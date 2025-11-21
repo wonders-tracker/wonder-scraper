@@ -7,8 +7,10 @@ export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
   component: Login,
-  beforeLoad: ({ context }) => {
-    // If we were using a real auth context we'd check it here.
+  beforeLoad: () => {
+    if (typeof window !== 'undefined' && auth.isAuthenticated()) {
+        throw redirect({ to: '/' })
+    }
   }
 })
 

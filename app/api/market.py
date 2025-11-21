@@ -12,7 +12,6 @@ router = APIRouter()
 @router.get("/overview")
 def read_market_overview(
     session: Session = Depends(get_session),
-    current_user = Depends(deps.get_current_user)
 ) -> Any:
     """
     Get optimized market overview statistics.
@@ -49,16 +48,8 @@ def read_market_overview(
             "rarity_id": card.rarity_id,
             "latest_price": snapshot.avg_price if snapshot else 0.0,
             "volume_24h": snapshot.volume if snapshot else 0,
-            # To calculate delta efficiently, we'd need the *previous* snapshot too. 
-            # For the "Overview" list, maybe we skip delta or fetch it only for top movers?
-            # Let's skip accurate delta for the bulk list for now to keep it fast, 
-            # OR we fetch top movers separately.
-            # BUT the frontend expects price_delta_24h. 
-            # Let's just return 0 for delta in this bulk view to be fast, 
-            # or we can try to fetch it if we really need it. 
-            # The user said "Analyzing Markets... Should Load Instantly".
             "price_delta_24h": 0.0, # Placeholder for speed
-            "market_cap": (snapshot.avg_price or 0) * (snapshot.volume or 0)
+            "market_cap": (snapshot.avg_price if snapshot else 0) * (snapshot.volume if snapshot else 0)
         })
         
     return overview_data

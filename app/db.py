@@ -17,7 +17,15 @@ if not DATABASE_URL:
     DATABASE_URL = f"postgresql://{user}:{password}@{host}/{db}?sslmode={ssl_mode}"
 
 # Neon requires sslmode=require
-engine = create_engine(DATABASE_URL, echo=True)
+# Add connection pooling for better performance
+engine = create_engine(
+    DATABASE_URL, 
+    echo=False,  # Disable query logging in production
+    pool_size=10,  # Connection pool
+    max_overflow=20,  # Allow burst connections
+    pool_pre_ping=True,  # Verify connections before use
+    pool_recycle=3600,  # Recycle connections every hour
+)
 
 def get_session():
     with Session(engine) as session:

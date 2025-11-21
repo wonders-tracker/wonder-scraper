@@ -16,6 +16,7 @@ class MarketSnapshot(SQLModel, table=True):
     lowest_ask: Optional[float] = None
     highest_bid: Optional[float] = None # eBay auctions only
     inventory: Optional[int] = None # Count of active listings
+    platform: str = Field(default="ebay") # 'ebay', 'opensea'
     
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -28,4 +29,8 @@ class MarketPrice(SQLModel, table=True):
     sold_date: Optional[datetime] = None
     listing_type: str = Field(default="sold") # 'sold' or 'active'
     treatment: str = Field(default="Classic Paper") # New field: Classic Paper, Foil, Serialized, etc.
+    bid_count: int = Field(default=0) # New field: Number of bids (for auctions)
+    external_id: Optional[str] = Field(default=None, index=True) # Unique ID from source (e.g., eBay item ID)
+    url: Optional[str] = Field(default=None) # Link to the listing
+    platform: str = Field(default="ebay") # 'ebay', 'opensea', 'tcgplayer', etc.
     scraped_at: datetime = Field(default_factory=datetime.utcnow)

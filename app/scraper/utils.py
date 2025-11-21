@@ -3,7 +3,7 @@ import urllib.parse
 EBAY_BASE_URL = "https://www.ebay.com/sch/i.html"
 TCG_CATEGORY_ID = "183454"  # CCG Individual Cards
 
-def build_ebay_url(card_name: str, set_name: str = None, sold_only: bool = True) -> str:
+def build_ebay_url(card_name: str, set_name: str = None, sold_only: bool = True, page: int = 1) -> str:
     """
     Constructs an eBay search URL for a given card name.
     
@@ -11,6 +11,7 @@ def build_ebay_url(card_name: str, set_name: str = None, sold_only: bool = True)
         card_name: The name of the card to search for.
         set_name: Optional set name to refine search (e.g. "Existence").
         sold_only: If True, returns only sold/completed listings (default True).
+        page: Page number for pagination (default 1).
         
     Returns:
         A valid eBay search URL.
@@ -32,11 +33,15 @@ def build_ebay_url(card_name: str, set_name: str = None, sold_only: bool = True)
     params = {
         "_nkw": query,
         "_sacat": TCG_CATEGORY_ID,
-        "_ipg": "60", # Items per page
+        "_ipg": "240", # Max items per page to capture more history in one go
+        "_pgn": str(page), # Page number for pagination
         "RT": "nc"    # Result type? often used in ebay urls
     }
     
     if sold_only:
+        # LH_Sold=1 implies sold items. eBay typically shows last 90 days of sold items.
+        # To get MORE history would require Terapeak or other paid APIs. 
+        # Standard eBay search is limited to ~90 days for sold listings.
         params["LH_Sold"] = "1"
         params["LH_Complete"] = "1"
         

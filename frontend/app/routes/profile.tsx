@@ -1,6 +1,6 @@
-import { createRoute, Link } from '@tanstack/react-router'
+import { createRoute, Link, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../utils/auth'
+import { api, auth } from '../utils/auth'
 import { Route as rootRoute } from './__root'
 import { ArrowLeft, User, Save, Server, Shield } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -19,6 +19,11 @@ export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile',
   component: Profile,
+  beforeLoad: () => {
+      if (typeof window !== 'undefined' && !auth.isAuthenticated()) {
+          throw redirect({ to: '/login' })
+      }
+  }
 })
 
 function Profile() {

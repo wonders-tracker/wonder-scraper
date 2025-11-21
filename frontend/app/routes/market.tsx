@@ -1,6 +1,6 @@
-import { createRoute, Link } from '@tanstack/react-router'
+import { createRoute, Link, redirect } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../utils/auth'
+import { api, auth } from '../utils/auth'
 import { Route as rootRoute } from './__root'
 import { ArrowLeft, TrendingUp, ArrowUp, ArrowDown, Activity } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
@@ -9,6 +9,11 @@ export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: '/market',
   component: MarketAnalysis,
+  beforeLoad: () => {
+      if (typeof window !== 'undefined' && !auth.isAuthenticated()) {
+          throw redirect({ to: '/login' })
+      }
+  }
 })
 
 function MarketAnalysis() {

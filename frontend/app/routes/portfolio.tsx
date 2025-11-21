@@ -1,6 +1,6 @@
-import { createRoute, Link } from '@tanstack/react-router'
+import { createRoute, Link, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../utils/auth'
+import { api, auth } from '../utils/auth'
 import { Route as rootRoute } from './__root'
 import { ArrowLeft, TrendingUp, Trash2, Search } from 'lucide-react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
@@ -25,6 +25,11 @@ export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: '/portfolio',
   component: Portfolio,
+  beforeLoad: () => {
+      if (typeof window !== 'undefined' && !auth.isAuthenticated()) {
+          throw redirect({ to: '/login' })
+      }
+  }
 })
 
 function Portfolio() {
