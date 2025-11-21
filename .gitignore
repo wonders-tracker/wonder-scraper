@@ -50,3 +50,6 @@ pip-delete-this-directory.txt
 # Cursor
 .cursor/
 
+*.log
+frontend/vite.config.timestamp_*.js
+node_modules
