@@ -301,7 +301,7 @@ function Home() {
       {/* Top Bar */}
       <div className="flex items-center justify-between mb-6 border-b border-border pb-4">
         <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold tracking-tight uppercase">Wonder Scraper <span className="text-xs font-normal text-muted-foreground bg-muted px-1 rounded">BETA</span></h1>
+            <h1 className="text-xl font-bold tracking-tight uppercase">WondersTracker <span className="text-xs font-normal text-muted-foreground bg-muted px-1 rounded">BETA</span></h1>
         </div>
         
         <div className="flex gap-3">

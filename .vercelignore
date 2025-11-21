@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Database
+*.db
+*.sqlite
+
+# Logs
+*.log
+backend.log
+frontend.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node modules
+node_modules/
+
+# Build outputs
+dist/
+build/
+.cache/
+
+# Test
+.pytest_cache/
+.coverage
+
+# Env
+.env
+.env.local
+
+# Scripts (if you don't want to deploy them)
+scripts/
+
+# Poetry
+poetry.lock
+

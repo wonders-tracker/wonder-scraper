@@ -56,3 +56,4 @@ node_modules
 *.log
 frontend/vite.config.timestamp_*.js
 node_modules
+.vercel
