@@ -11,6 +11,29 @@ from app.schemas import CardOut, MarketSnapshotOut, MarketPriceOut
 
 router = APIRouter()
 
+def get_cache_key(endpoint: str, **params) -> str:
+    """Generate cache key from endpoint and params."""
+    param_str = json.dumps(params, sort_keys=True)
+    return hashlib.md5(f"{endpoint}:{param_str}".encode()).hexdigest()
+
+def get_cached(key: str) -> Optional[Any]:
+    """Get cached response if not expired."""
+    import time
+    if key in _cache and key in _cache_ttl:
+        if time.time() < _cache_ttl[key]:
+            return _cache[key]
+        else:
+            # Expired, clean up
+            del _cache[key]
+            del _cache_ttl[key]
+    return None
+
+def set_cache(key: str, value: Any, ttl: int = 300):
+    """Set cache with TTL (default 5 minutes)."""
+    import time
+    _cache[key] = value
+    _cache_ttl[key] = time.time() + ttl
+
 @router.get("/", response_model=List[CardOut])
 def read_cards(
     session: Session = Depends(get_session),
@@ -20,9 +43,14 @@ def read_cards(
     time_period: Optional[str] = Query(default="24h", regex="^(24h|7d|30d|90d|all)$"),
 ) -> Any:
     """
-    Retrieve cards with latest market data - OPTIMIZED for Neon.
-    Single batch query instead of N+1.
+    Retrieve cards with latest market data - OPTIMIZED with caching.
+    Single batch query instead of N+1 + 5-minute cache.
     """
+    # Check cache first
+    cache_key = get_cache_key("cards", skip=skip, limit=limit, search=search or "", time_period=time_period)
+    cached = get_cached(cache_key)
+    if cached:
+        return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
     # Calculate time cutoff
     time_cutoffs = {
         "24h": timedelta(hours=24),
@@ -91,13 +119,23 @@ def read_cards(
         )
         results.append(c_out)
     
-    return results
+    # Convert to dict for caching
+    results_dict = [r.model_dump() for r in results]
+    set_cache(cache_key, results_dict, ttl=300)  # 5 minutes
+    
+    return JSONResponse(content=results_dict, headers={"X-Cache": "MISS"})
 
 @router.get("/{card_id}", response_model=CardOut)
 def read_card(
     card_id: int,
     session: Session = Depends(get_session),
 ) -> Any:
+    # Check cache
+    cache_key = get_cache_key("card", card_id=card_id)
+    cached = get_cached(cache_key)
+    if cached:
+        return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
+    
     card = session.get(Card, card_id)
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
@@ -135,7 +173,11 @@ def read_card(
         max_price=latest_snap.max_price if latest_snap else None
     )
     
-    return c_out
+    # Cache result
+    result_dict = c_out.model_dump()
+    set_cache(cache_key, result_dict, ttl=300)
+    
+    return JSONResponse(content=result_dict, headers={"X-Cache": "MISS"})
 
 @router.get("/{card_id}/market", response_model=Optional[MarketSnapshotOut])
 def read_market_data(
