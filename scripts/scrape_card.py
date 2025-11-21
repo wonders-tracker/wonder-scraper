@@ -2,7 +2,7 @@ import asyncio
 import sys
 from sqlmodel import Session, select
 from app.db import engine
-from app.models.card import Card
+from app.models.card import Card, Rarity
 from app.models.market import MarketSnapshot, MarketPrice
 from app.scraper.browser import get_page_content
 from app.scraper.utils import build_ebay_url
@@ -11,14 +11,12 @@ from app.services.math import calculate_stats
 from app.scraper.browser import BrowserManager
 from app.scraper.active import scrape_active_data
 
-async def scrape_card(card_name: str, card_id: int = 0):
-    print(f"--- Scraping: {card_name} ---")
+async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = ""):
+    print(f"--- Scraping: {card_name} (Rarity: {rarity_name}) ---")
     
-    # 1. Active Data (Ask, Bid, Inventory)
+    # 1. Active Data
     print("Fetching active listings...")
     active_ask, active_inv = await scrape_active_data(card_name, card_id)
-    # Note: active_bid logic is not yet implemented fully in active.py, defaulted to 0 or calculated later
-    # We'll use active_ask as lowest_ask and active_inv as inventory
     
     # 2. Build URL for SOLD listings
     url = build_ebay_url(card_name, sold_only=True)
@@ -32,11 +30,8 @@ async def scrape_card(card_name: str, card_id: int = 0):
         return
 
     # 3. Parse
-    # We pass card_id so MarketPrice objects have it
-    # We also pass card_name for strict matching validation
-    # Remove "Wonders of the First" from card_name if it was appended for validation purposes
     clean_name = card_name.replace("Wonders of the First", "").strip()
-    prices = parse_search_results(html, card_id=card_id, card_name=clean_name)
+    prices = parse_search_results(html, card_id=card_id, card_name=clean_name, target_rarity=rarity_name)
     print(f"Found {len(prices)} sold listings.")
     
     if not prices:
@@ -48,13 +43,11 @@ async def scrape_card(card_name: str, card_id: int = 0):
     stats = calculate_stats(price_values)
     print(f"Stats: {stats}")
     
-    # 5. Save to DB (if card_id is valid)
+    # 5. Save to DB
     if card_id > 0:
         with Session(engine) as session:
-            # Save individual prices (optional, usually we just want snapshot)
             session.add_all(prices)
             
-            # Save Snapshot
             snapshot = MarketSnapshot(
                 card_id=card_id,
                 min_price=stats["min"],
@@ -62,7 +55,7 @@ async def scrape_card(card_name: str, card_id: int = 0):
                 avg_price=stats["avg"],
                 volume=stats["volume"],
                 lowest_ask=active_ask,
-                highest_bid=0.0, # Placeholder
+                highest_bid=0.0,
                 inventory=active_inv
             )
             session.add(snapshot)
@@ -81,19 +74,20 @@ async def main():
             print("Card not found in DB. Using dummy ID.")
             card_name = "Aerius of Thalwind"
             card_id = 0
+            rarity_name = ""
         else:
-            card_name = f"{card.name} {card.set_name}" # Search with set name for better results
+            card_name = f"{card.name} {card.set_name}"
             card_id = card.id
+            rarity = session.get(Rarity, card.rarity_id)
+            rarity_name = rarity.name if rarity else ""
             
-    await scrape_card(card_name, card_id)
+    await scrape_card(card_name, card_id, rarity_name)
     
     # Close browser
     await BrowserManager.close()
 
 if __name__ == "__main__":
-    # Check args
     if len(sys.argv) > 1:
-        # Manual search override
         asyncio.run(scrape_card(sys.argv[1]))
     else:
         asyncio.run(main())

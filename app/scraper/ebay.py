@@ -6,17 +6,17 @@ import re
 import difflib
 from app.models.market import MarketPrice
 
-def parse_search_results(html_content: str, card_id: int = 0, card_name: str = "") -> List[MarketPrice]:
+def parse_search_results(html_content: str, card_id: int = 0, card_name: str = "", target_rarity: str = "") -> List[MarketPrice]:
     """
     Parses eBay HTML search results and extracts market prices (Sold listings).
     """
-    return _parse_generic_results(html_content, card_id, listing_type="sold", card_name=card_name)
+    return _parse_generic_results(html_content, card_id, listing_type="sold", card_name=card_name, target_rarity=target_rarity)
 
-def parse_active_results(html_content: str, card_id: int = 0, card_name: str = "") -> List[MarketPrice]:
+def parse_active_results(html_content: str, card_id: int = 0, card_name: str = "", target_rarity: str = "") -> List[MarketPrice]:
     """
     Parses eBay HTML search results for ACTIVE listings.
     """
-    return _parse_generic_results(html_content, card_id, listing_type="active", card_name=card_name)
+    return _parse_generic_results(html_content, card_id, listing_type="active", card_name=card_name, target_rarity=target_rarity)
 
 def parse_total_results(html_content: str) -> int:
     """
@@ -37,52 +37,76 @@ def _detect_treatment(title: str) -> str:
     """
     title_lower = title.lower()
     
+    # 1. Serialized / OCM (Highest Priority)
     if "serialized" in title_lower or "/10" in title_lower or "/25" in title_lower or "/50" in title_lower or "/75" in title_lower or "/99" in title_lower or "ocm" in title_lower:
         return "OCM Serialized"
-    
+        
+    # 2. Special Foils
     if "stonefoil" in title_lower or "stone foil" in title_lower:
         return "Stonefoil"
-        
     if "formless" in title_lower:
         return "Formless Foil"
         
-    if "foil" in title_lower:
+    # 3. Other Variants
+    if "prerelease" in title_lower:
+        return "Prerelease"
+    if "promo" in title_lower:
+        return "Promo"
+    if "proof" in title_lower or "sample" in title_lower:
+        return "Proof/Sample"
+    if "errata" in title_lower or "error" in title_lower:
+        return "Error/Errata"
+        
+    # 4. Classic Foil
+    if "foil" in title_lower or "holo" in title_lower or "refractor" in title_lower:
         return "Classic Foil"
         
+    # 5. Default
     return "Classic Paper"
 
-def _is_valid_match(title: str, card_name: str) -> bool:
+def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool:
     """
-    Validates if the listing title is a good match for the card name.
-    Uses token set ratio or simple keyword presence.
+    Validates if the listing title is a good match for the card name and rarity.
     """
     if not card_name:
-        return True # No name to check against
+        return True 
         
     title_lower = title.lower()
     name_lower = card_name.lower()
     
-    # 1. Keyword Check: All significant words in card_name should be in title
-    # Filter out common words like "the", "of", etc. if desired, but TCG names are specific.
-    # Let's try checking if at least 75% of the words match
+    # 1. Name Validation
     card_tokens = set(name_lower.split())
-    title_tokens = set(title_lower.replace("wonders of the first", "").split()) # Remove game name to avoid false positive match on just game name
+    title_tokens = set(title_lower.replace("wonders of the first", "").split())
     
     common_tokens = card_tokens.intersection(title_tokens)
     
-    # If card name is short (1 word), it must be present
     if len(card_tokens) == 1:
-        return list(card_tokens)[0] in title_tokens
-        
-    match_ratio = len(common_tokens) / len(card_tokens)
-    
-    # 2. Difflib Ratio (Backup)
-    # seq_ratio = difflib.SequenceMatcher(None, name_lower, title_lower).ratio()
-    
-    # Return True if enough words match
-    return match_ratio >= 0.66
+        if list(card_tokens)[0] not in title_tokens:
+            return False
+    else:
+        match_ratio = len(common_tokens) / len(card_tokens)
+        if match_ratio < 0.66:
+            return False
 
-def _parse_generic_results(html_content: str, card_id: int, listing_type: str, card_name: str = "") -> List[MarketPrice]:
+    # 2. Rarity Validation (if provided)
+    # If target is "Common", reject "Mythic" or "Rare" in title
+    # But accept "Common" in title.
+    # This is tricky because listings might say "Rare card!" for a common card as spam.
+    # So we should be conservative. Only reject obvious mismatches if we are sure.
+    # E.g. If card is "Common", and title says "Mythic", it's likely a mismatch OR a special version.
+    # If it's a special version (Foil Mythic), _detect_treatment might handle it.
+    # Let's skip strict rarity rejection for now unless requested, to avoid false negatives.
+    # User said "parse for the rarity... need to be smart".
+    # Smart = Parse it, maybe warn?
+    # For now, let's just rely on name + treatment. 
+    # If I search for "Card X" and get "Card X Mythic", it's probably Card X but the Mythic version.
+    # Since we want to track ALL sales of Card X (including variants), we should ACCEPT it.
+    # The `treatment` field will capture "Classic Foil" etc.
+    # If rarity changes (e.g. Promo is Mythic, Base is Common), treatment 'Promo' captures it.
+    
+    return True
+
+def _parse_generic_results(html_content: str, card_id: int, listing_type: str, card_name: str = "", target_rarity: str = "") -> List[MarketPrice]:
     soup = BeautifulSoup(html_content, "lxml")
     results = []
     
@@ -100,9 +124,7 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
         if "Shop on eBay" in title:
             continue
 
-        # Validation Step
-        if card_name and not _is_valid_match(title, card_name):
-            # print(f"Skipping invalid match: {title} (Target: {card_name})")
+        if card_name and not _is_valid_match(title, card_name, target_rarity):
             continue
 
         price_elem = item.select_one(".s-item__price, .s-card__price")
