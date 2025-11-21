@@ -1,0 +1,2624 @@
+[
+  {
+    "card_number": "001/401",
+    "set_name": "Existence",
+    "name": "The First",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "002/401",
+    "set_name": "Existence",
+    "name": "Aerius of Thalwind",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "003/401",
+    "set_name": "Existence",
+    "name": "Aetherion of Boundless",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "004/401",
+    "set_name": "Existence",
+    "name": "Agaric Supreme",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "005/401",
+    "set_name": "Existence",
+    "name": "Astrox A-10",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "006/401",
+    "set_name": "Existence",
+    "name": "Autumn, Essence Animated",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "007/401",
+    "set_name": "Existence",
+    "name": "Baern Bal'Thor",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "008/401",
+    "set_name": "Existence",
+    "name": "Blossom's Bite",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "009/401",
+    "set_name": "Existence",
+    "name": "Captain Isabella \"Izzy\" Stormsong",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "010/401",
+    "set_name": "Existence",
+    "name": "Carbon-X7 Synthforge",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "011/401",
+    "set_name": "Existence",
+    "name": "Cedarshade Ruins",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "012/401",
+    "set_name": "Existence",
+    "name": "Clearsky Eyrie",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "013/401",
+    "set_name": "Existence",
+    "name": "Commander Bathr'Al",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "014/401",
+    "set_name": "Existence",
+    "name": "Corruption Warp",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "015/401",
+    "set_name": "Existence",
+    "name": "Cosmic Cataclysm",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "016/401",
+    "set_name": "Existence",
+    "name": "Cursed Passages of Haem",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "017/401",
+    "set_name": "Existence",
+    "name": "Desolation",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "018/401",
+    "set_name": "Existence",
+    "name": "Divine Bloodbearer",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "019/401",
+    "set_name": "Existence",
+    "name": "Drogothar the Destroyer",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "020/401",
+    "set_name": "Existence",
+    "name": "Elysia Highwing",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "021/401",
+    "set_name": "Existence",
+    "name": "Epthus, the Lost Sword",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "022/401",
+    "set_name": "Existence",
+    "name": "Eternitum the Space Lich",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "023/401",
+    "set_name": "Existence",
+    "name": "Eye of the Maelstrom",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "024/401",
+    "set_name": "Existence",
+    "name": "Gem Primordial",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "025/401",
+    "set_name": "Existence",
+    "name": "Helia Hexbane",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "026/401",
+    "set_name": "Existence",
+    "name": "High Inquisitor Epsilon Tolaris",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "027/401",
+    "set_name": "Existence",
+    "name": "Highlord Voluris Crestwing",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "028/401",
+    "set_name": "Existence",
+    "name": "J\u00e4n, the Magician",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "029/401",
+    "set_name": "Existence",
+    "name": "John Breakbang",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "030/401",
+    "set_name": "Existence",
+    "name": "Jorambe",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "031/401",
+    "set_name": "Existence",
+    "name": "King Aldern Leafsong",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "032/401",
+    "set_name": "Existence",
+    "name": "Lo Lynn",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "033/401",
+    "set_name": "Existence",
+    "name": "Marinus of Thalwind",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "034/401",
+    "set_name": "Existence",
+    "name": "Market of Lost Wonders",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "035/401",
+    "set_name": "Existence",
+    "name": "Mirage Terrain",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "036/401",
+    "set_name": "Existence",
+    "name": "Murkmire Incarnate",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "037/401",
+    "set_name": "Existence",
+    "name": "Nexus Phasebringer",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "038/401",
+    "set_name": "Existence",
+    "name": "Nocturna of Umbrathene",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "039/401",
+    "set_name": "Existence",
+    "name": "Nova Matrixbender",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "040/401",
+    "set_name": "Existence",
+    "name": "Old Man \"Rocket\" Ricker",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "041/401",
+    "set_name": "Existence",
+    "name": "Open the Cosmos",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "042/401",
+    "set_name": "Existence",
+    "name": "Phoenix Quill",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "043/401",
+    "set_name": "Existence",
+    "name": "Plant Terror of Ethereal Grove",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "044/401",
+    "set_name": "Existence",
+    "name": "Prime Leophant",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "045/401",
+    "set_name": "Existence",
+    "name": "Princess Aurora Waveheart",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "046/401",
+    "set_name": "Existence",
+    "name": "Purpuria the Mystic Flame",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "047/401",
+    "set_name": "Existence",
+    "name": "Pyraethos of Solfera",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "048/401",
+    "set_name": "Existence",
+    "name": "Rage of the Ancients",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "049/401",
+    "set_name": "Existence",
+    "name": "Ragnar Bloodbane",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "050/401",
+    "set_name": "Existence",
+    "name": "Raul Lightman",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "051/401",
+    "set_name": "Existence",
+    "name": "Raziya Balakai",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "052/401",
+    "set_name": "Existence",
+    "name": "Rigel \"Lightbringer\" Leonis",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "053/401",
+    "set_name": "Existence",
+    "name": "Romalax Starwielder",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "054/401",
+    "set_name": "Existence",
+    "name": "Ronaan Triakis",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "055/401",
+    "set_name": "Existence",
+    "name": "Rus Trooper",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "056/401",
+    "set_name": "Existence",
+    "name": "Sandura of Heliosynth",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "057/401",
+    "set_name": "Existence",
+    "name": "Skraal, Ruler of the Three Lakes",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "058/401",
+    "set_name": "Existence",
+    "name": "Tempest Bomb",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "059/401",
+    "set_name": "Existence",
+    "name": "The Blazing Phoenix Pub",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "060/401",
+    "set_name": "Existence",
+    "name": "The Great Core of Alderok",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "061/401",
+    "set_name": "Existence",
+    "name": "The Great Usurper",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "062/401",
+    "set_name": "Existence",
+    "name": "The Great Veridan",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "063/401",
+    "set_name": "Existence",
+    "name": "The Mind",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "064/401",
+    "set_name": "Existence",
+    "name": "The Mount of Helios",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "065/401",
+    "set_name": "Existence",
+    "name": "The Prisoner",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "066/401",
+    "set_name": "Existence",
+    "name": "Titanscale Aegis",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "067/401",
+    "set_name": "Existence",
+    "name": "Utterly Complex Compound Bow",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "068/401",
+    "set_name": "Existence",
+    "name": "Verdantia of Petraia",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "069/401",
+    "set_name": "Existence",
+    "name": "Witch Warden",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "070/401",
+    "set_name": "Existence",
+    "name": "ZipZip NugNug",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "071/401",
+    "set_name": "Existence",
+    "name": "Adorable Vermin",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "072/401",
+    "set_name": "Existence",
+    "name": "Aetherium Arc Launcher",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "073/401",
+    "set_name": "Existence",
+    "name": "Archimedes Falco",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "074/401",
+    "set_name": "Existence",
+    "name": "Ayu Goss",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "075/401",
+    "set_name": "Existence",
+    "name": "Azure Sky Cetacean",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "076/401",
+    "set_name": "Existence",
+    "name": "Azure Vault",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "077/401",
+    "set_name": "Existence",
+    "name": "Blauzophel",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "078/401",
+    "set_name": "Existence",
+    "name": "Blazeholme Volcano",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "079/401",
+    "set_name": "Existence",
+    "name": "Blinsworth Goldscale",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "080/401",
+    "set_name": "Existence",
+    "name": "Boneharvest Harp",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "081/401",
+    "set_name": "Existence",
+    "name": "Cindermaw the Scalder",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "082/401",
+    "set_name": "Existence",
+    "name": "Cloudweaver Construct",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "083/401",
+    "set_name": "Existence",
+    "name": "Cometfall Hammer",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "084/401",
+    "set_name": "Existence",
+    "name": "Commanding Croak, the Leader",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "085/401",
+    "set_name": "Existence",
+    "name": "Courageous Heart Emblem",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "086/401",
+    "set_name": "Existence",
+    "name": "Dark Magic Hydra",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "087/401",
+    "set_name": "Existence",
+    "name": "Deathmarcher Knight",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "088/401",
+    "set_name": "Existence",
+    "name": "Dimensional Piercer",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "089/401",
+    "set_name": "Existence",
+    "name": "Dragon Eggs",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "090/401",
+    "set_name": "Existence",
+    "name": "Duatian Frontier",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "091/401",
+    "set_name": "Existence",
+    "name": "Elven Warhammer",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "092/401",
+    "set_name": "Existence",
+    "name": "End a Bloodline",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "093/401",
+    "set_name": "Existence",
+    "name": "Enlightenment",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "094/401",
+    "set_name": "Existence",
+    "name": "Entangle",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "095/401",
+    "set_name": "Existence",
+    "name": "Ethereal Grove",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "096/401",
+    "set_name": "Existence",
+    "name": "EthosRelic FR-39",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "097/401",
+    "set_name": "Existence",
+    "name": "Eye of Petraia",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "098/401",
+    "set_name": "Existence",
+    "name": "Flying Suzzer",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "099/401",
+    "set_name": "Existence",
+    "name": "Frostfire Citadel",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "100/401",
+    "set_name": "Existence",
+    "name": "Frostsavage, the Blizzard's Wrath",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "101/401",
+    "set_name": "Existence",
+    "name": "Fungolith Colossus",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "102/401",
+    "set_name": "Existence",
+    "name": "God's Eye Release",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "103/401",
+    "set_name": "Existence",
+    "name": "Gorrash, The Dreadful",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "104/401",
+    "set_name": "Existence",
+    "name": "Grailhart, Forgotten Death Marshal",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "105/401",
+    "set_name": "Existence",
+    "name": "Grothar Headchoppa",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "106/401",
+    "set_name": "Existence",
+    "name": "Harmonic Canyon Refuge",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "107/401",
+    "set_name": "Existence",
+    "name": "Horned Skull of the Minotaur",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "108/401",
+    "set_name": "Existence",
+    "name": "Hush of the Void",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "109/401",
+    "set_name": "Existence",
+    "name": "Kishral Vivasynth, ChronoTitan",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "110/401",
+    "set_name": "Existence",
+    "name": "Lumina Scarab",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "111/401",
+    "set_name": "Existence",
+    "name": "Mechalion",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "112/401",
+    "set_name": "Existence",
+    "name": "Myra Voriae",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "113/401",
+    "set_name": "Existence",
+    "name": "Nexar Voidchild",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "114/401",
+    "set_name": "Existence",
+    "name": "Nurse Desdemona Viridian",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "115/401",
+    "set_name": "Existence",
+    "name": "Omnis Quantum",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "116/401",
+    "set_name": "Existence",
+    "name": "Orionis Skydreamer",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "117/401",
+    "set_name": "Existence",
+    "name": "Pastel Bloom Drake",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "118/401",
+    "set_name": "Existence",
+    "name": "Pollenspewer",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "119/401",
+    "set_name": "Existence",
+    "name": "Rhinagi Vogal",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "120/401",
+    "set_name": "Existence",
+    "name": "Sigrid Ironshield",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "121/401",
+    "set_name": "Existence",
+    "name": "Skyrake Gearhawk",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "122/401",
+    "set_name": "Existence",
+    "name": "Smooki",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "123/401",
+    "set_name": "Existence",
+    "name": "Staff of the Eldritch Tribesmen",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "124/401",
+    "set_name": "Existence",
+    "name": "Stellar Harmony Tea Set",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "125/401",
+    "set_name": "Existence",
+    "name": "Stormforged Siege Beast",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "126/401",
+    "set_name": "Existence",
+    "name": "Strange Mutated Mass",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "127/401",
+    "set_name": "Existence",
+    "name": "Summon Crushing Rock",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "128/401",
+    "set_name": "Existence",
+    "name": "Swamp Sovereign",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "129/401",
+    "set_name": "Existence",
+    "name": "Teller, Vamparus Chief",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "130/401",
+    "set_name": "Existence",
+    "name": "Temporal Harmony Clock",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "131/401",
+    "set_name": "Existence",
+    "name": "Tendrils of Light and Shadow",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "132/401",
+    "set_name": "Existence",
+    "name": "Terring Faia",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "133/401",
+    "set_name": "Existence",
+    "name": "Thara Dester",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "134/401",
+    "set_name": "Existence",
+    "name": "The Awakening",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "135/401",
+    "set_name": "Existence",
+    "name": "The Lamp of Luferia",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "136/401",
+    "set_name": "Existence",
+    "name": "The Skywraith",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "137/401",
+    "set_name": "Existence",
+    "name": "Time Hop",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "138/401",
+    "set_name": "Existence",
+    "name": "Tremendous Automatic Sentinel",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "139/401",
+    "set_name": "Existence",
+    "name": "Twilight Marsh",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "140/401",
+    "set_name": "Existence",
+    "name": "Versi Holoheart",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "141/401",
+    "set_name": "Existence",
+    "name": "Whiskey Raider",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "142/401",
+    "set_name": "Existence",
+    "name": "Xara Stratos",
+    "rarity": "Epic"
+  },
+  {
+    "card_number": "143/401",
+    "set_name": "Existence",
+    "name": "A-90 Plasma Detonator",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "144/401",
+    "set_name": "Existence",
+    "name": "Blackhole Blunderbuss",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "145/401",
+    "set_name": "Existence",
+    "name": "Blackthorne Banshee",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "146/401",
+    "set_name": "Existence",
+    "name": "Borin Stormhand",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "147/401",
+    "set_name": "Existence",
+    "name": "Briarmaw",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "148/401",
+    "set_name": "Existence",
+    "name": "Brimstone Crypt",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "149/401",
+    "set_name": "Existence",
+    "name": "By\u2019ylar Pyreforge",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "150/401",
+    "set_name": "Existence",
+    "name": "Cairnvox Soulforger",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "151/401",
+    "set_name": "Existence",
+    "name": "Captain Rostar Corewind",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "152/401",
+    "set_name": "Existence",
+    "name": "Cave-Dwelling Toebiter",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "153/401",
+    "set_name": "Existence",
+    "name": "Chieftain Kli",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "154/401",
+    "set_name": "Existence",
+    "name": "Commune With Technology",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "155/401",
+    "set_name": "Existence",
+    "name": "Cooking Pot of the Eternal Fire",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "156/401",
+    "set_name": "Existence",
+    "name": "Corrupted Prismatian Behemoth",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "157/401",
+    "set_name": "Existence",
+    "name": "Corvus Shadowwing",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "158/401",
+    "set_name": "Existence",
+    "name": "Councilor Catar'r",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "159/401",
+    "set_name": "Existence",
+    "name": "Crystalsilk Spider",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "160/401",
+    "set_name": "Existence",
+    "name": "Cura, Voice of Terror",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "161/401",
+    "set_name": "Existence",
+    "name": "Dark Healer",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "162/401",
+    "set_name": "Existence",
+    "name": "Deathsworn Gravesman",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "163/401",
+    "set_name": "Existence",
+    "name": "Divine Breach",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "164/401",
+    "set_name": "Existence",
+    "name": "Divine Conduit",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "165/401",
+    "set_name": "Existence",
+    "name": "Ella, Procurer of Meatsacks",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "166/401",
+    "set_name": "Existence",
+    "name": "Empress Aurelia",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "167/401",
+    "set_name": "Existence",
+    "name": "Enzo Barboni",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "168/401",
+    "set_name": "Existence",
+    "name": "Experiment X7v1-3",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "169/401",
+    "set_name": "Existence",
+    "name": "Feline Entity of Dreams",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "170/401",
+    "set_name": "Existence",
+    "name": "Floral Diadem of the Verdant Queen",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "171/401",
+    "set_name": "Existence",
+    "name": "Galactic Sovereign Throne",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "172/401",
+    "set_name": "Existence",
+    "name": "Galen Mosspaw",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "173/401",
+    "set_name": "Existence",
+    "name": "Giant Hydrojelly",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "174/401",
+    "set_name": "Existence",
+    "name": "Glasswing Cockatrice",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "175/401",
+    "set_name": "Existence",
+    "name": "Gleaming Power Cell",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "176/401",
+    "set_name": "Existence",
+    "name": "Goladh the Sage",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "177/401",
+    "set_name": "Existence",
+    "name": "Gulpin Hawl",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "178/401",
+    "set_name": "Existence",
+    "name": "Gyrois Cygnus",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "179/401",
+    "set_name": "Existence",
+    "name": "Hester Dust",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "180/401",
+    "set_name": "Existence",
+    "name": "Indra's Citadel",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "181/401",
+    "set_name": "Existence",
+    "name": "Iron Citadel",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "182/401",
+    "set_name": "Existence",
+    "name": "Kanevil Wayfarer",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "183/401",
+    "set_name": "Existence",
+    "name": "King Hei'an",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "184/401",
+    "set_name": "Existence",
+    "name": "Lord Archiel Zetuma",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "185/401",
+    "set_name": "Existence",
+    "name": "Man-Portable Cannon",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "186/401",
+    "set_name": "Existence",
+    "name": "Mountain Ridge Mammoth",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "187/401",
+    "set_name": "Existence",
+    "name": "Onglepod",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "188/401",
+    "set_name": "Existence",
+    "name": "Quantum Boots",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "189/401",
+    "set_name": "Existence",
+    "name": "Reforging Titan",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "190/401",
+    "set_name": "Existence",
+    "name": "Resonance Reach",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "191/401",
+    "set_name": "Existence",
+    "name": "Reverence Engineer",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "192/401",
+    "set_name": "Existence",
+    "name": "Richard Grumpin",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "193/401",
+    "set_name": "Existence",
+    "name": "Rockskin Shredder",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "194/401",
+    "set_name": "Existence",
+    "name": "Rootling Terror",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "195/401",
+    "set_name": "Existence",
+    "name": "Rylan Windstrider",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "196/401",
+    "set_name": "Existence",
+    "name": "Scouting Barnale",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "197/401",
+    "set_name": "Existence",
+    "name": "Selva Tropicwing",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "198/401",
+    "set_name": "Existence",
+    "name": "Seraphina \"The Serpent\" Blackthorn",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "199/401",
+    "set_name": "Existence",
+    "name": "Serpent's Embrace",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "200/401",
+    "set_name": "Existence",
+    "name": "Shadowcast Mace",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "201/401",
+    "set_name": "Existence",
+    "name": "Short-Range Forcefield Deployer",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "202/401",
+    "set_name": "Existence",
+    "name": "Sirius Aetherblade",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "203/401",
+    "set_name": "Existence",
+    "name": "Slade Darkfur",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "204/401",
+    "set_name": "Existence",
+    "name": "Staff of the Sand Seer",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "205/401",
+    "set_name": "Existence",
+    "name": "Starbound Colossus",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "206/401",
+    "set_name": "Existence",
+    "name": "Stealthy Spriggan",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "207/401",
+    "set_name": "Existence",
+    "name": "Steed of Verdantleaf",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "208/401",
+    "set_name": "Existence",
+    "name": "Sunnia Sikala",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "209/401",
+    "set_name": "Existence",
+    "name": "Sunsand Goldscale",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "210/401",
+    "set_name": "Existence",
+    "name": "Sylira Shadowstalker",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "211/401",
+    "set_name": "Existence",
+    "name": "Tharn Sharkblade",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "212/401",
+    "set_name": "Existence",
+    "name": "The Crimson Marauder",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "213/401",
+    "set_name": "Existence",
+    "name": "The Power of Three",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "214/401",
+    "set_name": "Existence",
+    "name": "Treasure Map",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "215/401",
+    "set_name": "Existence",
+    "name": "Triton Behemoth",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "216/401",
+    "set_name": "Existence",
+    "name": "Tyros Ironfist",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "217/401",
+    "set_name": "Existence",
+    "name": "Unconfined Dusthowler",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "218/401",
+    "set_name": "Existence",
+    "name": "V-8 Wanderer",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "219/401",
+    "set_name": "Existence",
+    "name": "Verdant Cliffwing",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "220/401",
+    "set_name": "Existence",
+    "name": "Viking Phantom Caster",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "221/401",
+    "set_name": "Existence",
+    "name": "Vision of Thalwind",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "222/401",
+    "set_name": "Existence",
+    "name": "Vortexis Walker",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "223/401",
+    "set_name": "Existence",
+    "name": "Ward of Serendipity",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "224/401",
+    "set_name": "Existence",
+    "name": "Warfang Fortress",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "225/401",
+    "set_name": "Existence",
+    "name": "Whisperleaf Cloak",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "226/401",
+    "set_name": "Existence",
+    "name": "Xyrendra of Dimensional Forces",
+    "rarity": "Rare"
+  },
+  {
+    "card_number": "227/401",
+    "set_name": "Existence",
+    "name": "Abyssal Sand Leviathan",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "228/401",
+    "set_name": "Existence",
+    "name": "Arcane Grasp",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "229/401",
+    "set_name": "Existence",
+    "name": "Ashenleaf",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "230/401",
+    "set_name": "Existence",
+    "name": "Astral Vanguard Armor",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "231/401",
+    "set_name": "Existence",
+    "name": "Baron, the Unstable",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "232/401",
+    "set_name": "Existence",
+    "name": "Blasting Duel",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "233/401",
+    "set_name": "Existence",
+    "name": "Bloodeye Dragonet",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "234/401",
+    "set_name": "Existence",
+    "name": "Bloodfur Hunter",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "235/401",
+    "set_name": "Existence",
+    "name": "Bombi",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "236/401",
+    "set_name": "Existence",
+    "name": "Boneskewer Spear",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "237/401",
+    "set_name": "Existence",
+    "name": "Caden Windwhisper",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "238/401",
+    "set_name": "Existence",
+    "name": "Emma \"Fixem\" Shockbite",
+    "rarity": "Mythic"
+  },
+  {
+    "card_number": "239/401",
+    "set_name": "Existence",
+    "name": "Caelith Leaftracker",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "240/401",
+    "set_name": "Existence",
+    "name": "Carnotitan Ravager",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "241/401",
+    "set_name": "Existence",
+    "name": "Carrionys Moth",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "242/401",
+    "set_name": "Existence",
+    "name": "Charging Polpo",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "243/401",
+    "set_name": "Existence",
+    "name": "Darkiron City",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "244/401",
+    "set_name": "Existence",
+    "name": "Deep Black Goop",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "245/401",
+    "set_name": "Existence",
+    "name": "Deep Pincer",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "246/401",
+    "set_name": "Existence",
+    "name": "Demonic Wolfsman",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "247/401",
+    "set_name": "Existence",
+    "name": "Desert Survivor NBC Suit",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "248/401",
+    "set_name": "Existence",
+    "name": "Dragon's Gold",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "249/401",
+    "set_name": "Existence",
+    "name": "Dream Reaver",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "250/401",
+    "set_name": "Existence",
+    "name": "Dwarven Vault",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "251/401",
+    "set_name": "Existence",
+    "name": "Emberwood Stalwart",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "252/401",
+    "set_name": "Existence",
+    "name": "Ethereal Warden",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "253/401",
+    "set_name": "Existence",
+    "name": "Fire Flower of the Inferno",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "254/401",
+    "set_name": "Existence",
+    "name": "Fire Grimoire",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "255/401",
+    "set_name": "Existence",
+    "name": "Fortress Brightstone",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "256/401",
+    "set_name": "Existence",
+    "name": "Gearheart Enclave Inner",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "257/401",
+    "set_name": "Existence",
+    "name": "Giant Goo'Rah Beast",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "258/401",
+    "set_name": "Existence",
+    "name": "Gravitational Grasp",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "259/401",
+    "set_name": "Existence",
+    "name": "Iggling Wrotch",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "260/401",
+    "set_name": "Existence",
+    "name": "Intricate Protective Synthetic",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "261/401",
+    "set_name": "Existence",
+    "name": "Keeper of Beauty",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "262/401",
+    "set_name": "Existence",
+    "name": "Keeper of Drury Skulls",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "263/401",
+    "set_name": "Existence",
+    "name": "Kraken of the Inferno",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "264/401",
+    "set_name": "Existence",
+    "name": "Leviathan Scale Armor",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "265/401",
+    "set_name": "Existence",
+    "name": "Life Engine Heart",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "266/401",
+    "set_name": "Existence",
+    "name": "Luminous Medusa",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "267/401",
+    "set_name": "Existence",
+    "name": "Lyonnisia Celestine",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "268/401",
+    "set_name": "Existence",
+    "name": "Mystic Albeala",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "269/401",
+    "set_name": "Existence",
+    "name": "Noctarum the Lost",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "270/401",
+    "set_name": "Existence",
+    "name": "Path of Light",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "271/401",
+    "set_name": "Existence",
+    "name": "Pathfinding Kli",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "272/401",
+    "set_name": "Existence",
+    "name": "Pechanko",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "273/401",
+    "set_name": "Existence",
+    "name": "Percival \"Galeheart\" Stormwind",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "274/401",
+    "set_name": "Existence",
+    "name": "Petraian Home Cooked Meal",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "275/401",
+    "set_name": "Existence",
+    "name": "Pinkra Lumen",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "276/401",
+    "set_name": "Existence",
+    "name": "Power of Bloodlines",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "277/401",
+    "set_name": "Existence",
+    "name": "Professor Dro Stardust",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "278/401",
+    "set_name": "Existence",
+    "name": "Professor Tiberius Quicksilver",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "279/401",
+    "set_name": "Existence",
+    "name": "Punish",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "280/401",
+    "set_name": "Existence",
+    "name": "Quadritusk Etherphant",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "281/401",
+    "set_name": "Existence",
+    "name": "Quiet Creek",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "282/401",
+    "set_name": "Existence",
+    "name": "Redstooling Hunter",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "283/401",
+    "set_name": "Existence",
+    "name": "Reforged Summoning Platform",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "284/401",
+    "set_name": "Existence",
+    "name": "Rend",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "285/401",
+    "set_name": "Existence",
+    "name": "Sand Goggles",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "286/401",
+    "set_name": "Existence",
+    "name": "Seafly Nests",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "287/401",
+    "set_name": "Existence",
+    "name": "Sequestering Presence",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "288/401",
+    "set_name": "Existence",
+    "name": "Sir Caerban Ileander",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "289/401",
+    "set_name": "Existence",
+    "name": "Sirocco Blast",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "290/401",
+    "set_name": "Existence",
+    "name": "Sister Azura Silversong",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "291/401",
+    "set_name": "Existence",
+    "name": "Skyjelly",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "292/401",
+    "set_name": "Existence",
+    "name": "Solaris Stormcaster",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "293/401",
+    "set_name": "Existence",
+    "name": "Starburst Mallet",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "294/401",
+    "set_name": "Existence",
+    "name": "Starhorn Capra",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "295/401",
+    "set_name": "Existence",
+    "name": "Stoic Temple Guardian",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "296/401",
+    "set_name": "Existence",
+    "name": "Stratos Windrider",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "297/401",
+    "set_name": "Existence",
+    "name": "Sunfire City",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "298/401",
+    "set_name": "Existence",
+    "name": "Syl Scalewhisper",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "299/401",
+    "set_name": "Existence",
+    "name": "Tech Nomad Nix",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "300/401",
+    "set_name": "Existence",
+    "name": "The Windreaver",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "301/401",
+    "set_name": "Existence",
+    "name": "Thorwing Thunderbeak",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "302/401",
+    "set_name": "Existence",
+    "name": "Thought Tempest",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "303/401",
+    "set_name": "Existence",
+    "name": "Tony \"Fortune Hunter\" Thickfur",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "304/401",
+    "set_name": "Existence",
+    "name": "Valkeria Velorum",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "305/401",
+    "set_name": "Existence",
+    "name": "Vaporblast Artillery",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "306/401",
+    "set_name": "Existence",
+    "name": "Verdant Mace",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "307/401",
+    "set_name": "Existence",
+    "name": "Viking Sage of the Forge",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "308/401",
+    "set_name": "Existence",
+    "name": "Vobb Stalker",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "309/401",
+    "set_name": "Existence",
+    "name": "Wartamed Manticore",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "310/401",
+    "set_name": "Existence",
+    "name": "Xeno Tagion",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "311/401",
+    "set_name": "Existence",
+    "name": "Zephyrus Skyarc",
+    "rarity": "Uncommon"
+  },
+  {
+    "card_number": "312/401",
+    "set_name": "Existence",
+    "name": "Aethereal Enigmyst",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "313/401",
+    "set_name": "Existence",
+    "name": "Bio-Circuit Plant",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "314/401",
+    "set_name": "Existence",
+    "name": "Broken Eldritch Idol",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "315/401",
+    "set_name": "Existence",
+    "name": "Caroline Candole",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "316/401",
+    "set_name": "Existence",
+    "name": "Cast Out",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "317/401",
+    "set_name": "Existence",
+    "name": "Catch",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "318/401",
+    "set_name": "Existence",
+    "name": "Celestium Heights",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "319/401",
+    "set_name": "Existence",
+    "name": "Chained Crow",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "320/401",
+    "set_name": "Existence",
+    "name": "Circuitious Q-7",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "321/401",
+    "set_name": "Existence",
+    "name": "Comet Cleaver",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "322/401",
+    "set_name": "Existence",
+    "name": "Cosmo Cloudman",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "323/401",
+    "set_name": "Existence",
+    "name": "Cryptreach Province",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "324/401",
+    "set_name": "Existence",
+    "name": "Cybernetic Enhancement",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "325/401",
+    "set_name": "Existence",
+    "name": "Darkiron Fish",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "326/401",
+    "set_name": "Existence",
+    "name": "Dealmaker Paladius",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "327/401",
+    "set_name": "Existence",
+    "name": "Deconstruct",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "328/401",
+    "set_name": "Existence",
+    "name": "Dreamweaver Sloth",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "329/401",
+    "set_name": "Existence",
+    "name": "Dustfall Deadhead",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "330/401",
+    "set_name": "Existence",
+    "name": "Eclipse Enclave",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "331/401",
+    "set_name": "Existence",
+    "name": "Emerald Clearing",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "332/401",
+    "set_name": "Existence",
+    "name": "Endless Ram",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "333/401",
+    "set_name": "Existence",
+    "name": "Energy Extraction",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "334/401",
+    "set_name": "Existence",
+    "name": "Enraged Bear",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "335/401",
+    "set_name": "Existence",
+    "name": "Eron Sharpeye",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "336/401",
+    "set_name": "Existence",
+    "name": "Flamekissed Isle",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "337/401",
+    "set_name": "Existence",
+    "name": "Flash, the Windwalker",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "338/401",
+    "set_name": "Existence",
+    "name": "Floki, Born in Fire",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "339/401",
+    "set_name": "Existence",
+    "name": "Forgotten Draugr",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "340/401",
+    "set_name": "Existence",
+    "name": "Fortress Orcscar",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "341/401",
+    "set_name": "Existence",
+    "name": "Fortune Dealer",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "342/401",
+    "set_name": "Existence",
+    "name": "Glacium Keep",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "343/401",
+    "set_name": "Existence",
+    "name": "Glemmer Bandit",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "344/401",
+    "set_name": "Existence",
+    "name": "Glowcap Fungus",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "345/401",
+    "set_name": "Existence",
+    "name": "Harmonius Chordsinger",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "346/401",
+    "set_name": "Existence",
+    "name": "Hex Hunter HX-11",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "347/401",
+    "set_name": "Existence",
+    "name": "Isaac Sparkpaw",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "348/401",
+    "set_name": "Existence",
+    "name": "Kairos Mistral",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "349/401",
+    "set_name": "Existence",
+    "name": "Koiscale",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "350/401",
+    "set_name": "Existence",
+    "name": "Lunar Empowerment",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "351/401",
+    "set_name": "Existence",
+    "name": "Lynx Pawsong",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "352/401",
+    "set_name": "Existence",
+    "name": "Master Farid",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "353/401",
+    "set_name": "Existence",
+    "name": "Mold Warrior",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "354/401",
+    "set_name": "Existence",
+    "name": "Moonfire Crystal Mouse",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "355/401",
+    "set_name": "Existence",
+    "name": "Necropolis of the Damned",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "356/401",
+    "set_name": "Existence",
+    "name": "Nesula Majoris",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "357/401",
+    "set_name": "Existence",
+    "name": "Numinatrix Aurora Ignitara",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "358/401",
+    "set_name": "Existence",
+    "name": "Oakthorn's Elysium",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "359/401",
+    "set_name": "Existence",
+    "name": "The Skyseeker Twins",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "360/401",
+    "set_name": "Existence",
+    "name": "Patch Squibbler",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "361/401",
+    "set_name": "Existence",
+    "name": "Pinkspore Dreamcap",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "362/401",
+    "set_name": "Existence",
+    "name": "Progo",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "363/401",
+    "set_name": "Existence",
+    "name": "Quantum Quell",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "364/401",
+    "set_name": "Existence",
+    "name": "Ranidae Hopmaster",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "365/401",
+    "set_name": "Existence",
+    "name": "Rav, Courtroom Mistress",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "366/401",
+    "set_name": "Existence",
+    "name": "Revolutionary Cannon",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "367/401",
+    "set_name": "Existence",
+    "name": "Scarlet Devourer",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "368/401",
+    "set_name": "Existence",
+    "name": "Scorpion's Edge",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "369/401",
+    "set_name": "Existence",
+    "name": "Seer's Gaze",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "370/401",
+    "set_name": "Existence",
+    "name": "Set Sail",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "371/401",
+    "set_name": "Existence",
+    "name": "Shroom Walker",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "372/401",
+    "set_name": "Existence",
+    "name": "Sir Reynard",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "373/401",
+    "set_name": "Existence",
+    "name": "Sir Starbeak",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "374/401",
+    "set_name": "Existence",
+    "name": "Skaldar Grimshade",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "375/401",
+    "set_name": "Existence",
+    "name": "Soul Jar Mastery",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "376/401",
+    "set_name": "Existence",
+    "name": "Spellbroken Flame Golem",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "377/401",
+    "set_name": "Existence",
+    "name": "Static Shock",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "378/401",
+    "set_name": "Existence",
+    "name": "Strength Augmentation",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "379/401",
+    "set_name": "Existence",
+    "name": "Sylvari Oceanbreaker",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "380/401",
+    "set_name": "Existence",
+    "name": "Synapse Ridge",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "381/401",
+    "set_name": "Existence",
+    "name": "Syrenia Coralheart",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "382/401",
+    "set_name": "Existence",
+    "name": "TauMecha Outskirts",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "383/401",
+    "set_name": "Existence",
+    "name": "Techno-Historian",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "384/401",
+    "set_name": "Existence",
+    "name": "Techsol",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "385/401",
+    "set_name": "Existence",
+    "name": "The Betrayer of Ironskin Clan",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "386/401",
+    "set_name": "Existence",
+    "name": "The Light Forge",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "387/401",
+    "set_name": "Existence",
+    "name": "The Remains of Barnabus",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "388/401",
+    "set_name": "Existence",
+    "name": "Thunderclap Flash",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "389/401",
+    "set_name": "Existence",
+    "name": "Thundercrash Axe",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "390/401",
+    "set_name": "Existence",
+    "name": "Tik Nollegee",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "391/401",
+    "set_name": "Existence",
+    "name": "Trinity Barboni",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "392/401",
+    "set_name": "Existence",
+    "name": "Valthok Bladebane",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "393/401",
+    "set_name": "Existence",
+    "name": "Vamparus Assassin",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "394/401",
+    "set_name": "Existence",
+    "name": "Volcanic Wastes",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "395/401",
+    "set_name": "Existence",
+    "name": "Vulcan Vale",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "396/401",
+    "set_name": "Existence",
+    "name": "Wave Whisperer Bay",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "397/401",
+    "set_name": "Existence",
+    "name": "Wavecleaver Sword",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "398/401",
+    "set_name": "Existence",
+    "name": "Whirlpool Bay",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "399/401",
+    "set_name": "Existence",
+    "name": "Wren Arbor",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "400/401",
+    "set_name": "Existence",
+    "name": "Wretched Mirror of Requiem",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "401/401",
+    "set_name": "Existence",
+    "name": "Zenik Azimuth",
+    "rarity": "Common"
+  },
+  {
+    "card_number": "402/401",
+    "set_name": "Existence",
+    "name": "Alister the Unbroken",
+    "rarity": "Secret Mythic"
+  },
+  {
+    "card_number": "403/401",
+    "set_name": "Existence",
+    "name": "Galewraith, Protector of the Skies",
+    "rarity": "Secret Mythic"
+  },
+  {
+    "card_number": "404/401",
+    "set_name": "Existence",
+    "name": "Icarion, Ascension Arbiter",
+    "rarity": "Secret Mythic"
+  },
+  {
+    "card_number": "405/401",
+    "set_name": "Existence",
+    "name": "Shaka Bok III, Well Favored",
+    "rarity": "Secret Mythic"
+  },
+  {
+    "card_number": "406/401",
+    "set_name": "Existence",
+    "name": "War'rinoco, Nature's Firstborn",
+    "rarity": "Secret Mythic"
+  },
+  {
+    "card_number": "407/401",
+    "set_name": "Existence",
+    "name": "Zeltona, The Voice of The First",
+    "rarity": "Secret Mythic"
+  },
+  {
+    "card_number": "028/401",
+    "set_name": "Existence",
+    "name": "J\u00e4n, the Magician",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Mythic"
+  },
+  {
+    "card_number": "037/401",
+    "set_name": "Existence",
+    "name": "Nexus Phasebringer",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Mythic"
+  },
+  {
+    "card_number": "043/401",
+    "set_name": "Existence",
+    "name": "Plant Terror of Ethereal Grove",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Mythic"
+  },
+  {
+    "card_number": "057/401",
+    "set_name": "Existence",
+    "name": "Skraal, Ruler of the Three Lakes",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Mythic"
+  },
+  {
+    "card_number": "060/401",
+    "set_name": "Existence",
+    "name": "The Great Core of Alderok",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Mythic"
+  },
+  {
+    "card_number": "070/401",
+    "set_name": "Existence",
+    "name": "ZipZip NugNug",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Mythic"
+  },
+  {
+    "card_number": "071/401",
+    "set_name": "Existence",
+    "name": "Adorable Vermin",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Epic"
+  },
+  {
+    "card_number": "075/401",
+    "set_name": "Existence",
+    "name": "Azure Sky Cetacean",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Epic"
+  },
+  {
+    "card_number": "103/401",
+    "set_name": "Existence",
+    "name": "Gorrash, The Dreadful",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Epic"
+  },
+  {
+    "card_number": "116/401",
+    "set_name": "Existence",
+    "name": "Orionis Skydreamer",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Epic"
+  },
+  {
+    "card_number": "126/401",
+    "set_name": "Existence",
+    "name": "Strange Mutated Mass",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Epic"
+  },
+  {
+    "card_number": "141/401",
+    "set_name": "Existence",
+    "name": "Whiskey Raider",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Epic"
+  },
+  {
+    "card_number": "150/401",
+    "set_name": "Existence",
+    "name": "Cairnvox Soulforger",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Rare"
+  },
+  {
+    "card_number": "156/401",
+    "set_name": "Existence",
+    "name": "Corrupted Prismatian Behemoth",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Rare"
+  },
+  {
+    "card_number": "170/401",
+    "set_name": "Existence",
+    "name": "Floral Diadem of the Verdant Queen",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Rare"
+  },
+  {
+    "card_number": "181/401",
+    "set_name": "Existence",
+    "name": "Iron Citadel",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Rare"
+  },
+  {
+    "card_number": "182/401",
+    "set_name": "Existence",
+    "name": "Kanevil Wayfarer",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Rare"
+  },
+  {
+    "card_number": "218/401",
+    "set_name": "Existence",
+    "name": "V-8 Wanderer",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Rare"
+  },
+  {
+    "card_number": "228/401",
+    "set_name": "Existence",
+    "name": "Arcane Grasp",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Uncommon"
+  },
+  {
+    "card_number": "276/401",
+    "set_name": "Existence",
+    "name": "Power of Bloodlines",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Uncommon"
+  },
+  {
+    "card_number": "282/401",
+    "set_name": "Existence",
+    "name": "Redstooling Hunter",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Uncommon"
+  },
+  {
+    "card_number": "290/401",
+    "set_name": "Existence",
+    "name": "Sister Azura Silversong",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Uncommon"
+  },
+  {
+    "card_number": "295/401",
+    "set_name": "Existence",
+    "name": "Stoic Temple Guardian",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Uncommon"
+  },
+  {
+    "card_number": "298/401",
+    "set_name": "Existence",
+    "name": "Syl Scalewhisper",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Uncommon"
+  },
+  {
+    "card_number": "315/401",
+    "set_name": "Existence",
+    "name": "Caroline Candole",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Common"
+  },
+  {
+    "card_number": "349/401",
+    "set_name": "Existence",
+    "name": "Koiscale",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Common"
+  },
+  {
+    "card_number": "361/401",
+    "set_name": "Existence",
+    "name": "Pinkspore Dreamcap",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Common"
+  },
+  {
+    "card_number": "377/401",
+    "set_name": "Existence",
+    "name": "Static Shock",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Common"
+  },
+  {
+    "card_number": "385/401",
+    "set_name": "Existence",
+    "name": "The Betrayer of Ironskin Clan",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Common"
+  },
+  {
+    "card_number": "387/401",
+    "set_name": "Existence",
+    "name": "The Remains of Barnabus",
+    "rarity": "1st Edition Silver Pack Alt Art Promo Common"
+  }
+]
