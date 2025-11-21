@@ -2,10 +2,10 @@ import { createRoute, useParams } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../utils/auth'
 import { Route as rootRoute } from './__root'
-import { ArrowLeft, TrendingUp, Wallet } from 'lucide-react'
+import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import { useMemo } from 'react'
+import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getFilteredRowModel } from '@tanstack/react-table'
+import { useMemo, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import clsx from 'clsx'
 
@@ -29,7 +29,7 @@ type MarketPrice = {
     title: string
     sold_date: string
     listing_type: string
-    treatment?: string // Added treatment field
+    treatment?: string
 }
 
 export const Route = createRoute({
@@ -41,6 +41,7 @@ export const Route = createRoute({
 function CardDetail() {
   const { cardId } = useParams({ from: Route.id })
   const queryClient = useQueryClient()
+  const [treatmentFilter, setTreatmentFilter] = useState<string>('all')
   
   // Fetch Card Data
   const { data: card, isLoading: isLoadingCard } = useQuery({
@@ -71,7 +72,9 @@ function CardDetail() {
       queryKey: ['card-history', cardId],
       queryFn: async () => {
           try {
-            const data = await api.get(`cards/${cardId}/history`).json<MarketPrice[]>()
+            // Fetching 100 items to allow for some client-side filtering/pagination
+            // In a real app with massive data, this should be server-side filtered/paginated.
+            const data = await api.get(`cards/${cardId}/history?limit=100`).json<MarketPrice[]>()
             return data
           } catch (e) {
               return []
@@ -126,7 +129,7 @@ function CardDetail() {
       {
           accessorKey: 'title',
           header: 'Listing Title',
-          cell: ({ row }) => <div className="truncate max-w-xs text-xs text-muted-foreground" title={row.original.title}>{row.original.title}</div>
+          cell: ({ row }) => <div className="truncate max-w-xl text-xs text-muted-foreground" title={row.original.title}>{row.original.title}</div>
       },
       {
           accessorKey: 'listing_type',
@@ -142,10 +145,25 @@ function CardDetail() {
       }
   ], [])
 
+  const filteredData = useMemo(() => {
+      if (!history) return []
+      if (treatmentFilter === 'all') return history
+      return history.filter(h => {
+          const t = h.treatment || 'Classic Paper'
+          return t === treatmentFilter
+      })
+  }, [history, treatmentFilter])
+
   const table = useReactTable({
-      data: history || [],
+      data: filteredData,
       columns,
       getCoreRowModel: getCoreRowModel(),
+      getPaginationRowModel: getPaginationRowModel(),
+      initialState: {
+          pagination: {
+              pageSize: 10,
+          },
+      },
   })
 
   // Prepare Chart Data (Sort by date ascending for line chart)
@@ -158,6 +176,13 @@ function CardDetail() {
             date: new Date(h.sold_date).toLocaleDateString(),
             price: h.price
         }))
+  }, [history])
+
+  // Extract unique treatments for filter
+  const uniqueTreatments = useMemo(() => {
+      if (!history) return []
+      const s = new Set(history.map(h => h.treatment || 'Classic Paper'))
+      return Array.from(s)
   }, [history])
 
   if (isLoadingCard) {
@@ -272,57 +297,11 @@ function CardDetail() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Sales History Table */}
-                    <div className="lg:col-span-2">
-                        <div className="border border-border rounded bg-card overflow-hidden">
-                            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/20">
-                                <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                                    Recent Sales Activity
-                                    <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px]">{history?.length || 0}</span>
-                                </h3>
-                            </div>
-                            <div className="max-h-[500px] overflow-y-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="text-xs uppercase bg-muted/30 text-muted-foreground sticky top-0 backdrop-blur-md">
-                                        {table.getHeaderGroups().map(headerGroup => (
-                                            <tr key={headerGroup.id}>
-                                                {headerGroup.headers.map(header => (
-                                                    <th key={header.id} className="px-6 py-3 font-medium border-b border-border">
-                                                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        ))}
-                                    </thead>
-                                    <tbody className="divide-y divide-border/50">
-                                        {isLoadingHistory ? (
-                                            <tr><td colSpan={5} className="p-12 text-center text-muted-foreground animate-pulse">Fetching ledger data...</td></tr>
-                                        ) : table.getRowModel().rows?.length ? (
-                                            table.getRowModel().rows.map(row => (
-                                                <tr key={row.id} className="hover:bg-muted/30 transition-colors">
-                                                    {row.getVisibleCells().map(cell => (
-                                                        <td key={cell.id} className="px-6 py-3 whitespace-nowrap">
-                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan={5} className="p-12 text-center text-muted-foreground text-xs uppercase border-dashed">
-                                                    No verified sales recorded in this period.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Chart Section */}
-                    <div className="lg:col-span-1 flex flex-col gap-6">
+                {/* Stacked Layout: Chart then Table */}
+                <div className="space-y-8">
+                    
+                    {/* Chart Section (Full Width) */}
+                    <div>
                         <div className="border border-border rounded bg-card p-1 h-[300px]">
                             <div className="h-full w-full bg-muted/10 rounded flex flex-col">
                                 <div className="p-4 border-b border-border/50">
@@ -365,16 +344,139 @@ function CardDetail() {
                                 </div>
                             </div>
                         </div>
-                        
-                        <div className="border border-border rounded bg-card p-6">
-                            <h3 className="text-xs font-bold uppercase tracking-widest mb-4 text-muted-foreground">Investment Insight</h3>
-                            <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                                The market for <strong className="text-foreground">{card.name}</strong> shows a 24h volume of {card.volume_24h || 0} units. 
-                                Current inventory levels indicate {card.inventory || 0} active listings.
-                            </p>
-                            <div className="text-xs text-muted-foreground/50 uppercase tracking-widest">
-                                Last Scraped: {new Date().toLocaleDateString()}
+                    </div>
+
+                    {/* Sales History Table (Full Width) */}
+                    <div>
+                        <div className="border border-border rounded bg-card overflow-hidden">
+                            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/20">
+                                <div className="flex items-center gap-4">
+                                    <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                                        Recent Sales Activity
+                                        <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px]">{filteredData.length || 0}</span>
+                                    </h3>
+                                    
+                                    {/* Filters */}
+                                    <div className="flex items-center gap-2">
+                                        <Filter className="w-3 h-3 text-muted-foreground" />
+                                        <select 
+                                            className="bg-background border border-border rounded text-[10px] uppercase px-2 py-1 focus:outline-none focus:border-primary"
+                                            value={treatmentFilter}
+                                            onChange={(e) => setTreatmentFilter(e.target.value)}
+                                        >
+                                            <option value="all">All Treatments</option>
+                                            {uniqueTreatments.map(t => (
+                                                <option key={t} value={t}>{t}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
+                            
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs uppercase bg-white text-black sticky top-0">
+                                        {table.getHeaderGroups().map(headerGroup => (
+                                            <tr key={headerGroup.id}>
+                                                {headerGroup.headers.map(header => (
+                                                    <th key={header.id} className="px-6 py-3 font-medium border-b border-border">
+                                                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </thead>
+                                    <tbody className="divide-y divide-border/50">
+                                        {isLoadingHistory ? (
+                                            <tr><td colSpan={5} className="p-12 text-center text-muted-foreground animate-pulse">Fetching ledger data...</td></tr>
+                                        ) : table.getRowModel().rows?.length ? (
+                                            table.getRowModel().rows.map(row => (
+                                                <tr key={row.id} className="hover:bg-muted/30 transition-colors">
+                                                    {row.getVisibleCells().map(cell => (
+                                                        <td key={cell.id} className="px-6 py-3 whitespace-nowrap">
+                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={5} className="p-12 text-center text-muted-foreground text-xs uppercase border-dashed">
+                                                    No verified sales recorded in this period.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Pagination Controls */}
+                            {table.getPageCount() > 1 && (
+                                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/10">
+                                    <div className="flex-1 flex justify-between sm:hidden">
+                                        <button
+                                            onClick={() => table.previousPage()}
+                                            disabled={!table.getCanPreviousPage()}
+                                            className="relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-muted-foreground bg-card hover:bg-muted/50 disabled:opacity-50"
+                                        >
+                                            Previous
+                                        </button>
+                                        <button
+                                            onClick={() => table.nextPage()}
+                                            disabled={!table.getCanNextPage()}
+                                            className="ml-3 relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-muted-foreground bg-card hover:bg-muted/50 disabled:opacity-50"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                    <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="text-xs text-muted-foreground">
+                                                Showing <span className="font-medium">{table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}</span> to <span className="font-medium">{Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, filteredData.length)}</span> of <span className="font-medium">{filteredData.length}</span> results
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                                                <button
+                                                    onClick={() => table.previousPage()}
+                                                    disabled={!table.getCanPreviousPage()}
+                                                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-border bg-card text-sm font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
+                                                >
+                                                    <span className="sr-only">Previous</span>
+                                                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                                                </button>
+                                                {Array.from({ length: Math.min(5, table.getPageCount()) }, (_, i) => {
+                                                    // Logic to show sliding window of pages could be added here, simplistic for now
+                                                    const pageIdx = i; 
+                                                    return (
+                                                        <button
+                                                            key={pageIdx}
+                                                            onClick={() => table.setPageIndex(pageIdx)}
+                                                            aria-current={table.getState().pagination.pageIndex === pageIdx ? 'page' : undefined}
+                                                            className={clsx(
+                                                                "relative inline-flex items-center px-4 py-2 border text-xs font-medium",
+                                                                table.getState().pagination.pageIndex === pageIdx
+                                                                    ? "z-10 bg-primary text-primary-foreground border-primary"
+                                                                    : "bg-card border-border text-muted-foreground hover:bg-muted/50"
+                                                            )}
+                                                        >
+                                                            {pageIdx + 1}
+                                                        </button>
+                                                    )
+                                                })}
+                                                <button
+                                                    onClick={() => table.nextPage()}
+                                                    disabled={!table.getCanNextPage()}
+                                                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-border bg-card text-sm font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
+                                                >
+                                                    <span className="sr-only">Next</span>
+                                                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                                                </button>
+                                            </nav>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

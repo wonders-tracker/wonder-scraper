@@ -33,7 +33,10 @@ async def scrape_card(card_name: str, card_id: int = 0):
 
     # 3. Parse
     # We pass card_id so MarketPrice objects have it
-    prices = parse_search_results(html, card_id=card_id)
+    # We also pass card_name for strict matching validation
+    # Remove "Wonders of the First" from card_name if it was appended for validation purposes
+    clean_name = card_name.replace("Wonders of the First", "").strip()
+    prices = parse_search_results(html, card_id=card_id, card_name=clean_name)
     print(f"Found {len(prices)} sold listings.")
     
     if not prices:
@@ -94,4 +97,3 @@ if __name__ == "__main__":
         asyncio.run(scrape_card(sys.argv[1]))
     else:
         asyncio.run(main())
-

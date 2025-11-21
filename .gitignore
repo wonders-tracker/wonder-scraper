@@ -53,3 +53,6 @@ pip-delete-this-directory.txt
 *.log
 frontend/vite.config.timestamp_*.js
 node_modules
+*.log
+frontend/vite.config.timestamp_*.js
+node_modules

@@ -3,25 +3,24 @@ from typing import List, Optional
 from datetime import datetime
 from dateutil import parser
 import re
+import difflib
 from app.models.market import MarketPrice
 
-def parse_search_results(html_content: str, card_id: int = 0) -> List[MarketPrice]:
+def parse_search_results(html_content: str, card_id: int = 0, card_name: str = "") -> List[MarketPrice]:
     """
     Parses eBay HTML search results and extracts market prices (Sold listings).
     """
-    return _parse_generic_results(html_content, card_id, listing_type="sold")
+    return _parse_generic_results(html_content, card_id, listing_type="sold", card_name=card_name)
 
-def parse_active_results(html_content: str, card_id: int = 0) -> List[MarketPrice]:
+def parse_active_results(html_content: str, card_id: int = 0, card_name: str = "") -> List[MarketPrice]:
     """
     Parses eBay HTML search results for ACTIVE listings.
-    Looking for Price (Ask) and potentially bid count if auction.
     """
-    return _parse_generic_results(html_content, card_id, listing_type="active")
+    return _parse_generic_results(html_content, card_id, listing_type="active", card_name=card_name)
 
 def parse_total_results(html_content: str) -> int:
     """
     Parses the total number of results from the eBay search page header.
-    E.g., "1,200 results" -> 1200
     """
     soup = BeautifulSoup(html_content, "lxml")
     result_count_elem = soup.select_one(".srp-controls__count-heading, .srp-controls__count-heading span.BOLD")
@@ -38,26 +37,52 @@ def _detect_treatment(title: str) -> str:
     """
     title_lower = title.lower()
     
-    # Check for OCM / Serialized
     if "serialized" in title_lower or "/10" in title_lower or "/25" in title_lower or "/50" in title_lower or "/75" in title_lower or "/99" in title_lower or "ocm" in title_lower:
         return "OCM Serialized"
-        
-    # Check for Stonefoil
+    
     if "stonefoil" in title_lower or "stone foil" in title_lower:
         return "Stonefoil"
         
-    # Check for Formless Foil
     if "formless" in title_lower:
         return "Formless Foil"
         
-    # Check for Classic Foil (just "foil" usually implies classic if not specified otherwise)
     if "foil" in title_lower:
         return "Classic Foil"
         
-    # Default
     return "Classic Paper"
 
-def _parse_generic_results(html_content: str, card_id: int, listing_type: str) -> List[MarketPrice]:
+def _is_valid_match(title: str, card_name: str) -> bool:
+    """
+    Validates if the listing title is a good match for the card name.
+    Uses token set ratio or simple keyword presence.
+    """
+    if not card_name:
+        return True # No name to check against
+        
+    title_lower = title.lower()
+    name_lower = card_name.lower()
+    
+    # 1. Keyword Check: All significant words in card_name should be in title
+    # Filter out common words like "the", "of", etc. if desired, but TCG names are specific.
+    # Let's try checking if at least 75% of the words match
+    card_tokens = set(name_lower.split())
+    title_tokens = set(title_lower.replace("wonders of the first", "").split()) # Remove game name to avoid false positive match on just game name
+    
+    common_tokens = card_tokens.intersection(title_tokens)
+    
+    # If card name is short (1 word), it must be present
+    if len(card_tokens) == 1:
+        return list(card_tokens)[0] in title_tokens
+        
+    match_ratio = len(common_tokens) / len(card_tokens)
+    
+    # 2. Difflib Ratio (Backup)
+    # seq_ratio = difflib.SequenceMatcher(None, name_lower, title_lower).ratio()
+    
+    # Return True if enough words match
+    return match_ratio >= 0.66
+
+def _parse_generic_results(html_content: str, card_id: int, listing_type: str, card_name: str = "") -> List[MarketPrice]:
     soup = BeautifulSoup(html_content, "lxml")
     results = []
     
@@ -75,6 +100,11 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str) -
         if "Shop on eBay" in title:
             continue
 
+        # Validation Step
+        if card_name and not _is_valid_match(title, card_name):
+            # print(f"Skipping invalid match: {title} (Target: {card_name})")
+            continue
+
         price_elem = item.select_one(".s-item__price, .s-card__price")
         if not price_elem:
             continue
@@ -86,7 +116,6 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str) -
             
         sold_date = None
         if listing_type == "sold":
-            # Logic to find date
             captions = item.select(".s-item__caption, .s-card__caption")
             for caption in captions:
                 text = caption.get_text(strip=True)
@@ -100,9 +129,8 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str) -
                     if "Sold" in text:
                         sold_date = _parse_date(text)
             if not sold_date:
-                continue # Skip sold items without date
+                continue 
         else:
-            # Active listing
             pass
 
         treatment = _detect_treatment(title)
