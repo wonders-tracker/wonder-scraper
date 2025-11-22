@@ -51,7 +51,7 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
     # Initialize browser once (with Pydoll's internal 60s timeout)
     print("Initializing browser (may take up to 60 seconds)...")
     try:
-        await BrowserManager.get_browser()
+    await BrowserManager.get_browser()
         print("Browser ready!")
     except Exception as e:
         print(f"Browser initialization failed: {e}")
