@@ -187,12 +187,12 @@ function CardDetail() {
       // Create individual data points with proper index-based x values
       return sorted.map((h, index) => {
           const saleDate = new Date(h.sold_date)
+          const priceNum = Number(h.price)
           return {
               date: saleDate.toLocaleDateString(),
               timestamp: saleDate.getTime(),
               x: index,  // Sequential index for X-axis
-              y: h.price, // Price for Y-axis
-              price: h.price,
+              y: priceNum, // Price for Y-axis (ensure it's a number)
               treatment: h.treatment || 'Classic Paper',
               title: h.title,
               listing_type: h.listing_type
@@ -376,7 +376,7 @@ function CardDetail() {
                                                         const data = payload[0].payload
                                                         return (
                                                             <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)'}}>
-                                                                <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '16px'}}>${data.price?.toFixed(2)}</div>
+                                                                <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '16px'}}>${data.y?.toFixed(2)}</div>
                                                                 <div style={{color: '#a3a3a3', fontSize: '11px', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600'}}>{data.treatment}</div>
                                                                 <div style={{color: '#666', fontSize: '10px', marginBottom: '6px'}}>{data.date}</div>
                                                                 {data.listing_type === 'active' && (
