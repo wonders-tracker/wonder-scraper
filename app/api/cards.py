@@ -119,6 +119,8 @@ def read_cards(
     # Batch fetch actual LAST SALE price (Postgres DISTINCT ON)
     last_sale_map = {}
     vwap_map = {}
+    prev_price_map = {} # Price N hours ago
+    
     if card_ids:
         try:
             from sqlalchemy import text
@@ -146,6 +148,19 @@ def read_cards(
             vwap_results = session.exec(vwap_query).all()
             vwap_map = {row[0]: row[1] for row in vwap_results}
             
+            # Fetch Previous Closing Price (Price BEFORE cutoff)
+            if cutoff_time:
+                prev_price_query = text(f"""
+                    SELECT DISTINCT ON (card_id) card_id, price
+                    FROM marketprice
+                    WHERE card_id IN ({id_list}) 
+                    AND listing_type = 'sold'
+                    AND sold_date < '{cutoff_time}'
+                    ORDER BY card_id, sold_date DESC
+                """)
+                prev_results = session.exec(prev_price_query).all()
+                prev_price_map = {row[0]: row[1] for row in prev_results}
+            
         except Exception as e:
             print(f"Error fetching sales data: {e}")
     
@@ -167,12 +182,19 @@ def read_cards(
         # Get VWAP
         vwap = vwap_map.get(card.id)
         
-        # 1. Market Trend Delta (Avg Price vs Oldest Avg Price in window)
+        # 1. Market Trend Delta (Sales-based)
         avg_delta = 0.0
-        if latest_snap and oldest_snap and oldest_snap.avg_price > 0:
-            # Check if they are different snapshots to avoid 0 delta on single data point
+        
+        # Strategy A: Use actual sales delta (Current vs Prev Close) - Most Accurate
+        prev_close = prev_price_map.get(card.id)
+        if last_price and prev_close and prev_close > 0:
+             avg_delta = ((last_price - prev_close) / prev_close) * 100
+             
+        # Strategy B: Fallback to Snapshot Delta (if sales gap is too large or missing)
+        elif latest_snap and oldest_snap and oldest_snap.avg_price > 0:
             if latest_snap.id != oldest_snap.id:
                 avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
+
                 
         # 2. Deal Rating Delta (Last Sale vs Current Avg Price)
         deal_delta = 0.0
@@ -253,6 +275,7 @@ def read_card(
     
     # Calculate VWAP for single card (past 30 days default)
     vwap = None
+    prev_close = None
     try:
         from sqlalchemy import text
         cutoff_30d = datetime.utcnow() - timedelta(days=30)
@@ -261,12 +284,29 @@ def read_card(
             WHERE card_id = :cid AND listing_type = 'sold' AND sold_date >= :cutoff
         """)
         vwap = session.exec(vwap_q, params={"cid": card_id, "cutoff": cutoff_30d}).first()[0]
+        
+        # Fetch Prev Close (24h ago)
+        cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+        prev_q = text(f"""
+            SELECT price FROM marketprice 
+            WHERE card_id = :cid AND listing_type = 'sold' AND sold_date < :cutoff
+            ORDER BY sold_date DESC LIMIT 1
+        """)
+        prev_res = session.exec(prev_q, params={"cid": card_id, "cutoff": cutoff_24h}).first()
+        prev_close = prev_res if prev_res else None
+        
     except Exception:
         pass
 
     # 1. Market Trend Delta
     avg_delta = 0.0
-    if latest_snap and oldest_snap and oldest_snap.avg_price > 0 and latest_snap.id != oldest_snap.id:
+    
+    # Strategy A: Sales-based Delta
+    if real_price and prev_close and prev_close > 0:
+        avg_delta = ((real_price - prev_close) / prev_close) * 100
+        
+    # Strategy B: Snapshot Fallback
+    elif latest_snap and oldest_snap and oldest_snap.avg_price > 0 and latest_snap.id != oldest_snap.id:
         avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
             
     # 2. Deal Rating Delta
