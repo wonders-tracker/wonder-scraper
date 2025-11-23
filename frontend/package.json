@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "build:vercel": "vite build",
+    "clean:temp": "rm -f vite.config.timestamp_*.js app.config.timestamp_*.js",
+    "dev": "npm run clean:temp && vite",
+    "build": "npm run clean:temp && tsc --noEmit && vite build",
+    "build:vercel": "npm run clean:temp && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
