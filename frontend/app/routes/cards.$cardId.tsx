@@ -384,40 +384,42 @@ function CardDetail() {
                                                     cursor={{strokeDasharray: '3 3', stroke: '#666'}}
                                                 />
                                                 
-                                                {/* Single Scatter component with all data */}
-                                                <Scatter 
-                                                    data={chartData}
-                                                    shape={(props: any) => {
-                                                        // Treatment-specific color mapping
-                                                        const treatmentColors: Record<string, string> = {
-                                                            'Classic Paper': '#6b7280',      // Gray
-                                                            'Classic Foil': '#3b82f6',       // Blue
-                                                            'Stonefoil': '#8b5cf6',          // Purple
-                                                            'Formless Foil': '#ec4899',      // Pink
-                                                            'OCM Serialized': '#f59e0b',     // Amber/Gold
-                                                            'Prerelease': '#14b8a6',         // Teal
-                                                            'Promo': '#f97316',              // Orange
-                                                            'Proof/Sample': '#ef4444',       // Red
-                                                            'Error/Errata': '#dc2626',       // Dark Red
-                                                        }
-                                                        
-                                                        const { cx, cy, payload } = props
-                                                        const color = treatmentColors[payload.treatment] || '#10b981'
-                                                        
-                                                        return (
-                                                            <circle 
-                                                                cx={cx} 
-                                                                cy={cy} 
-                                                                r={5} 
-                                                                fill={color} 
-                                                                fillOpacity={0.8}
-                                                                stroke={color}
-                                                                strokeWidth={1}
-                                                                strokeOpacity={0.6}
-                                                            />
-                                                        )
-                                                    }}
-                                                />
+                                                {/* Scatter plots by treatment with proper dataKey mappings */}
+                                                {chartTreatments.map((treatment) => {
+                                                    // Treatment-specific color mapping
+                                                    const treatmentColors: Record<string, string> = {
+                                                        'Classic Paper': '#6b7280',      // Gray
+                                                        'Classic Foil': '#3b82f6',       // Blue
+                                                        'Stonefoil': '#8b5cf6',          // Purple
+                                                        'Formless Foil': '#ec4899',      // Pink
+                                                        'OCM Serialized': '#f59e0b',     // Amber/Gold
+                                                        'Prerelease': '#14b8a6',         // Teal
+                                                        'Promo': '#f97316',              // Orange
+                                                        'Proof/Sample': '#ef4444',       // Red
+                                                        'Error/Errata': '#dc2626',       // Dark Red
+                                                    }
+                                                    const color = treatmentColors[treatment] || '#10b981' // Default green
+                                                    
+                                                    // Filter data for this specific treatment
+                                                    const treatmentData = chartData.filter(d => d.treatment === treatment)
+                                                    
+                                                    if (treatmentData.length === 0) return null
+                                                    
+                                                    return (
+                                                        <Scatter 
+                                                            key={treatment}
+                                                            name={treatment}
+                                                            data={treatmentData}
+                                                            fill={color}
+                                                            fillOpacity={0.7}
+                                                            stroke={color}
+                                                            strokeWidth={2}
+                                                            strokeOpacity={0.3}
+                                                            line={false}
+                                                            shape="circle"
+                                                        />
+                                                    )
+                                                })}
                                             </ScatterChart>
                                         </ResponsiveContainer>
                                     ) : (
