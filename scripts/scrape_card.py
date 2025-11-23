@@ -27,11 +27,30 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
             queries.append(f"{card_name} Box")
         queries.append(f"{card_name} Sealed")
         queries.append(f"{card_name} Collector Box")
+        queries.append(f"{card_name} Booster Box")
+        queries.append(f"{card_name} Case")
         
     elif product_type == "Pack":
         if "pack" not in initial_query.lower():
             queries.append(f"{card_name} Pack")
         queries.append(f"{card_name} Booster Pack")
+        queries.append(f"{card_name} Sealed Pack")
+        
+    elif product_type == "Lot":
+        # For lots, we want to capture bundles, collections, and bulk sales
+        if "lot" not in initial_query.lower():
+            queries.append(f"{card_name} Lot")
+        queries.append(f"{card_name} Bundle")
+        queries.append(f"{card_name} Collection")
+        queries.append(f"{card_name} Bulk")
+        queries.append(f"{card_name} Mixed Lot")
+        
+    elif product_type == "Proof":
+        # For proofs and samples
+        if "proof" not in initial_query.lower() and "sample" not in initial_query.lower():
+            queries.append(f"{card_name} Proof")
+        queries.append(f"{card_name} Sample")
+        queries.append(f"{card_name} Prototype")
         
     else:
         # Standard Single Card Logic

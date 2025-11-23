@@ -182,14 +182,22 @@ function CardDetail() {
       // Create individual data points for each sale (no grouping/averaging)
       return history
         .filter(h => h.price > 0 && h.sold_date)
-        .map(h => ({
-            date: new Date(h.sold_date).toLocaleDateString(),
-            timestamp: new Date(h.sold_date).getTime(),
-            price: h.price,
-            treatment: h.treatment || 'Classic Paper',
-            title: h.title
-        }))
+        .map((h, index) => {
+            const saleDate = new Date(h.sold_date)
+            return {
+                date: saleDate.toLocaleDateString(),
+                timestamp: saleDate.getTime(),
+                // Use index as X position for proper spacing
+                x: index,
+                price: h.price,
+                treatment: h.treatment || 'Classic Paper',
+                title: h.title,
+                listing_type: h.listing_type
+            }
+        })
         .sort((a, b) => a.timestamp - b.timestamp)
+        // Re-index after sorting
+        .map((item, index) => ({ ...item, x: index }))
   }, [history])
   
   // Get all unique treatments for creating lines
@@ -338,69 +346,78 @@ function CardDetail() {
                                 <div className="flex-1 p-6 relative">
                                     {chartData.length > 1 ? (
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <ScatterChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={true} horizontal={true} />
-                                                <XAxis dataKey="date" hide />
+                                            <ScatterChart margin={{ top: 20, right: 60, bottom: 20, left: 20 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} horizontal={true} />
+                                                <XAxis 
+                                                    type="number" 
+                                                    dataKey="x" 
+                                                    hide
+                                                    domain={[0, 'auto']}
+                                                />
                                                 <YAxis 
+                                                    type="number"
                                                     dataKey="price"
-                                                    domain={['auto', 'auto']} 
+                                                    domain={[(dataMin: number) => Math.floor(dataMin * 0.9), (dataMax: number) => Math.ceil(dataMax * 1.1)]} 
                                                     orientation="right" 
-                                                    tick={{fill: '#666', fontSize: 10, fontFamily: 'monospace'}}
+                                                    tick={{fill: '#888', fontSize: 11, fontFamily: 'monospace'}}
                                                     axisLine={false}
                                                     tickLine={false}
-                                                    tickFormatter={(val) => `$${val}`}
+                                                    tickFormatter={(val) => `$${val.toFixed(0)}`}
+                                                    width={50}
                                                 />
-                                                <ZAxis range={[100, 100]} />
+                                                <ZAxis range={[80, 80]} />
                                                 <Tooltip 
-                                                    contentStyle={{backgroundColor: '#fff', borderColor: '#e5e7eb', fontFamily: 'monospace', fontSize: '11px', padding: '10px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)'}}
-                                                    itemStyle={{color: '#000'}}
                                                     content={({ payload }) => {
                                                         if (!payload || !payload[0]) return null
                                                         const data = payload[0].payload
                                                         return (
-                                                            <div style={{backgroundColor: '#fff', border: '1px solid #e5e7eb', padding: '10px', borderRadius: '6px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)'}}>
-                                                                <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '6px', fontSize: '14px'}}>${data.price?.toFixed(2)}</div>
-                                                                <div style={{color: '#374151', fontSize: '11px', fontWeight: '600'}}>{data.treatment}</div>
-                                                                <div style={{color: '#6b7280', fontSize: '10px', marginTop: '4px'}}>{data.date}</div>
+                                                            <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)'}}>
+                                                                <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '16px'}}>${data.price?.toFixed(2)}</div>
+                                                                <div style={{color: '#a3a3a3', fontSize: '11px', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600'}}>{data.treatment}</div>
+                                                                <div style={{color: '#666', fontSize: '10px', marginBottom: '6px'}}>{data.date}</div>
+                                                                {data.listing_type === 'active' && (
+                                                                    <div style={{color: '#3b82f6', fontSize: '9px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #333'}}>ACTIVE LISTING</div>
+                                                                )}
                                                             </div>
                                                         )
                                                     }}
-                                                    cursor={{strokeDasharray: '3 3'}}
+                                                    cursor={{strokeDasharray: '3 3', stroke: '#666'}}
                                                 />
                                                 
-                                                {/* Individual treatment scatter plots with distinct colors */}
-                                                {chartTreatments.map((treatment) => {
-                                                    // Treatment-specific color mapping
-                                                    const treatmentColors: Record<string, string> = {
-                                                        'Classic Paper': '#6b7280',      // Gray
-                                                        'Classic Foil': '#3b82f6',       // Blue
-                                                        'Stonefoil': '#8b5cf6',          // Purple
-                                                        'Formless Foil': '#ec4899',      // Pink
-                                                        'OCM Serialized': '#f59e0b',     // Amber/Gold
-                                                        'Prerelease': '#14b8a6',         // Teal
-                                                        'Promo': '#f97316',              // Orange
-                                                        'Proof/Sample': '#ef4444',       // Red
-                                                        'Error/Errata': '#dc2626',       // Dark Red
-                                                    }
-                                                    const color = treatmentColors[treatment] || '#10b981' // Default green
-                                                    
-                                                    // Filter data for this specific treatment
-                                                    const treatmentData = chartData.filter(d => d.treatment === treatment)
-                                                    
-                                                    return (
-                                                        <Scatter 
-                                                            key={treatment}
-                                                            name={treatment}
-                                                            data={treatmentData}
-                                                            fill={color}
-                                                            stroke={color}
-                                                            strokeWidth={2}
-                                                            fillOpacity={0.8}
-                                                            r={6}
-                                                            shape="circle"
-                                                        />
-                                                    )
-                                                })}
+                                                {/* Single Scatter component with all data */}
+                                                <Scatter 
+                                                    data={chartData}
+                                                    shape={(props: any) => {
+                                                        // Treatment-specific color mapping
+                                                        const treatmentColors: Record<string, string> = {
+                                                            'Classic Paper': '#6b7280',      // Gray
+                                                            'Classic Foil': '#3b82f6',       // Blue
+                                                            'Stonefoil': '#8b5cf6',          // Purple
+                                                            'Formless Foil': '#ec4899',      // Pink
+                                                            'OCM Serialized': '#f59e0b',     // Amber/Gold
+                                                            'Prerelease': '#14b8a6',         // Teal
+                                                            'Promo': '#f97316',              // Orange
+                                                            'Proof/Sample': '#ef4444',       // Red
+                                                            'Error/Errata': '#dc2626',       // Dark Red
+                                                        }
+                                                        
+                                                        const { cx, cy, payload } = props
+                                                        const color = treatmentColors[payload.treatment] || '#10b981'
+                                                        
+                                                        return (
+                                                            <circle 
+                                                                cx={cx} 
+                                                                cy={cy} 
+                                                                r={5} 
+                                                                fill={color} 
+                                                                fillOpacity={0.8}
+                                                                stroke={color}
+                                                                strokeWidth={1}
+                                                                strokeOpacity={0.6}
+                                                            />
+                                                        )
+                                                    }}
+                                                />
                                             </ScatterChart>
                                         </ResponsiveContainer>
                                     ) : (
