@@ -18,6 +18,7 @@ import { Route as PortfolioImport } from './routes/portfolio'
 import { Route as MarketImport } from './routes/market'
 import { Route as LoginImport } from './routes/login'
 import { Route as IndexImport } from './routes/index'
+import { Route as AuthCallbackImport } from './routes/auth.callback'
 import { Route as CardsCardIdImport } from './routes/cards.$cardId'
 
 // Create Virtual Routes
@@ -46,6 +47,11 @@ const LoginRoute = LoginImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
+const AuthCallbackRoute = AuthCallbackImport.update({
+  path: '/auth/callback',
+  getParentRoute: () => rootRoute,
+} as any)
+
 const IndexRoute = IndexImport.update({
   path: '/',
   getParentRoute: () => rootRoute,
@@ -65,6 +71,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexImport
+      parentRoute: typeof rootRoute
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackImport
       parentRoute: typeof rootRoute
     }
     '/login': {
@@ -110,6 +123,7 @@ declare module '@tanstack/react-router' {
 export const routeTree = rootRoute.addChildren({
   IndexRoute,
   LoginRoute,
+  AuthCallbackRoute,
   MarketRoute,
   PortfolioRoute,
   ProfileRoute,

@@ -230,7 +230,16 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
         treatment = _detect_treatment(title)
         bid_count = _extract_bid_count(item)
         item_id, url = _extract_item_details(item)
-
+        
+        # Extract Image URL
+        image_elem = item.select_one(".s-item__image-img")
+        image_url = None
+        if image_elem:
+            # Try src first, but eBay often uses lazy loading with data-src or other attributes
+            image_url = image_elem.get("src")
+            if not image_url or "gif" in image_url or "base64" in image_url:
+                 image_url = image_elem.get("data-src")
+        
         mp = MarketPrice(
             card_id=card_id,
             title=title,
@@ -241,6 +250,7 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             bid_count=bid_count, 
             external_id=item_id, # Unique eBay Item ID
             url=url,
+            image_url=image_url, # Captured Image URL
             platform="ebay",
             scraped_at=datetime.utcnow()
         )

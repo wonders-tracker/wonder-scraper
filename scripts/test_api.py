@@ -10,7 +10,7 @@ def generate_email():
 
 def test_api_flow():
     email = generate_email()
-    password = "password123"
+    password = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
     
     print(f"1. Registering user: {email}")
     response = client.post(

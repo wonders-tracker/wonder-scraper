@@ -33,6 +33,9 @@ type MarketPrice = {
     listing_type: string
     treatment?: string
     bid_count?: number
+    url?: string
+    image_url?: string
+    description?: string
 }
 
 export const Route = createRoute({
@@ -586,6 +589,18 @@ function CardDetail() {
                     </div>
                     
                     <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                        {/* Product Image (if available) */}
+                        {selectedListing.image_url && (
+                            <div className="rounded-lg overflow-hidden border border-border">
+                                <img 
+                                    src={selectedListing.image_url} 
+                                    alt={selectedListing.title} 
+                                    className="w-full h-48 object-cover" 
+                                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                                />
+                            </div>
+                        )}
+
                         <div>
                             <div className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-2">Listing Title</div>
                             <div className="text-sm font-medium leading-relaxed border border-border p-3 rounded bg-muted/20">
@@ -656,36 +671,38 @@ function CardDetail() {
                             </div>
                         </div>
                         
-                        {/* Item Specs & Protection */}
+                        {/* Listing Info */}
+                        {/* Only show placeholder specs if we don't have real data, for now we removed the hardcoded box specs to avoid confusion */}
                         <div className="pt-6 border-t border-border">
                             <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <div className="w-1 h-4 bg-orange-500 rounded-full"></div>
-                                Item Specs & Protection
+                                <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
+                                Listing Info
                             </h3>
                             <div className="bg-muted/10 rounded p-4 border border-border space-y-3 text-xs">
-                                <div>
-                                    <div className="text-foreground font-bold mb-2">Collector Box / Case Specs</div>
-                                    <ul className="space-y-1 list-disc list-inside text-muted-foreground">
-                                        <li>Inside Dimensions: 5.750 in x 4.875 in x 2 in.</li>
-                                        <li>5 mm Thick UV Protecting Acrylic.</li>
-                                        <li>Extra Strong Magnetic Lid.</li>
-                                        <li className="text-orange-400">Note: This listing is for the acrylic case only (reference).</li>
-                                    </ul>
-                                </div>
-                                <div className="pt-2 border-t border-border/50">
-                                    <div className="text-foreground font-bold mb-1">Seller Info</div>
-                                    <p className="text-muted-foreground">Verified Market Data aggregated from eBay and OpenSea.</p>
+                                {selectedListing.description ? (
+                                    <p className="text-muted-foreground italic">"{selectedListing.description}"</p>
+                                ) : (
+                                    <p className="text-muted-foreground">No additional details provided for this listing.</p>
+                                )}
+                                <div className="pt-2 border-t border-border/50 mt-2">
+                                    <div className="text-foreground font-bold mb-1">Source</div>
+                                    <p className="text-muted-foreground">Verified Market Data aggregated from {selectedListing.url?.includes('ebay') ? 'eBay' : 'External Market'}.</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Placeholder for future URL */}
+                        {/* External Link */}
                         <div className="pt-4">
-                            <a href={`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(selectedListing.title)}&LH_Complete=1`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full border border-border hover:bg-muted/50 text-xs uppercase font-bold py-3 rounded transition-colors">
-                                <ExternalLink className="w-3 h-3" /> Find Original on eBay
+                            <a 
+                                href={selectedListing.url || `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(selectedListing.title)}&LH_Complete=1`} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="flex items-center justify-center gap-2 w-full border border-border hover:bg-muted/50 text-xs uppercase font-bold py-3 rounded transition-colors"
+                            >
+                                <ExternalLink className="w-3 h-3" /> View Original Listing
                             </a>
                             <div className="text-[10px] text-center text-muted-foreground mt-2">
-                                *Link searches for this title as specific URLs are not yet archived.
+                                *Redirects to the original marketplace listing.
                             </div>
                         </div>
                     </div>

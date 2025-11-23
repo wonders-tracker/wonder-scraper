@@ -32,5 +32,7 @@ class MarketPrice(SQLModel, table=True):
     bid_count: int = Field(default=0) # New field: Number of bids (for auctions)
     external_id: Optional[str] = Field(default=None, index=True) # Unique ID from source (e.g., eBay item ID)
     url: Optional[str] = Field(default=None) # Link to the listing
+    image_url: Optional[str] = Field(default=None) # Link to listing image
+    description: Optional[str] = Field(default=None) # Short description or specifics
     platform: str = Field(default="ebay") # 'ebay', 'opensea', 'tcgplayer', etc.
     scraped_at: datetime = Field(default_factory=datetime.utcnow)

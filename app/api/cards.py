@@ -48,13 +48,14 @@ def read_cards(
     limit: int = 100,
     search: Optional[str] = None,
     time_period: Optional[str] = Query(default="24h", regex="^(24h|7d|30d|90d|all)$"),
+    product_type: Optional[str] = Query(default=None, description="Filter by product type (e.g., Single, Box, Pack)"),
 ) -> Any:
     """
     Retrieve cards with latest market data - OPTIMIZED with caching.
     Single batch query instead of N+1 + 5-minute cache.
     """
     # Check cache first
-    cache_key = get_cache_key("cards", skip=skip, limit=limit, search=search or "", time_period=time_period)
+    cache_key = get_cache_key("cards", skip=skip, limit=limit, search=search or "", time_period=time_period, product_type=product_type or "")
     cached = get_cached(cache_key)
     if cached:
         return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
@@ -73,6 +74,10 @@ def read_cards(
     card_query = select(Card)
     if search:
         card_query = card_query.where(Card.name.ilike(f"%{search}%"))
+    if product_type:
+        # Case-insensitive match for better UX
+        card_query = card_query.where(Card.product_type.ilike(product_type))
+        
     card_query = card_query.offset(skip).limit(limit)
     cards = session.exec(card_query).all()
     
