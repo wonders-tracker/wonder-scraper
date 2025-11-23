@@ -341,8 +341,8 @@ function Home() {
                     ))}
                </Marquee>
            </div>
-      </div>
-
+        </div>
+        
       <div className="p-6 max-w-[1600px] mx-auto space-y-6">
         {/* Main Data Table */}
         <div className="border border-border rounded bg-card overflow-hidden">
@@ -357,15 +357,15 @@ function Home() {
                     <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2 md:gap-4 w-full">
                         <div className="relative w-full flex-1">
                              <Search className="absolute left-3 top-2 h-3.5 w-3.5 text-muted-foreground" />
-                             <input 
-                                type="text" 
+                 <input 
+                    type="text" 
                                 placeholder="SEARCH..." 
                                 className="w-full bg-background pl-9 pr-4 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
-                                value={globalFilter}
-                                onChange={e => setGlobalFilter(e.target.value)}
-                             />
-                        </div>
-                        
+                    value={globalFilter}
+                    onChange={e => setGlobalFilter(e.target.value)}
+                 />
+            </div>
+            
                         <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
                             <select 
                                 className="flex-1 sm:flex-none bg-background px-3 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary uppercase font-mono cursor-pointer hover:bg-muted transition-colors"
@@ -382,71 +382,71 @@ function Home() {
 
                             <div className="relative flex items-center flex-1 sm:flex-none">
                                 <Calendar className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                                <select 
+                <select 
                                     className="w-full bg-background pl-9 pr-3 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary uppercase font-mono cursor-pointer hover:bg-muted transition-colors"
-                                    value={timePeriod}
-                                    onChange={e => setTimePeriod(e.target.value)}
-                                >
-                                    <option value="24h">24 Hours</option>
-                                    <option value="7d">7 Days</option>
-                                    <option value="30d">30 Days</option>
-                                    <option value="90d">90 Days</option>
-                                    <option value="all">All Time</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    value={timePeriod}
+                    onChange={e => setTimePeriod(e.target.value)}
+                >
+                    <option value="24h">24 Hours</option>
+                    <option value="7d">7 Days</option>
+                    <option value="30d">30 Days</option>
+                    <option value="90d">90 Days</option>
+                    <option value="all">All Time</option>
+                </select>
+            </div>
+        </div>
+        </div>
+      </div>
 
                 <div className="text-xs text-muted-foreground font-mono hidden xl:block shrink-0">
                     Showing top {cards?.length || 0} assets
                 </div>
-            </div>
-            {isLoading ? (
-                <div className="p-12 text-center">
-                    <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-                    <div className="text-xs uppercase text-muted-foreground animate-pulse">Loading market stream...</div>
-                </div>
-            ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="text-xs uppercase bg-muted/30 text-muted-foreground border-b border-border">
-                            {table.getHeaderGroups().map(headerGroup => (
-                                <tr key={headerGroup.id}>
-                                    {headerGroup.headers.map(header => (
+        </div>
+                {isLoading ? (
+                    <div className="p-12 text-center">
+                        <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                        <div className="text-xs uppercase text-muted-foreground animate-pulse">Loading market stream...</div>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="text-xs uppercase bg-muted/30 text-muted-foreground border-b border-border">
+                                {table.getHeaderGroups().map(headerGroup => (
+                                    <tr key={headerGroup.id}>
+                                        {headerGroup.headers.map(header => (
                                         <th key={header.id} className="px-4 py-3 font-medium whitespace-nowrap hover:bg-muted/50 transition-colors">
-                                            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                        </th>
-                                    ))}
-                                </tr>
-                            ))}
-                        </thead>
-                        <tbody className="divide-y divide-border/50">
-                            {table.getRowModel().rows?.length ? (
-                                table.getRowModel().rows.map(row => (
-                                    <tr 
-                                        key={row.id} 
-                                        className="hover:bg-muted/30 transition-colors cursor-pointer group"
-                                        onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(row.original.id) } })}
-                                    >
-                                        {row.getVisibleCells().map(cell => (
-                                            <td key={cell.id} className="px-2 md:px-4 py-3 whitespace-nowrap">
-                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                            </td>
+                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                            </th>
                                         ))}
                                     </tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td colSpan={columns.length} className="h-32 text-center text-muted-foreground text-xs uppercase">
-                                        No market data found.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+                                ))}
+                            </thead>
+                            <tbody className="divide-y divide-border/50">
+                                {table.getRowModel().rows?.length ? (
+                                    table.getRowModel().rows.map(row => (
+                                        <tr 
+                                            key={row.id} 
+                                            className="hover:bg-muted/30 transition-colors cursor-pointer group"
+                                            onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(row.original.id) } })}
+                                        >
+                                            {row.getVisibleCells().map(cell => (
+                                            <td key={cell.id} className="px-2 md:px-4 py-3 whitespace-nowrap">
+                                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={columns.length} className="h-32 text-center text-muted-foreground text-xs uppercase">
+                                            No market data found.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
         </div>
       </div>
     </div>
