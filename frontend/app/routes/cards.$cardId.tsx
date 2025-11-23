@@ -6,7 +6,7 @@ import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, Ex
 import { Link } from '@tanstack/react-router'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getFilteredRowModel } from '@tanstack/react-table'
 import { useMemo, useState } from 'react'
-import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ZAxis } from 'recharts'
+import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ZAxis, Cell } from 'recharts'
 import clsx from 'clsx'
 
 type CardDetail = {
@@ -398,37 +398,35 @@ function CardDetail() {
                                                     cursor={{strokeDasharray: '3 3', stroke: '#666'}}
                                                 />
                                                 
-                                                {/* Scatter plots by treatment with proper dataKey mappings */}
-                                                {chartTreatments.map((treatment) => {
-                                                    // Treatment-specific color mapping
-                                                    const treatmentColors: Record<string, string> = {
-                                                        'Classic Paper': '#6b7280',      // Gray
-                                                        'Classic Foil': '#3b82f6',       // Blue
-                                                        'Stonefoil': '#8b5cf6',          // Purple
-                                                        'Formless Foil': '#ec4899',      // Pink
-                                                        'OCM Serialized': '#f59e0b',     // Amber/Gold
-                                                        'Prerelease': '#14b8a6',         // Teal
-                                                        'Promo': '#f97316',              // Orange
-                                                        'Proof/Sample': '#ef4444',       // Red
-                                                        'Error/Errata': '#dc2626',       // Dark Red
-                                                    }
-                                                    const color = treatmentColors[treatment] || '#10b981' // Default green
-                                                    
-                                                    // Filter data for this specific treatment
-                                                    const treatmentData = chartData.filter(d => d.treatment === treatment)
-                                                    
-                                                    if (treatmentData.length === 0) return null
-                                                    
-                                                    return (
-                                                        <Scatter 
-                                                            key={treatment}
-                                                            name={treatment}
-                                                            data={treatmentData}
-                                                            fill={color}
-                                                            fillOpacity={0.7}
-                                                        />
-                                                    )
-                                                })}
+                                                {/* Single Scatter with individual Cells for coloring */}
+                                                <Scatter 
+                                                    data={chartData} 
+                                                    line={false}
+                                                    shape="circle"
+                                                >
+                                                    {chartData.map((entry, index) => {
+                                                        const treatmentColors: Record<string, string> = {
+                                                            'Classic Paper': '#6b7280',      // Gray
+                                                            'Classic Foil': '#3b82f6',       // Blue
+                                                            'Stonefoil': '#8b5cf6',          // Purple
+                                                            'Formless Foil': '#ec4899',      // Pink
+                                                            'OCM Serialized': '#f59e0b',     // Amber/Gold
+                                                            'Prerelease': '#14b8a6',         // Teal
+                                                            'Promo': '#f97316',              // Orange
+                                                            'Proof/Sample': '#ef4444',       // Red
+                                                            'Error/Errata': '#dc2626',       // Dark Red
+                                                        }
+                                                        const color = treatmentColors[entry.treatment] || '#10b981'
+                                                        
+                                                        return (
+                                                            <Cell 
+                                                                key={`cell-${index}`} 
+                                                                fill={color} 
+                                                                fillOpacity={0.7}
+                                                            />
+                                                        )
+                                                    })}
+                                                </Scatter>
                                             </ScatterChart>
                                         </ResponsiveContainer>
                                     ) : (
