@@ -179,25 +179,25 @@ function CardDetail() {
   const chartData = useMemo(() => {
       if (!history) return []
       
-      // Create individual data points for each sale (no grouping/averaging)
-      return history
+      // Sort first by date
+      const sorted = history
         .filter(h => h.price > 0 && h.sold_date)
-        .map((h, index) => {
-            const saleDate = new Date(h.sold_date)
-            return {
-                date: saleDate.toLocaleDateString(),
-                timestamp: saleDate.getTime(),
-                // Use index as X position for proper spacing
-                x: index,
-                price: h.price,
-                treatment: h.treatment || 'Classic Paper',
-                title: h.title,
-                listing_type: h.listing_type
-            }
-        })
-        .sort((a, b) => a.timestamp - b.timestamp)
-        // Re-index after sorting
-        .map((item, index) => ({ ...item, x: index }))
+        .sort((a, b) => new Date(a.sold_date).getTime() - new Date(b.sold_date).getTime())
+      
+      // Create individual data points with proper index-based x values
+      return sorted.map((h, index) => {
+          const saleDate = new Date(h.sold_date)
+          return {
+              date: saleDate.toLocaleDateString(),
+              timestamp: saleDate.getTime(),
+              x: index,  // Sequential index for X-axis
+              y: h.price, // Price for Y-axis
+              price: h.price,
+              treatment: h.treatment || 'Classic Paper',
+              title: h.title,
+              listing_type: h.listing_type
+          }
+      })
   }, [history])
   
   // Get all unique treatments for creating lines
@@ -346,26 +346,30 @@ function CardDetail() {
                                 <div className="flex-1 p-6 relative">
                                     {chartData.length > 1 ? (
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <ScatterChart margin={{ top: 20, right: 60, bottom: 20, left: 20 }}>
+                                            <ScatterChart margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} horizontal={true} />
                                                 <XAxis 
                                                     type="number" 
                                                     dataKey="x" 
-                                                    hide
-                                                    domain={[0, 'auto']}
+                                                    name="Sale"
+                                                    domain={[0, chartData.length - 1]}
+                                                    tick={{fill: '#666', fontSize: 10}}
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                    label={{ value: 'Sales Timeline →', position: 'bottom', fill: '#666', fontSize: 10 }}
                                                 />
                                                 <YAxis 
                                                     type="number"
-                                                    dataKey="price"
+                                                    dataKey="y"
+                                                    name="Price"
                                                     domain={[(dataMin: number) => Math.floor(dataMin * 0.9), (dataMax: number) => Math.ceil(dataMax * 1.1)]} 
                                                     orientation="right" 
                                                     tick={{fill: '#888', fontSize: 11, fontFamily: 'monospace'}}
                                                     axisLine={false}
                                                     tickLine={false}
                                                     tickFormatter={(val) => `$${val.toFixed(0)}`}
-                                                    width={50}
+                                                    width={60}
                                                 />
-                                                <ZAxis range={[80, 80]} />
                                                 <Tooltip 
                                                     content={({ payload }) => {
                                                         if (!payload || !payload[0]) return null
@@ -412,11 +416,6 @@ function CardDetail() {
                                                             data={treatmentData}
                                                             fill={color}
                                                             fillOpacity={0.7}
-                                                            stroke={color}
-                                                            strokeWidth={2}
-                                                            strokeOpacity={0.3}
-                                                            line={false}
-                                                            shape="circle"
                                                         />
                                                     )
                                                 })}
