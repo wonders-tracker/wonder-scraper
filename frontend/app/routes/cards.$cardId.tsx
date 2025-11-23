@@ -179,20 +179,27 @@ function CardDetail() {
   const chartData = useMemo(() => {
       if (!history) return []
       
-      // Sort first by date
-      const sorted = history
-        .filter(h => h.price > 0 && h.sold_date)
-        .sort((a, b) => new Date(a.sold_date).getTime() - new Date(b.sold_date).getTime())
+      // 1. Filter valid data first
+      const validHistory = history.filter(h => {
+          const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
+          const validDate = h.sold_date && !isNaN(new Date(h.sold_date).getTime())
+          return validPrice && validDate
+      })
+
+      // 2. Sort by date
+      const sorted = validHistory.sort((a, b) => 
+          new Date(a.sold_date).getTime() - new Date(b.sold_date).getTime()
+      )
       
-      // Create individual data points with proper index-based x values
+      // 3. Map to chart format with sequential index
       return sorted.map((h, index) => {
           const saleDate = new Date(h.sold_date)
-          const priceNum = Number(h.price)
           return {
+              id: `${h.id}-${index}`, // Unique ID for Recharts
               date: saleDate.toLocaleDateString(),
               timestamp: saleDate.getTime(),
               x: index,  // Sequential index for X-axis
-              y: priceNum, // Price for Y-axis (ensure it's a number)
+              price: Number(h.price), // Ensure numeric price
               treatment: h.treatment || 'Classic Paper',
               title: h.title,
               listing_type: h.listing_type
@@ -360,7 +367,7 @@ function CardDetail() {
                                                 />
                                                 <YAxis 
                                                     type="number"
-                                                    dataKey="y"
+                                                    dataKey="price"
                                                     name="Price"
                                                     domain={[(dataMin: number) => Math.floor(dataMin * 0.9), (dataMax: number) => Math.ceil(dataMax * 1.1)]} 
                                                     orientation="right" 
@@ -373,10 +380,13 @@ function CardDetail() {
                                                 <Tooltip 
                                                     content={({ payload }) => {
                                                         if (!payload || !payload[0]) return null
+                                                        // Safely access payload data
                                                         const data = payload[0].payload
+                                                        if (!data) return null
+                                                        
                                                         return (
                                                             <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)'}}>
-                                                                <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '16px'}}>${data.y?.toFixed(2)}</div>
+                                                                <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '16px'}}>${typeof data.price === 'number' ? data.price.toFixed(2) : data.price}</div>
                                                                 <div style={{color: '#a3a3a3', fontSize: '11px', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600'}}>{data.treatment}</div>
                                                                 <div style={{color: '#666', fontSize: '10px', marginBottom: '6px'}}>{data.date}</div>
                                                                 {data.listing_type === 'active' && (
