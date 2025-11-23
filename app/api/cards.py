@@ -47,7 +47,7 @@ def read_cards(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = None,
-    time_period: Optional[str] = Query(default="24h", regex="^(24h|7d|30d|90d|all)$"),
+    time_period: Optional[str] = Query(default="24h", regex="^(24h|1d|3d|7d|14d|30d|90d|all)$"),
     product_type: Optional[str] = Query(default=None, description="Filter by product type (e.g., Single, Box, Pack)"),
 ) -> Any:
     """
@@ -62,7 +62,10 @@ def read_cards(
     # Calculate time cutoff
     time_cutoffs = {
         "24h": timedelta(hours=24),
+        "1d": timedelta(days=1),
+        "3d": timedelta(days=3),
         "7d": timedelta(days=7),
+        "14d": timedelta(days=14),
         "30d": timedelta(days=30),
         "90d": timedelta(days=90),
         "all": None

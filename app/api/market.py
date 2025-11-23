@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlmodel import Session, select, func, desc
 from datetime import datetime, timedelta
 
@@ -7,6 +7,7 @@ from app.api import deps
 from app.db import get_session
 from app.models.card import Card, Rarity
 from app.models.market import MarketSnapshot, MarketPrice
+from app.services.price_calculator import PriceCalculator
 
 router = APIRouter()
 
@@ -214,5 +215,179 @@ def read_market_activity(
             "treatment": sale.treatment,
             "platform": sale.platform
         })
-        
+
     return activity_data
+
+
+# ============================================================================
+# Advanced Price Tracking Endpoints
+# ============================================================================
+
+@router.get("/floor")
+def read_floor_prices(
+    session: Session = Depends(get_session),
+    product_type: str = Query(default="Single"),
+    period: str = Query(default="30d", regex="^(1d|3d|7d|14d|30d|90d|all)$"),
+    min_sales: int = Query(default=3, ge=1),
+) -> Any:
+    """
+    Get floor prices by rarity, treatment, and combination.
+
+    Returns comprehensive floor price data for market analysis.
+    """
+    calc = PriceCalculator(session)
+
+    by_rarity = calc.calculate_floor_by_rarity(
+        rarity_id=None,
+        period=period,
+        product_type=product_type
+    )
+
+    by_treatment = calc.calculate_floor_by_treatment(
+        treatment=None,
+        period=period,
+        product_type=product_type
+    )
+
+    by_combination = calc.calculate_floor_by_combination(
+        period=period,
+        product_type=product_type,
+        min_sales=min_sales
+    )
+
+    return {
+        "product_type": product_type,
+        "period": period,
+        "by_rarity": by_rarity,
+        "by_treatment": by_treatment,
+        "by_combination": by_combination
+    }
+
+
+@router.get("/time-series")
+def read_time_series(
+    session: Session = Depends(get_session),
+    card_id: Optional[int] = Query(default=None),
+    product_type: Optional[str] = Query(default=None),
+    interval: str = Query(default="1d", regex="^(1d|1w|1m)$"),
+    period: str = Query(default="30d", regex="^(7d|14d|30d|90d|1y)$"),
+) -> Any:
+    """
+    Get time-series price data with VWAP, volume, and floor prices.
+
+    Use card_id for specific card or product_type for aggregate data.
+    """
+    if not card_id and not product_type:
+        raise HTTPException(
+            status_code=400,
+            detail="Either card_id or product_type must be specified"
+        )
+
+    calc = PriceCalculator(session)
+
+    data = calc.get_time_series(
+        card_id=card_id,
+        interval=interval,
+        period=period,
+        product_type=product_type
+    )
+
+    return {
+        "card_id": card_id,
+        "product_type": product_type,
+        "interval": interval,
+        "period": period,
+        "data": data
+    }
+
+
+@router.get("/bid-ask")
+def read_bid_ask_spreads(
+    session: Session = Depends(get_session),
+    product_type: str = Query(default="Single"),
+    limit: int = Query(default=50, le=200),
+) -> Any:
+    """
+    Get current bid/ask spreads and price-to-sale ratios.
+
+    Useful for finding arbitrage opportunities and market inefficiencies.
+    """
+    # Get cards with active listings
+    cards = session.exec(
+        select(Card)
+        .where(Card.product_type == product_type)
+        .limit(limit)
+    ).all()
+
+    calc = PriceCalculator(session)
+    results = []
+
+    for card in cards:
+        spread = calc.calculate_bid_ask_spread(card.id)
+        p2s = calc.calculate_price_to_sale(card.id, "30d")
+
+        if spread and spread["lowest_ask"] > 0:
+            results.append({
+                "card_id": card.id,
+                "name": card.name,
+                "set_name": card.set_name,
+                "lowest_ask": spread["lowest_ask"],
+                "highest_bid": spread["highest_bid"],
+                "spread_amount": spread["spread_amount"],
+                "spread_percent": spread["spread_percent"],
+                "price_to_sale": p2s
+            })
+
+    # Sort by spread percent descending (highest spreads first)
+    results.sort(key=lambda x: x["spread_percent"], reverse=True)
+
+    return {
+        "product_type": product_type,
+        "count": len(results),
+        "cards": results
+    }
+
+
+@router.get("/metrics/{card_id}")
+def read_comprehensive_metrics(
+    card_id: int,
+    session: Session = Depends(get_session),
+    period: str = Query(default="30d", regex="^(1d|3d|7d|14d|30d|90d|all)$"),
+) -> Any:
+    """
+    Get all calculated price metrics for a specific card.
+
+    Includes VWAP, EMA, price deltas, bid/ask spread, and price-to-sale ratio.
+    """
+    # Verify card exists
+    card = session.get(Card, card_id)
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    calc = PriceCalculator(session)
+    metrics = calc.get_comprehensive_metrics(card_id, period)
+
+    # Get latest snapshot for context
+    snapshot = session.exec(
+        select(MarketSnapshot)
+        .where(MarketSnapshot.card_id == card_id)
+        .order_by(MarketSnapshot.timestamp.desc())
+    ).first()
+
+    return {
+        "card_id": card_id,
+        "name": card.name,
+        "set_name": card.set_name,
+        "product_type": card.product_type,
+        "period": period,
+        # Snapshot data
+        "min_price": snapshot.min_price if snapshot else None,
+        "max_price": snapshot.max_price if snapshot else None,
+        "avg_price": snapshot.avg_price if snapshot else None,
+        "volume": snapshot.volume if snapshot else 0,
+        "lowest_ask": snapshot.lowest_ask if snapshot else None,
+        "highest_bid": snapshot.highest_bid if snapshot else None,
+        "inventory": snapshot.inventory if snapshot else 0,
+        # Calculated metrics
+        **metrics
+    }
