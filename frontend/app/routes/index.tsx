@@ -92,7 +92,9 @@ function Home() {
           price_delta_24h: c.price_delta_24h ?? 0,
           volume_usd_24h: (c.volume_24h ?? 0) * (c.vwap ?? c.latest_price ?? 0), // Calculate dollar volume using VWAP if possible
           highest_bid: (c as any).highest_bid ?? 0
-      })).filter(c => (c.latest_price && c.latest_price > 0) || (c.volume_24h && c.volume_24h > 0)) // Filter out 0 listings
+      }))
+      .filter(c => (c.latest_price && c.latest_price > 0) || (c.volume_24h && c.volume_24h > 0)) // Filter out 0 listings
+      .filter(c => !['Box', 'Pack', 'Lot'].includes(c.product_type || 'Single')) // Temporarily hide Box, Pack, Lot until data is cleaned
     },
     staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh
     gcTime: 30 * 60 * 1000, // 30 minutes - cache persists (renamed from cacheTime in v5)
@@ -368,17 +370,14 @@ function Home() {
             </div>
             
                         <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-                            <select 
+                            <select
                                 className="flex-1 sm:flex-none bg-background px-3 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary uppercase font-mono cursor-pointer hover:bg-muted transition-colors"
                                 value={productType}
                                 onChange={e => setProductType(e.target.value)}
                             >
                                 <option value="all">All Types</option>
                                 <option value="Single">Singles</option>
-                                <option value="Pack">Packs</option>
-                                <option value="Box">Boxes</option>
                                 <option value="Proof">Proofs</option>
-                                <option value="Lot">Lots</option>
                             </select>
 
                             <div className="relative flex items-center flex-1 sm:flex-none">
