@@ -22,17 +22,34 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     
     # Logic based on Product Type
     if product_type == "Box":
-        # For boxes, we want strict matching on "Box" and "Sealed" usually
+        # For boxes, ensure we include "Wonders of the First" to avoid matching Pokemon/MTG boxes
         if "box" not in initial_query.lower():
             queries.append(f"{card_name} Box")
+
+        # Add Wonders of the First variations to filter for WoTF products specifically
+        if "wonders" not in initial_query.lower():
+            queries.append(f"Wonders of the First {card_name}")
+            queries.append(f"Wonders of the First {card_name} Sealed")
+            queries.append(f"Wonders of the First {card_name} TCG")
+
+        # Standard box variations (with card_name which should already contain "Existence" or "Wonders")
         queries.append(f"{card_name} Sealed")
         queries.append(f"{card_name} Collector Box")
         queries.append(f"{card_name} Booster Box")
-        queries.append(f"{card_name} Case")
-        
+
     elif product_type == "Pack":
+        # For packs, add "Wonders of the First" prefix to ensure we find WoTF packs
         if "pack" not in initial_query.lower():
             queries.append(f"{card_name} Pack")
+
+        # Add Wonders of the First variations
+        if "wonders" not in initial_query.lower():
+            queries.append(f"Wonders of the First {card_name}")
+            queries.append(f"Wonders of the First Booster Pack")
+            queries.append(f"Wonders of the First Pack")
+            queries.append(f"Wonders of the First TCG Pack")
+
+        # Standard pack variations
         queries.append(f"{card_name} Booster Pack")
         queries.append(f"{card_name} Sealed Pack")
         
