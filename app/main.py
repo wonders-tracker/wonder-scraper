@@ -1,9 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from app.core.config import settings
 from app.api import auth, cards, portfolio, users, market
 from contextlib import asynccontextmanager
 from app.core.scheduler import start_scheduler
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,6 +35,10 @@ origins = [
 
 # Clean up duplicates and empty strings
 origins = list(set([o for o in origins if o]))
+
+# CRITICAL: Add ProxyHeadersMiddleware FIRST to trust X-Forwarded-* headers from Railway
+# This prevents FastAPI from redirecting HTTPS requests to HTTP
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 app.add_middleware(
     CORSMiddleware,
