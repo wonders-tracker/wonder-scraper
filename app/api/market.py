@@ -10,6 +10,27 @@ from app.models.market import MarketSnapshot, MarketPrice
 
 router = APIRouter()
 
+@router.get("/treatments")
+def read_treatments(
+    session: Session = Depends(get_session),
+) -> Any:
+    """
+    Get price floors by treatment.
+    """
+    from sqlalchemy import text
+    query = text("""
+        SELECT
+            treatment,
+            MIN(price) as min_price,
+            COUNT(*) as count
+        FROM marketprice
+        WHERE listing_type = 'sold' AND treatment IS NOT NULL
+        GROUP BY treatment
+        ORDER BY treatment
+    """)
+    results = session.exec(query).all()
+    return [{"name": row[0], "min_price": float(row[1]), "count": int(row[2])} for row in results]
+
 @router.get("/overview")
 def read_market_overview(
     session: Session = Depends(get_session),
@@ -52,31 +73,58 @@ def read_market_overview(
     # Batch fetch actual LAST SALE price (Postgres DISTINCT ON)
     last_sale_map = {}
     vwap_map = {}
+    oldest_sale_map = {}
+    sales_count_map = {}
     if card_ids:
         try:
             from sqlalchemy import text
             id_list = ", ".join(str(cid) for cid in card_ids)
+            period_start = cutoff_time if cutoff_time else datetime.utcnow() - timedelta(hours=24)
+
             query = text(f"""
-                SELECT DISTINCT ON (card_id) card_id, price, treatment
+                SELECT DISTINCT ON (card_id) card_id, price, treatment, sold_date
                 FROM marketprice
                 WHERE card_id IN ({id_list}) AND listing_type = 'sold'
                 ORDER BY card_id, sold_date DESC NULLS LAST
             """)
             results = session.exec(query).all()
-            last_sale_map = {row[0]: {'price': row[1], 'treatment': row[2]} for row in results}
-            
+            last_sale_map = {row[0]: {'price': row[1], 'treatment': row[2], 'date': row[3]} for row in results}
+
             # Calculate VWAP
             vwap_query = text(f"""
                 SELECT card_id, AVG(price) as vwap
                 FROM marketprice
-                WHERE card_id IN ({id_list}) 
+                WHERE card_id IN ({id_list})
                 AND listing_type = 'sold'
                 {f"AND sold_date >= '{cutoff_time}'" if cutoff_time else ""}
                 GROUP BY card_id
             """)
             vwap_results = session.exec(vwap_query).all()
             vwap_map = {row[0]: row[1] for row in vwap_results}
-            
+
+            # Get oldest sale in period for delta calculation
+            # Also get sale counts to validate minimum data requirements
+            oldest_sale_query = text(f"""
+                SELECT DISTINCT ON (card_id) card_id, price, sold_date
+                FROM marketprice
+                WHERE card_id IN ({id_list}) AND listing_type = 'sold'
+                AND sold_date >= '{period_start}'
+                ORDER BY card_id, sold_date ASC
+            """)
+            oldest_results = session.exec(oldest_sale_query).all()
+            oldest_sale_map = {row[0]: {'price': row[1], 'date': row[2]} for row in oldest_results}
+
+            # Count sales in period for each card
+            sales_count_query = text(f"""
+                SELECT card_id, COUNT(*) as sale_count, COUNT(DISTINCT DATE(sold_date)) as unique_days
+                FROM marketprice
+                WHERE card_id IN ({id_list}) AND listing_type = 'sold'
+                AND sold_date >= '{period_start}'
+                GROUP BY card_id
+            """)
+            sales_count_results = session.exec(sales_count_query).all()
+            sales_count_map = {row[0]: {'count': row[1], 'unique_days': row[2]} for row in sales_count_results}
+
         except Exception as e:
             print(f"Error fetching last sales: {e}")
 
@@ -96,11 +144,29 @@ def read_market_overview(
         vwap = vwap_map.get(card.id)
         effective_price = vwap if vwap else (latest_snap.avg_price if latest_snap else 0.0)
             
-        # Market Trend Delta
+        # Market Trend Delta - Use batch-fetched oldest sale with validation
         avg_delta = 0.0
-        if latest_snap and oldest_snap and oldest_snap.avg_price > 0:
-             if latest_snap.id != oldest_snap.id:
-                avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
+        oldest_sale_data = oldest_sale_map.get(card.id)
+        sales_stats = sales_count_map.get(card.id)
+        last_sale_data_full = last_sale_map.get(card.id)
+
+        # Require minimum data: at least 2 sales on different days
+        if (oldest_sale_data and last_sale_data_full and sales_stats and
+            sales_stats['count'] >= 2 and sales_stats['unique_days'] >= 2):
+
+            oldest_price = oldest_sale_data['price']
+            oldest_date = oldest_sale_data['date']
+            newest_date = last_sale_data_full.get('date') if isinstance(last_sale_data_full, dict) else None
+
+            # Only calculate if we have different dates and valid prices
+            if oldest_price > 0 and last_price and last_price > 0:
+                # Ensure the sales are actually from different times
+                if newest_date and oldest_date and newest_date > oldest_date:
+                    avg_delta = ((last_price - oldest_price) / oldest_price) * 100
+
+        # Fallback to snapshot comparison if sales data insufficient
+        if avg_delta == 0.0 and latest_snap and oldest_snap and oldest_snap.avg_price > 0 and latest_snap.id != oldest_snap.id:
+            avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
                 
         # Deal Rating Delta
         deal_delta = 0.0

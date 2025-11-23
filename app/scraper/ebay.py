@@ -92,54 +92,98 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
     Stricter matching logic to prevent "The Great Veridan" matching "The Great Usurper".
     """
     if not card_name:
-        return True 
-        
+        return True
+
     title_lower = title.lower()
     name_lower = card_name.lower()
-    
+
+    # Detect product types - use more lenient matching for sealed products
+    product_type_keywords = ['box', 'pack', 'case', 'lot', 'bundle', 'collection', 'bulk', 'sealed']
+    is_product = any(keyword in name_lower for keyword in product_type_keywords)
+
     # 1. Name Validation
-    
+
     # Clean the title:
-    # Remove "Wonders of the First" but KEEP key words.
-    clean_title = title_lower.replace("wonders of the first", "").replace("existence", "")
-    
-    # Special handling for "The First" card
+    # Remove "Wonders of the First" but KEEP key words like "existence"
+    clean_title = title_lower.replace("wonders of the first", "")
+    clean_name = name_lower.replace("wonders of the first", "")
+
+    # Special handling for "The First" card (single card, not sealed product)
     if name_lower == "the first":
         if "the first" not in clean_title:
             return False
-    
+
     # Tokenize and remove stopwords
-    card_tokens = [t for t in name_lower.split() if t not in STOPWORDS]
+    card_tokens = [t for t in clean_name.split() if t not in STOPWORDS]
     title_tokens = [t for t in clean_title.split() if t not in STOPWORDS]
-    
+
     card_tokens_set = set(card_tokens)
     title_tokens_set = set(title_tokens)
-    
+
     if not card_tokens_set:
         # If card name is all stopwords (e.g. "The First" handled above, or unusual names)
         # Fallback to raw token match
-        card_tokens_set = set(name_lower.split())
+        card_tokens_set = set(clean_name.split())
         title_tokens_set = set(clean_title.split())
-    
+
     common_tokens = card_tokens_set.intersection(title_tokens_set)
-    
+
     # If after stripping stopwords we have tokens, we require high match
     if len(card_tokens_set) > 0:
         match_ratio = len(common_tokens) / len(card_tokens_set)
-        
-        # Strict match: All meaningful words must be present
-        # This prevents "Great Usurper" matching "Great Veridan" (Overlap 1/2 = 0.5)
-        if match_ratio < 1.0: 
+
+        # For sealed products (boxes, packs, lots), be more lenient - require 60% match
+        # For single cards, require strict 100% match to prevent mismatches
+        required_ratio = 0.6 if is_product else 1.0
+
+        if match_ratio < required_ratio:
             return False
-            
+
     else:
         # Fallback for very short/stopword-heavy names
         if name_lower not in title_lower:
             return False
 
     # 2. Rarity Validation (if provided)
-    # ... (logic remains same)
-    
+    if target_rarity:
+        # Check if the rarity appears in the title
+        # Common rarity keywords to check
+        rarity_lower = target_rarity.lower()
+
+        # Skip rarity validation for sealed products - they often don't list rarity
+        if is_product:
+            return True
+
+        # For single cards, validate rarity if specified
+        # Look for exact rarity name or common abbreviations
+        rarity_keywords = {
+            'common': ['common', 'c'],
+            'uncommon': ['uncommon', 'uc', 'u'],
+            'rare': ['rare', 'r'],
+            'epic': ['epic', 'e'],
+            'legendary': ['legendary', 'leg', 'l'],
+            'mythic': ['mythic', 'myth', 'm'],
+            'secret': ['secret'],
+            'promo': ['promo', 'promotional'],
+        }
+
+        # Find which category our target rarity falls into
+        rarity_found = False
+        for category, keywords in rarity_keywords.items():
+            if category in rarity_lower:
+                # Check if any of the keywords appear in the title
+                for keyword in keywords:
+                    if keyword in title_lower:
+                        rarity_found = True
+                        break
+                break
+
+        # If we have a rarity specified but couldn't find it, that's suspicious
+        # But we'll be lenient and allow it if the name match is strong
+        # This prevents false negatives when sellers don't list rarity
+        if not rarity_found and len(common_tokens) < len(card_tokens_set):
+            return False
+
     return True
 
 def _extract_bid_count(item) -> int:

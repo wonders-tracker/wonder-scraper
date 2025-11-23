@@ -1,22 +1,25 @@
-import { createRoute, Link, redirect, useNavigate } from '@tanstack/react-router'
+import { createRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { Route as rootRoute } from './__root'
 import { ArrowLeft, TrendingUp, ArrowUp, ArrowDown, Activity, Zap, BarChart3, DollarSign } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from 'recharts'
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState } from '@tanstack/react-table'
+import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getPaginationRowModel } from '@tanstack/react-table'
 import { useState, useMemo } from 'react'
 import clsx from 'clsx'
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select"
 
 export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: '/market',
-  component: MarketAnalysis,
-  beforeLoad: () => {
-      if (typeof window !== 'undefined' && !auth.isAuthenticated()) {
-          throw redirect({ to: '/login' })
-      }
-  }
+  component: MarketAnalysis
 })
 
 type MarketCard = {
@@ -31,11 +34,21 @@ type MarketCard = {
     price_delta_24h: number
     market_cap: number
     deal_rating: number
+    treatment?: string
 }
 
 function MarketAnalysis() {
   const navigate = useNavigate()
   const [sorting, setSorting] = useState<SortingState>([])
+  const [timeFrame, setTimeFrame] = useState('24h')
+
+  // Fetch treatment price floors
+  const { data: treatments } = useQuery({
+    queryKey: ['treatments'],
+    queryFn: async () => {
+        return await api.get('market/treatments').json<{ name: string; min_price: number; count: number }[]>()
+    }
+  })
 
   // Fetch optimized overview data from new endpoint
   const { data: rawCards, isLoading } = useQuery({
@@ -111,8 +124,12 @@ function MarketAnalysis() {
       },
       {
           accessorKey: 'market_cap',
-          header: ({ column }) => <div className="text-right cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>CAP</div>,
-          cell: ({ row }) => <div className="text-right font-mono text-muted-foreground">${(row.original.market_cap / 1000).toFixed(1)}k</div>
+          header: ({ column }) => <div className="text-right cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>MARKET CAP</div>,
+          cell: ({ row }) => {
+              const cap = row.original.market_cap
+              if (cap === 0 || !cap) return <div className="text-right font-mono text-muted-foreground">-</div>
+              return <div className="text-right font-mono text-muted-foreground">${(cap / 1000).toFixed(1)}k</div>
+          }
       },
       {
           accessorKey: 'deal_rating',
@@ -139,8 +156,14 @@ function MarketAnalysis() {
       columns,
       getCoreRowModel: getCoreRowModel(),
       getSortedRowModel: getSortedRowModel(),
+      getPaginationRowModel: getPaginationRowModel(),
       onSortingChange: setSorting,
-      state: { sorting }
+      state: { sorting },
+      initialState: {
+          pagination: {
+              pageSize: 20,
+          },
+      },
   })
 
   if (isLoading) {
@@ -155,8 +178,8 @@ function MarketAnalysis() {
   }
 
   return (
-    <div className="p-4 md:p-6 min-h-screen bg-background text-foreground font-mono">
-        <div className="max-w-[1800px] mx-auto space-y-4">
+    <div className="p-4 md:p-6 h-[calc(100vh-4rem)] bg-background text-foreground font-mono flex flex-col overflow-hidden">
+        <div className="max-w-[1800px] mx-auto w-full flex flex-col gap-4 h-full overflow-hidden">
             {/* Compact Header */}
             <div className="flex items-center justify-between border-b border-border pb-4">
                 <div className="flex items-center gap-3">
@@ -164,6 +187,20 @@ function MarketAnalysis() {
                         <Activity className="w-4 h-4" />
                     </div>
                     <h1 className="text-lg font-bold uppercase tracking-tight">Market Pulse</h1>
+                    <div className="flex items-center gap-2 ml-4">
+                        <Clock className="w-3 h-3 text-muted-foreground" />
+                        <Select value={timeFrame} onValueChange={setTimeFrame}>
+                            <SelectTrigger className="w-[100px] h-8 text-xs">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="1h">1 Hour</SelectItem>
+                                <SelectItem value="24h">24 Hours</SelectItem>
+                                <SelectItem value="7d">7 Days</SelectItem>
+                                <SelectItem value="30d">30 Days</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
                 <div className="flex gap-4 text-xs text-muted-foreground uppercase font-bold">
                     <div className="flex items-center gap-1">
@@ -175,7 +212,7 @@ function MarketAnalysis() {
             </div>
 
             {/* KPI Dashboard - Compact Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-shrink-0">
                 <div className="bg-card border border-border p-3 rounded flex flex-col justify-between hover:border-primary/50 transition-colors">
                     <div className="flex justify-between items-start mb-2">
                         <span className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest">Total Volume</span>
@@ -198,14 +235,30 @@ function MarketAnalysis() {
                 </div>
                 <div className="bg-card border border-border p-3 rounded flex flex-col justify-between hover:border-primary/50 transition-colors">
                     <div className="flex justify-between items-start mb-2">
-                        <span className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest">Breadth</span>
+                        <span className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest">Market Breadth</span>
                         <Activity className="w-3 h-3 text-muted-foreground" />
                     </div>
-                    <div className="flex items-end gap-2">
-                        <div className="text-xl font-mono font-bold text-emerald-500">{metrics.gainers}</div>
-                        <div className="text-[10px] text-muted-foreground mb-1">Up</div>
-                        <div className="text-xl font-mono font-bold text-red-500 ml-2">{metrics.losers}</div>
-                        <div className="text-[10px] text-muted-foreground mb-1">Down</div>
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <div className="text-xs font-bold text-emerald-500 w-8">{metrics.gainers}</div>
+                            <div className="flex-1 h-3 bg-muted rounded-sm overflow-hidden">
+                                <div
+                                    className="h-full bg-emerald-500/80"
+                                    style={{ width: `${cards.length > 0 ? (metrics.gainers / cards.length) * 100 : 0}%` }}
+                                />
+                            </div>
+                            <div className="text-[10px] text-muted-foreground w-12 text-right">UP</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="text-xs font-bold text-red-500 w-8">{metrics.losers}</div>
+                            <div className="flex-1 h-3 bg-muted rounded-sm overflow-hidden">
+                                <div
+                                    className="h-full bg-red-500/80"
+                                    style={{ width: `${cards.length > 0 ? (metrics.losers / cards.length) * 100 : 0}%` }}
+                                />
+                            </div>
+                            <div className="text-[10px] text-muted-foreground w-12 text-right">DOWN</div>
+                        </div>
                     </div>
                 </div>
                 <div className="bg-card border border-border p-3 rounded flex flex-col justify-between hover:border-primary/50 transition-colors">
@@ -220,9 +273,9 @@ function MarketAnalysis() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 flex-1 overflow-hidden">
                 {/* Left Column: Movers (Compact) */}
-                <div className="lg:col-span-1 space-y-4">
+                <div className="lg:col-span-1 space-y-4 overflow-y-auto">
                     <div className="bg-card border border-border rounded overflow-hidden">
                         <div className="p-3 border-b border-border bg-muted/20 flex justify-between items-center">
                             <span className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-emerald-500">
@@ -258,10 +311,34 @@ function MarketAnalysis() {
                             ))}
                             </div>
                     </div>
+
+                    {/* Price Floors by Treatment */}
+                    <div className="bg-card border border-border rounded overflow-hidden">
+                        <div className="p-3 border-b border-border bg-muted/20">
+                            <span className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                                <DollarSign className="w-3 h-3" /> Price Floors
+                            </span>
+                        </div>
+                        <div className="divide-y divide-border/50">
+                            {treatments?.map(treatment => (
+                                <div key={treatment.name} className="p-2 flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        <div className="text-xs font-bold">{treatment.name}</div>
+                                        <div className="text-[10px] text-muted-foreground">({treatment.count})</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-xs font-mono font-bold">${treatment.min_price.toFixed(2)}</div>
+                                    </div>
+                                </div>
+                            )) || (
+                                <div className="p-4 text-center text-xs text-muted-foreground">Loading...</div>
+                            )}
+                        </div>
+                    </div>
                 </div>
 
                 {/* Right Column: Detailed Table */}
-                <div className="lg:col-span-3 bg-card border border-border rounded flex flex-col h-[600px]">
+                <div className="lg:col-span-3 bg-card border border-border rounded flex flex-col min-h-0">
                     <div className="p-3 border-b border-border bg-muted/20 flex justify-between items-center">
                         <h3 className="text-xs font-bold uppercase tracking-widest">Market Depth & Analytics</h3>
                         <div className="text-[10px] text-muted-foreground">
@@ -293,6 +370,64 @@ function MarketAnalysis() {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Pagination Controls */}
+                    <div className="border-t border-border p-3 bg-muted/20 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => table.setPageIndex(0)}
+                                disabled={!table.getCanPreviousPage()}
+                                className="p-1 rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <ChevronsLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => table.previousPage()}
+                                disabled={!table.getCanPreviousPage()}
+                                className="p-1 rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => table.nextPage()}
+                                disabled={!table.getCanNextPage()}
+                                className="p-1 rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+                                disabled={!table.getCanNextPage()}
+                                className="p-1 rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <ChevronsRight className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                            <span className="text-xs text-muted-foreground">
+                                Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                                {table.getFilteredRowModel().rows.length} total assets
+                            </span>
+                        </div>
+
+                        <Select
+                            value={String(table.getState().pagination.pageSize)}
+                            onValueChange={(value) => table.setPageSize(Number(value))}
+                        >
+                            <SelectTrigger className="w-[100px] h-8 text-xs">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="10">10 / page</SelectItem>
+                                <SelectItem value="20">20 / page</SelectItem>
+                                <SelectItem value="50">50 / page</SelectItem>
+                                <SelectItem value="100">100 / page</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
             </div>
