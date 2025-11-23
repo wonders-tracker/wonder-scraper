@@ -22,5 +22,8 @@ class Settings(BaseSettings):
     
     model_config = ConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 
+print(f"DEBUG: SECRET_KEY present: {'SECRET_KEY' in os.environ}")
+# print(f"DEBUG: Env keys: {list(os.environ.keys())}") # Commented out to avoid log spam, uncomment if needed
+
 settings = Settings()
 
