@@ -22,6 +22,9 @@ function RootComponent() {
           try {
               return await api.get('users/me').json<UserProfile>()
           } catch {
+              // If API fails (e.g. 401), clear local token so app knows we are logged out
+              // This prevents redirect loops where localStorage has token but API rejects it
+              localStorage.removeItem('token')
               return null
           }
       },
@@ -31,7 +34,7 @@ function RootComponent() {
   return (
     <div className="min-h-screen bg-background text-foreground antialiased font-mono flex flex-col">
              {/* Top Header Navigation */}
-             <div className="h-16 border-b border-border sticky top-0 bg-background/95 backdrop-blur z-30 flex items-center px-6 justify-between">
+             <div className="h-16 border-b border-border sticky top-0 bg-background/95 backdrop-blur z-50 flex items-center px-6 justify-between">
                <div className="flex items-center gap-8">
                     <h1 className="text-xl font-bold tracking-tight uppercase flex items-center gap-2">
                 WondersTracker 
@@ -89,9 +92,9 @@ function RootComponent() {
                     </button>
                 </div>
             ) : (
-                <Link to="/login" className="text-xs font-bold uppercase px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors">
+                <a href="/login" className="text-xs font-bold uppercase px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors relative z-50">
                     Login
-                </Link>
+                </a>
             )}
         </div>
       </div>
