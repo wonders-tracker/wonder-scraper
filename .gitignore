@@ -51,9 +51,11 @@ pip-delete-this-directory.txt
 .cursor/
 
 *.log
-frontend/vite.config.timestamp_*.js
-node_modules
-*.log
-frontend/vite.config.timestamp_*.js
 node_modules
 .vercel
+
+# Vite HMR temp files
+frontend/vite.config.timestamp_*.js
+frontend/app.config.timestamp_*.js
+**/vite.config.timestamp_*.js
+**/app.config.timestamp_*.js
