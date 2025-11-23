@@ -26,6 +26,7 @@ origins = [
     "http://127.0.0.1:3000",
     "https://wonderstracker.com", # Production
     "https://wonderstrader.com", # Production (Correction)
+    "https://www.wonderstrader.com", # Production (WWW)
     settings.FRONTEND_URL, # Dynamic from env
 ]
 
