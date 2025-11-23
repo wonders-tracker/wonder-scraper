@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { useState, useMemo } from 'react'
 import Marquee from '../components/ui/marquee'
+import { Analytics } from '@vercel/analytics/react'
 
 type UserProfile = {
     id: number
@@ -70,6 +71,9 @@ function RootComponent() {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
+
+      {/* Vercel Analytics */}
+      <Analytics />
 
       <div className="min-h-screen bg-background text-foreground antialiased font-mono flex flex-col">
         {/* Top Header Navigation */}

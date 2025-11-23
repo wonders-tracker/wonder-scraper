@@ -6,7 +6,7 @@ import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, Ex
 import { Link } from '@tanstack/react-router'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getFilteredRowModel } from '@tanstack/react-table'
 import { useMemo, useState } from 'react'
-import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ZAxis, Cell } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import clsx from 'clsx'
 
 type CardDetail = {
@@ -244,7 +244,27 @@ function CardDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-mono flex flex-col">
+    <>
+      {/* Dynamic OG Tags */}
+      <head>
+        <title>{card.name} | WondersTracker</title>
+        <meta name="description" content={`Track ${card.name} market prices and sales history. Current price: $${card.latest_price?.toFixed(2) || '---'}. Live data for Wonders of the First TCG.`} />
+
+        {/* Open Graph */}
+        <meta property="og:title" content={`${card.name} - $${card.latest_price?.toFixed(2) || '---'}`} />
+        <meta property="og:description" content={`Track ${card.name} prices and market trends on WondersTracker`} />
+        <meta property="og:image" content={`https://wonderstrader.com/api/og/${card.id}`} />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={`https://wonderstrader.com/cards/${card.id}`} />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={`${card.name} - $${card.latest_price?.toFixed(2) || '---'}`} />
+        <meta name="twitter:description" content={`Track ${card.name} prices and market trends`} />
+        <meta name="twitter:image" content={`https://wonderstrader.com/api/og/${card.id}`} />
+      </head>
+
+      <div className="min-h-screen bg-background text-foreground font-mono flex flex-col">
         <div className="flex-1 p-6">
             <div className="max-w-7xl mx-auto">
                 {/* Navigation */}
@@ -353,11 +373,10 @@ function CardDetail() {
                                 <div className="flex-1 p-6 relative">
                                     {chartData.length > 1 ? (
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <ScatterChart margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
+                                            <LineChart data={chartData} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} horizontal={true} />
-                                                <XAxis 
-                                                    type="number" 
-                                                    dataKey="x" 
+                                                <XAxis
+                                                    dataKey="x"
                                                     name="Sale"
                                                     domain={[0, chartData.length - 1]}
                                                     tick={{fill: '#666', fontSize: 10}}
@@ -365,25 +384,23 @@ function CardDetail() {
                                                     tickLine={false}
                                                     label={{ value: 'Sales Timeline →', position: 'bottom', fill: '#666', fontSize: 10 }}
                                                 />
-                                                <YAxis 
-                                                    type="number"
+                                                <YAxis
                                                     dataKey="price"
                                                     name="Price"
-                                                    domain={[(dataMin: number) => Math.floor(dataMin * 0.9), (dataMax: number) => Math.ceil(dataMax * 1.1)]} 
-                                                    orientation="right" 
+                                                    domain={[(dataMin: number) => Math.floor(dataMin * 0.9), (dataMax: number) => Math.ceil(dataMax * 1.1)]}
+                                                    orientation="right"
                                                     tick={{fill: '#888', fontSize: 11, fontFamily: 'monospace'}}
                                                     axisLine={false}
                                                     tickLine={false}
                                                     tickFormatter={(val) => `$${val.toFixed(0)}`}
                                                     width={60}
                                                 />
-                                                <Tooltip 
+                                                <Tooltip
                                                     content={({ payload }) => {
                                                         if (!payload || !payload[0]) return null
-                                                        // Safely access payload data
                                                         const data = payload[0].payload
                                                         if (!data) return null
-                                                        
+
                                                         return (
                                                             <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)'}}>
                                                                 <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '16px'}}>${typeof data.price === 'number' ? data.price.toFixed(2) : data.price}</div>
@@ -397,37 +414,17 @@ function CardDetail() {
                                                     }}
                                                     cursor={{strokeDasharray: '3 3', stroke: '#666'}}
                                                 />
-                                                
-                                                {/* Single Scatter with individual Cells for coloring */}
-                                                <Scatter 
-                                                    data={chartData} 
-                                                    line={false}
-                                                    shape="circle"
-                                                >
-                                                    {chartData.map((entry, index) => {
-                                                    const treatmentColors: Record<string, string> = {
-                                                        'Classic Paper': '#6b7280',      // Gray
-                                                        'Classic Foil': '#3b82f6',       // Blue
-                                                        'Stonefoil': '#8b5cf6',          // Purple
-                                                        'Formless Foil': '#ec4899',      // Pink
-                                                        'OCM Serialized': '#f59e0b',     // Amber/Gold
-                                                        'Prerelease': '#14b8a6',         // Teal
-                                                        'Promo': '#f97316',              // Orange
-                                                        'Proof/Sample': '#ef4444',       // Red
-                                                        'Error/Errata': '#dc2626',       // Dark Red
-                                                    }
-                                                        const color = treatmentColors[entry.treatment] || '#10b981'
-                                                    
-                                                    return (
-                                                            <Cell 
-                                                                key={`cell-${index}`} 
-                                                            fill={color}
-                                                                fillOpacity={0.7}
-                                                        />
-                                                    )
-                                                })}
-                                                </Scatter>
-                                            </ScatterChart>
+
+                                                {/* Main price line */}
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="price"
+                                                    stroke="#10b981"
+                                                    strokeWidth={3}
+                                                    dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
+                                                    activeDot={{ r: 6, fill: '#10b981' }}
+                                                />
+                                            </LineChart>
                                         </ResponsiveContainer>
                                     ) : (
                                         <div className="h-full flex items-center justify-center text-xs text-muted-foreground uppercase">
@@ -580,8 +577,39 @@ function CardDetail() {
             </div>
         </div>
 
+        {/* Promotional Banner */}
+        <div className="border-t border-border bg-black py-8 mt-auto">
+            <div className="max-w-7xl mx-auto px-6">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
+                    <div className="flex-1">
+                        <h3 className="text-xl font-bold uppercase tracking-tight mb-2 text-white">
+                            Track Your Collection in Real-Time
+                        </h3>
+                        <p className="text-sm text-zinc-400">
+                            Get instant market data, price alerts, and portfolio analytics for Wonders of the First TCG at{' '}
+                            <span className="text-emerald-500 font-bold">WondersTrader.com</span>
+                        </p>
+                    </div>
+                    <div className="flex gap-3">
+                        <Link
+                            to="/"
+                            className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-black font-bold uppercase text-sm rounded transition-colors"
+                        >
+                            View Market
+                        </Link>
+                        <Link
+                            to="/portfolio"
+                            className="px-6 py-3 border border-emerald-500 text-emerald-500 hover:bg-emerald-500/10 font-bold uppercase text-sm rounded transition-colors"
+                        >
+                            Track Portfolio
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         {/* SEO Footer */}
-        <footer className="border-t border-border py-8 mt-auto bg-muted/10">
+        <footer className="border-t border-border py-8 bg-muted/10">
             <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="text-xs text-muted-foreground uppercase tracking-wider">
                     © 2025 Wonder Scraper Inc. Market Data for TCG "Wonders of the First".
@@ -738,11 +766,12 @@ function CardDetail() {
         
         {/* Backdrop */}
         {selectedListing && (
-            <div 
+            <div
                 className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
                 onClick={() => setSelectedListing(null)}
             />
         )}
-    </div>
+      </div>
+    </>
   )
 }

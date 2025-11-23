@@ -18,7 +18,12 @@
       "Bash(timeout 60 python:*)",
       "Bash(find:*)",
       "Bash(PGPASSWORD='npg_w5lJR8VifOWz' psql -h 'ep-blue-union-adbh5vnk-pooler.c-2.us-east-1.aws.neon.tech' -U 'neondb_owner' -d 'neondb' -c \"SELECT id, email, is_active, is_superuser FROM \"\"user\"\" LIMIT 10;\")",
-      "Bash(timeout 60 poetry run python:*)"
+      "Bash(timeout 60 poetry run python:*)",
+      "Bash(git push)",
+      "Bash(PGPASSWORD='npg_w5lJR8VifOWz' psql -h 'ep-blue-union-adbh5vnk-pooler.c-2.us-east-1.aws.neon.tech' -U 'neondb_owner' -d 'neondb' -c \"SELECT name, rarity_id FROM card WHERE name = ''Emma \"\"Fixem\"\" Shockbite'';\")",
+      "Bash(PGPASSWORD='npg_w5lJR8VifOWz' psql -h 'ep-blue-union-adbh5vnk-pooler.c-2.us-east-1.aws.neon.tech' -U 'neondb_owner' -d 'neondb' -c \"SELECT COUNT(*) as total FROM card WHERE product_type = ''Single'' AND name IN (''The First'', ''ZipZip NugNug'', ''Adorable Vermin'', ''Whiskey Raider'', ''A-90 Plasma Detonator'', ''Xyrendra of Dimensional Forces'', ''Abyssal Sand Leviathan'', ''Zephyrus Skyarc'', ''Aethereal Enigmyst'', ''Zenik Azimuth'', ''Alister the Unbroken'', ''Zeltona, The Voice of The First'');\")",
+      "Bash(npm install:*)",
+      "Bash(vercel env add:*)"
     ],
     "deny": [],
     "ask": []
