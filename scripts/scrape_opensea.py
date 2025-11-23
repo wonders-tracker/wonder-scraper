@@ -14,7 +14,7 @@ OPENSEA_COLLECTIONS = {
     },
     "wotf-existence-collector-boxes": {
         "url": "https://opensea.io/collection/wotf-existence-collector-boxes",
-        "card_name": "Existence Collector Box"
+        "card_name": "Collector Booster Box"
     }
 }
 

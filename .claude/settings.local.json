@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PGPASSWORD='npg_w5lJR8VifOWz' psql:*)",
+      "Bash(PGPASSWORD='npg_w5lJR8VifOWz' psql -h 'ep-blue-union-adbh5vnk-pooler.c-2.us-east-1.aws.neon.tech' -U 'neondb_owner' -d 'neondb' -c \"SELECT card_id, COUNT(*) as snapshot_count FROM marketsnapshot GROUP BY card_id ORDER BY snapshot_count DESC LIMIT 10;\")",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(git checkout:*)",
+      "Bash(PGPASSWORD='npg_w5lJR8VifOWz' psql -h 'ep-blue-union-adbh5vnk-pooler.c-2.us-east-1.aws.neon.tech' -U 'neondb_owner' -d 'neondb' -c \"SELECT product_type, COUNT(*) as count FROM card GROUP BY product_type ORDER BY count DESC;\")",
+      "Bash(git add:*)",
+      "Bash(git restore:*)",
+      "Bash(git commit:*)",
+      "Bash(git merge:*)",
+      "Bash(git branch:*)",
+      "WebSearch",
+      "Bash(PGPASSWORD='npg_w5lJR8VifOWz' psql -h 'ep-blue-union-adbh5vnk-pooler.c-2.us-east-1.aws.neon.tech' -U 'neondb_owner' -d 'neondb' -c \"SELECT name, product_type FROM card WHERE product_type IN (''Box'', ''Pack'') ORDER BY name;\")",
+      "Bash(PGPASSWORD='npg_w5lJR8VifOWz' psql -h 'ep-blue-union-adbh5vnk-pooler.c-2.us-east-1.aws.neon.tech' -U 'neondb_owner' -d 'neondb' -c \"UPDATE card SET name = ''Existence Play Booster Bundle'' WHERE name = ''Existence Booster Box''; UPDATE card SET name = ''Collector Booster Box'' WHERE name = ''Existence Collector Box''; UPDATE card SET name = ''2-Player Starter Set'' WHERE name = ''Wonders of the First Starter Box''; SELECT name, product_type FROM card WHERE product_type IN (''Box'', ''Pack'') ORDER BY name;\")",
+      "Bash(timeout 60 python:*)",
+      "Bash(find:*)",
+      "Bash(PGPASSWORD='npg_w5lJR8VifOWz' psql -h 'ep-blue-union-adbh5vnk-pooler.c-2.us-east-1.aws.neon.tech' -U 'neondb_owner' -d 'neondb' -c \"SELECT id, email, is_active, is_superuser FROM \"\"user\"\" LIMIT 10;\")",
+      "Bash(timeout 60 poetry run python:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

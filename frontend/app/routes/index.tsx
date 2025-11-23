@@ -1,12 +1,11 @@
 import { createRoute, useNavigate, Link } from '@tanstack/react-router'
 import { api, auth } from '../utils/auth'
-import { useQuery } from '@tanstack/react-query'
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel } from '@tanstack/react-table'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel, getPaginationRowModel } from '@tanstack/react-table'
 import { useState, useMemo } from 'react'
-import { ArrowUpDown, Search, ArrowUp, ArrowDown, Calendar, TrendingUp, DollarSign, BarChart3, LayoutDashboard } from 'lucide-react'
+import { ArrowUpDown, Search, ArrowUp, ArrowDown, Calendar, TrendingUp, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
 import clsx from 'clsx'
 import { Route as rootRoute } from './__root'
-import Marquee from '../components/ui/marquee'
 
 // Updated Type Definition including placeholder fields
 type Card = {
@@ -43,7 +42,10 @@ function Home() {
   const [globalFilter, setGlobalFilter] = useState('')
   const [timePeriod, setTimePeriod] = useState<string>('24h')
   const [productType, setProductType] = useState<string>('all')
+  const [trackingCard, setTrackingCard] = useState<Card | null>(null)
+  const [trackForm, setTrackForm] = useState({ quantity: 1, purchase_price: 0 })
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   // Fetch User Profile for Permissions
   const { data: user } = useQuery({
@@ -56,6 +58,18 @@ function Home() {
           }
       },
       retry: false
+  })
+
+  // Mutation for adding cards to portfolio
+  const addToPortfolioMutation = useMutation({
+      mutationFn: async (data: { card_id: number, quantity: number, purchase_price: number }) => {
+          return await api.post('portfolio/', { json: data }).json()
+      },
+      onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+          setTrackingCard(null)
+          setTrackForm({ quantity: 1, purchase_price: 0 })
+      }
   })
 
   const { data: cards, isLoading } = useQuery({
@@ -242,8 +256,30 @@ function Home() {
           </button>
         ),
         cell: ({ row }) => <div className="hidden md:block text-right font-mono text-xs text-muted-foreground">{row.original.inventory}</div>
+    },
+    {
+        id: 'track',
+        header: () => <div className="text-xs uppercase tracking-wider text-muted-foreground text-center">Track</div>,
+        cell: ({ row }) => {
+            if (!user) return null
+            return (
+                <div className="flex justify-center">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            setTrackingCard(row.original)
+                            setTrackForm({ quantity: 1, purchase_price: row.original.vwap || row.original.latest_price || 0 })
+                        }}
+                        className="p-1.5 rounded border border-border hover:bg-primary hover:text-primary-foreground transition-colors group"
+                        title="Add to Portfolio"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                    </button>
+                </div>
+            )
+        }
     }
-  ], [])
+  ], [user])
 
   const table = useReactTable({
     data: cards || [],
@@ -252,10 +288,16 @@ function Home() {
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     onGlobalFilterChange: setGlobalFilter,
     state: {
       sorting,
       globalFilter,
+    },
+    initialState: {
+      pagination: {
+        pageSize: 50,
+      },
     },
   })
 
@@ -301,51 +343,10 @@ function Home() {
   }, [cards, timePeriod])
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-mono">
-      {/* Market Pulse Marquee */}
-      <div className="border-b border-border bg-muted/10 backdrop-blur overflow-hidden flex items-center h-10 sticky top-0 z-40">
-           {/* Fixed Metrics */}
-           <div className="flex items-center px-4 border-r border-border h-full bg-background/50 z-10">
-                <div className="flex items-center gap-2 text-xs font-mono mr-4">
-                    <span className="text-muted-foreground uppercase">Vol:</span>
-                    <span className="font-bold">{marketMetrics.totalVolume}</span>
-                </div>
-                 <div className="flex items-center gap-2 text-xs font-mono">
-                    <span className="text-muted-foreground uppercase">Vel:</span>
-                    <span className="font-bold text-emerald-500">{Number(marketMetrics.avgVelocity).toFixed(1)}/d</span>
-                </div>
-           </div>
-           
-           {/* Scrolling Ticker */}
-           <div className="flex-1 min-w-0">
-               <Marquee pauseOnHover className="[--gap:2rem]">
-                    {/* Fallback if lists are empty: show top volume items */}
-                    {(topGainers.length === 0 && topLosers.length === 0) && topVolume.slice(0, 8).map(c => (
-                        <div key={`ticker-vol-${c.id}`} className="flex items-center gap-2 text-xs font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                            <span className="font-bold uppercase">{c.name}</span>
-                            <span className="text-muted-foreground">${Number(c.latest_price).toFixed(2)}</span>
-                        </div>
-                    ))}
-
-                    {topGainers.slice(0, 5).map(c => (
-                        <div key={`ticker-${c.id}`} className="flex items-center gap-2 text-xs font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                            <span className="font-bold uppercase">{c.name}</span>
-                            <span className="text-emerald-500">+{Number(c.price_delta_24h).toFixed(1)}%</span>
-                        </div>
-                    ))}
-                    {topLosers.slice(0, 3).map(c => (
-                        <div key={`ticker-loss-${c.id}`} className="flex items-center gap-2 text-xs font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                            <span className="font-bold uppercase">{c.name}</span>
-                            <span className="text-red-500">{Number(c.price_delta_24h).toFixed(1)}%</span>
-                        </div>
-                    ))}
-               </Marquee>
-           </div>
-        </div>
-        
-      <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+    <div className="h-[calc(100vh-3.5rem-2rem)] flex flex-col bg-background text-foreground font-mono">
+      <div className="p-4 max-w-[1800px] mx-auto w-full flex-1 flex flex-col overflow-hidden">
         {/* Main Data Table */}
-        <div className="border border-border rounded bg-card overflow-hidden">
+        <div className="border border-border rounded bg-card overflow-hidden flex-1 flex flex-col">
             <div className="p-3 md:p-4 border-b border-border flex flex-col xl:flex-row xl:items-center justify-between bg-muted/20 gap-4">
                 <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-8 w-full">
                     <h2 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2 shrink-0">
@@ -408,47 +409,155 @@ function Home() {
                         <div className="text-xs uppercase text-muted-foreground animate-pulse">Loading market stream...</div>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs uppercase bg-muted/30 text-muted-foreground border-b border-border">
-                                {table.getHeaderGroups().map(headerGroup => (
-                                    <tr key={headerGroup.id}>
-                                        {headerGroup.headers.map(header => (
-                                        <th key={header.id} className="px-4 py-3 font-medium whitespace-nowrap hover:bg-muted/50 transition-colors">
-                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                ))}
-                            </thead>
-                            <tbody className="divide-y divide-border/50">
-                                {table.getRowModel().rows?.length ? (
-                                    table.getRowModel().rows.map(row => (
-                                        <tr 
-                                            key={row.id} 
-                                            className="hover:bg-muted/30 transition-colors cursor-pointer group"
-                                            onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(row.original.id) } })}
-                                        >
-                                            {row.getVisibleCells().map(cell => (
-                                            <td key={cell.id} className="px-2 md:px-4 py-3 whitespace-nowrap">
-                                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                </td>
+                    <>
+                        <div className="overflow-auto flex-1">
+                            <table className="w-full text-sm text-left">
+                                <thead className="text-xs uppercase bg-muted/30 text-muted-foreground border-b border-border sticky top-0 z-10">
+                                    {table.getHeaderGroups().map(headerGroup => (
+                                        <tr key={headerGroup.id}>
+                                            {headerGroup.headers.map(header => (
+                                            <th key={header.id} className="px-3 py-2.5 font-medium whitespace-nowrap hover:bg-muted/50 transition-colors bg-muted/30">
+                                                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                                </th>
                                             ))}
                                         </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={columns.length} className="h-32 text-center text-muted-foreground text-xs uppercase">
-                                            No market data found.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                    ))}
+                                </thead>
+                                <tbody className="divide-y divide-border/50">
+                                    {table.getRowModel().rows?.length ? (
+                                        table.getRowModel().rows.map(row => (
+                                            <tr
+                                                key={row.id}
+                                                className="hover:bg-muted/30 transition-colors cursor-pointer group"
+                                                onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(row.original.id) } })}
+                                            >
+                                                {row.getVisibleCells().map(cell => (
+                                                <td key={cell.id} className="px-2 md:px-3 py-2.5 whitespace-nowrap">
+                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={columns.length} className="h-32 text-center text-muted-foreground text-xs uppercase">
+                                                No market data found.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        {/* Pagination */}
+                        <div className="border-t border-border px-3 py-2 flex items-center justify-between bg-muted/20">
+                            <div className="text-xs text-muted-foreground">
+                                Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, table.getFilteredRowModel().rows.length)} of {table.getFilteredRowModel().rows.length} assets
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => table.previousPage()}
+                                    disabled={!table.getCanPreviousPage()}
+                                    className="px-3 py-1.5 text-xs font-bold uppercase border border-border rounded hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronLeft className="w-3.5 h-3.5" />
+                                </button>
+                                <div className="text-xs font-mono">
+                                    Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+                                </div>
+                                <button
+                                    onClick={() => table.nextPage()}
+                                    disabled={!table.getCanNextPage()}
+                                    className="px-3 py-1.5 text-xs font-bold uppercase border border-border rounded hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                    </>
                 )}
         </div>
       </div>
+
+      {/* Track Card Dialog */}
+      {trackingCard && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setTrackingCard(null)}>
+          <div className="bg-background border border-border rounded-lg max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold uppercase tracking-wider">Add to Portfolio</h3>
+              <button onClick={() => setTrackingCard(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <div className="text-xs text-muted-foreground uppercase mb-1">Card</div>
+              <div className="font-bold">{trackingCard.name}</div>
+              <div className="text-xs text-muted-foreground">{trackingCard.set_name}</div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-muted-foreground uppercase block mb-1">Quantity</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={trackForm.quantity}
+                  onChange={(e) => setTrackForm({ ...trackForm, quantity: parseInt(e.target.value) || 1 })}
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground uppercase block mb-1">Purchase Price (per card)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-muted-foreground">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={trackForm.purchase_price}
+                    onChange={(e) => setTrackForm({ ...trackForm, purchase_price: parseFloat(e.target.value) || 0 })}
+                    className="w-full bg-background border border-border rounded pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-border">
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className="text-muted-foreground uppercase">Total Cost</span>
+                  <span className="font-mono font-bold">${(trackForm.quantity * trackForm.purchase_price).toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground uppercase">Current Value</span>
+                  <span className="font-mono font-bold">${(trackForm.quantity * (trackingCard.vwap || trackingCard.latest_price || 0)).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => setTrackingCard(null)}
+                className="flex-1 px-4 py-2 text-sm font-bold uppercase border border-border rounded hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  addToPortfolioMutation.mutate({
+                    card_id: trackingCard.id,
+                    quantity: trackForm.quantity,
+                    purchase_price: trackForm.purchase_price
+                  })
+                }}
+                disabled={addToPortfolioMutation.isPending}
+                className="flex-1 px-4 py-2 text-sm font-bold uppercase bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {addToPortfolioMutation.isPending ? 'Adding...' : 'Add to Portfolio'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

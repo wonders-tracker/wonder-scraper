@@ -38,6 +38,23 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
         if not items:
             return (0.0, 0, 0.0)
 
+        # Calculate stats BEFORE saving to DB to avoid detached instance errors
+        prices = [i.price for i in items]
+        lowest_ask = min(prices) if prices else 0.0
+
+        # Calculate Highest Bid
+        # We need to check which items are auctions and have bids.
+        # In `ebay.py`, we added `bid_count` to the MarketPrice object (monkey-patched).
+        # We want the highest PRICE among items that have > 0 bids.
+        highest_bid = 0.0
+
+        for item in items:
+            # Check if it has bids (we monkey-patched this property in parse_generic_results)
+            bid_count = getattr(item, 'bid_count', 0)
+            if bid_count > 0:
+                if item.price > highest_bid:
+                    highest_bid = item.price
+
         # Save active listings to database if requested
         if save_to_db and card_id > 0:
             with Session(engine) as session:
@@ -61,23 +78,6 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                 session.add_all(items)
                 session.commit()
                 print(f"Saved {len(items)} active listings for {card_name}")
-
-        # Calculate stats
-        prices = [i.price for i in items]
-        lowest_ask = min(prices) if prices else 0.0
-
-        # Calculate Highest Bid
-        # We need to check which items are auctions and have bids.
-        # In `ebay.py`, we added `bid_count` to the MarketPrice object (monkey-patched).
-        # We want the highest PRICE among items that have > 0 bids.
-        highest_bid = 0.0
-
-        for item in items:
-            # Check if it has bids (we monkey-patched this property in parse_generic_results)
-            bid_count = getattr(item, 'bid_count', 0)
-            if bid_count > 0:
-                if item.price > highest_bid:
-                    highest_bid = item.price
 
         # Try to get total inventory count from page header, fallback to list length
         total_count = parse_total_results(html)

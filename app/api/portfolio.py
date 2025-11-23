@@ -8,7 +8,7 @@ from app.models.portfolio import PortfolioItem
 from app.models.card import Card
 from app.models.market import MarketSnapshot
 from app.models.user import User
-from app.schemas import PortfolioItemCreate, PortfolioItemOut
+from app.schemas import PortfolioItemCreate, PortfolioItemOut, PortfolioItemUpdate
 
 router = APIRouter()
 
@@ -92,6 +92,62 @@ def read_portfolio(
         
     return results
 
+@router.put("/{item_id}", response_model=PortfolioItemOut)
+def update_portfolio_item(
+    item_id: int,
+    item_in: PortfolioItemUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    Update a portfolio item's quantity or purchase price.
+    """
+    item = session.get(PortfolioItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Portfolio item not found")
+    if item.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Update fields if provided
+    if item_in.quantity is not None:
+        item.quantity = item_in.quantity
+    if item_in.purchase_price is not None:
+        item.purchase_price = item_in.purchase_price
+    if item_in.acquired_at is not None:
+        item.acquired_at = item_in.acquired_at
+
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+
+    # Get card details
+    card = session.get(Card, item.card_id)
+
+    # Get market price
+    market_stmt = select(MarketSnapshot).where(MarketSnapshot.card_id == item.card_id).order_by(MarketSnapshot.timestamp.desc())
+    market_snap = session.exec(market_stmt).first()
+    current_price = market_snap.avg_price if market_snap else 0.0
+
+    current_value = current_price * item.quantity
+    cost_basis = item.purchase_price * item.quantity
+    gain_loss = current_value - cost_basis
+    gain_loss_percent = (gain_loss / cost_basis * 100) if cost_basis > 0 else 0.0
+
+    return PortfolioItemOut(
+        id=item.id,
+        user_id=item.user_id,
+        card_id=item.card_id,
+        quantity=item.quantity,
+        purchase_price=item.purchase_price,
+        acquired_at=item.acquired_at,
+        card_name=card.name if card else "Unknown",
+        card_set=card.set_name if card else "",
+        current_market_price=current_price,
+        current_value=current_value,
+        gain_loss=gain_loss,
+        gain_loss_percent=gain_loss_percent
+    )
+
 @router.delete("/{item_id}", response_model=PortfolioItemOut)
 def delete_portfolio_item(
     item_id: int,
@@ -106,12 +162,12 @@ def delete_portfolio_item(
         raise HTTPException(status_code=404, detail="Portfolio item not found")
     if item.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
-        
+
     session.delete(item)
     session.commit()
-    
+
     # Return valid Pydantic model instead of just item object
-    # Since the object is deleted, we can't access lazy loaded fields easily, 
+    # Since the object is deleted, we can't access lazy loaded fields easily,
     # but we have what we need in the object before deletion or just basic fields.
     # Simpler to return basic info.
     return PortfolioItemOut(

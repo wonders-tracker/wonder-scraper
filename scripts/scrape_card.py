@@ -13,7 +13,7 @@ from app.services.math import calculate_stats
 from app.scraper.browser import BrowserManager
 from app.scraper.active import scrape_active_data
 
-async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", search_term: Optional[str] = None, set_name: str = "", product_type: str = "Single", max_pages: int = 3):
+async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", search_term: Optional[str] = None, set_name: str = "", product_type: str = "Single", max_pages: int = 3, is_backfill: bool = False):
     # If no search_term provided, default to card_name
     initial_query = search_term if search_term else card_name
     
@@ -60,9 +60,10 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
             queries.append(card_name)
         
         if "wonders" not in initial_query.lower():
-            queries.append(f"{card_name} Wonders of the First")
-            queries.append(f"{card_name} Wonders of the First TCG")
-            queries.append(f"{card_name} Wonders of the First CCG")
+            queries.append(f"Wonders of the First {card_name}")
+            queries.append(f"Wonders of the First {card_name} TCG")
+            queries.append(f"Wonders of the First {card_name} CCG")
+            queries.append(f"Wonders of the First Existence {card_name}")
             
         if set_name and set_name.lower() not in initial_query.lower():
              queries.append(f"{card_name} {set_name}")
@@ -75,8 +76,14 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
             unique_queries.append(q)
             seen_queries.add(q.lower())
             
+    # Override max_pages for historical backfills to capture more data
+    if is_backfill and max_pages < 15:
+        max_pages = 15
+        print(f"BACKFILL MODE: Increasing max_pages to {max_pages} for historical data capture")
+
     print(f"--- Scraping: {card_name} (Rarity: {rarity_name}) ---")
     print(f"Search Queries: {unique_queries}")
+    print(f"Max Pages: {max_pages} | Backfill: {is_backfill}")
     
     # 1. Active Data (Use the primary query)
     print("Fetching active listings...")
@@ -140,10 +147,10 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
             await asyncio.sleep(1)
             
         print(f"Found {len(query_prices)} new results with '{query}'. Total unique: {len(all_prices)}")
-        
-        # If we found a good amount of data (e.g. > 10), we can probably stop trying variations
-        # unless it's a very high volume card.
-        if len(all_prices) > 20:
+
+        # If we found a good amount of data (e.g. > 20), we can probably stop trying variations
+        # unless it's a very high volume card or we're in backfill mode.
+        if not is_backfill and len(all_prices) > 20:
             print("Sufficient data found, stopping search variations.")
             break
             

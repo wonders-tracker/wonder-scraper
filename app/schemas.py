@@ -93,5 +93,10 @@ class PortfolioItemUpdate(BaseModel):
 class PortfolioItemOut(PortfolioItemBase):
     id: int
     user_id: int
-    # Optionally include card details for display
-    card: Optional[CardOut] = None # This would require a join in the API
+    # Card details for display
+    card_name: Optional[str] = None
+    card_set: Optional[str] = None
+    current_market_price: Optional[float] = None
+    current_value: Optional[float] = None
+    gain_loss: Optional[float] = None
+    gain_loss_percent: Optional[float] = None

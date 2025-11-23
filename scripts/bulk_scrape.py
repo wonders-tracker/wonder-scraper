@@ -51,7 +51,7 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
     # Initialize browser once (with Pydoll's internal 60s timeout)
     print("Initializing browser (may take up to 60 seconds)...")
     try:
-    await BrowserManager.get_browser()
+        await BrowserManager.get_browser()
         print("Browser ready!")
     except Exception as e:
         print(f"Browser initialization failed: {e}")
@@ -67,11 +67,12 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
                 # Pass card_name separately from search_term to ensure strict validation
                 # Pass set_name to help build search variations
                 await scrape_card(
-                    card_name=card.name, 
-                    card_id=card.id, 
+                    card_name=card.name,
+                    card_id=card.id,
                     search_term=search_term,
                     set_name=card.set_name,
-                    product_type=card.product_type # Pass product type
+                    product_type=card.product_type,  # Pass product type
+                    is_backfill=True  # Bulk scrape should capture max historical data
                 )
             except Exception as e:
                 print(f"Error scraping {card.name}: {e}")

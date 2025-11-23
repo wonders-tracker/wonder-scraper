@@ -13,16 +13,9 @@ class BrowserManager:
     @classmethod
     async def get_browser(cls) -> Chrome:
         if not cls._browser:
-            try:
-                # Kill any lingering Chrome processes from previous crashes
-                subprocess.run(
-                    ["pkill", "-f", "chrome.*--remote-debugging-port"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-                await asyncio.sleep(1)
-            except Exception:
-                pass
+            # Don't use pkill - it can kill other workers' browsers in multiprocessing
+            # Let Pydoll handle process cleanup internally
+            pass
                 
             opts = ChromiumOptions()
             opts.headless = True
@@ -71,16 +64,7 @@ class BrowserManager:
             except Exception as e:
                 print(f"Error closing browser: {e}")
             cls._browser = None
-            
-            # Cleanup any lingering processes
-            try:
-                subprocess.run(
-                    ["pkill", "-f", "chrome.*--remote-debugging-port"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-            except Exception:
-                pass
+            # Let Pydoll handle cleanup - don't use pkill in multiprocessing environment
 
     @classmethod
     async def restart(cls):
@@ -107,24 +91,19 @@ async def get_page_content(url: str, retries: int = 3) -> str:
     for attempt in range(retries + 1):
         try:
             browser = await BrowserManager.get_browser()
-            
-            # Test browser connection before creating tab
+
+            # Create tab with timeout (no need for separate connectivity test)
             try:
-                # Simple connectivity test
-                await asyncio.wait_for(browser.new_tab(), timeout=10)
+                tab = await asyncio.wait_for(browser.new_tab(), timeout=10)
             except asyncio.TimeoutError:
                 raise Exception("Browser is not responding (timeout on new_tab)")
             
-            tab = await browser.new_tab()
-            
             try:
-                # await asyncio.sleep(0.5) # Removed pre-nav wait
-                
-                # Navigate with timeout
-                await asyncio.wait_for(tab.go_to(url), timeout=15)
-                
-                # Wait for content to load - Reduced
-                await asyncio.sleep(1)
+                # Navigate with longer timeout for eBay's heavy pages
+                await asyncio.wait_for(tab.go_to(url), timeout=30)
+
+                # Wait for content to load
+                await asyncio.sleep(2)
                 
                 content = await tab.page_source
                 
@@ -142,11 +121,15 @@ async def get_page_content(url: str, retries: int = 3) -> str:
         except Exception as e:
             last_error = e
             error_msg = str(e).lower()
-            print(f"Error in get_page_content: {e}")
+            print(f"Error in get_page_content:")
+            print(f"  Type: {type(e).__name__}")
+            print(f"  Message: {e}")
+            import traceback
+            print(f"  Traceback: {traceback.format_exc()}")
             
-            # If it's a connection error, restart browser
-            if any(keyword in error_msg for keyword in ["websocket", "connection", "target closed", "timeout", "not responding"]):
-                print("Detected browser issue. Restarting browser...")
+            # If it's a connection/timeout error, restart browser
+            if isinstance(e, (asyncio.TimeoutError, TimeoutError)) or any(keyword in error_msg for keyword in ["websocket", "connection", "target closed", "timeout", "not responding", "cancelled"]):
+                print("Detected browser issue (timeout/connection). Restarting browser...")
                 await BrowserManager.restart()
                 await asyncio.sleep(3)
             else:
