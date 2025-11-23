@@ -293,7 +293,7 @@ def read_card(
             ORDER BY sold_date DESC LIMIT 1
         """)
         prev_res = session.exec(prev_q, params={"cid": card_id, "cutoff": cutoff_24h}).first()
-        prev_close = prev_res if prev_res else None
+        prev_close = prev_res[0] if prev_res else None
         
     except Exception:
         pass
