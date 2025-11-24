@@ -87,5 +87,10 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
         print("Bulk Scrape Complete.")
 
 if __name__ == "__main__":
-    # Set force_all=True to ensure we update historical data for everything
-    asyncio.run(bulk_scrape(limit=1000, force_all=True))
+    import sys
+    # Parse command line args
+    limit = int(sys.argv[1]) if len(sys.argv) > 1 else 10000  # Higher default for full backfill
+    force_all = '--force' in sys.argv or len(sys.argv) <= 2  # Default to force for backfill
+
+    print(f"Running bulk scrape with limit={limit}, force_all={force_all}")
+    asyncio.run(bulk_scrape(limit=limit, force_all=force_all))
