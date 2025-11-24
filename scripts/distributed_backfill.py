@@ -170,10 +170,11 @@ async def distributed_backfill(num_workers: int = 2, force_all: bool = False, li
 
 if __name__ == "__main__":
     # Parse command line args
-    num_workers = int(sys.argv[1]) if len(sys.argv) > 1 else 2 # Default to 2 for safety
+    num_workers = int(sys.argv[1]) if len(sys.argv) > 1 else 3 # Default to 3 for balanced performance
     force_all = '--force' in sys.argv
     is_backfill = '--historical' in sys.argv or '--backfill' in sys.argv
-    limit = 1000
+    # For historical backfill, process all cards; otherwise limit to 1000
+    limit = 10000 if is_backfill else 1000
 
     # Set multiprocessing start method
     mp.set_start_method('spawn', force=True)

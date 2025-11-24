@@ -62,8 +62,8 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     unique_queries = deduped
             
     # Override max_pages for historical backfills to capture more data
-    if is_backfill and max_pages < 15:
-        max_pages = 15
+    if is_backfill and max_pages < 25:
+        max_pages = 25
         print(f"BACKFILL MODE: Increasing max_pages to {max_pages} for historical data capture")
 
     print(f"--- Scraping: {card_name} (Rarity: {rarity_name}) ---")
