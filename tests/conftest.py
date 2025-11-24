@@ -90,6 +90,7 @@ def test_prices_fixture(session: Session, test_card: Card):
             price = MarketPrice(
                 card_id=test_card.id,
                 price=base_price + (j * 0.5),
+                quantity=1,  # Default quantity for test data
                 title=f"Test Listing {i}-{j}",
                 sold_date=date + timedelta(hours=j * 8),
                 listing_type="sold",
@@ -151,6 +152,7 @@ def multiple_cards_fixture(session: Session, test_rarity: Rarity):
         price = MarketPrice(
             card_id=card1.id,
             price=1.0 + (i * 0.4),
+            quantity=1,
             title=f"Common Listing {i}",
             sold_date=now - timedelta(days=9 - i),
             listing_type="sold",
@@ -173,6 +175,7 @@ def multiple_cards_fixture(session: Session, test_rarity: Rarity):
         price = MarketPrice(
             card_id=card2.id,
             price=10.0 + (i * 1.0),
+            quantity=1,
             title=f"Rare Foil Listing {i}",
             sold_date=now - timedelta(days=9 - i),
             listing_type="sold",

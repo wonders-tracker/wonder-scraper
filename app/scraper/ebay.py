@@ -5,6 +5,7 @@ from dateutil import parser
 import re
 import difflib
 from app.models.market import MarketPrice
+from app.services.ai_extractor import get_ai_extractor
 
 STOPWORDS = {"the", "of", "a", "an", "in", "on", "at", "for", "to", "with", "by", "and", "or", "wonders", "first", "existence"}
 
@@ -271,7 +272,19 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
         else:
             pass
 
-        treatment = _detect_treatment(title)
+        # Use AI extraction for intelligent parsing (quantity, condition, etc.)
+        ai_extractor = get_ai_extractor()
+        extracted_data = ai_extractor.extract_listing_data(
+            title=title,
+            description=None,  # Could extract from item details if available
+            price=price
+        )
+
+        # Fallback to rule-based treatment detection if AI extraction has low confidence
+        treatment = extracted_data["treatment"]
+        if extracted_data["confidence"] < 0.7:
+            treatment = _detect_treatment(title)
+
         bid_count = _extract_bid_count(item)
         item_id, url = _extract_item_details(item)
 
@@ -283,15 +296,16 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             image_url = image_elem.get("src")
             if not image_url or "gif" in image_url or "base64" in image_url:
                  image_url = image_elem.get("data-src")
-        
+
         mp = MarketPrice(
             card_id=card_id,
             title=title,
             price=price,
+            quantity=extracted_data["quantity"],  # AI-extracted quantity
             sold_date=sold_date,
             listing_type=listing_type,
             treatment=treatment,
-            bid_count=bid_count, 
+            bid_count=bid_count,
             external_id=item_id, # Unique eBay Item ID
             url=url,
             image_url=image_url, # Captured Image URL

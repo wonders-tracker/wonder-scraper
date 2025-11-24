@@ -55,19 +55,26 @@ class PriceCalculator:
         """
         Calculate Volume Weighted Average Price.
 
-        Currently uses simple average since quantity per sale isn't tracked.
-        Formula: AVG(price) for sold items in period
+        True VWAP Formula: SUM(price * quantity) / SUM(quantity)
 
-        Future: SUM(price * quantity) / SUM(quantity) when quantity is tracked
+        Args:
+            card_id: Card ID to calculate VWAP for
+            period: Time period ('1d', '3d', '7d', '14d', '30d', '90d', 'all')
+
+        Returns:
+            VWAP as float, or None if no data exists
         """
         cutoff = self._get_cutoff_time(period)
 
         query = text("""
-            SELECT AVG(price) as vwap
+            SELECT
+                SUM(price * quantity) as total_value,
+                SUM(quantity) as total_quantity
             FROM marketprice
             WHERE card_id = :card_id
             AND listing_type = 'sold'
             AND price > 0
+            AND quantity > 0
             {}
         """.format("AND sold_date >= :cutoff" if cutoff else ""))
 
@@ -76,7 +83,10 @@ class PriceCalculator:
             params["cutoff"] = cutoff
 
         result = self.session.exec(query, params=params).first()
-        return float(result[0]) if result and result[0] is not None else None
+
+        if result and result[0] is not None and result[1] is not None and result[1] > 0:
+            return float(result[0]) / float(result[1])
+        return None
 
     # =========================================================================
     # EMA Calculation

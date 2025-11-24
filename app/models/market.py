@@ -25,6 +25,7 @@ class MarketPrice(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     card_id: int = Field(foreign_key="card.id", index=True)
     price: float
+    quantity: int = Field(default=1) # Quantity sold/listed (for VWAP calculation)
     title: str
     sold_date: Optional[datetime] = None
     listing_type: str = Field(default="sold") # 'sold' or 'active'

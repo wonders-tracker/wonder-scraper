@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlmodel import Session, select, func, desc
 from datetime import datetime, timedelta
 
@@ -224,7 +224,8 @@ def read_market_activity(
 # ============================================================================
 
 @router.get("/floor")
-def read_floor_prices(
+async def read_floor_prices(
+    request: Request,
     session: Session = Depends(get_session),
     product_type: str = Query(default="Single"),
     period: str = Query(default="30d", regex="^(1d|3d|7d|14d|30d|90d|all)$"),
@@ -232,6 +233,8 @@ def read_floor_prices(
 ) -> Any:
     """
     Get floor prices by rarity, treatment, and combination.
+
+    Rate limit: 30/minute per IP
 
     Returns comprehensive floor price data for market analysis.
     """
