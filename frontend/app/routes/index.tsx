@@ -22,6 +22,7 @@ type Card = {
   inventory?: number
   volume_usd_24h?: number // New field for dollar volume
   product_type?: string // Single, Box, Pack, Proof
+  condition?: string // For boxes/packs: Sealed, Unsealed
   max_price?: number // Highest confirmed sale
 }
 

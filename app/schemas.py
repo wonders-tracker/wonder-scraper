@@ -34,19 +34,20 @@ class CardBase(BaseModel):
     name: str
     set_name: str
     rarity_id: int
+    product_type: Optional[str] = "Single"  # Single, Box, Pack, Lot
+    condition: Optional[str] = None  # For boxes/packs: Sealed, Unsealed
 
 class CardOut(CardBase):
     id: int
     rarity_name: Optional[str] = None # Added rarity_name
     # Flattened fields for easy table access
-    latest_price: Optional[float] = None 
+    latest_price: Optional[float] = None
     volume_24h: Optional[int] = None
     price_delta_24h: Optional[float] = None
     last_sale_diff: Optional[float] = None # Diff between last sale and avg price
     last_sale_treatment: Optional[str] = None # Treatment of the last sold item
     lowest_ask: Optional[float] = None
     inventory: Optional[int] = None
-    product_type: Optional[str] = None  # Single, Box, Pack, Proof
     max_price: Optional[float] = None  # Highest confirmed sale
     avg_price: Optional[float] = None  # Average price
     vwap: Optional[float] = None # Volume Weighted Average Price

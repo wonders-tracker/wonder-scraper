@@ -22,6 +22,8 @@ type CardDetail = {
   lowest_ask?: number
   inventory?: number
   max_price?: number // Added max_price type
+  product_type?: string // Single, Box, Pack, Proof
+  condition?: string // For boxes/packs: Sealed, Unsealed
   // Calculated fields for display
   market_cap?: number
 }
