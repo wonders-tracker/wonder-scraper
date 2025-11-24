@@ -4,9 +4,51 @@ from datetime import datetime
 from dateutil import parser
 import re
 import difflib
+from sqlmodel import Session, select
 from app.models.market import MarketPrice
+from app.services.ai_extractor import get_ai_extractor
+from app.db import engine
 
 STOPWORDS = {"the", "of", "a", "an", "in", "on", "at", "for", "to", "with", "by", "and", "or", "wonders", "first", "existence"}
+
+def _is_listing_already_indexed(
+    external_id: Optional[str],
+    title: str,
+    price: float,
+    sold_date: Optional[datetime],
+    card_id: int
+) -> bool:
+    """
+    Check if a listing already exists in the database to avoid redundant scraping.
+
+    Checks both:
+    1. external_id (eBay item ID) - most reliable
+    2. Composite key (card_id, title, price, sold_date) - fallback
+
+    Returns True if listing already exists, False otherwise.
+    """
+    with Session(engine) as session:
+        # Check by external_id first (most reliable)
+        if external_id:
+            existing = session.exec(
+                select(MarketPrice)
+                .where(MarketPrice.external_id == external_id)
+                .limit(1)
+            ).first()
+            if existing:
+                return True
+
+        # Check by composite key (title, price, sold_date)
+        existing = session.exec(
+            select(MarketPrice)
+            .where(MarketPrice.card_id == card_id)
+            .where(MarketPrice.title == title)
+            .where(MarketPrice.price == price)
+            .where(MarketPrice.sold_date == sold_date)
+            .limit(1)
+        ).first()
+
+        return existing is not None
 
 def parse_search_results(html_content: str, card_id: int = 0, card_name: str = "", target_rarity: str = "") -> List[MarketPrice]:
     """
@@ -221,19 +263,21 @@ def _clean_title_text(title: str) -> str:
 
 def _parse_generic_results(html_content: str, card_id: int, listing_type: str, card_name: str = "", target_rarity: str = "") -> List[MarketPrice]:
     soup = BeautifulSoup(html_content, "lxml")
-    results = []
-    
     items = soup.select("li.s-item, li.s-card")
-    
+
+    # Phase 1: Collect all valid listing data (filter, validate, dedup)
+    listings_to_extract = []
+    listing_metadata = []
+
     for item in items:
         if "s-item__header" in item.get("class", []) or "s-card__header" in item.get("class", []):
             continue
-            
+
         title_elem = item.select_one(".s-item__title, .s-card__title")
         if not title_elem:
             continue
         raw_title = title_elem.get_text(strip=True)
-        
+
         if "Shop on eBay" in raw_title:
             continue
 
@@ -246,12 +290,12 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
         price_elem = item.select_one(".s-item__price, .s-card__price")
         if not price_elem:
             continue
-        
+
         price_str = price_elem.get_text(strip=True)
         price = _clean_price(price_str)
         if price is None:
             continue
-            
+
         sold_date = None
         if listing_type == "sold":
             captions = item.select(".s-item__caption, .s-card__caption")
@@ -259,7 +303,8 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
                 text = caption.get_text(strip=True)
                 if "Sold" in text:
                     sold_date = _parse_date(text)
-                    if sold_date: break
+                    if sold_date:
+                        break
             if not sold_date:
                 tag = item.select_one(".s-item__title--tag")
                 if tag:
@@ -267,40 +312,79 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
                     if "Sold" in text:
                         sold_date = _parse_date(text)
             if not sold_date:
-                continue 
+                continue
         else:
             pass
 
-        treatment = _detect_treatment(title)
-        bid_count = _extract_bid_count(item)
+        # Extract item ID early for dedup check
         item_id, url = _extract_item_details(item)
+
+        # DB dedup check - skip if listing already indexed (saves AI calls)
+        if _is_listing_already_indexed(item_id, title, price, sold_date, card_id):
+            continue
+
+        # Extract additional metadata
+        bid_count = _extract_bid_count(item)
 
         # Extract Image URL
         image_elem = item.select_one(".s-item__image-img")
         image_url = None
         if image_elem:
-            # Try src first, but eBay often uses lazy loading with data-src or other attributes
             image_url = image_elem.get("src")
             if not image_url or "gif" in image_url or "base64" in image_url:
-                 image_url = image_elem.get("data-src")
-        
+                image_url = image_elem.get("data-src")
+
+        # Store for batch extraction
+        listings_to_extract.append({
+            "title": title,
+            "description": None,
+            "price": price
+        })
+
+        # Store metadata to create MarketPrice later
+        listing_metadata.append({
+            "title": title,
+            "price": price,
+            "sold_date": sold_date,
+            "item_id": item_id,
+            "url": url,
+            "bid_count": bid_count,
+            "image_url": image_url
+        })
+
+    # Phase 2: Batch AI extraction for all collected listings
+    if not listings_to_extract:
+        return []
+
+    ai_extractor = get_ai_extractor()
+    extracted_batch = ai_extractor.extract_batch(listings_to_extract)
+
+    # Phase 3: Create MarketPrice objects with extracted data
+    results = []
+    for metadata, extracted_data in zip(listing_metadata, extracted_batch):
+        # Fallback to rule-based treatment detection if AI extraction has low confidence
+        treatment = extracted_data["treatment"]
+        if extracted_data["confidence"] < 0.7:
+            treatment = _detect_treatment(metadata["title"])
+
         mp = MarketPrice(
             card_id=card_id,
-            title=title,
-            price=price,
-            sold_date=sold_date,
+            title=metadata["title"],
+            price=metadata["price"],
+            quantity=extracted_data["quantity"],
+            sold_date=metadata["sold_date"],
             listing_type=listing_type,
             treatment=treatment,
-            bid_count=bid_count, 
-            external_id=item_id, # Unique eBay Item ID
-            url=url,
-            image_url=image_url, # Captured Image URL
+            bid_count=metadata["bid_count"],
+            external_id=metadata["item_id"],
+            url=metadata["url"],
+            image_url=metadata["image_url"],
             platform="ebay",
             scraped_at=datetime.utcnow()
         )
-        
+
         results.append(mp)
-        
+
     return results
 
 def _clean_price(price_str: str) -> Optional[float]:
