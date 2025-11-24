@@ -175,12 +175,39 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
     """
     Validates if the listing title is a good match for the card name and rarity.
     Stricter matching logic to prevent "The Great Veridan" matching "The Great Usurper".
+    Also filters out non-Wonders products (Harry Potter, Yu-Gi-Oh, Pokemon, etc.)
     """
     if not card_name:
         return True
 
     title_lower = title.lower()
     name_lower = card_name.lower()
+
+    # CRITICAL: Reject non-Wonders TCG products that might match on keywords
+    # e.g., "The Prisoner" should NOT match "Harry Potter Prisoner of Azkaban"
+    non_wonders_keywords = [
+        # Other TCGs
+        'harry potter', 'pokemon', 'yu-gi-oh', 'yugioh', 'yu gi oh', 'magic the gathering',
+        'mtg ', ' mtg', 'flesh and blood', 'fab ', 'one piece', 'dragon ball',
+        'digimon', 'cardfight', 'weiss schwarz', 'force of will', 'keyforge',
+        'lorcana', 'metazoo', 'sorcery contested', 'star wars', 'lord of the rings',
+        'universus', 'ufs ', 'naruto', 'my hero academia', 'union arena',
+        # Game-specific terms that indicate non-Wonders
+        'azkaban', 'hogwarts', 'pikachu', 'charizard', 'blue-eyes', 'dark magician',
+        'planeswalker', 'earthbound', 'maze of millennia', 'duelist', 'konami',
+        # Sports cards
+        'topps', 'panini', 'upper deck', 'bowman', 'prizm', 'donruss',
+        'nba', 'nfl', 'mlb', 'nhl', 'fifa', 'ufc',
+    ]
+
+    for keyword in non_wonders_keywords:
+        if keyword in title_lower:
+            return False
+
+    # Positive signal: title should ideally contain Wonders identifiers
+    # (but don't require it - some listings are abbreviated)
+    wonders_identifiers = ['wonders', 'existence', 'wotf', 'wonders of the first']
+    has_wonders_identifier = any(ident in title_lower for ident in wonders_identifiers)
 
     # Detect product types - use more lenient matching for sealed products
     product_type_keywords = ['box', 'pack', 'case', 'lot', 'bundle', 'collection', 'bulk', 'sealed']
