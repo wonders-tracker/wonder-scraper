@@ -78,51 +78,60 @@ def read_market_overview(
     if card_ids:
         try:
             from sqlalchemy import text
-            id_list = ", ".join(str(cid) for cid in card_ids)
             period_start = cutoff_time if cutoff_time else datetime.utcnow() - timedelta(hours=24)
 
-            query = text(f"""
+            # Use parameterized queries to prevent SQL injection
+            query = text("""
                 SELECT DISTINCT ON (card_id) card_id, price, treatment, sold_date
                 FROM marketprice
-                WHERE card_id IN ({id_list}) AND listing_type = 'sold'
+                WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
                 ORDER BY card_id, sold_date DESC NULLS LAST
             """)
-            results = session.exec(query).all()
+            results = session.execute(query, {"card_ids": card_ids}).all()
             last_sale_map = {row[0]: {'price': row[1], 'treatment': row[2], 'date': row[3]} for row in results}
 
-            # Calculate VWAP
-            vwap_query = text(f"""
-                SELECT card_id, AVG(price) as vwap
-                FROM marketprice
-                WHERE card_id IN ({id_list})
-                AND listing_type = 'sold'
-                {f"AND sold_date >= '{cutoff_time}'" if cutoff_time else ""}
-                GROUP BY card_id
-            """)
-            vwap_results = session.exec(vwap_query).all()
+            # Calculate VWAP with proper parameter binding
+            if cutoff_time:
+                vwap_query = text("""
+                    SELECT card_id, AVG(price) as vwap
+                    FROM marketprice
+                    WHERE card_id = ANY(:card_ids)
+                    AND listing_type = 'sold'
+                    AND sold_date >= :cutoff_time
+                    GROUP BY card_id
+                """)
+                vwap_results = session.execute(vwap_query, {"card_ids": card_ids, "cutoff_time": cutoff_time}).all()
+            else:
+                vwap_query = text("""
+                    SELECT card_id, AVG(price) as vwap
+                    FROM marketprice
+                    WHERE card_id = ANY(:card_ids)
+                    AND listing_type = 'sold'
+                    GROUP BY card_id
+                """)
+                vwap_results = session.execute(vwap_query, {"card_ids": card_ids}).all()
             vwap_map = {row[0]: row[1] for row in vwap_results}
 
             # Get oldest sale in period for delta calculation
-            # Also get sale counts to validate minimum data requirements
-            oldest_sale_query = text(f"""
+            oldest_sale_query = text("""
                 SELECT DISTINCT ON (card_id) card_id, price, sold_date
                 FROM marketprice
-                WHERE card_id IN ({id_list}) AND listing_type = 'sold'
-                AND sold_date >= '{period_start}'
+                WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
+                AND sold_date >= :period_start
                 ORDER BY card_id, sold_date ASC
             """)
-            oldest_results = session.exec(oldest_sale_query).all()
+            oldest_results = session.execute(oldest_sale_query, {"card_ids": card_ids, "period_start": period_start}).all()
             oldest_sale_map = {row[0]: {'price': row[1], 'date': row[2]} for row in oldest_results}
 
             # Count sales in period for each card
-            sales_count_query = text(f"""
+            sales_count_query = text("""
                 SELECT card_id, COUNT(*) as sale_count, COUNT(DISTINCT DATE(sold_date)) as unique_days
                 FROM marketprice
-                WHERE card_id IN ({id_list}) AND listing_type = 'sold'
-                AND sold_date >= '{period_start}'
+                WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
+                AND sold_date >= :period_start
                 GROUP BY card_id
             """)
-            sales_count_results = session.exec(sales_count_query).all()
+            sales_count_results = session.execute(sales_count_query, {"card_ids": card_ids, "period_start": period_start}).all()
             sales_count_map = {row[0]: {'count': row[1], 'unique_days': row[2]} for row in sales_count_results}
 
         except Exception as e:

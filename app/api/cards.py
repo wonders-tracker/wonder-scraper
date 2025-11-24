@@ -124,43 +124,53 @@ def read_cards(
     if card_ids:
         try:
             from sqlalchemy import text
-            # Safe parameter binding
-            id_list = ", ".join(str(cid) for cid in card_ids)
-            query = text(f"""
+
+            # Use parameterized queries to prevent SQL injection
+            # PostgreSQL ANY() syntax for array parameters
+            query = text("""
                 SELECT DISTINCT ON (card_id) card_id, price, treatment
                 FROM marketprice
-                WHERE card_id IN ({id_list}) AND listing_type = 'sold'
+                WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
                 ORDER BY card_id, sold_date DESC NULLS LAST
             """)
-            results = session.exec(query).all()
-            # Store full object or dict for the card
+            results = session.execute(query, {"card_ids": card_ids}).all()
             last_sale_map = {row[0]: {'price': row[1], 'treatment': row[2]} for row in results}
-            
-            # Calculate VWAP (Average Sold Price)
-            vwap_query = text(f"""
-                SELECT card_id, AVG(price) as vwap
-                FROM marketprice
-                WHERE card_id IN ({id_list}) 
-                AND listing_type = 'sold'
-                {f"AND sold_date >= '{cutoff_time}'" if cutoff_time else ""}
-                GROUP BY card_id
-            """)
-            vwap_results = session.exec(vwap_query).all()
-            vwap_map = {row[0]: row[1] for row in vwap_results}
-            
-            # Fetch Previous Closing Price (Price BEFORE cutoff)
+
+            # Calculate VWAP with proper parameter binding
             if cutoff_time:
-                prev_price_query = text(f"""
+                vwap_query = text("""
+                    SELECT card_id, AVG(price) as vwap
+                    FROM marketprice
+                    WHERE card_id = ANY(:card_ids)
+                    AND listing_type = 'sold'
+                    AND sold_date >= :cutoff_time
+                    GROUP BY card_id
+                """)
+                vwap_results = session.execute(vwap_query, {"card_ids": card_ids, "cutoff_time": cutoff_time}).all()
+            else:
+                vwap_query = text("""
+                    SELECT card_id, AVG(price) as vwap
+                    FROM marketprice
+                    WHERE card_id = ANY(:card_ids)
+                    AND listing_type = 'sold'
+                    GROUP BY card_id
+                """)
+                vwap_results = session.execute(vwap_query, {"card_ids": card_ids}).all()
+            vwap_map = {row[0]: row[1] for row in vwap_results}
+
+            # Fetch Previous Closing Price with proper parameter binding
+            if cutoff_time:
+                prev_price_query = text("""
                     SELECT DISTINCT ON (card_id) card_id, price
                     FROM marketprice
-                    WHERE card_id IN ({id_list}) 
+                    WHERE card_id = ANY(:card_ids)
                     AND listing_type = 'sold'
-                    AND sold_date < '{cutoff_time}'
+                    AND sold_date < :cutoff_time
                     ORDER BY card_id, sold_date DESC
                 """)
-                prev_results = session.exec(prev_price_query).all()
+                prev_results = session.execute(prev_price_query, {"card_ids": card_ids, "cutoff_time": cutoff_time}).all()
                 prev_price_map = {row[0]: row[1] for row in prev_results}
-            
+
         except Exception as e:
             print(f"Error fetching sales data: {e}")
     
