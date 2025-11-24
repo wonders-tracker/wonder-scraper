@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from app.core.config import settings
-from app.api import auth, cards, portfolio, users, market
+from app.api import auth, cards, portfolio, users, market, admin
 from contextlib import asynccontextmanager
 from app.core.scheduler import start_scheduler
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -53,6 +53,7 @@ app.include_router(cards.router, prefix=f"{settings.API_V1_STR}/cards", tags=["c
 app.include_router(portfolio.router, prefix=f"{settings.API_V1_STR}/portfolio", tags=["portfolio"])
 app.include_router(users.router, prefix=f"{settings.API_V1_STR}/users", tags=["users"])
 app.include_router(market.router, prefix=f"{settings.API_V1_STR}/market", tags=["market"])
+app.include_router(admin.router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 
 @app.get("/")
 def root():
