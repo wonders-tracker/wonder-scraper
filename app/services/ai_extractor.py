@@ -11,11 +11,15 @@ Uses GPT-5-nano via OpenRouter to intelligently parse eBay listings for:
 from typing import Optional, Dict, Any, List
 from collections import OrderedDict
 from datetime import datetime
+from dotenv import load_dotenv
 from openai import OpenAI
 import json
 import re
 import os
 import hashlib
+
+# Ensure environment variables are loaded
+load_dotenv()
 
 
 class AIListingExtractor:
