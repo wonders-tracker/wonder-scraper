@@ -11,44 +11,87 @@ from app.db import engine
 
 STOPWORDS = {"the", "of", "a", "an", "in", "on", "at", "for", "to", "with", "by", "and", "or", "wonders", "first", "existence"}
 
-def _is_listing_already_indexed(
-    external_id: Optional[str],
-    title: str,
-    price: float,
-    sold_date: Optional[datetime],
-    card_id: int
-) -> bool:
+def _bulk_check_indexed(
+    card_id: int,
+    listings_data: List[dict]
+) -> set:
     """
-    Check if a listing already exists in the database to avoid redundant scraping.
+    Bulk check if listings already exist in database (avoids N+1 query problem).
 
-    Checks both:
-    1. external_id (eBay item ID) - most reliable
-    2. Composite key (card_id, title, price, sold_date) - fallback
+    Args:
+        card_id: Card ID to check against
+        listings_data: List of dicts with keys: external_id, title, price, sold_date
 
-    Returns True if listing already exists, False otherwise.
+    Returns:
+        Set of indices of listings that are already indexed
     """
+    if not listings_data:
+        return set()
+
+    indexed_indices = set()
+
     with Session(engine) as session:
-        # Check by external_id first (most reliable)
-        if external_id:
-            existing = session.exec(
-                select(MarketPrice)
-                .where(MarketPrice.external_id == external_id)
-                .limit(1)
-            ).first()
-            if existing:
-                return True
+        # Check by external_ids in bulk (most reliable)
+        external_ids = [
+            listing["external_id"]
+            for listing in listings_data
+            if listing.get("external_id")
+        ]
 
-        # Check by composite key (title, price, sold_date)
-        existing = session.exec(
-            select(MarketPrice)
-            .where(MarketPrice.card_id == card_id)
-            .where(MarketPrice.title == title)
-            .where(MarketPrice.price == price)
-            .where(MarketPrice.sold_date == sold_date)
-            .limit(1)
-        ).first()
+        if external_ids:
+            existing_ids = session.exec(
+                select(MarketPrice.external_id)
+                .where(MarketPrice.external_id.in_(external_ids))
+            ).all()
+            existing_ids_set = set(existing_ids)
 
-        return existing is not None
+            # Mark indices with existing external_ids
+            for i, listing in enumerate(listings_data):
+                if listing.get("external_id") in existing_ids_set:
+                    indexed_indices.add(i)
+
+        # Check by composite key for listings without external_id or not found
+        # Build OR conditions for composite keys
+        from sqlalchemy import and_, or_
+
+        composite_conditions = []
+        composite_index_map = {}  # Maps condition index to listing index
+
+        for i, listing in enumerate(listings_data):
+            if i not in indexed_indices:  # Not already found by external_id
+                condition = and_(
+                    MarketPrice.card_id == card_id,
+                    MarketPrice.title == listing["title"],
+                    MarketPrice.price == listing["price"],
+                    MarketPrice.sold_date == listing["sold_date"]
+                )
+                composite_conditions.append(condition)
+                composite_index_map[len(composite_conditions) - 1] = i
+
+        if composite_conditions:
+            # Query with OR of all composite conditions
+            existing_composites = session.exec(
+                select(
+                    MarketPrice.title,
+                    MarketPrice.price,
+                    MarketPrice.sold_date
+                )
+                .where(or_(*composite_conditions))
+                .distinct()
+            ).all()
+
+            # Mark indices that match composite keys
+            for existing in existing_composites:
+                for i, listing in enumerate(listings_data):
+                    if (
+                        i not in indexed_indices
+                        and listing["title"] == existing[0]
+                        and listing["price"] == existing[1]
+                        and listing["sold_date"] == existing[2]
+                    ):
+                        indexed_indices.add(i)
+
+    return indexed_indices
 
 def parse_search_results(html_content: str, card_id: int = 0, card_name: str = "", target_rarity: str = "") -> List[MarketPrice]:
     """
@@ -265,9 +308,8 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
     soup = BeautifulSoup(html_content, "lxml")
     items = soup.select("li.s-item, li.s-card")
 
-    # Phase 1: Collect all valid listing data (filter, validate, dedup)
-    listings_to_extract = []
-    listing_metadata = []
+    # Phase 1a: Collect ALL valid listings (filter, validate)
+    all_listings_data = []
 
     for item in items:
         if "s-item__header" in item.get("class", []) or "s-card__header" in item.get("class", []):
@@ -316,12 +358,8 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
         else:
             pass
 
-        # Extract item ID early for dedup check
+        # Extract item ID
         item_id, url = _extract_item_details(item)
-
-        # DB dedup check - skip if listing already indexed (saves AI calls)
-        if _is_listing_already_indexed(item_id, title, price, sold_date, card_id):
-            continue
 
         # Extract additional metadata
         bid_count = _extract_bid_count(item)
@@ -334,28 +372,41 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             if not image_url or "gif" in image_url or "base64" in image_url:
                 image_url = image_elem.get("data-src")
 
-        # Store for batch extraction
-        listings_to_extract.append({
-            "title": title,
-            "description": None,
-            "price": price
-        })
-
-        # Store metadata to create MarketPrice later
-        listing_metadata.append({
+        # Store all listing data for bulk dedup check
+        all_listings_data.append({
+            "external_id": item_id,
             "title": title,
             "price": price,
             "sold_date": sold_date,
-            "item_id": item_id,
             "url": url,
             "bid_count": bid_count,
             "image_url": image_url
         })
 
-    # Phase 2: Batch AI extraction for all collected listings
+    if not all_listings_data:
+        return []
+
+    # Phase 1b: Bulk DB dedup check (single query instead of N queries)
+    indexed_indices = _bulk_check_indexed(card_id, all_listings_data)
+
+    # Phase 1c: Filter out already-indexed listings
+    listings_to_extract = []
+    listing_metadata = []
+
+    for i, listing_data in enumerate(all_listings_data):
+        if i not in indexed_indices:
+            # Not indexed yet, include for AI extraction
+            listings_to_extract.append({
+                "title": listing_data["title"],
+                "description": None,
+                "price": listing_data["price"]
+            })
+            listing_metadata.append(listing_data)
+
     if not listings_to_extract:
         return []
 
+    # Phase 2: Batch AI extraction for all non-indexed listings
     ai_extractor = get_ai_extractor()
     extracted_batch = ai_extractor.extract_batch(listings_to_extract)
 
@@ -376,7 +427,7 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             listing_type=listing_type,
             treatment=treatment,
             bid_count=metadata["bid_count"],
-            external_id=metadata["item_id"],
+            external_id=metadata["external_id"],
             url=metadata["url"],
             image_url=metadata["image_url"],
             platform="ebay",

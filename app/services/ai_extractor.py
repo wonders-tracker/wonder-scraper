@@ -9,6 +9,8 @@ Uses GPT-5-nano via OpenRouter to intelligently parse eBay listings for:
 """
 
 from typing import Optional, Dict, Any, List
+from collections import OrderedDict
+from datetime import datetime
 from openai import OpenAI
 import json
 import re
@@ -19,12 +21,27 @@ import hashlib
 class AIListingExtractor:
     """AI-powered listing data extractor using GPT-5-nano."""
 
+    # Cache configuration
+    MAX_CACHE_SIZE = 10000
+    CACHE_TTL_SECONDS = 3600  # 1 hour
+
     def __init__(self):
         """Initialize OpenRouter client with GPT-5-nano."""
         api_key = os.getenv("OPENROUTER_API_KEY")
 
-        # Title hash cache to prevent redundant AI calls for same titles
-        self._title_cache = {}
+        # Title hash cache with LRU eviction (OrderedDict maintains insertion order)
+        self._title_cache = OrderedDict()
+        self._cache_timestamps = {}
+
+        # Performance metrics
+        self._metrics = {
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "ai_calls": 0,
+            "fallback_calls": 0,
+            "batch_calls": 0,
+            "cache_evictions": 0
+        }
 
         if not api_key:
             print("WARNING: OPENROUTER_API_KEY not set, AI extraction will fallback to rule-based")
@@ -42,6 +59,87 @@ class AIListingExtractor:
         """Generate SHA256 hash of normalized title for cache key."""
         normalized = title.lower().strip()
         return hashlib.sha256(normalized.encode()).hexdigest()
+
+    def _evict_expired_cache_entries(self):
+        """Remove expired entries based on TTL."""
+        now = datetime.utcnow().timestamp()
+        expired_keys = [
+            key for key, ts in self._cache_timestamps.items()
+            if now - ts > self.CACHE_TTL_SECONDS
+        ]
+
+        for key in expired_keys:
+            del self._title_cache[key]
+            del self._cache_timestamps[key]
+            self._metrics["cache_evictions"] += 1
+
+    def _evict_if_cache_full(self):
+        """Evict oldest entries if cache exceeds max size (LRU eviction)."""
+        while len(self._title_cache) > self.MAX_CACHE_SIZE:
+            # OrderedDict.popitem(last=False) removes oldest (FIFO/LRU)
+            oldest_key, _ = self._title_cache.popitem(last=False)
+            if oldest_key in self._cache_timestamps:
+                del self._cache_timestamps[oldest_key]
+            self._metrics["cache_evictions"] += 1
+
+    def _cache_get(self, title_hash: str) -> Optional[Dict[str, Any]]:
+        """Get from cache and track metrics."""
+        # Evict expired entries periodically
+        if len(self._cache_timestamps) % 100 == 0:  # Check every 100 accesses
+            self._evict_expired_cache_entries()
+
+        if title_hash in self._title_cache:
+            # Check if expired
+            now = datetime.utcnow().timestamp()
+            if now - self._cache_timestamps[title_hash] > self.CACHE_TTL_SECONDS:
+                # Expired, remove it
+                del self._title_cache[title_hash]
+                del self._cache_timestamps[title_hash]
+                self._metrics["cache_misses"] += 1
+                self._metrics["cache_evictions"] += 1
+                return None
+
+            self._metrics["cache_hits"] += 1
+            # Move to end for LRU (most recently used)
+            self._title_cache.move_to_end(title_hash)
+            return self._title_cache[title_hash]
+        else:
+            self._metrics["cache_misses"] += 1
+            return None
+
+    def _cache_set(self, title_hash: str, value: Dict[str, Any]):
+        """Set cache value and track timestamp."""
+        self._evict_if_cache_full()
+        self._title_cache[title_hash] = value
+        self._cache_timestamps[title_hash] = datetime.utcnow().timestamp()
+
+    def get_metrics(self) -> Dict[str, int]:
+        """Get performance metrics."""
+        return {
+            **self._metrics,
+            "cache_size": len(self._title_cache),
+            "cache_hit_rate": (
+                self._metrics["cache_hits"] / (self._metrics["cache_hits"] + self._metrics["cache_misses"])
+                if (self._metrics["cache_hits"] + self._metrics["cache_misses"]) > 0
+                else 0.0
+            )
+        }
+
+    def reset_metrics(self):
+        """Reset metrics (useful for benchmarking)."""
+        self._metrics = {
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "ai_calls": 0,
+            "fallback_calls": 0,
+            "batch_calls": 0,
+            "cache_evictions": 0
+        }
+
+    def clear_cache(self):
+        """Clear all cache entries (useful for testing)."""
+        self._title_cache.clear()
+        self._cache_timestamps.clear()
 
     def extract_listing_data(
         self,
@@ -67,16 +165,21 @@ class AIListingExtractor:
         """
         # Check cache first to avoid redundant API calls
         title_hash = self._hash_title(title)
-        if title_hash in self._title_cache:
-            return self._title_cache[title_hash]
+        cached_result = self._cache_get(title_hash)
+        if cached_result is not None:
+            return cached_result
 
         # If no API key configured, use fallback immediately
         if not self.client:
-            return self._fallback_extraction(title, description)
+            self._metrics["fallback_calls"] += 1
+            fallback_result = self._fallback_extraction(title, description)
+            self._cache_set(title_hash, fallback_result)
+            return fallback_result
 
         prompt = self._build_extraction_prompt(title, description, price)
 
         try:
+            self._metrics["ai_calls"] += 1
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -109,14 +212,15 @@ Always return valid JSON matching the schema exactly."""
             }
 
             # Cache the result before returning
-            self._title_cache[title_hash] = result
+            self._cache_set(title_hash, result)
             return result
 
         except Exception as e:
             print(f"AI extraction failed: {e}, using fallback")
+            self._metrics["fallback_calls"] += 1
             fallback_result = self._fallback_extraction(title, description)
             # Cache fallback to avoid repeated failed API calls for same title
-            self._title_cache[title_hash] = fallback_result
+            self._cache_set(title_hash, fallback_result)
             return fallback_result
 
     def extract_batch(
@@ -144,8 +248,9 @@ Always return valid JSON matching the schema exactly."""
             title = listing.get("title", "")
             title_hash = self._hash_title(title)
 
-            if title_hash in self._title_cache:
-                results.append(self._title_cache[title_hash])
+            cached_result = self._cache_get(title_hash)
+            if cached_result is not None:
+                results.append(cached_result)
             else:
                 results.append(None)  # Placeholder
                 uncached_indices.append(i)
@@ -157,6 +262,7 @@ Always return valid JSON matching the schema exactly."""
 
         # If no API key, use fallback for uncached
         if not self.client:
+            self._metrics["fallback_calls"] += len(uncached_listings)
             for i, listing in zip(uncached_indices, uncached_listings):
                 fallback = self._fallback_extraction(
                     listing.get("title", ""),
@@ -164,11 +270,13 @@ Always return valid JSON matching the schema exactly."""
                 )
                 results[i] = fallback
                 title_hash = self._hash_title(listing.get("title", ""))
-                self._title_cache[title_hash] = fallback
+                self._cache_set(title_hash, fallback)
             return results
 
         # Extract uncached listings in batch
         try:
+            self._metrics["batch_calls"] += 1
+            self._metrics["ai_calls"] += 1
             batch_prompt = self._build_batch_extraction_prompt(uncached_listings)
 
             response = self.client.chat.completions.create(
@@ -209,9 +317,10 @@ Always return valid JSON matching the schema exactly."""
 
                     # Cache the result
                     title_hash = self._hash_title(uncached_listings[i].get("title", ""))
-                    self._title_cache[title_hash] = result
+                    self._cache_set(title_hash, result)
                 else:
                     # Fallback if extraction missing
+                    self._metrics["fallback_calls"] += 1
                     listing = uncached_listings[i]
                     fallback = self._fallback_extraction(
                         listing.get("title", ""),
@@ -219,11 +328,12 @@ Always return valid JSON matching the schema exactly."""
                     )
                     results[extraction_idx] = fallback
                     title_hash = self._hash_title(listing.get("title", ""))
-                    self._title_cache[title_hash] = fallback
+                    self._cache_set(title_hash, fallback)
 
         except Exception as e:
             print(f"Batch AI extraction failed: {e}, using fallback for uncached items")
             # Use fallback for all uncached
+            self._metrics["fallback_calls"] += len(uncached_listings)
             for i, listing in zip(uncached_indices, uncached_listings):
                 fallback = self._fallback_extraction(
                     listing.get("title", ""),
@@ -231,7 +341,7 @@ Always return valid JSON matching the schema exactly."""
                 )
                 results[i] = fallback
                 title_hash = self._hash_title(listing.get("title", ""))
-                self._title_cache[title_hash] = fallback
+                self._cache_set(title_hash, fallback)
 
         return results
 
