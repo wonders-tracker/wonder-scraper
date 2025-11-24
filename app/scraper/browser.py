@@ -1,172 +1,140 @@
-from pydoll.browser import Chrome
-from pydoll.browser.options import ChromiumOptions
+from playwright.async_api import async_playwright, Browser, BrowserContext
 from typing import Optional
 import asyncio
-import subprocess
-import time
+import os
+
 
 class BrowserManager:
-    _browser: Optional[Chrome] = None
+    _playwright = None
+    _browser: Optional[Browser] = None
+    _context: Optional[BrowserContext] = None
     _restart_count: int = 0
     _max_restarts: int = 3
 
     @classmethod
-    async def get_browser(cls) -> Chrome:
+    async def get_browser(cls) -> Browser:
         if not cls._browser:
-            # Don't use pkill - it can kill other workers' browsers in multiprocessing
-            # Let Pydoll handle process cleanup internally
-            pass
-                
-            opts = ChromiumOptions()
-            opts.headless = True
+            print("Starting Playwright browser...")
 
-            # CRITICAL: Increase Pydoll's internal start timeout (default is only 10s)
-            opts.start_timeout = 120  # Give it 2 minutes to start in container
+            cls._playwright = await async_playwright().start()
 
-            # Container/server-specific args (critical for Railway/Docker)
-            opts.add_argument("--headless=new")  # New headless mode for Chrome 109+
-            opts.add_argument("--no-sandbox")  # Required for root in containers
-            opts.add_argument("--disable-setuid-sandbox")
-            opts.add_argument("--disable-dev-shm-usage")  # Overcome limited /dev/shm
-            opts.add_argument("--disable-gpu")
-            opts.add_argument("--disable-software-rasterizer")
-            opts.add_argument("--single-process")  # Run in single process mode
-            opts.add_argument("--no-zygote")  # Disable zygote process
-            opts.add_argument("--disable-background-timer-throttling")
-            opts.add_argument("--disable-backgrounding-occluded-windows")
-            opts.add_argument("--disable-renderer-backgrounding")
-
-            # Memory/stability args
-            opts.add_argument("--memory-pressure-off")
-            opts.add_argument("--max_old_space_size=4096")
-
-            # Stealth args
-            opts.add_argument("--disable-blink-features=AutomationControlled")
-            opts.add_argument("--disable-infobars")
-            opts.add_argument("--disable-extensions")
-            
-            # Mimic a real browser UA
-            opts.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            
-            # Try to find Chrome/Chromium binary explicitly
-            import os
-            import shutil
-
-            chrome_paths = [
-                # Linux paths (Railway/Docker)
-                "/usr/bin/chromium-browser",
-                "/usr/bin/chromium",
-                "/usr/bin/google-chrome",
-                "/usr/bin/google-chrome-stable",
-                # Nix paths (Railway Nixpacks)
-                shutil.which("chromium-browser"),
-                shutil.which("chromium"),
-                shutil.which("google-chrome"),
-                # macOS paths
-                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            # Launch args optimized for containers
+            launch_args = [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+                "--single-process",
+                "--no-zygote",
             ]
 
-            for path in chrome_paths:
-                if path and os.path.exists(path):
-                    opts.binary_location = path
-                    print(f"Using Chrome at: {path}")
-                    break
-            else:
-                print("WARNING: No Chrome/Chromium binary found in standard paths")
-            
-            print("Starting new browser instance (this may take up to 60 seconds)...")
-            cls._browser = Chrome(options=opts)
-            
-            # Pydoll will handle timeout internally now with start_timeout
-            await cls._browser.start()
-            # await asyncio.sleep(2) # Reduced startup wait
-            print("Browser started successfully!")
+            cls._browser = await cls._playwright.chromium.launch(
+                headless=True,
+                args=launch_args,
+            )
+
+            # Create a context with stealth settings
+            cls._context = await cls._browser.new_context(
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1920, "height": 1080},
+                java_script_enabled=True,
+            )
+
+            print("Playwright browser started successfully!")
         return cls._browser
 
     @classmethod
+    async def get_context(cls) -> BrowserContext:
+        if not cls._context:
+            await cls.get_browser()
+        return cls._context
+
+    @classmethod
     async def close(cls):
+        if cls._context:
+            try:
+                await cls._context.close()
+            except Exception as e:
+                print(f"Error closing context: {e}")
+            cls._context = None
+
         if cls._browser:
             try:
-                await cls._browser.stop()
+                await cls._browser.close()
             except Exception as e:
                 print(f"Error closing browser: {e}")
             cls._browser = None
-            # Let Pydoll handle cleanup - don't use pkill in multiprocessing environment
+
+        if cls._playwright:
+            try:
+                await cls._playwright.stop()
+            except Exception as e:
+                print(f"Error stopping playwright: {e}")
+            cls._playwright = None
 
     @classmethod
     async def restart(cls):
         """Force restart of the browser instance"""
         cls._restart_count += 1
-        
+
         if cls._restart_count > cls._max_restarts:
             print(f"Browser has been restarted {cls._restart_count} times. Applying extended cooldown...")
             await asyncio.sleep(10)
             cls._restart_count = 0
-        
+
         print(f"Restarting browser instance (attempt {cls._restart_count})...")
         await cls.close()
-        await asyncio.sleep(3)  # Longer wait between restarts
+        await asyncio.sleep(2)
         return await cls.get_browser()
+
 
 async def get_page_content(url: str, retries: int = 3) -> str:
     """
     Navigates to a URL and returns the HTML content.
-    Includes auto-retry and browser recovery logic.
+    Uses Playwright for reliable browser automation.
     """
     last_error = None
-    
+
     for attempt in range(retries + 1):
         try:
-            browser = await BrowserManager.get_browser()
+            context = await BrowserManager.get_context()
+            page = await context.new_page()
 
-            # Create tab with timeout (no need for separate connectivity test)
             try:
-                tab = await asyncio.wait_for(browser.new_tab(), timeout=10)
-            except asyncio.TimeoutError:
-                raise Exception("Browser is not responding (timeout on new_tab)")
-            
-            try:
-                # Navigate with longer timeout for eBay's heavy pages
-                await asyncio.wait_for(tab.go_to(url), timeout=30)
+                # Navigate with timeout
+                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
                 # Wait for content to load
-                await asyncio.sleep(2)
-                
-                content = await tab.page_source
-                
+                await page.wait_for_timeout(2000)
+
+                content = await page.content()
+
                 if not content or len(content) < 100:
                     raise Exception("Empty or invalid page content received")
-                    
+
                 return content
+
             finally:
-                # Safely close tab
-                try:
-                    await asyncio.wait_for(tab.close(), timeout=5)
-                except Exception:
-                    pass
-                    
+                await page.close()
+
         except Exception as e:
             last_error = e
             error_msg = str(e).lower()
-            print(f"Error in get_page_content:")
+            print(f"Error in get_page_content (attempt {attempt + 1}/{retries + 1}):")
             print(f"  Type: {type(e).__name__}")
             print(f"  Message: {e}")
-            import traceback
-            print(f"  Traceback: {traceback.format_exc()}")
-            
+
             # If it's a connection/timeout error, restart browser
-            if isinstance(e, (asyncio.TimeoutError, TimeoutError)) or any(keyword in error_msg for keyword in ["websocket", "connection", "target closed", "timeout", "not responding", "cancelled"]):
-                print("Detected browser issue (timeout/connection). Restarting browser...")
+            if any(keyword in error_msg for keyword in ["timeout", "connection", "target closed", "browser", "context"]):
+                print("Detected browser issue. Restarting browser...")
                 await BrowserManager.restart()
-                await asyncio.sleep(3)
-            else:
-                # For other errors, wait before retry
                 await asyncio.sleep(2)
-                
-            # On last attempt, raise the error
+            else:
+                await asyncio.sleep(1)
+
             if attempt == retries:
                 print(f"Failed after {retries + 1} attempts: {last_error}")
                 raise last_error
-    
+
     raise last_error
