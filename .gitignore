@@ -48,6 +48,9 @@ pip-delete-this-directory.txt
 # Cursor
 .cursor/
 
+# Claude Code (may contain sensitive allowlist patterns)
+.claude/
+
 # Logs
 *.log
 backend.log
