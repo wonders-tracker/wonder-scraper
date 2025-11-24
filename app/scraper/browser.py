@@ -4,8 +4,8 @@ import asyncio
 import os
 
 
-# Limit concurrent browser operations to prevent memory exhaustion
-_semaphore = asyncio.Semaphore(2)
+# Serialize browser operations - only 1 at a time for stability
+_semaphore = asyncio.Semaphore(1)
 
 
 class BrowserManager:
@@ -29,7 +29,7 @@ class BrowserManager:
 
                 cls._playwright = await async_playwright().start()
 
-                # Aggressive memory-saving args for Railway containers
+                # Memory-saving args for Railway containers
                 launch_args = [
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
@@ -44,9 +44,6 @@ class BrowserManager:
                     "--disable-default-apps",
                     "--mute-audio",
                     "--hide-scrollbars",
-                    "--single-process",  # Critical for low-memory containers
-                    "--disable-features=site-per-process",  # Reduce memory
-                    "--js-flags=--max-old-space-size=128",  # Limit JS heap
                 ]
 
                 cls._browser = await cls._playwright.chromium.launch(
