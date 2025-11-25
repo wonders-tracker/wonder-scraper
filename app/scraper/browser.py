@@ -7,6 +7,9 @@ import os
 # Serialize browser operations - only 1 at a time for stability
 _semaphore = asyncio.Semaphore(1)
 
+# Remote browser server URL (set in Railway env)
+BROWSER_WS_URL = os.getenv("BROWSER_WS_URL", "")
+
 
 class BrowserManager:
     _playwright = None
@@ -29,27 +32,32 @@ class BrowserManager:
 
                 cls._playwright = await async_playwright().start()
 
-                # Memory-saving args for Railway containers
-                launch_args = [
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--disable-software-rasterizer",
-                    "--disable-extensions",
-                    "--disable-background-networking",
-                    "--disable-sync",
-                    "--disable-translate",
-                    "--no-first-run",
-                    "--disable-default-apps",
-                    "--mute-audio",
-                    "--hide-scrollbars",
-                ]
-
-                cls._browser = await cls._playwright.chromium.launch(
-                    headless=True,
-                    args=launch_args,
-                )
+                if BROWSER_WS_URL:
+                    # Connect to remote browser service
+                    print(f"Connecting to remote browser: {BROWSER_WS_URL}")
+                    cls._browser = await cls._playwright.chromium.connect(BROWSER_WS_URL)
+                else:
+                    # Local browser launch (fallback for dev)
+                    print("Launching local browser...")
+                    launch_args = [
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--disable-software-rasterizer",
+                        "--disable-extensions",
+                        "--disable-background-networking",
+                        "--disable-sync",
+                        "--disable-translate",
+                        "--no-first-run",
+                        "--disable-default-apps",
+                        "--mute-audio",
+                        "--hide-scrollbars",
+                    ]
+                    cls._browser = await cls._playwright.chromium.launch(
+                        headless=True,
+                        args=launch_args,
+                    )
 
                 print("Playwright browser started successfully!")
             return cls._browser
@@ -101,11 +109,11 @@ async def get_page_content(url: str, retries: int = 3) -> str:
     """
     Navigates to a URL and returns the HTML content.
     Uses Playwright with isolated context per request for concurrency safety.
-    Limited to 2 concurrent operations to prevent memory exhaustion.
+    Limited to 1 concurrent operation for stability.
     """
     last_error = None
 
-    async with _semaphore:  # Limit concurrent browser operations
+    async with _semaphore:  # Serialize browser operations
         for attempt in range(retries + 1):
             context = None
             page = None
@@ -135,7 +143,7 @@ async def get_page_content(url: str, retries: int = 3) -> str:
                 print(f"  Message: {e}")
 
                 # If it's a browser-level error, restart
-                if any(keyword in error_msg for keyword in ["browser has been closed", "browser.newcontext", "target crashed"]):
+                if any(keyword in error_msg for keyword in ["browser has been closed", "browser.newcontext", "target crashed", "connection closed"]):
                     print("Detected browser crash. Restarting browser...")
                     await BrowserManager.restart()
                     await asyncio.sleep(2)
