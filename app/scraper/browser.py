@@ -43,7 +43,13 @@ class BrowserManager:
                     async with aiohttp.ClientSession() as session:
                         async with session.get(endpoint_url) as resp:
                             data = await resp.json()
-                            ws_endpoint = data["wsEndpoint"]
+                            ws_path = data["wsPath"]
+                            ws_port = data["wsPort"]
+
+                    # Construct WebSocket URL with correct host (Railway internal)
+                    # BROWSER_SERVER_URL is like ws://playwright.railway.internal:3000
+                    base_host = BROWSER_SERVER_URL.split("://")[1].split(":")[0]
+                    ws_endpoint = f"ws://{base_host}:{ws_port}{ws_path}"
 
                     print(f"Connecting to remote browser: {ws_endpoint}")
                     cls._browser = await cls._playwright.chromium.connect(ws_endpoint)
