@@ -2,13 +2,15 @@ from playwright.async_api import async_playwright, Browser, BrowserContext
 from typing import Optional
 import asyncio
 import os
+import aiohttp
 
 
 # Serialize browser operations - only 1 at a time for stability
 _semaphore = asyncio.Semaphore(1)
 
 # Remote browser server URL (set in Railway env)
-BROWSER_WS_URL = os.getenv("BROWSER_WS_URL", "")
+# This should be the HTTP URL like http://playwright.railway.internal:3000
+BROWSER_SERVER_URL = os.getenv("BROWSER_WS_URL", "")
 
 
 class BrowserManager:
@@ -32,10 +34,19 @@ class BrowserManager:
 
                 cls._playwright = await async_playwright().start()
 
-                if BROWSER_WS_URL:
-                    # Connect to remote Playwright browser server
-                    print(f"Connecting to remote browser: {BROWSER_WS_URL}")
-                    cls._browser = await cls._playwright.chromium.connect(BROWSER_WS_URL)
+                if BROWSER_SERVER_URL:
+                    # Fetch the WebSocket endpoint from the browser server
+                    http_url = BROWSER_SERVER_URL.replace("ws://", "http://").replace("wss://", "https://")
+                    endpoint_url = f"{http_url}/ws-endpoint"
+                    print(f"Fetching WebSocket endpoint from: {endpoint_url}")
+
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(endpoint_url) as resp:
+                            data = await resp.json()
+                            ws_endpoint = data["wsEndpoint"]
+
+                    print(f"Connecting to remote browser: {ws_endpoint}")
+                    cls._browser = await cls._playwright.chromium.connect(ws_endpoint)
                 else:
                     # Local browser launch (fallback for dev)
                     print("Launching local browser...")
