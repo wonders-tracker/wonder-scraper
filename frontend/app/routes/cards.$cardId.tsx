@@ -306,20 +306,20 @@ function CardDetail() {
                             <div>
                                 <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">Market Price</div>
                                 <div className="text-4xl font-mono font-bold text-emerald-500">
-                                    ${card.latest_price?.toFixed(2) || '---'}
+                                    ${card.lowest_ask?.toFixed(2) || card.latest_price?.toFixed(2) || '---'}
                                 </div>
                             </div>
                             <div className="hidden md:block border-l border-border pl-8">
                                 <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">24h Vol</div>
                                 <div className="text-4xl font-mono font-bold">
-                                    {card.volume_24h || 0}
+                                    {(card.volume_24h || 0).toLocaleString()}
                                 </div>
                             </div>
                             {/* Highest Confirmed Sale */}
                             <div className="hidden md:block border-l border-border pl-8">
                                 <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">Highest Sale</div>
                                 <div className="text-4xl font-mono font-bold text-emerald-600">
-                                    ${card.max_price ? card.max_price.toFixed(2) : '---'}
+                                    ${card.max_price ? card.max_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '---'}
                                 </div>
                             </div>
                         </div>
@@ -340,14 +340,14 @@ function CardDetail() {
                             <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
                             Active Listings
                         </div>
-                        <div className="text-xl font-mono font-bold">{card.inventory || 0}</div>
+                        <div className="text-xl font-mono font-bold">{(card.inventory || 0).toLocaleString()}</div>
                     </div>
                      <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
                         <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
                             Vol (USD)
                         </div>
-                        <div className="text-xl font-mono font-bold">${((card.volume_24h || 0) * (card.latest_price || 0)).toFixed(0)}</div>
+                        <div className="text-xl font-mono font-bold">${((card.volume_24h || 0) * (card.latest_price || 0)).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
                     </div>
                      <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
                         <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">

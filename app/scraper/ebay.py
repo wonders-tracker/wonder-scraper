@@ -233,14 +233,32 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
         clean_name = clean_name.replace(char, "")
 
     # Special handling for "The First" card (single card, not sealed product)
-    # We need to check if "the first" appears OUTSIDE of "wonders of the first"
-    # Use clean_title which has "wonders of the first" removed
+    # This card requires VERY strict matching as it's easily confused with other cards
     if name_lower == "the first":
-        # Check if "the first" appears in the cleaned title (after removing "wonders of the first")
-        if "the first" in clean_title or "first" in clean_title.split():
-            return True  # Valid match for "The First" card
-        else:
-            return False
+        # Must have specific indicators for "The First" card:
+        # - Card number 001/401 (standard numbering)
+        # - Or explicit mentions like "The First Land" or "The First Formless"
+        # - NOT just any card from "Wonders of the First" set
+
+        # Check for card number first (most reliable)
+        if "001/401" in title_lower:
+            return True
+
+        # Check if "the first" appears as the actual card name (not just set name)
+        # After removing "wonders of the first", check what remains
+        if "the first land" in title_lower or "the first formless" in title_lower:
+            return True
+
+        # Check cleaned title - must have "first" as a distinct word, not part of another card name
+        if clean_title.strip() and ("the first" in clean_title or clean_title.strip() == "first"):
+            # Extra validation: shouldn't have other card names
+            other_card_indicators = ['/401', 'rare', 'epic', 'mythic', 'uncommon', 'common']
+            # Skip if it has a card number that's not 001
+            if any(f"{num:03d}/401" in title_lower for num in range(2, 402)):
+                return False
+            return True
+
+        return False
 
     # Tokenize and remove stopwords
     card_tokens = [t for t in clean_name.split() if t not in STOPWORDS]
