@@ -33,17 +33,27 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     if product_type == "Box":
         # For boxes, also try with "Existence" set name
         unique_queries.append(f"Wonders of the First Existence {card_name}")
+        # Also try just the card name for boxes
+        unique_queries.append(card_name)
 
     elif product_type == "Pack":
-        unique_queries.append(f"Wonders of the First Booster Pack")
+        # Use actual card name, not generic "Booster Pack"
+        unique_queries.append(card_name)
+        if "booster" not in card_name.lower():
+            unique_queries.append(f"Wonders of the First Booster Pack")
 
     elif product_type == "Lot":
-        # For lots, search more broadly but still with Wonders prefix
+        # Use actual card name for lots
+        unique_queries.append(card_name)
+        # Also try generic searches
         unique_queries.append(f"Wonders of the First Lot")
         unique_queries.append(f"Wonders of the First Bundle")
 
     elif product_type == "Proof":
-        unique_queries.append(f"Wonders of the First Proof")
+        # Use actual card name for proofs
+        unique_queries.append(card_name)
+        if "proof" not in card_name.lower():
+            unique_queries.append(f"Wonders of the First Proof")
 
     else:
         # Single cards - add Existence set search
@@ -62,8 +72,8 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     unique_queries = deduped
             
     # Override max_pages for historical backfills to capture more data
-    if is_backfill and max_pages < 25:
-        max_pages = 25
+    if is_backfill and max_pages < 10:
+        max_pages = 10
         print(f"BACKFILL MODE: Increasing max_pages to {max_pages} for historical data capture")
 
     print(f"--- Scraping: {card_name} (Rarity: {rarity_name}) ---")
@@ -179,6 +189,10 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     if total_volume == 0 and prices_for_stats:
         total_volume = len(prices_for_stats)
 
+    # Find the most recent sale for last_sale_price/date
+    last_sale_price = None
+    last_sale_date = None
+
     if not prices_for_stats:
         print("No sold data found.")
         stats = {"min": 0.0, "max": 0.0, "avg": 0.0, "volume": 0}
@@ -188,6 +202,17 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
         # Override volume with the parsed total from header
         stats["volume"] = total_volume
         print(f"Stats: {stats} (Total Vol from Header: {total_volume})")
+
+        # Get most recent sale (sort by sold_date descending)
+        sorted_by_date = sorted(
+            [p for p in prices_for_stats if p.sold_date],
+            key=lambda x: x.sold_date,
+            reverse=True
+        )
+        if sorted_by_date:
+            last_sale_price = sorted_by_date[0].price
+            last_sale_date = sorted_by_date[0].sold_date
+            print(f"Last Sale: ${last_sale_price:.2f} on {last_sale_date.strftime('%Y-%m-%d')}")
     
     # 5. Save to DB
     if card_id > 0:
@@ -205,7 +230,9 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                 volume=stats["volume"],
                 lowest_ask=active_ask,
                 highest_bid=highest_bid,
-                inventory=active_inv
+                inventory=active_inv,
+                last_sale_price=last_sale_price,
+                last_sale_date=last_sale_date
             )
             session.add(snapshot)
             session.commit()

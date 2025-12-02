@@ -252,7 +252,13 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
         # Check cleaned title - must have "first" as a distinct word, not part of another card name
         if clean_title.strip() and ("the first" in clean_title or clean_title.strip() == "first"):
             # Extra validation: shouldn't have other card names
-            other_card_indicators = ['/401', 'rare', 'epic', 'mythic', 'uncommon', 'common']
+            # Reject if it contains other character names like "voice of", "zeltona", etc
+            reject_phrases = ['voice of', 'zeltona', 'cura', 'captain', 'king', 'queen',
+                            'lord', 'lady', 'sir', 'baron', 'duke', 'emperor', 'empress']
+            for phrase in reject_phrases:
+                if phrase in title_lower:
+                    return False
+
             # Skip if it has a card number that's not 001
             if any(f"{num:03d}/401" in title_lower for num in range(2, 402)):
                 return False
@@ -411,7 +417,8 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
                 print(f"[DEBUG] REJECTED: {title[:80]}...")
             continue
 
-        price_elem = item.select_one(".s-item__price, .s-card__price")
+        # New eBay structure uses s-card__price with su-styled-text wrapper
+        price_elem = item.select_one(".s-item__price, .s-card__price, [class*='s-card__price']")
         if not price_elem:
             debug_stats["no_price"] += 1
             continue
@@ -451,8 +458,8 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
         # Extract additional metadata
         bid_count = _extract_bid_count(item)
 
-        # Extract Image URL
-        image_elem = item.select_one(".s-item__image-img")
+        # Extract Image URL (both old and new eBay structure)
+        image_elem = item.select_one(".s-item__image-img, .s-card__image img, img.s-card__image")
         image_url = None
         if image_elem:
             image_url = image_elem.get("src")
@@ -480,7 +487,12 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
         return []
 
     # Phase 1b: Bulk DB dedup check (single query instead of N queries)
-    indexed_indices = _bulk_check_indexed(card_id, all_listings_data) if not return_all else set()
+    # IMPORTANT: Skip dedup for active listings - we always want fresh data
+    # Dedup only makes sense for sold listings (avoid re-saving same sale)
+    if listing_type == "active":
+        indexed_indices = set()  # No dedup for active listings
+    else:
+        indexed_indices = _bulk_check_indexed(card_id, all_listings_data) if not return_all else set()
 
     # Phase 1c: Filter out already-indexed listings (unless return_all=True for stats)
     listings_to_extract = []

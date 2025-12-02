@@ -16,6 +16,11 @@ class MarketSnapshot(SQLModel, table=True):
     lowest_ask: Optional[float] = None
     highest_bid: Optional[float] = None # eBay auctions only
     inventory: Optional[int] = None # Count of active listings
+
+    # Last Sale Data
+    last_sale_price: Optional[float] = None
+    last_sale_date: Optional[datetime] = None
+
     platform: str = Field(default="ebay") # 'ebay', 'opensea'
     
     timestamp: datetime = Field(default_factory=datetime.utcnow)
