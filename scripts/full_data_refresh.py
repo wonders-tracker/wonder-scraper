@@ -34,7 +34,7 @@ async def process_card_batch(cards_data: List[dict], is_backfill: bool = True):
 
         for i, card_data in enumerate(cards_data):
             try:
-                print(f"[Worker {os.getpid()}] Processing {i+1}/{len(cards_data)}: {card_data['name']}")
+                print(f"[Worker {os.getpid()}] Processing {i+1}/{len(cards_data)}: {card_data['name']}", flush=True)
 
                 await scrape_card(
                     card_name=card_data['name'],
@@ -46,7 +46,7 @@ async def process_card_batch(cards_data: List[dict], is_backfill: bool = True):
                 )
                 results.append(True)
             except Exception as e:
-                print(f"[Worker {os.getpid()}] Error on {card_data['name']}: {e}")
+                print(f"[Worker {os.getpid()}] Error on {card_data['name']}: {e}", flush=True)
                 results.append(False)
                 # If error is severe (browser crash), try to restart for next card
                 try:
@@ -55,7 +55,7 @@ async def process_card_batch(cards_data: List[dict], is_backfill: bool = True):
                     pass
 
     except Exception as e:
-        print(f"[Worker {os.getpid()}] Batch failed: {e}")
+        print(f"[Worker {os.getpid()}] Batch failed: {e}", flush=True)
     finally:
         # Close browser at the end of the batch to free resources
         await BrowserManager.close()
@@ -81,7 +81,7 @@ async def scrape_all_ebay_parallel(num_workers: int = 2):
 
     print(f"Found {len(cards)} products to scrape from eBay...")
 
-    # Prepare card data
+    # Prepare card data - SKIP "The First" as it's too problematic
     card_data_list = [
         {
             'id': card.id,
@@ -91,6 +91,7 @@ async def scrape_all_ebay_parallel(num_workers: int = 2):
             'product_type': card.product_type if hasattr(card, 'product_type') else 'Single'
         }
         for card in cards
+        if card.name != "The First"  # Skip this problematic card
     ]
 
     # Chunk data for workers (20 per chunk for safety)

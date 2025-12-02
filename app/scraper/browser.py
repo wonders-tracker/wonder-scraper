@@ -1,110 +1,102 @@
-from playwright.async_api import async_playwright, Browser, BrowserContext
+# Use pydoll for undetected browser automation
+from pydoll.browser.chromium.chrome import Chrome
+from pydoll.browser.options import ChromiumOptions
 from typing import Optional
 import asyncio
 import os
-import aiohttp
+import random
+import shutil
+import tempfile
 
 
 # Serialize browser operations - only 1 at a time for stability
 _semaphore = asyncio.Semaphore(1)
 
 # Remote browser server URL (set in Railway env)
-# This should be the HTTP URL like http://playwright.railway.internal:3000
 BROWSER_SERVER_URL = os.getenv("BROWSER_WS_URL", "")
 
 
+def find_chrome_binary() -> Optional[str]:
+    """Find Chrome/Chromium binary on the system."""
+    # Check env var first
+    chrome_path = os.getenv("CHROME_PATH")
+    if chrome_path and os.path.exists(chrome_path):
+        return chrome_path
+
+    # Common Chrome/Chromium paths
+    common_paths = [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",  # macOS
+    ]
+
+    for path in common_paths:
+        if os.path.exists(path):
+            return path
+
+    # Try which command
+    for cmd in ["chromium", "chromium-browser", "google-chrome"]:
+        found = shutil.which(cmd)
+        if found:
+            return found
+
+    return None
+
+
+def get_user_data_dir():
+    """Get unique profile directory for this process"""
+    return os.path.join(tempfile.gettempdir(), f"pydoll_profile_{os.getpid()}")
+
+
 class BrowserManager:
-    _playwright = None
-    _browser: Optional[Browser] = None
+    _browser: Optional[Chrome] = None
     _lock = asyncio.Lock()
     _restart_count: int = 0
     _max_restarts: int = 3
 
     @classmethod
-    async def get_browser(cls) -> Browser:
+    async def get_browser(cls) -> Chrome:
         async with cls._lock:
-            if not cls._browser or not cls._browser.is_connected():
-                print("Starting Playwright browser...")
+            if not cls._browser:
+                print("Starting pydoll browser...")
 
-                if cls._playwright:
-                    try:
-                        await cls._playwright.stop()
-                    except:
-                        pass
+                options = ChromiumOptions()
+                options.headless = True
 
-                cls._playwright = await async_playwright().start()
+                # Use system Chrome if available (for production containers)
+                chrome_path = find_chrome_binary()
+                if chrome_path:
+                    print(f"Using Chrome: {chrome_path}")
+                    options.binary_location = chrome_path
 
-                if BROWSER_SERVER_URL:
-                    # Fetch the WebSocket endpoint from the browser server
-                    http_url = BROWSER_SERVER_URL.replace("ws://", "http://").replace("wss://", "https://")
-                    endpoint_url = f"{http_url}/ws-endpoint"
-                    print(f"Fetching WebSocket endpoint from: {endpoint_url}")
+                # Anti-detection args
+                options.add_argument("--disable-blink-features=AutomationControlled")
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--disable-gpu")  # Required for headless in containers
 
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(endpoint_url) as resp:
-                            data = await resp.json()
-                            ws_path = data["wsPath"]
-                            ws_port = data["wsPort"]
+                # Use unique profile per process
+                profile_dir = get_user_data_dir()
+                print(f"Using profile: {profile_dir}")
+                options.add_argument(f"--user-data-dir={profile_dir}")
 
-                    # Construct WebSocket URL with correct host (Railway internal)
-                    # BROWSER_SERVER_URL is like ws://playwright.railway.internal:3000
-                    base_host = BROWSER_SERVER_URL.split("://")[1].split(":")[0]
-                    ws_endpoint = f"ws://{base_host}:{ws_port}{ws_path}"
+                cls._browser = Chrome(options=options)
+                await cls._browser.start()
+                print("Pydoll browser started successfully!")
 
-                    print(f"Connecting to remote browser: {ws_endpoint}")
-                    cls._browser = await cls._playwright.chromium.connect(ws_endpoint)
-                else:
-                    # Local browser launch (fallback for dev)
-                    print("Launching local browser...")
-                    launch_args = [
-                        "--no-sandbox",
-                        "--disable-setuid-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-gpu",
-                        "--disable-software-rasterizer",
-                        "--disable-extensions",
-                        "--disable-background-networking",
-                        "--disable-sync",
-                        "--disable-translate",
-                        "--no-first-run",
-                        "--disable-default-apps",
-                        "--mute-audio",
-                        "--hide-scrollbars",
-                    ]
-                    cls._browser = await cls._playwright.chromium.launch(
-                        headless=True,
-                        args=launch_args,
-                    )
-
-                print("Playwright browser started successfully!")
             return cls._browser
-
-    @classmethod
-    async def new_context(cls) -> BrowserContext:
-        """Create a new isolated context for each scrape"""
-        browser = await cls.get_browser()
-        return await browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1920, "height": 1080},
-            java_script_enabled=True,
-        )
 
     @classmethod
     async def close(cls):
         async with cls._lock:
             if cls._browser:
                 try:
-                    await cls._browser.close()
+                    await cls._browser.stop()
                 except Exception as e:
                     print(f"Error closing browser: {e}")
                 cls._browser = None
-
-            if cls._playwright:
-                try:
-                    await cls._playwright.stop()
-                except Exception as e:
-                    print(f"Error stopping playwright: {e}")
-                cls._playwright = None
 
     @classmethod
     async def restart(cls):
@@ -125,27 +117,28 @@ class BrowserManager:
 async def get_page_content(url: str, retries: int = 3) -> str:
     """
     Navigates to a URL and returns the HTML content.
-    Uses Playwright with isolated context per request for concurrency safety.
-    Limited to 1 concurrent operation for stability.
+    Uses pydoll for undetected browsing.
     """
     last_error = None
 
     async with _semaphore:  # Serialize browser operations
         for attempt in range(retries + 1):
-            context = None
-            page = None
+            tab = None
             try:
-                # Create isolated context for this request
-                context = await BrowserManager.new_context()
-                page = await context.new_page()
+                browser = await BrowserManager.get_browser()
+                tab = await browser.new_tab()
 
-                # Navigate with timeout
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                # Random delay before navigation (human-like)
+                await asyncio.sleep(random.uniform(1, 3))
 
-                # Wait for content to load
-                await page.wait_for_timeout(2000)
+                # Navigate
+                await tab.go_to(url)
 
-                content = await page.content()
+                # Random wait for content to load (human-like)
+                await asyncio.sleep(random.uniform(2, 4))
+
+                # Get page content
+                content = await tab.page_source
 
                 if not content or len(content) < 100:
                     raise Exception("Empty or invalid page content received")
@@ -160,8 +153,8 @@ async def get_page_content(url: str, retries: int = 3) -> str:
                 print(f"  Message: {e}")
 
                 # If it's a browser-level error, restart
-                if any(keyword in error_msg for keyword in ["browser has been closed", "browser.newcontext", "target crashed", "connection closed"]):
-                    print("Detected browser crash. Restarting browser...")
+                if any(keyword in error_msg for keyword in ["browser", "closed", "crashed", "connection"]):
+                    print("Detected browser issue. Restarting browser...")
                     await BrowserManager.restart()
                     await asyncio.sleep(2)
                 else:
@@ -172,15 +165,9 @@ async def get_page_content(url: str, retries: int = 3) -> str:
                     raise last_error
 
             finally:
-                # Always clean up context
-                if page:
+                if tab:
                     try:
-                        await page.close()
-                    except:
-                        pass
-                if context:
-                    try:
-                        await context.close()
+                        await tab.close()
                     except:
                         pass
 
