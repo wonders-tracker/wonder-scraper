@@ -55,33 +55,48 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                 if item.price > highest_bid:
                     highest_bid = item.price
 
-        # Save active listings to database if requested
-        if save_to_db and card_id > 0:
-            with Session(engine) as session:
-                # First, delete old active listings for this card (older than 1 hour)
-                # to prevent stale data accumulation
-                from datetime import datetime, timedelta
-                from app.models.market import MarketPrice
-                cutoff = datetime.utcnow() - timedelta(hours=1)
-
-                # Delete stale active listings
-                stmt = select(MarketPrice).where(
-                    MarketPrice.card_id == card_id,
-                    MarketPrice.listing_type == "active",
-                    MarketPrice.scraped_at < cutoff
-                )
-                old_listings = session.exec(stmt).all()
-                for old in old_listings:
-                    session.delete(old)
-
-                # Add new active listings
-                session.add_all(items)
-                session.commit()
-                print(f"Saved {len(items)} active listings for {card_name}")
-
         # Try to get total inventory count from page header, fallback to list length
         total_count = parse_total_results(html)
         inventory = total_count if total_count > 0 else len(prices)
+
+        # Save active listings to database if requested (separate try/except so stats aren't lost)
+        if save_to_db and card_id > 0:
+            try:
+                with Session(engine) as session:
+                    # First, delete old active listings for this card (older than 1 hour)
+                    # to prevent stale data accumulation
+                    from datetime import datetime, timedelta
+                    from app.models.market import MarketPrice
+                    cutoff = datetime.utcnow() - timedelta(hours=1)
+
+                    # Delete stale active listings
+                    stmt = select(MarketPrice).where(
+                        MarketPrice.card_id == card_id,
+                        MarketPrice.listing_type == "active",
+                        MarketPrice.scraped_at < cutoff
+                    )
+                    old_listings = session.exec(stmt).all()
+                    for old in old_listings:
+                        session.delete(old)
+
+                    # Add new active listings (skip duplicates by checking external_id)
+                    existing_ids = set()
+                    stmt = select(MarketPrice.external_id).where(
+                        MarketPrice.card_id == card_id,
+                        MarketPrice.listing_type == "active",
+                        MarketPrice.external_id.isnot(None)
+                    )
+                    existing_ids = {r for r in session.exec(stmt).all()}
+
+                    new_items = [item for item in items if item.external_id not in existing_ids]
+                    if new_items:
+                        session.add_all(new_items)
+                        session.commit()
+                        print(f"Saved {len(new_items)} new active listings for {card_name} (skipped {len(items) - len(new_items)} duplicates)")
+                    else:
+                        print(f"No new active listings to save for {card_name} (all {len(items)} already exist)")
+            except Exception as db_err:
+                print(f"DB save error for {card_name} active listings (stats still valid): {db_err}")
 
         return (lowest_ask, inventory, highest_bid)
     except Exception as e:
