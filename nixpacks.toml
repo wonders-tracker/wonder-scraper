@@ -1,6 +1,6 @@
 [phases.setup]
-# Added chromium and deps for pydoll browser automation
-nixPkgs = ["python3", "postgresql_16.dev", "gcc", "chromium", "nss", "nspr", "at-spi2-atk", "cups", "libdrm", "libxkbcommon", "mesa", "pango", "cairo", "alsa-lib", "dbus", "expat", "libX11", "libXcomposite", "libXdamage", "libXext", "libXfixes", "libXrandr", "libxcb", "libxshmfence"]
+# Chromium brings its own dependencies - keep it minimal
+nixPkgs = ["python3", "postgresql_16.dev", "gcc", "chromium"]
 
 [phases.install]
 cmds = [
