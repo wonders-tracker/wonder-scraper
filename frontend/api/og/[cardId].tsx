@@ -153,7 +153,7 @@ export default async function handler(req: NextRequest) {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ color: '#10b981' }}>▶</div>
-              <div>Track Real-Time TCG Prices at WondersTrader.com</div>
+              <div>Track Real-Time TCG Prices at wonderstracker.com</div>
             </div>
           </div>
         </div>
