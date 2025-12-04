@@ -61,18 +61,6 @@ function RootComponent() {
 
   return (
     <>
-      {/* SEO Metadata */}
-      <head>
-        <title>Wonders of the First TCG Tracker | WondersTracker</title>
-        <meta name="description" content="Track market prices, analyze trends, and manage your portfolio for Wonders of the First TCG/CCG. Real-time data for singles, boxes, packs, and proofs." />
-        <meta name="keywords" content="Wonders of the First, WOTF, TCG tracker, CCG tracker, trading card game, market prices, card values, portfolio tracker, Existence set, collectible cards, card market analysis" />
-        <meta property="og:title" content="Wonders of the First TCG Tracker | WondersTracker" />
-        <meta property="og:description" content="Track market prices and analyze trends for Wonders of the First TCG" />
-        <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </head>
-
       {/* Vercel Analytics */}
       <Analytics />
 

@@ -250,25 +250,6 @@ function CardDetail() {
 
   return (
     <>
-      {/* Dynamic OG Tags */}
-      <head>
-        <title>{card.name} | WondersTracker</title>
-        <meta name="description" content={`Track ${card.name} market prices and sales history. Current price: $${card.latest_price?.toFixed(2) || '---'}. Live data for Wonders of the First TCG.`} />
-
-        {/* Open Graph */}
-        <meta property="og:title" content={`${card.name} - $${card.latest_price?.toFixed(2) || '---'}`} />
-        <meta property="og:description" content={`Track ${card.name} prices and market trends on WondersTracker`} />
-        <meta property="og:image" content={`https://wonderstrader.com/api/og/${card.id}`} />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content={`https://wonderstrader.com/cards/${card.id}`} />
-
-        {/* Twitter Card */}
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={`${card.name} - $${card.latest_price?.toFixed(2) || '---'}`} />
-        <meta name="twitter:description" content={`Track ${card.name} prices and market trends`} />
-        <meta name="twitter:image" content={`https://wonderstrader.com/api/og/${card.id}`} />
-      </head>
-
       <div className="min-h-screen bg-background text-foreground font-mono flex flex-col">
         <div className="flex-1 p-6">
             <div className="max-w-7xl mx-auto">
@@ -594,7 +575,7 @@ function CardDetail() {
                         </h3>
                         <p className="text-sm text-zinc-400">
                             Get instant market data, price alerts, and portfolio analytics for Wonders of the First TCG at{' '}
-                            <span className="text-emerald-500 font-bold">WondersTrader.com</span>
+                            <span className="text-emerald-500 font-bold">WondersTracker.com</span>
                         </p>
                     </div>
                     <div className="flex gap-3">

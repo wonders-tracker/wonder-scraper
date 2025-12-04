@@ -140,11 +140,20 @@ function MarketAnalysis() {
       },
       {
           accessorKey: 'market_cap',
-          header: ({ column }) => <div className="text-right cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>MARKET CAP</div>,
+          header: ({ column }) => <div className="text-right cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>MKT CAP</div>,
           cell: ({ row }) => {
               const cap = row.original.market_cap
               if (cap === 0 || !cap) return <div className="text-right font-mono text-muted-foreground">-</div>
-              return <div className="text-right font-mono text-muted-foreground">${(cap / 1000).toFixed(1)}k</div>
+              // Format based on size: <$1k show $X, $1k-$1M show $Xk, >$1M show $XM
+              let formatted: string
+              if (cap >= 1000000) {
+                  formatted = `$${(cap / 1000000).toFixed(1)}M`
+              } else if (cap >= 1000) {
+                  formatted = `$${(cap / 1000).toFixed(1)}k`
+              } else {
+                  formatted = `$${cap.toFixed(0)}`
+              }
+              return <div className="text-right font-mono text-muted-foreground">{formatted}</div>
           }
       },
       {
