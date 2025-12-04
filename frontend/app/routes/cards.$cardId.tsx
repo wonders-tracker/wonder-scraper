@@ -2,11 +2,11 @@ import { createRoute, useParams } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../utils/auth'
 import { Route as rootRoute } from './__root'
-import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink } from 'lucide-react'
+import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink, Calendar } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getFilteredRowModel } from '@tanstack/react-table'
 import { useMemo, useState } from 'react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from 'recharts'
 import clsx from 'clsx'
 
 type CardDetail = {
@@ -49,11 +49,14 @@ export const Route = createRoute({
   component: CardDetail,
 })
 
+type TimeRange = '7d' | '30d' | '90d' | 'all'
+
 function CardDetail() {
   const { cardId } = useParams({ from: Route.id })
   const queryClient = useQueryClient()
   const [treatmentFilter, setTreatmentFilter] = useState<string>('all')
   const [selectedListing, setSelectedListing] = useState<MarketPrice | null>(null)
+  const [timeRange, setTimeRange] = useState<TimeRange>('all')
   
   // Fetch Card Data
   const { data: card, isLoading: isLoadingCard } = useQuery({
@@ -180,37 +183,75 @@ function CardDetail() {
       },
   })
 
-  // Prepare Chart Data - Individual points per sale for scatter plot
+  // Prepare Chart Data - Individual points per sale with time range filtering
   const chartData = useMemo(() => {
       if (!history) return []
-      
+
+      // Calculate time range cutoff
+      const now = new Date()
+      let cutoffDate: Date | null = null
+      switch (timeRange) {
+          case '7d':
+              cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+              break
+          case '30d':
+              cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+              break
+          case '90d':
+              cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+              break
+          case 'all':
+          default:
+              cutoffDate = null
+      }
+
       // 1. Filter valid data first
       const validHistory = history.filter(h => {
           const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
           const validDate = h.sold_date && !isNaN(new Date(h.sold_date).getTime())
-          return validPrice && validDate
+          if (!validPrice || !validDate) return false
+
+          // Apply time range filter
+          if (cutoffDate) {
+              const saleDate = new Date(h.sold_date)
+              return saleDate >= cutoffDate
+          }
+          return true
       })
 
       // 2. Sort by date
-      const sorted = validHistory.sort((a, b) => 
+      const sorted = validHistory.sort((a, b) =>
           new Date(a.sold_date).getTime() - new Date(b.sold_date).getTime()
       )
-      
+
       // 3. Map to chart format with sequential index
       return sorted.map((h, index) => {
           const saleDate = new Date(h.sold_date)
           return {
               id: `${h.id}-${index}`, // Unique ID for Recharts
-              date: saleDate.toLocaleDateString(),
+              date: saleDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
               timestamp: saleDate.getTime(),
               x: index,  // Sequential index for X-axis
               price: Number(h.price), // Ensure numeric price
-            treatment: h.treatment || 'Classic Paper',
+              treatment: h.treatment || 'Classic Paper',
               title: h.title,
               listing_type: h.listing_type
           }
       })
-  }, [history])
+  }, [history, timeRange])
+
+  // Calculate chart statistics
+  const chartStats = useMemo(() => {
+      if (!chartData.length) return null
+      const prices = chartData.map(d => d.price)
+      const minPrice = Math.min(...prices)
+      const maxPrice = Math.max(...prices)
+      const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length
+      const firstPrice = prices[0]
+      const lastPrice = prices[prices.length - 1]
+      const priceChange = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0
+      return { minPrice, maxPrice, avgPrice, priceChange, totalSales: chartData.length }
+  }, [chartData])
   
   // Get all unique treatments for creating lines
   const chartTreatments = useMemo(() => {
@@ -351,15 +392,74 @@ function CardDetail() {
                     
                     {/* Chart Section (Full Width) */}
                     <div>
-                        <div className="border border-border rounded bg-card p-1 h-[400px]">
+                        <div className="border border-border rounded bg-card p-1">
                             <div className="h-full w-full bg-muted/10 rounded flex flex-col">
-                                <div className="p-4 border-b border-border/50">
-                                    <h3 className="text-xs font-bold uppercase tracking-widest">Price Action</h3>
+                                {/* Chart Header with Time Range Buttons */}
+                                <div className="p-4 border-b border-border/50 flex justify-between items-center">
+                                    <div className="flex items-center gap-4">
+                                        <h3 className="text-xs font-bold uppercase tracking-widest">Price History</h3>
+                                        {chartStats && (
+                                            <div className="flex items-center gap-3 text-[10px]">
+                                                <span className="text-muted-foreground">
+                                                    {chartStats.totalSales} sale{chartStats.totalSales !== 1 ? 's' : ''}
+                                                </span>
+                                                <span className={clsx(
+                                                    "font-bold",
+                                                    chartStats.priceChange >= 0 ? "text-emerald-500" : "text-red-500"
+                                                )}>
+                                                    {chartStats.priceChange >= 0 ? '+' : ''}{chartStats.priceChange.toFixed(1)}%
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <Calendar className="w-3 h-3 text-muted-foreground mr-2" />
+                                        {(['7d', '30d', '90d', 'all'] as TimeRange[]).map((range) => (
+                                            <button
+                                                key={range}
+                                                onClick={() => setTimeRange(range)}
+                                                className={clsx(
+                                                    "px-3 py-1 text-[10px] uppercase font-bold rounded transition-colors",
+                                                    timeRange === range
+                                                        ? "bg-primary text-primary-foreground"
+                                                        : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                                                )}
+                                            >
+                                                {range === 'all' ? 'All' : range}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                                <div className="flex-1 p-6 relative">
-                                    {chartData.length > 1 ? (
+
+                                {/* Chart Stats Bar */}
+                                {chartStats && chartData.length > 0 && (
+                                    <div className="px-4 py-2 border-b border-border/30 flex gap-6 text-[10px]">
+                                        <div>
+                                            <span className="text-muted-foreground uppercase">Low: </span>
+                                            <span className="font-mono font-bold text-red-400">${chartStats.minPrice.toFixed(2)}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-muted-foreground uppercase">High: </span>
+                                            <span className="font-mono font-bold text-emerald-400">${chartStats.maxPrice.toFixed(2)}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-muted-foreground uppercase">Avg: </span>
+                                            <span className="font-mono font-bold">${chartStats.avgPrice.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Chart Area */}
+                                <div className="flex-1 p-4 relative h-[350px]">
+                                    {chartData.length > 0 ? (
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={chartData} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
+                                            <AreaChart data={chartData} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
+                                                <defs>
+                                                    <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                                    </linearGradient>
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} horizontal={true} />
                                                 <XAxis
                                                     dataKey="timestamp"
@@ -375,14 +475,23 @@ function CardDetail() {
                                                 <YAxis
                                                     dataKey="price"
                                                     name="Price"
-                                                    domain={[(dataMin: number) => Math.floor(dataMin * 0.9), (dataMax: number) => Math.ceil(dataMax * 1.1)]}
+                                                    domain={[(dataMin: number) => Math.max(0, Math.floor(dataMin * 0.8)), (dataMax: number) => Math.ceil(dataMax * 1.2)]}
                                                     orientation="right"
                                                     tick={{fill: '#888', fontSize: 11, fontFamily: 'monospace'}}
                                                     axisLine={false}
                                                     tickLine={false}
-                                                    tickFormatter={(val) => `$${val.toFixed(0)}`}
+                                                    tickFormatter={(val) => `$${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val.toFixed(0)}`}
                                                     width={60}
                                                 />
+                                                {/* Average price reference line */}
+                                                {chartStats && (
+                                                    <ReferenceLine
+                                                        y={chartStats.avgPrice}
+                                                        stroke="#666"
+                                                        strokeDasharray="5 5"
+                                                        strokeOpacity={0.5}
+                                                    />
+                                                )}
                                                 <Tooltip
                                                     content={({ payload }) => {
                                                         if (!payload || !payload[0]) return null
@@ -390,12 +499,12 @@ function CardDetail() {
                                                         if (!data) return null
 
                                                         return (
-                                                            <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)'}}>
-                                                                <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '16px'}}>${typeof data.price === 'number' ? data.price.toFixed(2) : data.price}</div>
+                                                            <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', minWidth: '160px'}}>
+                                                                <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '18px', fontFamily: 'monospace'}}>${typeof data.price === 'number' ? data.price.toFixed(2) : data.price}</div>
                                                                 <div style={{color: '#a3a3a3', fontSize: '11px', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600'}}>{data.treatment}</div>
-                                                                <div style={{color: '#666', fontSize: '10px', marginBottom: '6px'}}>{data.date}</div>
+                                                                <div style={{color: '#888', fontSize: '11px', marginBottom: '6px'}}>{data.date}</div>
                                                                 {data.listing_type === 'active' && (
-                                                                    <div style={{color: '#3b82f6', fontSize: '9px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #333'}}>ACTIVE LISTING</div>
+                                                                    <div style={{color: '#3b82f6', fontSize: '9px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #333'}}>ACTIVE LISTING</div>
                                                                 )}
                                                             </div>
                                                         )
@@ -403,20 +512,33 @@ function CardDetail() {
                                                     cursor={{strokeDasharray: '3 3', stroke: '#666'}}
                                                 />
 
-                                                {/* Main price line */}
-                                                <Line
+                                                {/* Area fill under line */}
+                                                <Area
                                                     type="monotone"
                                                     dataKey="price"
                                                     stroke="#10b981"
-                                                    strokeWidth={3}
-                                                    dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
-                                                    activeDot={{ r: 6, fill: '#10b981' }}
+                                                    strokeWidth={2}
+                                                    fill="url(#priceGradient)"
+                                                    dot={{ fill: '#10b981', strokeWidth: 0, r: 3 }}
+                                                    activeDot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
                                                 />
-                                            </LineChart>
+                                            </AreaChart>
                                         </ResponsiveContainer>
                                     ) : (
-                                        <div className="h-full flex items-center justify-center text-xs text-muted-foreground uppercase">
-                                            Not enough data points for chart
+                                        <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                                            <div className="text-xs uppercase mb-2">No sales data available</div>
+                                            <div className="text-[10px]">
+                                                {timeRange !== 'all' ? (
+                                                    <button
+                                                        onClick={() => setTimeRange('all')}
+                                                        className="text-primary hover:underline"
+                                                    >
+                                                        View all time data
+                                                    </button>
+                                                ) : (
+                                                    'Check back later for price history'
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
