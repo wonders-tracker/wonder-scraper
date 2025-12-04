@@ -315,7 +315,7 @@ function CardDetail() {
                                 </div>
                             </div>
                             <div className="hidden md:block border-l border-border pl-8">
-                                <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">24h Vol</div>
+                                <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">30d Vol</div>
                                 <div className="text-4xl font-mono font-bold">
                                     {(card.volume_24h || 0).toLocaleString()}
                                 </div>
@@ -357,7 +357,7 @@ function CardDetail() {
                      <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
                         <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">
                             <TrendingUp className="w-3 h-3" />
-                            All-Time Trend
+                            30d Trend
                         </div>
                         <div className={clsx("text-xl font-mono font-bold", (card.price_delta_24h || 0) >= 0 ? "text-emerald-500" : "text-red-500")}>
                             {(card.price_delta_24h || 0) > 0 ? '+' : ''}{(card.price_delta_24h || 0).toFixed(2)}%

@@ -300,28 +300,33 @@ def read_card(
     real_price = last_sale.price if last_sale else (latest_snap.avg_price if latest_snap else None)
     real_treatment = last_sale.treatment if last_sale else None
     
-    # Calculate VWAP for single card (past 30 days default)
+    # Calculate VWAP and 30-day volume for single card
     vwap = None
     prev_close = None
+    volume_30d = 0
     try:
         from sqlalchemy import text
         cutoff_30d = datetime.utcnow() - timedelta(days=30)
-        vwap_q = text(f"""
-            SELECT AVG(price) FROM marketprice 
+
+        # Get VWAP and volume in one query
+        stats_q = text("""
+            SELECT AVG(price), COUNT(*) FROM marketprice
             WHERE card_id = :cid AND listing_type = 'sold' AND sold_date >= :cutoff
         """)
-        vwap = session.exec(vwap_q, params={"cid": card_id, "cutoff": cutoff_30d}).first()[0]
-        
-        # Fetch Prev Close (24h ago)
-        cutoff_24h = datetime.utcnow() - timedelta(hours=24)
-        prev_q = text(f"""
-            SELECT price FROM marketprice 
+        stats_res = session.execute(stats_q, {"cid": card_id, "cutoff": cutoff_30d}).first()
+        if stats_res:
+            vwap = stats_res[0]
+            volume_30d = stats_res[1] or 0
+
+        # Fetch Prev Close (30 days ago for trend calculation)
+        prev_q = text("""
+            SELECT price FROM marketprice
             WHERE card_id = :cid AND listing_type = 'sold' AND sold_date < :cutoff
             ORDER BY sold_date DESC LIMIT 1
         """)
-        prev_res = session.exec(prev_q, params={"cid": card_id, "cutoff": cutoff_24h}).first()
+        prev_res = session.execute(prev_q, {"cid": card_id, "cutoff": cutoff_30d}).first()
         prev_close = prev_res[0] if prev_res else None
-        
+
     except Exception:
         pass
 
@@ -368,7 +373,7 @@ def read_card(
         rarity_id=card.rarity_id,
         rarity_name=rarity_name,
         latest_price=real_price,
-        volume_24h=latest_snap.volume if latest_snap else 0,
+        volume_24h=volume_30d,  # 30-day volume from MarketPrice
         price_delta_24h=avg_delta,
         last_sale_diff=deal_delta,
         last_sale_treatment=real_treatment,
