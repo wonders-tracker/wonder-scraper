@@ -171,18 +171,19 @@ def read_cards(
             active_stats_results = session.execute(active_stats_query, {"card_ids": card_ids}).all()
             active_stats_map = {row[0]: {'lowest_ask': row[1], 'inventory': row[2]} for row in active_stats_results}
 
-            # Fetch Previous Closing Price with proper parameter binding
-            if cutoff_time:
-                prev_price_query = text("""
-                    SELECT DISTINCT ON (card_id) card_id, price
+            # Fetch Previous Sale Price (second most recent sale for each card)
+            # This gives us "last sale vs previous sale" delta regardless of time period
+            prev_price_query = text("""
+                SELECT card_id, price FROM (
+                    SELECT card_id, price,
+                           ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY sold_date DESC) as rn
                     FROM marketprice
-                    WHERE card_id = ANY(:card_ids)
-                    AND listing_type = 'sold'
-                    AND sold_date < :cutoff_time
-                    ORDER BY card_id, sold_date DESC
-                """)
-                prev_results = session.execute(prev_price_query, {"card_ids": card_ids, "cutoff_time": cutoff_time}).all()
-                prev_price_map = {row[0]: row[1] for row in prev_results}
+                    WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
+                ) ranked
+                WHERE rn = 2
+            """)
+            prev_results = session.execute(prev_price_query, {"card_ids": card_ids}).all()
+            prev_price_map = {row[0]: row[1] for row in prev_results}
 
         except Exception as e:
             print(f"Error fetching sales data: {e}")
