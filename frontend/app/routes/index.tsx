@@ -94,8 +94,7 @@ function Home() {
           volume_usd_24h: (c.volume_24h ?? 0) * (c.vwap ?? c.latest_price ?? 0), // Calculate dollar volume using VWAP if possible
           highest_bid: (c as any).highest_bid ?? 0
       }))
-      .filter(c => (c.latest_price && c.latest_price > 0) || (c.volume_24h && c.volume_24h > 0)) // Filter out 0 listings
-      .filter(c => !['Box', 'Pack', 'Lot'].includes(c.product_type || 'Single')) // Temporarily hide Box, Pack, Lot until data is cleaned
+      .filter(c => (c.latest_price && c.latest_price > 0) || (c.volume_24h && c.volume_24h > 0) || (c.lowest_ask && c.lowest_ask > 0)) // Filter out items with no data
     },
     staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh
     gcTime: 30 * 60 * 1000, // 30 minutes - cache persists (renamed from cacheTime in v5)

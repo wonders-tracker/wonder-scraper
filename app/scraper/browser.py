@@ -172,7 +172,7 @@ async def get_page_content(url: str, retries: int = 3) -> str:
                 if tab:
                     try:
                         await tab.close()
-                    except:
+                    except Exception:
                         pass
 
     raise last_error

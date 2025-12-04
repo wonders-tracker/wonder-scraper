@@ -36,6 +36,11 @@ type MarketPrice = {
     url?: string
     image_url?: string
     description?: string
+    seller_name?: string
+    seller_feedback_score?: number
+    seller_feedback_percent?: number
+    condition?: string
+    shipping_cost?: number
 }
 
 export const Route = createRoute({
@@ -352,7 +357,7 @@ function CardDetail() {
                      <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
                         <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">
                             <TrendingUp className="w-3 h-3" />
-                            Trend (24h)
+                            All-Time Trend
                         </div>
                         <div className={clsx("text-xl font-mono font-bold", (card.price_delta_24h || 0) >= 0 ? "text-emerald-500" : "text-red-500")}>
                             {(card.price_delta_24h || 0) > 0 ? '+' : ''}{(card.price_delta_24h || 0).toFixed(2)}%
@@ -727,8 +732,49 @@ function CardDetail() {
                             </div>
                         </div>
                         
+                        {/* Seller Info */}
+                        {(selectedListing.seller_name || selectedListing.condition || selectedListing.shipping_cost !== undefined) && (
+                        <div className="pt-6 border-t border-border">
+                            <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <div className="w-1 h-4 bg-purple-500 rounded-full"></div>
+                                Seller Info
+                            </h3>
+                            <div className="bg-muted/10 rounded p-4 border border-border space-y-3 text-xs">
+                                {selectedListing.seller_name && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Seller</span>
+                                        <span className="font-bold">{selectedListing.seller_name}</span>
+                                    </div>
+                                )}
+                                {selectedListing.seller_feedback_score !== undefined && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Feedback Score</span>
+                                        <span className="font-bold">{selectedListing.seller_feedback_score.toLocaleString()}</span>
+                                    </div>
+                                )}
+                                {selectedListing.seller_feedback_percent !== undefined && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Positive Feedback</span>
+                                        <span className={clsx("font-bold", selectedListing.seller_feedback_percent >= 99 ? "text-emerald-500" : selectedListing.seller_feedback_percent >= 95 ? "text-yellow-500" : "text-red-500")}>{selectedListing.seller_feedback_percent}%</span>
+                                    </div>
+                                )}
+                                {selectedListing.condition && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Condition</span>
+                                        <span className="font-bold">{selectedListing.condition}</span>
+                                    </div>
+                                )}
+                                {selectedListing.shipping_cost !== undefined && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Shipping</span>
+                                        <span className={clsx("font-bold", selectedListing.shipping_cost === 0 ? "text-emerald-500" : "")}>{selectedListing.shipping_cost === 0 ? 'Free' : `$${selectedListing.shipping_cost.toFixed(2)}`}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        )}
+
                         {/* Listing Info */}
-                        {/* Only show placeholder specs if we don't have real data, for now we removed the hardcoded box specs to avoid confusion */}
                         <div className="pt-6 border-t border-border">
                             <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
                                 <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
@@ -737,7 +783,7 @@ function CardDetail() {
                             <div className="bg-muted/10 rounded p-4 border border-border space-y-3 text-xs">
                                 {selectedListing.description ? (
                                     <p className="text-muted-foreground italic">"{selectedListing.description}"</p>
-                                ) : (
+                                ) : !selectedListing.seller_name && (
                                     <p className="text-muted-foreground">No additional details provided for this listing.</p>
                                 )}
                                 <div className="pt-2 border-t border-border/50 mt-2">
