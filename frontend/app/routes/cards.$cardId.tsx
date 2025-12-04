@@ -393,7 +393,7 @@ function CardDetail() {
                     {/* Chart Section (Full Width) */}
                     <div>
                         <div className="border border-border rounded bg-card p-1">
-                            <div className="h-full w-full bg-muted/10 rounded flex flex-col">
+                            <div className="w-full bg-muted/10 rounded flex flex-col">
                                 {/* Chart Header with Time Range Buttons */}
                                 <div className="p-4 border-b border-border/50 flex justify-between items-center">
                                     <div className="flex items-center gap-4">
@@ -450,7 +450,7 @@ function CardDetail() {
                                 )}
 
                                 {/* Chart Area */}
-                                <div className="flex-1 p-4 relative h-[350px]">
+                                <div className="p-4 relative" style={{ height: '350px' }}>
                                     {chartData.length > 0 ? (
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={chartData} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
