@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from datetime import datetime, timedelta
 from typing import Optional
 from sqlmodel import Session, select
 from app.db import engine
@@ -83,6 +84,30 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     # 1. Active Data (Use the primary query)
     print("Fetching active listings...")
     active_ask, active_inv, highest_bid = await scrape_active_data(card_name, card_id, search_term=unique_queries[0])
+
+    # Fallback: If scraper found no active listings, check existing DB records
+    # Active listings within the last 24 hours are still relevant
+    if active_ask == 0 and active_inv == 0 and card_id > 0:
+        print("No active data from scrape. Checking existing DB records...")
+        with Session(engine) as fallback_session:
+            from app.models.market import MarketPrice
+            cutoff = datetime.now() - timedelta(hours=24)
+            existing_active = fallback_session.exec(
+                select(MarketPrice)
+                .where(MarketPrice.card_id == card_id, MarketPrice.listing_type == "active")
+                .where(MarketPrice.scraped_at >= cutoff)
+            ).all()
+
+            if existing_active:
+                prices = [p.price for p in existing_active]
+                active_ask = min(prices) if prices else 0.0
+                active_inv = len(existing_active)
+                # Check for bids
+                for p in existing_active:
+                    bid_count = getattr(p, 'bid_count', 0)
+                    if bid_count > 0 and p.price > highest_bid:
+                        highest_bid = p.price
+                print(f"Using {len(existing_active)} recent active listings from DB: Ask=${active_ask:.2f}, Inv={active_inv}")
     
     # 2. Scrape SOLD listings using variations if needed
     all_prices = []  # For saving to DB (new listings only)
@@ -194,8 +219,44 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     last_sale_date = None
 
     if not prices_for_stats:
-        print("No sold data found.")
-        stats = {"min": 0.0, "max": 0.0, "avg": 0.0, "volume": 0}
+        print("No sold data found in current scrape. Checking existing DB records...")
+        # Fallback: Calculate stats from existing MarketPrice records in DB
+        if card_id > 0:
+            with Session(engine) as fallback_session:
+                # First try 30-day records, then fall back to ALL records
+                cutoff = datetime.now() - timedelta(days=30)
+                existing_prices = fallback_session.exec(
+                    select(MarketPrice)
+                    .where(MarketPrice.card_id == card_id, MarketPrice.listing_type == "sold")
+                    .where(MarketPrice.sold_date >= cutoff)
+                ).all()
+
+                # If no 30-day records, get ALL sold records
+                if not existing_prices:
+                    existing_prices = fallback_session.exec(
+                        select(MarketPrice)
+                        .where(MarketPrice.card_id == card_id, MarketPrice.listing_type == "sold")
+                    ).all()
+                    if existing_prices:
+                        print(f"Using {len(existing_prices)} ALL-TIME sold records (none in last 30 days)")
+
+                if existing_prices:
+                    price_values = [p.price for p in existing_prices]
+                    stats = calculate_stats(price_values)
+                    stats["volume"] = len(existing_prices)
+                    print(f"Calculated from {len(existing_prices)} existing DB records: {stats}")
+
+                    # Also get last sale for snapshot
+                    sorted_existing = sorted([p for p in existing_prices if p.sold_date],
+                                            key=lambda x: x.sold_date, reverse=True)
+                    if sorted_existing:
+                        last_sale_price = sorted_existing[0].price
+                        last_sale_date = sorted_existing[0].sold_date
+                else:
+                    print("No existing DB records found either.")
+                    stats = {"min": 0.0, "max": 0.0, "avg": 0.0, "volume": 0}
+        else:
+            stats = {"min": 0.0, "max": 0.0, "avg": 0.0, "volume": 0}
     else:
         price_values = [p.price for p in prices_for_stats]
         stats = calculate_stats(price_values)

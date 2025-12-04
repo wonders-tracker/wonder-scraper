@@ -66,5 +66,9 @@ ENV PYTHONUNBUFFERED=1
 # Expose port for FastAPI
 EXPOSE 8000
 
-# Run the application - use shell form so $PORT is expanded
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Copy entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Run the application
+CMD ["/docker-entrypoint.sh"]

@@ -279,11 +279,35 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
         card_tokens_set = set(clean_name.split())
         title_tokens_set = set(clean_title.split())
 
+    # Helper function for fuzzy token matching (handles typos like "Atherion" vs "Aetherion")
+    def fuzzy_token_match(card_token: str, title_tokens_list: list) -> bool:
+        """Check if card_token has a close match in title_tokens using fuzzy matching."""
+        # Use lower threshold for shorter words (e.g., "lich" vs "lieh")
+        threshold = 0.75 if len(card_token) <= 5 else 0.85
+        for title_token in title_tokens_list:
+            # Use SequenceMatcher for fuzzy matching
+            ratio = difflib.SequenceMatcher(None, card_token, title_token).ratio()
+            if ratio >= threshold:
+                return True
+        return False
+
+    # First try exact matching
     common_tokens = card_tokens_set.intersection(title_tokens_set)
+
+    # If exact match is low, try fuzzy matching for remaining tokens
+    unmatched_card_tokens = card_tokens_set - common_tokens
+    fuzzy_matches = 0
+    title_tokens_list = list(title_tokens_set)
+
+    for card_token in unmatched_card_tokens:
+        if len(card_token) >= 4 and fuzzy_token_match(card_token, title_tokens_list):
+            fuzzy_matches += 1
+
+    total_matches = len(common_tokens) + fuzzy_matches
 
     # If after stripping stopwords we have tokens, we require high match
     if len(card_tokens_set) > 0:
-        match_ratio = len(common_tokens) / len(card_tokens_set)
+        match_ratio = total_matches / len(card_tokens_set)
 
         # For sealed products (boxes, packs, lots), be more lenient - require 60% match
         # For single cards with short names (1-2 tokens), require 100% match
