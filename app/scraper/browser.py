@@ -7,6 +7,7 @@ import os
 import random
 import shutil
 import tempfile
+import subprocess
 
 
 # Serialize browser operations - only 1 at a time for stability
@@ -15,33 +16,76 @@ _semaphore = asyncio.Semaphore(1)
 # Remote browser server URL (set in Railway env)
 BROWSER_SERVER_URL = os.getenv("BROWSER_WS_URL", "")
 
+# Flag to track if we're in a container environment
+IS_CONTAINER = os.path.exists("/.dockerenv") or os.getenv("RAILWAY_ENVIRONMENT") is not None
+
 
 def find_chrome_binary() -> Optional[str]:
-    """Find Chrome/Chromium binary on the system."""
-    # Check env var first
+    """Find Chrome/Chromium binary on the system with extensive search."""
+    # Check env var first (set by nixpacks.toml)
     chrome_path = os.getenv("CHROME_PATH")
     if chrome_path and os.path.exists(chrome_path):
+        print(f"[Browser] Found Chrome via CHROME_PATH env: {chrome_path}")
         return chrome_path
 
-    # Common Chrome/Chromium paths
+    # Nixpacks-specific paths (Railway uses nixpacks)
+    nixpacks_paths = [
+        "/nix/var/nix/profiles/default/bin/chromium",
+        "/nix/store/*/bin/chromium",  # Will use glob below
+        "/root/.nix-profile/bin/chromium",
+    ]
+
+    # Common Chrome/Chromium paths for various Linux distros
     common_paths = [
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
         "/usr/bin/google-chrome",
         "/usr/bin/google-chrome-stable",
+        "/opt/google/chrome/google-chrome",
+        "/snap/bin/chromium",
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",  # macOS
     ]
 
+    # Try nixpacks paths first (for Railway)
+    for path in nixpacks_paths:
+        if "*" in path:
+            # Use glob for wildcard paths
+            import glob
+            matches = glob.glob(path)
+            if matches:
+                print(f"[Browser] Found Chrome via glob: {matches[0]}")
+                return matches[0]
+        elif os.path.exists(path):
+            print(f"[Browser] Found Chrome at: {path}")
+            return path
+
+    # Try common paths
     for path in common_paths:
         if os.path.exists(path):
+            print(f"[Browser] Found Chrome at: {path}")
             return path
 
     # Try which command
-    for cmd in ["chromium", "chromium-browser", "google-chrome"]:
+    for cmd in ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"]:
         found = shutil.which(cmd)
         if found:
+            print(f"[Browser] Found Chrome via which: {found}")
             return found
 
+    # Last resort: search in PATH and nix store
+    try:
+        result = subprocess.run(
+            ["find", "/nix/store", "-name", "chromium", "-type", "f", "-executable"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            path = result.stdout.strip().split("\n")[0]
+            print(f"[Browser] Found Chrome via find: {path}")
+            return path
+    except Exception as e:
+        print(f"[Browser] find command failed: {e}")
+
+    print("[Browser] WARNING: No Chrome binary found!")
     return None
 
 
@@ -55,12 +99,14 @@ class BrowserManager:
     _lock = asyncio.Lock()
     _restart_count: int = 0
     _max_restarts: int = 3
+    _startup_timeout: int = 60  # seconds to wait for browser startup
 
     @classmethod
     async def get_browser(cls) -> Chrome:
         async with cls._lock:
             if not cls._browser:
-                print("Starting pydoll browser...")
+                print("[Browser] Starting pydoll browser...")
+                print(f"[Browser] Container environment: {IS_CONTAINER}")
 
                 options = ChromiumOptions()
                 options.headless = True
@@ -68,26 +114,63 @@ class BrowserManager:
                 # Use system Chrome if available (for production containers)
                 chrome_path = find_chrome_binary()
                 if chrome_path:
-                    print(f"Using Chrome: {chrome_path}")
+                    print(f"[Browser] Using Chrome: {chrome_path}")
                     options.binary_location = chrome_path
+                else:
+                    print("[Browser] ERROR: No Chrome binary found. Browser will likely fail.")
+
+                # Essential args for headless Chrome in containers
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--disable-gpu")
+                options.add_argument("--disable-software-rasterizer")
 
                 # Anti-detection args
                 options.add_argument("--disable-blink-features=AutomationControlled")
-                options.add_argument("--no-sandbox")
-                options.add_argument("--disable-dev-shm-usage")
-                options.add_argument("--disable-gpu")  # Required for headless in containers
+
+                # Memory optimization for containers
+                options.add_argument("--disable-extensions")
+                options.add_argument("--disable-plugins")
+
+                # Additional container-specific settings
+                if IS_CONTAINER:
+                    print("[Browser] Applying container-specific settings...")
+                    options.add_argument("--disable-setuid-sandbox")
+                    options.add_argument("--disable-background-networking")
+                    options.add_argument("--disable-default-apps")
+                    options.add_argument("--disable-sync")
+                    options.add_argument("--disable-translate")
+                    options.add_argument("--metrics-recording-only")
+                    options.add_argument("--mute-audio")
+                    options.add_argument("--no-first-run")
+                    options.add_argument("--safebrowsing-disable-auto-update")
+                    # Reduce process count
+                    options.add_argument("--renderer-process-limit=1")
+                    options.add_argument("--disable-features=TranslateUI")
 
                 # Use unique profile per process
                 profile_dir = get_user_data_dir()
-                print(f"Using profile: {profile_dir}")
+                print(f"[Browser] Using profile: {profile_dir}")
                 options.add_argument(f"--user-data-dir={profile_dir}")
 
+                # Create browser instance
                 cls._browser = Chrome(options=options)
+
+                # Start with timeout
                 try:
-                    await cls._browser.start()
-                    print("Pydoll browser started successfully!")
+                    print(f"[Browser] Starting browser with {cls._startup_timeout}s timeout...")
+                    await asyncio.wait_for(
+                        cls._browser.start(),
+                        timeout=cls._startup_timeout
+                    )
+                    print("[Browser] Pydoll browser started successfully!")
+                except asyncio.TimeoutError:
+                    print(f"[Browser] ERROR: Browser startup timed out after {cls._startup_timeout}s")
+                    cls._browser = None
+                    raise Exception(f"Browser startup timed out after {cls._startup_timeout}s")
                 except Exception as start_err:
-                    print(f"Browser start failed: {type(start_err).__name__}: {start_err}")
+                    print(f"[Browser] ERROR: Browser start failed: {type(start_err).__name__}: {start_err}")
+                    cls._browser = None
                     raise
 
             return cls._browser
