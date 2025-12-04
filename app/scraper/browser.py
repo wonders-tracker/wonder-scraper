@@ -13,9 +13,6 @@ import subprocess
 # Serialize browser operations - only 1 at a time for stability
 _semaphore = asyncio.Semaphore(1)
 
-# Remote browser server URL (set in Railway env)
-BROWSER_SERVER_URL = os.getenv("BROWSER_WS_URL", "")
-
 # Flag to track if we're in a container environment
 IS_CONTAINER = os.path.exists("/.dockerenv") or os.getenv("RAILWAY_ENVIRONMENT") is not None
 
@@ -36,12 +33,13 @@ def find_chrome_binary() -> Optional[str]:
     ]
 
     # Common Chrome/Chromium paths for various Linux distros
+    # Priority order: Google Chrome first (from Dockerfile), then Chromium
     common_paths = [
+        "/usr/bin/google-chrome-stable",  # Dockerfile installs here
+        "/usr/bin/google-chrome",
+        "/opt/google/chrome/google-chrome",
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable",
-        "/opt/google/chrome/google-chrome",
         "/snap/bin/chromium",
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",  # macOS
     ]
