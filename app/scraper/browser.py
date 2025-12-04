@@ -83,8 +83,12 @@ class BrowserManager:
                 options.add_argument(f"--user-data-dir={profile_dir}")
 
                 cls._browser = Chrome(options=options)
-                await cls._browser.start()
-                print("Pydoll browser started successfully!")
+                try:
+                    await cls._browser.start()
+                    print("Pydoll browser started successfully!")
+                except Exception as start_err:
+                    print(f"Browser start failed: {type(start_err).__name__}: {start_err}")
+                    raise
 
             return cls._browser
 
