@@ -379,10 +379,10 @@ function CardDetail() {
                      <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
                         <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">
                             <TrendingUp className="w-3 h-3" />
-                            30d Trend
+                            {timeRange} Trend
                         </div>
-                        <div className={clsx("text-xl font-mono font-bold", (card.price_delta_24h || 0) >= 0 ? "text-emerald-500" : "text-red-500")}>
-                            {(card.price_delta_24h || 0) > 0 ? '+' : ''}{(card.price_delta_24h || 0).toFixed(2)}%
+                        <div className={clsx("text-xl font-mono font-bold", (chartStats?.priceChange ?? 0) >= 0 ? "text-emerald-500" : "text-red-500")}>
+                            {(chartStats?.priceChange ?? 0) > 0 ? '+' : ''}{(chartStats?.priceChange ?? 0).toFixed(2)}%
                         </div>
                     </div>
                 </div>
