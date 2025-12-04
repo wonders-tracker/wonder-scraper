@@ -849,13 +849,13 @@ function CardDetail() {
                                         <span className="font-bold">{selectedListing.seller_name}</span>
                                     </div>
                                 )}
-                                {selectedListing.seller_feedback_score !== undefined && (
+                                {selectedListing.seller_feedback_score != null && (
                                     <div className="flex justify-between">
                                         <span className="text-muted-foreground">Feedback Score</span>
                                         <span className="font-bold">{selectedListing.seller_feedback_score.toLocaleString()}</span>
                                     </div>
                                 )}
-                                {selectedListing.seller_feedback_percent !== undefined && (
+                                {selectedListing.seller_feedback_percent != null && (
                                     <div className="flex justify-between">
                                         <span className="text-muted-foreground">Positive Feedback</span>
                                         <span className={clsx("font-bold", selectedListing.seller_feedback_percent >= 99 ? "text-emerald-500" : selectedListing.seller_feedback_percent >= 95 ? "text-yellow-500" : "text-red-500")}>{selectedListing.seller_feedback_percent}%</span>
