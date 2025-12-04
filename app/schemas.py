@@ -21,8 +21,17 @@ class MarketPriceBase(BaseModel):
     title: str
     sold_date: Optional[datetime] = None
     listing_type: str
-    treatment: Optional[str] = "Classic Paper" # Added treatment field
-    bid_count: Optional[int] = 0 # Added bid_count field
+    treatment: Optional[str] = "Classic Paper"
+    bid_count: Optional[int] = 0
+    url: Optional[str] = None
+    image_url: Optional[str] = None
+    # Seller info
+    seller_name: Optional[str] = None
+    seller_feedback_score: Optional[int] = None
+    seller_feedback_percent: Optional[float] = None
+    # Listing details
+    condition: Optional[str] = None
+    shipping_cost: Optional[float] = None
     scraped_at: datetime
 
 class MarketPriceOut(MarketPriceBase):

@@ -40,4 +40,14 @@ class MarketPrice(SQLModel, table=True):
     image_url: Optional[str] = Field(default=None) # Link to listing image
     description: Optional[str] = Field(default=None) # Short description or specifics
     platform: str = Field(default="ebay") # 'ebay', 'opensea', 'tcgplayer', etc.
+
+    # Seller Info
+    seller_name: Optional[str] = Field(default=None, index=True) # Seller username
+    seller_feedback_score: Optional[int] = Field(default=None) # Feedback count (e.g., 1234)
+    seller_feedback_percent: Optional[float] = Field(default=None) # Positive feedback % (e.g., 99.5)
+
+    # Listing Details
+    condition: Optional[str] = Field(default=None) # "New", "Like New", "Used", etc.
+    shipping_cost: Optional[float] = Field(default=None) # Shipping price (0 = free)
+
     scraped_at: datetime = Field(default_factory=datetime.utcnow)

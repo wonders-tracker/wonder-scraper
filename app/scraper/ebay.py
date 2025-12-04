@@ -356,8 +356,94 @@ def _extract_bid_count(item) -> int:
         match = re.search(r'(\d+)\s*bids?', text, re.IGNORECASE)
         if match:
             return int(match.group(1))
-            
+
     return 0
+
+def _extract_seller_info(item) -> Tuple[Optional[str], Optional[int], Optional[float]]:
+    """
+    Extracts seller name and feedback info from an item element.
+    Returns: (seller_name, feedback_score, feedback_percent)
+    """
+    seller_name = None
+    feedback_score = None
+    feedback_percent = None
+
+    # Try to find seller info element
+    seller_elem = item.select_one(".s-item__seller-info, .s-item__seller-info-text, .s-item__itemAff498, [class*='seller']")
+    if seller_elem:
+        text = seller_elem.get_text(strip=True)
+        # Parse seller name - usually format: "seller_name (1234) 99.5%"
+        # Or sometimes: "Sold by seller_name"
+
+        # Try pattern: "seller_name (1234) 99.5%"
+        match = re.search(r'^([^\(]+)\s*\((\d+)\)\s*([\d.]+)%?', text)
+        if match:
+            seller_name = match.group(1).strip()
+            feedback_score = int(match.group(2))
+            feedback_percent = float(match.group(3))
+        else:
+            # Just extract seller name if feedback isn't there
+            seller_name = text.replace("Sold by", "").strip()
+
+    # Alternative: look for seller link
+    if not seller_name:
+        seller_link = item.select_one("a[href*='/usr/'], a[class*='seller']")
+        if seller_link:
+            seller_name = seller_link.get_text(strip=True)
+
+    # Try to find feedback separately if not found
+    if seller_name and not feedback_score:
+        feedback_elem = item.select_one(".s-item__seller-info .s-item__feedback, [class*='feedback']")
+        if feedback_elem:
+            text = feedback_elem.get_text(strip=True)
+            # Parse "(1234) 99.5%" format
+            match = re.search(r'\((\d+)\)\s*([\d.]+)%', text)
+            if match:
+                feedback_score = int(match.group(1))
+                feedback_percent = float(match.group(2))
+
+    return seller_name, feedback_score, feedback_percent
+
+def _extract_condition(item) -> Optional[str]:
+    """
+    Extracts item condition from listing.
+    """
+    # Standard condition element
+    condition_elem = item.select_one(".s-item__subtitle, .SECONDARY_INFO, [class*='condition']")
+    if condition_elem:
+        text = condition_elem.get_text(strip=True)
+        # Common conditions: "New", "Brand New", "Pre-Owned", "Used", "Like New", "For parts"
+        conditions = ["Brand New", "New", "Like New", "Pre-Owned", "Used", "Open Box", "Refurbished", "For parts"]
+        for condition in conditions:
+            if condition.lower() in text.lower():
+                return condition
+        # Return the raw text if no known condition found (might still be useful)
+        if len(text) < 50:  # Avoid long descriptions
+            return text
+    return None
+
+def _extract_shipping_cost(item) -> Optional[float]:
+    """
+    Extracts shipping cost from listing.
+    Returns: shipping cost in dollars (0.0 for free shipping, None if not found)
+    """
+    shipping_elem = item.select_one(".s-item__shipping, .s-item__freeXDays, .s-item__logisticsCost, [class*='shipping']")
+    if shipping_elem:
+        text = shipping_elem.get_text(strip=True).lower()
+
+        # Free shipping
+        if "free" in text:
+            return 0.0
+
+        # Parse shipping cost: "+$5.99 shipping" or "$5.99 shipping"
+        match = re.search(r'\+?\$?([\d,.]+)\s*shipping', text, re.IGNORECASE)
+        if match:
+            try:
+                return float(match.group(1).replace(',', ''))
+            except:
+                pass
+
+    return None
 
 def _clean_title_text(title: str) -> str:
     """
@@ -458,6 +544,13 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
         # Extract additional metadata
         bid_count = _extract_bid_count(item)
 
+        # Extract seller info
+        seller_name, seller_feedback_score, seller_feedback_percent = _extract_seller_info(item)
+
+        # Extract condition and shipping
+        condition = _extract_condition(item)
+        shipping_cost = _extract_shipping_cost(item)
+
         # Extract Image URL (both old and new eBay structure)
         image_elem = item.select_one(".s-item__image-img, .s-card__image img, img.s-card__image")
         image_url = None
@@ -474,7 +567,12 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             "sold_date": sold_date,
             "url": url,
             "bid_count": bid_count,
-            "image_url": image_url
+            "image_url": image_url,
+            "seller_name": seller_name,
+            "seller_feedback_score": seller_feedback_score,
+            "seller_feedback_percent": seller_feedback_percent,
+            "condition": condition,
+            "shipping_cost": shipping_cost
         })
         debug_stats["passed"] += 1
         if debug_mode:
@@ -536,6 +634,13 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             url=metadata["url"],
             image_url=metadata["image_url"],
             platform="ebay",
+            # Seller info
+            seller_name=metadata.get("seller_name"),
+            seller_feedback_score=metadata.get("seller_feedback_score"),
+            seller_feedback_percent=metadata.get("seller_feedback_percent"),
+            # Listing details
+            condition=metadata.get("condition"),
+            shipping_cost=metadata.get("shipping_cost"),
             scraped_at=datetime.utcnow()
         )
 
