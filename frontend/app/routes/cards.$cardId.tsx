@@ -810,7 +810,7 @@ function CardDetail() {
                         <div>
                              <div className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-1">Bid Count</div>
                              <div className="text-sm font-mono font-bold">
-                                {selectedListing.bid_count !== undefined ? selectedListing.bid_count : '0'}
+                                {selectedListing.bid_count ?? '0'}
                              </div>
                         </div>
 
@@ -836,7 +836,7 @@ function CardDetail() {
                         </div>
                         
                         {/* Seller Info */}
-                        {(selectedListing.seller_name || selectedListing.condition || selectedListing.shipping_cost !== undefined) && (
+                        {(selectedListing.seller_name || selectedListing.condition || selectedListing.shipping_cost != null) && (
                         <div className="pt-6 border-t border-border">
                             <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
                                 <div className="w-1 h-4 bg-purple-500 rounded-full"></div>
@@ -867,7 +867,7 @@ function CardDetail() {
                                         <span className="font-bold">{selectedListing.condition}</span>
                                     </div>
                                 )}
-                                {selectedListing.shipping_cost !== undefined && (
+                                {selectedListing.shipping_cost != null && (
                                     <div className="flex justify-between">
                                         <span className="text-muted-foreground">Shipping</span>
                                         <span className={clsx("font-bold", selectedListing.shipping_cost === 0 ? "text-emerald-500" : "")}>{selectedListing.shipping_cost === 0 ? 'Free' : `$${selectedListing.shipping_cost.toFixed(2)}`}</span>
