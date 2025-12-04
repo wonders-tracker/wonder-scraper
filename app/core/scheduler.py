@@ -55,13 +55,14 @@ async def scrape_single_card(card: Card):
 async def job_update_market_data():
     """
     Optimized polling job - scrapes cards in batches with concurrency control.
+    Includes robust error handling for browser startup failures.
     """
     print(f"[{datetime.utcnow()}] Starting Scheduled Market Update...")
-    
+
     with Session(engine) as session:
         # Get cards that haven't been updated in the last hour (or all if none)
         cutoff_time = datetime.utcnow() - timedelta(hours=1)
-        
+
         # Subquery for latest snapshot per card
         latest_snapshots = (
             select(
@@ -71,7 +72,7 @@ async def job_update_market_data():
             .group_by(MarketSnapshot.card_id)
             .subquery()
         )
-        
+
         # Get cards needing updates
         cards_query = (
             select(Card)
@@ -81,40 +82,78 @@ async def job_update_market_data():
                 (latest_snapshots.c.latest_timestamp == None)
             )
         )
-        
+
         cards_to_update = session.exec(cards_query).all()
-    
+
         # If no stale cards, update a random sample
         if not cards_to_update:
             all_cards = session.exec(select(Card)).all()
             cards_to_update = random.sample(all_cards, min(10, len(all_cards)))
-    
+
     if not cards_to_update:
         print("[Polling] No cards to update.")
         return
-    
+
     print(f"[Polling] Updating {len(cards_to_update)} cards...")
-    
-    # Initialize browser once
-    await BrowserManager.get_browser()
-    
+
+    # Initialize browser with retry logic
+    max_browser_retries = 3
+    browser_started = False
+
+    for attempt in range(max_browser_retries):
+        try:
+            print(f"[Polling] Browser startup attempt {attempt + 1}/{max_browser_retries}...")
+            await BrowserManager.get_browser()
+            browser_started = True
+            print("[Polling] Browser started successfully!")
+            break
+        except Exception as e:
+            print(f"[Polling] Browser startup failed (attempt {attempt + 1}): {type(e).__name__}: {e}")
+            # Clean up any partial state
+            await BrowserManager.close()
+            if attempt < max_browser_retries - 1:
+                wait_time = (attempt + 1) * 10  # 10s, 20s, 30s
+                print(f"[Polling] Waiting {wait_time}s before retry...")
+                await asyncio.sleep(wait_time)
+
+    if not browser_started:
+        print("[Polling] ERROR: Could not start browser after all retries. Skipping this update cycle.")
+        return
+
     try:
         # Process cards with controlled concurrency (max 3 concurrent)
         batch_size = 3
+        successful = 0
+        failed = 0
+
         for i in range(0, len(cards_to_update), batch_size):
             batch = cards_to_update[i:i+batch_size]
-            
+
             # Process batch concurrently
             tasks = [scrape_single_card(card) for card in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
+            # Count successes/failures
+            for result in results:
+                if isinstance(result, Exception):
+                    failed += 1
+                elif result:
+                    successful += 1
+                else:
+                    failed += 1
+
             # Brief delay between batches
             if i + batch_size < len(cards_to_update):
                 await asyncio.sleep(5)
-    
+
+        print(f"[Polling] Results: {successful} successful, {failed} failed out of {len(cards_to_update)} cards")
+
+    except Exception as e:
+        print(f"[Polling] ERROR during scraping: {type(e).__name__}: {e}")
+
     finally:
         await BrowserManager.close()
-    
+
     print(f"[{datetime.utcnow()}] Scheduled Update Complete.")
 
 def start_scheduler():
