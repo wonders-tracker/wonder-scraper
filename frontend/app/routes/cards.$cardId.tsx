@@ -306,7 +306,7 @@ function CardDetail() {
                             <div>
                                 <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">Market Price</div>
                                 <div className="text-4xl font-mono font-bold text-emerald-500">
-                                    ${card.lowest_ask?.toFixed(2) || card.latest_price?.toFixed(2) || '---'}
+                                    ${(card.lowest_ask && card.lowest_ask > 0) ? card.lowest_ask.toFixed(2) : (card.latest_price?.toFixed(2) || '---')}
                                 </div>
                             </div>
                             <div className="hidden md:block border-l border-border pl-8">
@@ -333,7 +333,7 @@ function CardDetail() {
                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
                             Lowest Ask
                         </div>
-                        <div className="text-xl font-mono font-bold">${card.lowest_ask?.toFixed(2) || '---'}</div>
+                        <div className="text-xl font-mono font-bold">{(card.lowest_ask && card.lowest_ask > 0) ? `$${card.lowest_ask.toFixed(2)}` : '---'}</div>
                     </div>
                      <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
                         <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">
