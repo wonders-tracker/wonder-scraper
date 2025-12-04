@@ -171,16 +171,14 @@ def read_cards(
             active_stats_results = session.execute(active_stats_query, {"card_ids": card_ids}).all()
             active_stats_map = {row[0]: {'lowest_ask': row[1], 'inventory': row[2]} for row in active_stats_results}
 
-            # Fetch Previous Sale Price (second most recent sale for each card)
-            # This gives us "last sale vs previous sale" delta regardless of time period
+            # Fetch Previous Sale Price (oldest sale overall for trend comparison)
+            # Compare most recent sale vs oldest recorded sale to show all-time trend
             prev_price_query = text("""
-                SELECT card_id, price FROM (
-                    SELECT card_id, price,
-                           ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY sold_date DESC) as rn
-                    FROM marketprice
-                    WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
-                ) ranked
-                WHERE rn = 2
+                SELECT DISTINCT ON (card_id) card_id, price
+                FROM marketprice
+                WHERE card_id = ANY(:card_ids)
+                AND listing_type = 'sold'
+                ORDER BY card_id, sold_date ASC NULLS LAST
             """)
             prev_results = session.execute(prev_price_query, {"card_ids": card_ids}).all()
             prev_price_map = {row[0]: row[1] for row in prev_results}
