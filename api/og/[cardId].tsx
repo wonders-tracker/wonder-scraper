@@ -29,11 +29,11 @@ export default async function handler(req: Request) {
       }
       const basicCard = await cardRes.json()
 
-      // Use the card data directly - it has latest_price (last sale) and avg_price
+      // Use the card data directly - floor_price is the standard market price
       cardData = {
         ...basicCard,
-        // Use latest_price from the card (most recent sale), fallback to avg_price
-        display_price: basicCard.latest_price || basicCard.avg_price || null,
+        // Use floor_price (avg of 4 lowest sales), fallback to latest_price, then avg_price
+        display_price: basicCard.floor_price || basicCard.latest_price || basicCard.avg_price || null,
       }
 
       // Fetch price history for chart

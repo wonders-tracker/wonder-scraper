@@ -30,6 +30,7 @@ type MarketCard = {
     rarity_id: number
     latest_price: number
     avg_price: number
+    floor_price?: number // Avg of 4 lowest sales - THE standard price
     volume_30d: number // Mapped from volume_period (Total/Window)
     volume_change: number // Delta
     price_delta_24h: number
@@ -71,11 +72,12 @@ function MarketAnalysis() {
             return {
                 ...c,
                 latest_price: c.latest_price ?? 0,
+                floor_price: c.floor_price ?? null,
                 volume_30d: volumePeriod,
                 volume_change: c.volume_change ?? 0,
                 price_delta_24h: priceDelta,
                 deal_rating: c.deal_rating ?? 0,
-                market_cap: (c.latest_price ?? 0) * volumePeriod
+                market_cap: (c.floor_price ?? c.latest_price ?? 0) * volumePeriod
             }
         }) as MarketCard[]
     }
@@ -144,9 +146,12 @@ function MarketAnalysis() {
           )
       },
       {
-          accessorKey: 'latest_price',
-          header: ({ column }) => <div className="text-right cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>PRICE</div>,
-          cell: ({ row }) => <div className="text-right font-mono font-bold">${row.original.latest_price.toFixed(2)}</div>
+          accessorKey: 'floor_price',
+          header: ({ column }) => <div className="text-right cursor-pointer" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>FLOOR</div>,
+          cell: ({ row }) => {
+              const price = row.original.floor_price || row.original.latest_price
+              return <div className="text-right font-mono font-bold">{price ? `$${price.toFixed(2)}` : '---'}</div>
+          }
       },
       {
           accessorKey: 'price_delta_24h',
@@ -330,7 +335,7 @@ function MarketAnalysis() {
                     </div>
                     <div className="truncate">
                         <span className="text-sm font-bold">{metrics.highestValue?.name || '-'}</span>
-                        <span className="text-xs text-emerald-500 ml-2">${metrics.highestValue?.latest_price.toFixed(2) || '0'}</span>
+                        <span className="text-xs text-emerald-500 ml-2">${(metrics.highestValue?.floor_price || metrics.highestValue?.latest_price)?.toFixed(2) || '0'}</span>
                     </div>
                 </div>
             </div>

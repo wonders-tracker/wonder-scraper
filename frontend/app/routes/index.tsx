@@ -18,6 +18,8 @@ type Card = {
   // Optional fields that might come from backend logic or joins
   latest_price?: number
   vwap?: number // Volume Weighted Average Price
+  floor_price?: number // Avg of 4 lowest sales (30d) - THE standard price
+  fair_market_price?: number // FMP calculated from formula
   volume_30d?: number
   price_delta_24h?: number // Placeholder for delta
   lowest_ask?: number
@@ -94,7 +96,7 @@ function Home() {
           // low_ask: c.lowest_ask ?? (c.latest_price ?? 0) * 1.1, // Removed mock low_ask
           // Only show delta if price exists
           price_delta_24h: c.price_delta_24h ?? 0,
-          volume_usd_24h: (c.volume_30d ?? 0) * (c.vwap ?? c.latest_price ?? 0), // Calculate dollar volume using VWAP if possible
+          volume_usd_24h: (c.volume_30d ?? 0) * ((c as any).floor_price ?? c.vwap ?? c.latest_price ?? 0), // Calculate dollar volume using floor_price
           highest_bid: (c as any).highest_bid ?? 0
       }))
       .filter(c => (c.latest_price && c.latest_price > 0) || (c.volume_30d && c.volume_30d > 0) || (c.lowest_ask && c.lowest_ask > 0)) // Filter out items with no data
@@ -160,24 +162,24 @@ function Home() {
       },
     },
     {
-      accessorKey: 'vwap', // Changed to VWAP for price column
+      accessorKey: 'floor_price', // Floor price = avg of 4 lowest sales (30d)
       header: ({ column }) => (
         <button
           className="flex items-center gap-1 hover:text-primary uppercase tracking-wider text-xs ml-auto"
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
         >
-          30d Avg
+          Floor
           <ArrowUpDown className="h-3 w-3" />
         </button>
       ),
       cell: ({ row }) => {
-          // Price priority: VWAP > latest_price > lowest_ask (for cards with no sales yet)
-          const salePrice = row.original.vwap || row.original.latest_price
+          // Price priority: floor_price > vwap > latest_price > lowest_ask
+          const floorPrice = row.original.floor_price
+          const salePrice = floorPrice || row.original.vwap || row.original.latest_price
           const askPrice = row.original.lowest_ask || 0
           const price = salePrice || askPrice
           const isAskOnly = !salePrice && askPrice > 0
           const delta = row.original.price_delta_24h || 0
-          const isPositive = delta >= 0
           const hasPrice = price && price > 0
 
           return (
@@ -195,7 +197,7 @@ function Home() {
                         {delta > 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%
                     </span>
                 ) : hasPrice && (
-                    <span className="text-muted-foreground/30 cursor-help" title="Stable price - last sale equals historical average">
+                    <span className="text-muted-foreground/30 cursor-help" title="Stable price - based on recent lowest sales">
                         <Info className="w-3 h-3" />
                     </span>
                 )}
@@ -343,7 +345,7 @@ function Home() {
                                 return
                             }
                             setTrackingCard(row.original)
-                            setTrackForm({ quantity: 1, purchase_price: row.original.vwap || row.original.latest_price || row.original.lowest_ask || 0 })
+                            setTrackForm({ quantity: 1, purchase_price: row.original.floor_price || row.original.vwap || row.original.latest_price || row.original.lowest_ask || 0 })
                         }}
                         className="p-1.5 rounded border border-border hover:bg-primary hover:text-primary-foreground transition-colors group"
                         title={user ? "Add to Portfolio" : "Login to track"}
@@ -415,7 +417,7 @@ function Home() {
       if (!cards) return { totalVolume: 0, totalVolumeUSD: 0, avgVelocity: 0 }
 
       const totalVolume = cards.reduce((sum, c) => sum + (c.volume_30d || 0), 0)
-      const totalVolumeUSD = cards.reduce((sum, c) => sum + ((c.volume_30d || 0) * (c.latest_price || 0)), 0)
+      const totalVolumeUSD = cards.reduce((sum, c) => sum + ((c.volume_30d || 0) * (c.floor_price || c.latest_price || 0)), 0)
       
       // Sale velocity = avg sales per card per day
       // For time periods other than 24h, normalize to daily rate
@@ -622,7 +624,7 @@ function Home() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground uppercase">Current Value</span>
-                  <span className="font-mono font-bold">${(trackForm.quantity * (trackingCard.vwap || trackingCard.latest_price || trackingCard.lowest_ask || 0)).toFixed(2)}</span>
+                  <span className="font-mono font-bold">${(trackForm.quantity * (trackingCard.floor_price || trackingCard.vwap || trackingCard.latest_price || trackingCard.lowest_ask || 0)).toFixed(2)}</span>
                 </div>
               </div>
             </div>

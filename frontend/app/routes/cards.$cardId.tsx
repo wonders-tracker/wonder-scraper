@@ -23,6 +23,8 @@ type CardDetail = {
   inventory?: number
   max_price?: number // Added max_price type
   product_type?: string // Single, Box, Pack, Proof, etc.
+  floor_price?: number // Avg of 4 lowest sales (30d) - THE standard price
+  fair_market_price?: number // FMP calculated from formula
   // Calculated fields for display
   market_cap?: number
 }
@@ -192,7 +194,7 @@ function CardDetail() {
               inventory: basic.inventory ?? market.inventory,
               max_price: basic.max_price ?? market.max_price,
               product_type: basic.product_type,
-              market_cap: (basic.latest_price || market.avg_price || 0) * (basic.volume_30d || market.volume || 0)
+              market_cap: (basic.floor_price || basic.latest_price || market.avg_price || 0) * (basic.volume_30d || market.volume || 0)
           }
       } catch (e) {
           // If market data fails (404 or 401), return basic info
@@ -246,7 +248,7 @@ function CardDetail() {
               json: {
                   card_id: parseInt(cardId),
                   quantity: 1,
-                  purchase_price: card?.latest_price || 0
+                  purchase_price: card?.floor_price || card?.latest_price || 0
               }
           })
       },
@@ -552,9 +554,9 @@ function CardDetail() {
                         
                         <div className="flex gap-8 md:text-right">
                             <div>
-                                <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">Market Price</div>
+                                <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">Floor Price</div>
                                 <div className="text-4xl font-mono font-bold text-emerald-500">
-                                    ${(card.lowest_ask && card.lowest_ask > 0) ? card.lowest_ask.toFixed(2) : (card.latest_price?.toFixed(2) || '---')}
+                                    ${card.floor_price ? card.floor_price.toFixed(2) : (card.lowest_ask && card.lowest_ask > 0) ? card.lowest_ask.toFixed(2) : (card.latest_price?.toFixed(2) || '---')}
                                 </div>
                             </div>
                             <div className="hidden md:block border-l border-border pl-8">
@@ -595,7 +597,7 @@ function CardDetail() {
                             <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
                             Vol (USD)
                         </div>
-                        <div className="text-xl font-mono font-bold">${((card.volume_30d || 0) * (card.latest_price || 0)).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+                        <div className="text-xl font-mono font-bold">${((card.volume_30d || 0) * (card.floor_price || card.latest_price || 0)).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
                     </div>
                      <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
                         <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">
