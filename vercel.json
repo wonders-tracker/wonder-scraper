@@ -1,11 +1,22 @@
 {
+  "version": 2,
   "buildCommand": "npm install && cd frontend && npm install && npm run build:vercel",
   "outputDirectory": "frontend/dist",
   "installCommand": "npm install",
   "framework": null,
+  "functions": {
+    "api/*.tsx": {
+      "memory": 1024,
+      "maxDuration": 10
+    },
+    "api/**/*.tsx": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api).*)",
       "destination": "/index.html"
     }
   ]
