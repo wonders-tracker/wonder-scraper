@@ -24,14 +24,8 @@ export const Route = createFileRoute('/cards/$cardId')({
     // Construct title with key terms for SEO
     const pageTitle = `${cardName} Price & Market Data | ${setName} | ${SITE_NAME}`
 
-    // OG Image with card info
-    const ogImageParams = new URLSearchParams({
-      card: cardName,
-      ...(price && { price }),
-      ...(rarityName && { rarity: rarityName }),
-      set: setName,
-    })
-    const ogImageUrl = `${SITE_URL}/api/og?${ogImageParams.toString()}`
+    // OG Image with card-specific chart and data
+    const ogImageUrl = `${SITE_URL}/api/og/${params.cardId}`
 
     // Canonical URL
     const canonicalUrl = `${SITE_URL}/cards/${params.cardId}`
