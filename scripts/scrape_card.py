@@ -289,23 +289,31 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
             if prices_to_save:
                 session.add_all(prices_to_save)
                 print(f"Saving {len(prices_to_save)} new listings to database")
-            
-            snapshot = MarketSnapshot(
-                card_id=card_id,
-                min_price=stats["min"],
-                max_price=stats["max"],
-                avg_price=stats["avg"],
-                volume=stats["volume"],
-                lowest_ask=active_ask,
-                highest_bid=highest_bid,
-                inventory=active_inv,
-                last_sale_price=last_sale_price,
-                last_sale_date=last_sale_date
-            )
-            session.add(snapshot)
-            session.commit()
-            session.refresh(snapshot)
-            print(f"Saved Snapshot ID: {snapshot.id}")
+
+            # Skip snapshot if we have no meaningful data (prevents bloat)
+            has_sold_data = stats["avg"] > 0 or stats["volume"] > 0
+            has_active_data = active_ask > 0 or active_inv > 0
+
+            if not has_sold_data and not has_active_data:
+                print(f"Skipping snapshot - no data found for this card")
+                session.commit()  # Still commit any prices_to_save
+            else:
+                snapshot = MarketSnapshot(
+                    card_id=card_id,
+                    min_price=stats["min"],
+                    max_price=stats["max"],
+                    avg_price=stats["avg"],
+                    volume=stats["volume"],
+                    lowest_ask=active_ask,
+                    highest_bid=highest_bid,
+                    inventory=active_inv,
+                    last_sale_price=last_sale_price,
+                    last_sale_date=last_sale_date
+                )
+                session.add(snapshot)
+                session.commit()
+                session.refresh(snapshot)
+                print(f"Saved Snapshot ID: {snapshot.id}")
 
 async def main():
     # 1. Get a card from DB
