@@ -29,14 +29,11 @@ export default async function handler(req: Request) {
       }
       const basicCard = await cardRes.json()
 
-      // Fetch market data
-      const marketRes = await fetch(`${API_URL}/cards/${cardId}/market/`)
-      const marketData = marketRes.ok ? await marketRes.json() : {}
-
+      // Use the card data directly - it has latest_price (last sale) and avg_price
       cardData = {
         ...basicCard,
-        latest_price: marketData.avg_price || null,
-        volume_30d: marketData.volume || 0,
+        // Use latest_price from the card (most recent sale), fallback to avg_price
+        display_price: basicCard.latest_price || basicCard.avg_price || null,
       }
 
       // Fetch price history for chart
@@ -49,14 +46,29 @@ export default async function handler(req: Request) {
     }
 
     // Prepare chart data (last 10 points for simplicity)
-    const chartPoints = historyData
+    const filteredHistory = historyData
       .filter(h => h.price && h.sold_date)
       .slice(-10)
-      .map((h, idx) => ({
-        x: idx * 110, // Spacing
-        y: 280 - (h.price / (cardData.latest_price || 1)) * 100, // Scale to fit
-        price: h.price
-      }))
+
+    // Calculate min/max for proper scaling
+    const prices = filteredHistory.map(h => h.price)
+    const minPrice = prices.length > 0 ? Math.min(...prices) : 0
+    const maxPrice = prices.length > 0 ? Math.max(...prices) : 1
+    const priceRange = maxPrice - minPrice || 1 // Avoid division by zero
+
+    // Chart dimensions (within the SVG viewBox)
+    const chartWidth = 1000
+    const chartHeight = 220
+    const chartPadding = 50
+    const chartTop = 40
+
+    const chartPoints = filteredHistory.map((h, idx, arr) => ({
+      // Spread points evenly across chart width
+      x: chartPadding + (arr.length > 1 ? (idx / (arr.length - 1)) * chartWidth : chartWidth / 2),
+      // Scale price to fit chart height (inverted: higher price = lower Y)
+      y: chartTop + chartHeight - ((h.price - minPrice) / priceRange) * chartHeight,
+      price: h.price
+    }))
 
     return new ImageResponse(
       (
@@ -96,7 +108,7 @@ export default async function handler(req: Request) {
               marginBottom: '32px',
             }}
           >
-            ${cardData.latest_price?.toFixed(2) || '---'}
+            ${cardData.display_price?.toFixed(2) || '---'}
           </div>
 
           {/* Chart Area */}
