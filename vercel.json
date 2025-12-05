@@ -3,12 +3,8 @@
   "outputDirectory": "frontend/dist",
   "installCommand": "npm install",
   "framework": null,
-  "functions": {
-    "api/**/*.tsx": {
-      "runtime": "@vercel/edge"
-    }
-  },
   "rewrites": [
+    { "source": "/api/og/:cardId", "destination": "/api/og/[cardId]" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
