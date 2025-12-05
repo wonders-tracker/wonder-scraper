@@ -27,6 +27,6 @@ class Card(SQLModel, table=True):
 
     # Metadata
     set_name: str = Field(default="Wonders of the First", index=True)
-    product_type: str = Field(default="Single") # Single, Box, Pack, Lot
+    product_type: str = Field(default="Single")  # Single, Box, Pack, Bundle, Lot
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

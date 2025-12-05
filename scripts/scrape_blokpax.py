@@ -6,6 +6,9 @@ Usage:
     python scripts/scrape_blokpax.py --slug wotf-art-proofs  # Scrape specific storefront
     python scripts/scrape_blokpax.py --floors           # Only fetch floor prices
     python scripts/scrape_blokpax.py --sales            # Only fetch recent sales
+    python scripts/scrape_blokpax.py --offers           # Only fetch active offers/bids
+    python scripts/scrape_blokpax.py --redemptions      # Scrape collector box redemptions
+    python scripts/scrape_blokpax.py --deep             # Deep scan for floor prices
 """
 import asyncio
 import argparse
@@ -25,6 +28,7 @@ from app.scraper.blokpax import (
     scrape_all_listings,
     scrape_recent_sales,
     scrape_all_offers,
+    scrape_redemption_stats,
     parse_asset,
     parse_sale,
     is_wotf_asset,
@@ -35,6 +39,7 @@ from app.models.blokpax import (
     BlokpaxSale,
     BlokpaxSnapshot,
     BlokpaxOffer as BlokpaxOfferDB,
+    BlokpaxRedemption,
 )
 from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
 
@@ -127,6 +132,18 @@ async def scrape_floor_prices(slugs: List[str] = None, deep_scan: bool = False):
                 print(f"  Floor: No listings")
             print(f"  Listed: {listed} / {total} tokens")
 
+            # Fetch redemption stats for collector boxes
+            total_redeemed = 0
+            max_supply = 0
+            if slug == "wotf-existence-collector-boxes":
+                try:
+                    redemption_stats = await scrape_redemption_stats(slug)
+                    total_redeemed = redemption_stats.get("total_redeemed", 0)
+                    max_supply = redemption_stats.get("max_supply", 0)
+                    print(f"  Redeemed: {total_redeemed}/{max_supply} ({redemption_stats.get('redeemed_pct', 0):.1f}%)")
+                except Exception as e:
+                    print(f"  Error fetching redemptions: {e}")
+
             # Save snapshot
             with Session(engine) as session:
                 snapshot = BlokpaxSnapshot(
@@ -136,6 +153,8 @@ async def scrape_floor_prices(slugs: List[str] = None, deep_scan: bool = False):
                     bpx_price_usd=bpx_price,
                     listed_count=listed,
                     total_tokens=total,
+                    total_redeemed=total_redeemed,
+                    max_supply=max_supply,
                 )
                 session.add(snapshot)
 
@@ -299,6 +318,73 @@ async def scrape_offers(slugs: List[str] = None, max_pages: int = 200):
     return {"total": total_offers, "new": new_offers}
 
 
+async def scrape_redemptions(slug: str = "wotf-existence-collector-boxes"):
+    """
+    Scrapes redemption data from collector boxes activity feed.
+    Stores individual redemption events and updates snapshot with totals.
+    """
+    print("\n" + "=" * 60)
+    print("BLOKPAX REDEMPTION TRACKER")
+    print("=" * 60)
+
+    try:
+        stats = await scrape_redemption_stats(slug)
+
+        total_redeemed = stats["total_redeemed"]
+        max_supply = stats["max_supply"]
+        remaining = stats["remaining"]
+        redeemed_pct = stats["redeemed_pct"]
+        by_box_art = stats["by_box_art"]
+        redemptions = stats["redemptions"]
+
+        print(f"\nCollector Box Redemptions: {total_redeemed}/{max_supply} ({redeemed_pct:.1f}%)")
+        print(f"Remaining: {remaining}")
+        print("\nBy Box Art:")
+        for art, count in sorted(by_box_art.items(), key=lambda x: -x[1]):
+            print(f"  {art}: {count}")
+
+        # Save individual redemptions to database
+        with Session(engine) as session:
+            new_count = 0
+            for r in redemptions:
+                # Check if already indexed
+                existing = session.exec(
+                    select(BlokpaxRedemption).where(
+                        BlokpaxRedemption.asset_id == r.asset_id,
+                        BlokpaxRedemption.redeemed_at == r.redeemed_at
+                    )
+                ).first()
+
+                if existing:
+                    continue
+
+                db_redemption = BlokpaxRedemption(
+                    storefront_slug=slug,
+                    asset_id=r.asset_id,
+                    asset_name=r.asset_name,
+                    box_art=r.box_art,
+                    serial_number=r.serial_number,
+                    redeemed_at=r.redeemed_at,
+                )
+                session.add(db_redemption)
+                new_count += 1
+
+            session.commit()
+            print(f"\nSaved {new_count} new redemption records to database")
+
+        return {
+            "total_redeemed": total_redeemed,
+            "max_supply": max_supply,
+            "remaining": remaining,
+            "redeemed_pct": redeemed_pct,
+            "new_records": new_count,
+        }
+
+    except Exception as e:
+        print(f"Error scraping redemptions: {e}")
+        return {"error": str(e)}
+
+
 async def scrape_all_assets(slug: str, max_pages: int = 10):
     """
     Scrapes all assets from a storefront (for initial indexing).
@@ -406,6 +492,10 @@ async def main():
         "--deep", action="store_true",
         help="Deep scan: check each asset for listings (slow but accurate)"
     )
+    parser.add_argument(
+        "--redemptions", action="store_true",
+        help="Scrape collector box redemption data"
+    )
     args = parser.parse_args()
 
     # Determine which storefronts to scrape
@@ -434,11 +524,16 @@ async def main():
         elif args.sales:
             result = await scrape_sales(slugs, max_pages=args.pages)
             new_sales = result.get("new", 0)
+        elif args.redemptions:
+            await scrape_redemptions()
         else:
-            # Default: floors + sales
+            # Default: floors + sales + redemptions (for collector boxes)
             await scrape_floor_prices(slugs, deep_scan=args.deep)
             result = await scrape_sales(slugs, max_pages=args.pages)
             new_sales = result.get("new", 0)
+            # Also scrape redemptions for collector boxes
+            if "wotf-existence-collector-boxes" in slugs:
+                await scrape_redemptions()
 
     except Exception as e:
         errors += 1

@@ -13,9 +13,9 @@ const RARITY_COLORS: Record<string, string> = {
   'mythic': '#a855f7',
 }
 
-export default async function handler(request: Request) {
+export default async function handler(req: Request) {
   try {
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = new URL(req.url)
 
     const cardName = searchParams.get('card') || 'WondersTracker'
     const price = searchParams.get('price') || ''
@@ -39,7 +39,7 @@ export default async function handler(request: Request) {
             padding: '48px',
           }}
         >
-          {/* Top Bar - Set Name & Rarity */}
+          {/* Top Bar */}
           <div
             style={{
               display: 'flex',
@@ -78,7 +78,7 @@ export default async function handler(request: Request) {
             )}
           </div>
 
-          {/* Logo Box */}
+          {/* Logo */}
           <div
             style={{
               display: 'flex',
@@ -90,15 +90,7 @@ export default async function handler(request: Request) {
               marginBottom: '32px',
             }}
           >
-            <span
-              style={{
-                fontSize: '64px',
-                fontWeight: 'bold',
-                color: '#000',
-              }}
-            >
-              W
-            </span>
+            <span style={{ fontSize: '64px', fontWeight: 'bold', color: '#000' }}>W</span>
           </div>
 
           {/* Card Name */}
@@ -131,7 +123,7 @@ export default async function handler(request: Request) {
             </div>
           )}
 
-          {/* Footer - Brand */}
+          {/* Footer */}
           <div
             style={{
               display: 'flex',
@@ -146,16 +138,10 @@ export default async function handler(request: Request) {
           </div>
         </div>
       ),
-      {
-        width: 1200,
-        height: 630,
-      }
+      { width: 1200, height: 630 }
     )
   } catch (e: any) {
-    console.log(`${e.message}`)
-    return new Response(`Failed to generate the image`, {
-      status: 500,
-    })
+    console.error('OG Image Error:', e)
+    return new Response(`Failed to generate image: ${e.message}`, { status: 500 })
   }
 }
-

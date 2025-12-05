@@ -227,6 +227,120 @@ def _detect_treatment(title: str, product_type: str = "Single") -> str:
     # 5. Default for singles
     return "Classic Paper"
 
+
+def _detect_quantity(title: str, product_type: str = "Single") -> int:
+    """
+    Detects quantity from listing title for multi-unit listings.
+
+    Examples:
+    - "2 Wonders of the First Existence Play Bundle" -> 2
+    - "3x Booster Pack" -> 3
+    - "Lot of 5 packs" -> 5
+    - "Bundle Box 6 Booster Packs" -> 1 (this is a single bundle containing 6 packs)
+
+    Returns 1 if no quantity detected.
+    """
+    title_lower = title.lower()
+
+    # For singles, quantity is usually 1 unless explicitly stated
+    if product_type == "Single":
+        # Look for explicit quantity patterns
+        patterns = [
+            r'^(\d+)x?\s+',          # "2x Card Name" or "2 Card Name"
+            r'lot\s+of\s+(\d+)',     # "lot of 5"
+            r'(\d+)\s*card\s*lot',   # "5 card lot"
+            r'x\s*(\d+)\b',          # "x4" at word boundary
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, title_lower)
+            if match:
+                qty = int(match.group(1))
+                if 1 < qty <= 100:  # Reasonable quantity range
+                    return qty
+        return 1
+
+    # For sealed products (Box, Pack, Bundle), detect multi-unit sales
+    # Important: "Bundle Box with 6 packs" is 1 bundle, not 6 packs
+
+    # First check if this is describing contents (not quantity being sold)
+    content_patterns = [
+        r'(\d+)\s*booster\s*packs?\s*(inside|included|contains|per|each)',
+        r'contains\s*(\d+)',
+        r'includes\s*(\d+)',
+        r'with\s*(\d+)\s*(booster|pack)',
+    ]
+    for pattern in content_patterns:
+        if re.search(pattern, title_lower):
+            # This describes contents, not sale quantity - return 1
+            return 1
+
+    # Now look for actual quantity being sold
+    quantity_patterns = [
+        r'^(\d+)\s*x?\s*(wonders|existence|booster|play|collector|bundle|box|pack)',  # "2 Wonders of..." or "2x Bundle"
+        r'^(\d+)\s+(?!st\b|nd\b|rd\b|th\b)',  # "2 Something" but not "1st Edition"
+        r'(\d+)\s*(?:ct|count)\b',            # "5ct" or "5 count"
+        r'lot\s+of\s+(\d+)',                  # "lot of 3"
+        r'set\s+of\s+(\d+)',                  # "set of 2"
+    ]
+
+    for pattern in quantity_patterns:
+        match = re.search(pattern, title_lower)
+        if match:
+            qty = int(match.group(1))
+            if 1 < qty <= 50:  # Reasonable quantity for sealed products
+                return qty
+
+    return 1
+
+
+def _detect_bundle_pack_count(title: str) -> int:
+    """
+    Detects how many packs are in a bundle/box from the title.
+
+    Known WOTF bundle products:
+    - Play Bundle / Blaster Box: 6 packs
+    - Collector Booster Box: 12 packs
+    - Serialized Advantage: 4 packs
+    - Collector Box (30-pack): 30 packs
+
+    Returns 0 if not a bundle (i.e., single pack listing).
+    """
+    title_lower = title.lower()
+
+    # Known WOTF bundle products
+    if "play bundle" in title_lower or "blaster box" in title_lower:
+        return 6  # Play Bundle / Blaster Box = 6 packs
+    if "serialized advantage" in title_lower:
+        return 4  # Serialized Advantage = 4 packs
+    if "collector booster" in title_lower and "box" in title_lower:
+        return 12  # Collector Booster Box = 12 packs
+
+    # Check for explicit pack counts in title (for 30-pack boxes etc.)
+    if "collector" in title_lower and "30" in title_lower:
+        return 30
+
+    # Try to extract pack count from title patterns
+    # Be careful not to match single pack listings like "pack + 12 bonus cards"
+    patterns = [
+        r'box\s*(?:of\s*)?(\d+)\s*(?:booster\s*)?packs?',  # "box of 6 packs"
+        r'(\d+)\s*pack\s*box',                              # "6 pack box"
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, title_lower)
+        if match:
+            count = int(match.group(1))
+            if 2 <= count <= 36:  # Reasonable pack count for bundles
+                return count
+
+    # Don't match single packs with bonus cards
+    # e.g., "COLLECTOR BOOSTER PACK Sealed +12 bonus" should return 0
+    if "bonus" in title_lower or "+ " in title_lower:
+        return 0
+
+    return 0
+
+
 def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool:
     """
     Validates if the listing title is a good match for the card name and rarity.
@@ -285,6 +399,22 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
     # Detect product types - use more lenient matching for sealed products
     product_type_keywords = ['box', 'pack', 'case', 'lot', 'bundle', 'collection', 'bulk', 'sealed']
     is_product = any(keyword in name_lower for keyword in product_type_keywords)
+
+    # CRITICAL: Distinguish between individual packs vs bundles/boxes
+    # When searching for "Booster Pack", reject listings that are clearly bundles
+    is_searching_for_pack = 'pack' in name_lower and 'bundle' not in name_lower and 'box' not in name_lower
+    is_listing_bundle = any(kw in title_lower for kw in [
+        'bundle', 'blaster box', 'play bundle', 'collector box',
+        'serialized advantage', '6 pack', '12 pack', '30 pack',
+        # Multi-unit indicators
+        '2x ', '3x ', '4x ', '5x ', '2 wonders', '3 wonders', '4 wonders', '5 wonders',
+    ])
+    # Also check for quantity patterns at start of title
+    if re.match(r'^\d+\s+(wonders|existence|play|collector|booster)', title_lower):
+        is_listing_bundle = True
+
+    if is_searching_for_pack and is_listing_bundle:
+        return False  # Reject bundle listings when searching for individual packs
 
     # 1. Name Validation
 
@@ -685,17 +815,38 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
         # AI extractor doesn't understand sealed product treatments
         if product_type in ("Box", "Pack", "Lot", "Bundle"):
             treatment = _detect_treatment(metadata["title"], product_type)
+            # Use rule-based quantity detection for sealed products
+            quantity = _detect_quantity(metadata["title"], product_type)
         else:
             # For singles, use AI extraction with fallback to rule-based if low confidence
             treatment = extracted_data["treatment"]
+            quantity = extracted_data["quantity"]
             if extracted_data["confidence"] < 0.7:
                 treatment = _detect_treatment(metadata["title"], product_type)
+                # Also use rule-based quantity for low confidence
+                rule_qty = _detect_quantity(metadata["title"], product_type)
+                if rule_qty > 1:
+                    quantity = rule_qty
+
+        # Normalize price per unit for multi-quantity listings
+        raw_price = metadata["price"]
+        unit_price = raw_price / quantity if quantity > 1 else raw_price
+
+        # For packs being sold as bundles, calculate per-pack price
+        # e.g., "2 Play Bundle Boxes" at $59.99 = 2 bundles * 6 packs = 12 packs
+        # Per-pack price = $59.99 / 12 = $4.99
+        packs_per_bundle = _detect_bundle_pack_count(metadata["title"]) if product_type == "Pack" else 0
+        if packs_per_bundle > 0:
+            total_packs = quantity * packs_per_bundle
+            unit_price = raw_price / total_packs
+            # Update quantity to reflect total packs
+            quantity = total_packs
 
         mp = MarketPrice(
             card_id=card_id,
             title=metadata["title"],
-            price=metadata["price"],
-            quantity=extracted_data["quantity"],
+            price=round(unit_price, 2),  # Store normalized per-unit price
+            quantity=quantity,
             sold_date=metadata["sold_date"],
             listing_type=listing_type,
             treatment=treatment,

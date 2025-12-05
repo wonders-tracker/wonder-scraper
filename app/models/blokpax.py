@@ -146,4 +146,22 @@ class BlokpaxSnapshot(SQLModel, table=True):
     volume_24h_usd: Optional[float] = None
     sales_24h: int = Field(default=0)
 
+    # Redemption tracking (for collector boxes)
+    total_redeemed: int = Field(default=0)
+    max_supply: int = Field(default=0)
+
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class BlokpaxRedemption(SQLModel, table=True):
+    """
+    Tracks individual redemption events from Blokpax activity feed.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    storefront_slug: str = Field(index=True)
+    asset_id: str = Field(index=True)
+    asset_name: str
+    box_art: Optional[str] = None  # e.g. "Dragon", "First Form: Solfera"
+    serial_number: Optional[str] = None  # e.g. "929/2699"
+    redeemed_at: datetime = Field(index=True)
+    scraped_at: datetime = Field(default_factory=datetime.utcnow)

@@ -406,7 +406,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
         # Step 1: Collect all asset IDs from bulk endpoint AND check for floor_listing data
         all_asset_ids = []  # Store as strings (API returns mixed types)
         bulk_has_listings = False  # Track if bulk endpoint includes floor_listing data
-        page = 1
+        page = 0  # Blokpax API uses 0-indexed pagination
         total_pages = 1
         total_assets = 0
 
@@ -436,7 +436,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
                     assets = data.get("data", [])
                     meta = data.get("meta", {})
 
-                    if page == 1:
+                    if page == 0:  # First page (0-indexed)
                         total_pages = meta.get("last_page", 1)
                         total_assets = meta.get("total", 0)
                         print(f"  Total assets: {total_assets} across {total_pages} pages")
@@ -829,3 +829,134 @@ async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 
     print(f"[Blokpax] Found {len(all_offers)} total offers in {slug}")
 
     return all_offers
+
+
+@dataclass
+class BlokpaxRedemptionData:
+    """Parsed redemption activity from Blokpax."""
+    asset_id: str
+    asset_name: str
+    box_art: Optional[str]
+    serial_number: Optional[str]
+    redeemed_at: datetime
+
+
+# Max supply for collector boxes (from storefront description)
+COLLECTOR_BOX_MAX_SUPPLY = 3393
+
+
+async def fetch_redemptions(slug: str, max_pages: int = 50) -> List[BlokpaxRedemptionData]:
+    """
+    Fetches redemption activity from Blokpax activity feed.
+
+    The activity API returns events with action='redemption' for redeemed boxes.
+    Uses the v4 API: https://api.blokpax.com/api/v4/storefront/{slug}/activity
+
+    Args:
+        slug: Storefront slug (e.g., 'wotf-existence-collector-boxes')
+        max_pages: Maximum pages to fetch (100 items per page)
+
+    Returns:
+        List of BlokpaxRedemptionData objects
+    """
+    redemptions = []
+
+    async with httpx.AsyncClient() as client:
+        for page in range(1, max_pages + 1):
+            try:
+                url = f"https://api.blokpax.com/api/v4/storefront/{slug}/activity"
+                response = await client.get(
+                    url,
+                    params={"page": page, "query": ""},
+                    timeout=15.0
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                items = data.get("data", [])
+                if not items:
+                    break
+
+                for item in items:
+                    action = item.get("action")
+                    if action != "redemption":
+                        continue
+
+                    asset = item.get("asset", {})
+                    asset_id = str(asset.get("id", ""))
+                    asset_name = asset.get("name", "Unknown")
+
+                    # Extract box art and serial from attributes
+                    box_art = None
+                    serial_number = None
+                    for attr in asset.get("attributes", []):
+                        if attr.get("trait_type") == "Box Art":
+                            box_art = attr.get("value")
+                        elif attr.get("trait_type") == "Serial Number":
+                            serial_number = attr.get("value")
+
+                    # Parse timestamp
+                    timestamp_str = item.get("timestamp")
+                    redeemed_at = _parse_datetime(timestamp_str) or datetime.utcnow()
+
+                    redemptions.append(BlokpaxRedemptionData(
+                        asset_id=asset_id,
+                        asset_name=asset_name,
+                        box_art=box_art,
+                        serial_number=serial_number,
+                        redeemed_at=redeemed_at
+                    ))
+
+                # Check if we've reached the last page
+                meta = data.get("meta", {})
+                last_page = meta.get("last_page", 1)
+                if page >= last_page:
+                    break
+
+                await asyncio.sleep(0.3)
+
+            except Exception as e:
+                print(f"[Blokpax] Error fetching redemptions page {page}: {e}")
+                break
+
+    return redemptions
+
+
+async def scrape_redemption_stats(slug: str = "wotf-existence-collector-boxes") -> Dict[str, Any]:
+    """
+    Scrapes redemption statistics for a storefront.
+
+    Returns a dict with:
+    - total_redeemed: Number of boxes redeemed
+    - max_supply: Maximum supply (3393 for collector boxes)
+    - remaining: Boxes not yet redeemed
+    - redeemed_pct: Percentage redeemed
+    - by_box_art: Dict of redemption counts by box art type
+    - redemptions: List of individual redemption data
+    """
+    print(f"[Blokpax] Fetching redemption data for {slug}...")
+
+    redemptions = await fetch_redemptions(slug)
+
+    # Count by box art type
+    by_box_art: Dict[str, int] = {}
+    for r in redemptions:
+        if r.box_art:
+            by_box_art[r.box_art] = by_box_art.get(r.box_art, 0) + 1
+
+    total_redeemed = len(redemptions)
+    max_supply = COLLECTOR_BOX_MAX_SUPPLY
+    remaining = max_supply - total_redeemed
+    redeemed_pct = (total_redeemed / max_supply * 100) if max_supply > 0 else 0
+
+    print(f"[Blokpax] Redemption stats: {total_redeemed}/{max_supply} ({redeemed_pct:.1f}% redeemed)")
+
+    return {
+        "slug": slug,
+        "total_redeemed": total_redeemed,
+        "max_supply": max_supply,
+        "remaining": remaining,
+        "redeemed_pct": redeemed_pct,
+        "by_box_art": by_box_art,
+        "redemptions": redemptions
+    }

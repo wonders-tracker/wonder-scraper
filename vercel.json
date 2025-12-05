@@ -1,24 +1,21 @@
 {
   "version": 2,
-  "buildCommand": "npm install && cd frontend && npm install && npm run build:vercel && mkdir -p ../public && cp -r dist/* ../public/",
-  "outputDirectory": "public",
-  "installCommand": "npm install",
-  "framework": null,
-  "functions": {
-    "api/*.tsx": {
-      "memory": 1024,
-      "maxDuration": 10
-    },
-    "api/**/*.tsx": {
-      "memory": 1024,
-      "maxDuration": 10
-    }
-  },
-  "rewrites": [
+  "builds": [
     {
-      "source": "/((?!api).*)",
-      "destination": "/index.html"
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "api/**/*.tsx",
+      "use": "@vercel/edge"
     }
+  ],
+  "routes": [
+    { "src": "/api/og/(.+)", "dest": "/api/og/[cardId].tsx" },
+    { "src": "/api/og", "dest": "/api/og.tsx" },
+    { "src": "/(.*)", "dest": "/frontend/$1" }
   ]
 }
-
