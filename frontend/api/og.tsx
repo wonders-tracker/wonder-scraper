@@ -4,13 +4,26 @@ export const config = {
   runtime: 'edge',
 }
 
+// Rarity color mapping
+const RARITY_COLORS: Record<string, string> = {
+  'common': '#9ca3af',
+  'uncommon': '#22c55e',
+  'rare': '#3b82f6',
+  'legendary': '#f59e0b',
+  'mythic': '#a855f7',
+}
+
 export default async function handler(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    
+
     const cardName = searchParams.get('card') || 'WondersTracker'
     const price = searchParams.get('price') || ''
-    
+    const rarity = searchParams.get('rarity') || ''
+    const setName = searchParams.get('set') || 'Wonders of the First'
+
+    const rarityColor = RARITY_COLORS[rarity.toLowerCase()] || '#10b981'
+
     return new ImageResponse(
       (
         <div
@@ -21,25 +34,65 @@ export default async function handler(request: Request) {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#000',
+            backgroundColor: '#0a0a0a',
             fontFamily: 'monospace',
+            padding: '48px',
           }}
         >
+          {/* Top Bar - Set Name & Rarity */}
+          <div
+            style={{
+              display: 'flex',
+              width: '100%',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '24px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                fontSize: '20px',
+                color: '#6b7280',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+              }}
+            >
+              {setName}
+            </div>
+            {rarity && (
+              <div
+                style={{
+                  display: 'flex',
+                  fontSize: '18px',
+                  color: rarityColor,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  padding: '4px 12px',
+                  border: `2px solid ${rarityColor}`,
+                  borderRadius: '4px',
+                }}
+              >
+                {rarity}
+              </div>
+            )}
+          </div>
+
           {/* Logo Box */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: '120px',
-              height: '120px',
+              width: '100px',
+              height: '100px',
               backgroundColor: '#fff',
-              marginBottom: '40px',
+              marginBottom: '32px',
             }}
           >
             <span
               style={{
-                fontSize: '80px',
+                fontSize: '64px',
                 fontWeight: 'bold',
                 color: '#000',
               }}
@@ -47,46 +100,49 @@ export default async function handler(request: Request) {
               W
             </span>
           </div>
-          
+
           {/* Card Name */}
           <div
             style={{
               display: 'flex',
-              fontSize: '48px',
+              fontSize: '52px',
               fontWeight: 'bold',
               color: '#fff',
-              marginBottom: '20px',
+              marginBottom: '16px',
               maxWidth: '90%',
               textAlign: 'center',
             }}
           >
             {cardName}
           </div>
-          
+
           {/* Price */}
           {price && (
             <div
               style={{
                 display: 'flex',
-                fontSize: '36px',
+                fontSize: '64px',
+                fontWeight: 'bold',
                 color: '#10b981',
-                marginBottom: '20px',
+                marginBottom: '24px',
               }}
             >
               {price}
             </div>
           )}
-          
-          {/* Footer */}
+
+          {/* Footer - Brand */}
           <div
             style={{
               display: 'flex',
-              fontSize: '24px',
+              position: 'absolute',
+              bottom: '32px',
+              fontSize: '20px',
               color: '#6b7280',
-              marginTop: '20px',
+              letterSpacing: '0.05em',
             }}
           >
-            wonderstracker.com
+            Track prices at wonderstracker.com
           </div>
         </div>
       ),

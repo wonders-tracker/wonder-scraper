@@ -43,10 +43,40 @@ type MarketPrice = {
     shipping_cost?: number
 }
 
+// Server-side loader for SEO meta tags
+const API_URL = import.meta.env.VITE_API_URL || 'https://wonder-scraper-production.up.railway.app/api/v1'
+
+async function fetchCardForSEO(cardId: string) {
+  try {
+    const [cardRes, marketRes] = await Promise.all([
+      fetch(`${API_URL}/cards/${cardId}`),
+      fetch(`${API_URL}/cards/${cardId}/market`),
+    ])
+
+    if (!cardRes.ok) return null
+
+    const card = await cardRes.json()
+    const market = marketRes.ok ? await marketRes.json() : {}
+
+    return {
+      ...card,
+      latest_price: market.avg_price,
+      volume_30d: market.volume,
+      lowest_ask: market.lowest_ask,
+    }
+  } catch {
+    return null
+  }
+}
+
 export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: '/cards/$cardId',
   component: CardDetail,
+  loader: async ({ params }) => {
+    const card = await fetchCardForSEO(params.cardId)
+    return { card }
+  },
 })
 
 type TimeRange = '7d' | '30d' | '90d' | 'all'
