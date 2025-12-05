@@ -26,39 +26,46 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     # Build optimized query list (max 2-3 queries)
     unique_queries = []
 
-    # ALWAYS include "Wonders of the First" to filter out non-Wonders products
-    primary_query = f"Wonders of the First {card_name}"
-    unique_queries.append(primary_query)
+    # Check if card_name already contains "Wonders of the First" to avoid doubling
+    has_wonders_prefix = "wonders of the first" in card_name.lower()
+
+    # Primary query - add prefix only if not already present
+    if has_wonders_prefix:
+        unique_queries.append(card_name)
+    else:
+        unique_queries.append(f"Wonders of the First {card_name}")
 
     # Add product-type specific fallback
     if product_type == "Box":
         # For boxes, also try with "Existence" set name
-        unique_queries.append(f"Wonders of the First Existence {card_name}")
-        # Also try just the card name for boxes
+        if not has_wonders_prefix:
+            unique_queries.append(f"Wonders of the First Existence {card_name}")
         unique_queries.append(card_name)
 
     elif product_type == "Pack":
-        # Use actual card name, not generic "Booster Pack"
+        # Use actual card name
         unique_queries.append(card_name)
+        # Add generic booster pack search if not already searching for booster
         if "booster" not in card_name.lower():
-            unique_queries.append(f"Wonders of the First Booster Pack")
+            unique_queries.append("Wonders of the First Booster Pack")
 
     elif product_type == "Lot":
         # Use actual card name for lots
         unique_queries.append(card_name)
-        # Also try generic searches
-        unique_queries.append(f"Wonders of the First Lot")
-        unique_queries.append(f"Wonders of the First Bundle")
+        # Add generic lot/bundle searches
+        unique_queries.append("Wonders of the First Lot")
+        unique_queries.append("Wonders of the First Bundle")
 
     elif product_type == "Proof":
         # Use actual card name for proofs
         unique_queries.append(card_name)
         if "proof" not in card_name.lower():
-            unique_queries.append(f"Wonders of the First Proof")
+            unique_queries.append("Wonders of the First Proof")
 
     else:
         # Single cards - add Existence set search
-        unique_queries.append(f"Wonders of the First Existence {card_name}")
+        if not has_wonders_prefix:
+            unique_queries.append(f"Wonders of the First Existence {card_name}")
         # For very specific cards, add rarity if available
         if rarity_name and rarity_name.lower() not in ['common', 'uncommon']:
             unique_queries.append(f"{card_name} {rarity_name} Wonders")
