@@ -1106,13 +1106,20 @@ function CardDetail() {
                                 </div>
                             </div>
 
-                            <div className="overflow-x-auto max-h-[500px]">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="text-xs uppercase bg-white text-black sticky top-0">
+                            <div className="overflow-y-auto max-h-[500px]">
+                                <table className="w-full text-sm text-left table-fixed">
+                                    <colgroup>
+                                        <col className="w-20" />
+                                        <col className="w-20" />
+                                        <col className="w-24" />
+                                        <col />
+                                        <col className="w-16" />
+                                    </colgroup>
+                                    <thead className="text-xs uppercase bg-zinc-100 text-zinc-600 sticky top-0">
                                         {table.getHeaderGroups().map(headerGroup => (
                                             <tr key={headerGroup.id}>
                                                 {headerGroup.headers.map(header => (
-                                                    <th key={header.id} className="px-4 py-3 font-medium border-b border-border">
+                                                    <th key={header.id} className="px-3 py-2 font-medium border-b border-border">
                                                         {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                                     </th>
                                                 ))}
@@ -1130,7 +1137,7 @@ function CardDetail() {
                                                     onClick={() => setSelectedListing(row.original)}
                                                 >
                                                     {row.getVisibleCells().map(cell => (
-                                                        <td key={cell.id} className="px-4 py-3 whitespace-nowrap">
+                                                        <td key={cell.id} className="px-3 py-2 truncate">
                                                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                                         </td>
                                                     ))}
@@ -1208,14 +1215,14 @@ function CardDetail() {
                                 <p className="text-[10px] text-muted-foreground mt-1">Fair Market Price by card variant (30d median)</p>
                             </div>
 
-                            <div className="overflow-x-auto max-h-[500px]">
+                            <div className="overflow-y-auto max-h-[500px]">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-xs uppercase bg-zinc-900 text-zinc-400 sticky top-0">
+                                    <thead className="text-xs uppercase bg-zinc-100 text-zinc-600 sticky top-0">
                                         <tr>
-                                            <th className="px-4 py-3 font-medium border-b border-border">Treatment</th>
-                                            <th className="px-4 py-3 font-medium border-b border-border text-right">FMP</th>
-                                            <th className="px-4 py-3 font-medium border-b border-border text-right">Range</th>
-                                            <th className="px-4 py-3 font-medium border-b border-border text-right">Sales</th>
+                                            <th className="px-4 py-2 font-medium border-b border-border">Treatment</th>
+                                            <th className="px-4 py-2 font-medium border-b border-border text-right">FMP</th>
+                                            <th className="px-4 py-2 font-medium border-b border-border text-right">Range</th>
+                                            <th className="px-4 py-2 font-medium border-b border-border text-right">Sales</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border/50">

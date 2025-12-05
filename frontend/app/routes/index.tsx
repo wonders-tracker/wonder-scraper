@@ -162,51 +162,55 @@ function Home() {
       },
     },
     {
-      accessorKey: 'floor_price', // Floor price = avg of 4 lowest sales (30d) - THE FMP baseline
+      accessorKey: 'floor_price', // Floor price = avg of 4 lowest sales (30d)
       header: ({ column }) => (
         <button
-          className="flex flex-col items-end gap-0 hover:text-primary uppercase tracking-wider text-xs ml-auto"
+          className="flex items-center gap-1 hover:text-primary uppercase tracking-wider text-xs ml-auto"
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          title="Fair Market Price based on floor (avg of 4 lowest sales)"
+          title="Floor Price (avg of 4 lowest sales in 30d)"
         >
-          <span className="flex items-center gap-1">
-            FMP
-            <ArrowUpDown className="h-3 w-3" />
-          </span>
-          <span className="text-[8px] text-muted-foreground/60 font-normal">30d Floor</span>
+          Floor
+          <ArrowUpDown className="h-3 w-3" />
         </button>
       ),
       cell: ({ row }) => {
-          // Price priority: floor_price > vwap > latest_price > lowest_ask
           const floorPrice = row.original.floor_price
-          const salePrice = floorPrice || row.original.vwap || row.original.latest_price
-          const askPrice = row.original.lowest_ask || 0
-          const price = salePrice || askPrice
-          const isAskOnly = !salePrice && askPrice > 0
           const hasFloor = !!floorPrice && floorPrice > 0
+          return (
+            <div className="text-right font-mono text-sm">
+                {hasFloor ? `$${floorPrice.toFixed(2)}` : '---'}
+            </div>
+          )
+      }
+    },
+    {
+      accessorKey: 'vwap', // FMP / median price
+      header: ({ column }) => (
+        <button
+          className="flex items-center gap-1 hover:text-primary uppercase tracking-wider text-xs ml-auto"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          title="Fair Market Price (30d median)"
+        >
+          FMP
+          <ArrowUpDown className="h-3 w-3" />
+        </button>
+      ),
+      cell: ({ row }) => {
+          const fmp = row.original.vwap || row.original.fair_market_price
+          const hasFMP = !!fmp && fmp > 0
           const delta = row.original.price_delta_24h || 0
-          const hasPrice = price && price > 0
-
           return (
             <div className="text-right flex items-center justify-end gap-2">
-                <span className={clsx(
-                    "font-mono text-sm font-semibold",
-                    hasFloor ? "text-blue-400" : isAskOnly ? "text-muted-foreground" : "text-foreground"
-                )}>
-                    {hasPrice ? `$${price.toFixed(2)}` : '---'}
-                    {isAskOnly && <span className="text-[9px] ml-1">(ask)</span>}
+                <span className="font-mono text-sm">
+                    {hasFMP ? `$${fmp.toFixed(2)}` : '---'}
                 </span>
-                {hasPrice && delta !== 0 ? (
+                {hasFMP && delta !== 0 && (
                     <span className={clsx(
                         "text-[10px] font-mono px-1 py-0.5 rounded",
                         delta > 0 ? "text-emerald-400 bg-emerald-500/10" :
                         "text-red-400 bg-red-500/10"
                     )}>
                         {delta > 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%
-                    </span>
-                ) : hasPrice && (
-                    <span className="text-muted-foreground/30 cursor-help" title="Stable price - based on recent lowest sales">
-                        <Info className="w-3 h-3" />
                     </span>
                 )}
             </div>
