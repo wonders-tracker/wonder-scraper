@@ -14,6 +14,7 @@ type Card = {
   name: string
   set_name: string
   rarity_id: number
+  rarity_name?: string // Rarity display name from backend join
   // Optional fields that might come from backend logic or joins
   latest_price?: number
   vwap?: number // Volume Weighted Average Price
@@ -22,7 +23,7 @@ type Card = {
   lowest_ask?: number
   inventory?: number
   volume_usd_24h?: number // New field for dollar volume
-  product_type?: string // Single, Box, Pack, Proof
+  product_type?: string // Single, Box, Pack, Bundle, Proof, Lot
   max_price?: number // Highest confirmed sale
   last_sale_treatment?: string // Treatment/variant of last sale
 }
