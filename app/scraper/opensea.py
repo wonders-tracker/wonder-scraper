@@ -1,12 +1,34 @@
 """
-Scraper for OpenSea collections using Pydoll.
+Scraper for OpenSea collections using Pydoll and the OpenSea API.
 """
 import asyncio
-from typing import Dict, Any, Optional
+import aiohttp
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass
+from datetime import datetime
 from app.scraper.browser import get_page_content
 from bs4 import BeautifulSoup
 import re
+import os
 from app.services.crypto import get_eth_price
+
+# OpenSea API Configuration
+OPENSEA_API_KEY = os.environ.get("OPENSEA_API_KEY", "")
+OPENSEA_API_BASE = "https://api.opensea.io/api/v2"
+
+
+@dataclass
+class OpenSeaSale:
+    """Represents a single OpenSea sale event."""
+    token_id: str
+    token_name: str
+    price_eth: float
+    price_usd: float
+    seller: str
+    buyer: str
+    sold_at: datetime
+    tx_hash: str
+    image_url: Optional[str] = None
 
 async def scrape_opensea_collection(collection_url: str) -> Dict[str, Any]:
     """
@@ -164,3 +186,245 @@ async def scrape_opensea_collection(collection_url: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"Error scraping OpenSea: {e}")
         return {}
+
+
+async def scrape_opensea_sales(
+    collection_slug: str,
+    limit: int = 50,
+    event_type: str = "sale"
+) -> List[OpenSeaSale]:
+    """
+    Scrape sales history from OpenSea using their public API.
+
+    Args:
+        collection_slug: The OpenSea collection slug (e.g., 'wotf-character-proofs')
+        limit: Maximum number of sales to fetch (max 50 per request)
+        event_type: Event type to filter ('sale' for completed sales)
+
+    Returns:
+        List of OpenSeaSale objects
+    """
+    print(f"[OpenSea] Fetching sales for collection: {collection_slug}")
+
+    # Get ETH price for USD conversion
+    eth_price_usd = 0.0
+    try:
+        eth_price_usd = await get_eth_price()
+        print(f"[OpenSea] ETH Price: ${eth_price_usd:.2f}")
+    except Exception as e:
+        print(f"[OpenSea] Failed to fetch ETH price: {e}")
+        eth_price_usd = 3500.0  # Fallback estimate
+
+    sales: List[OpenSeaSale] = []
+
+    # OpenSea API v2 endpoint for collection events
+    url = f"{OPENSEA_API_BASE}/events/collection/{collection_slug}"
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; WonderScraper/1.0)"
+    }
+
+    # Add API key if available
+    if OPENSEA_API_KEY:
+        headers["X-API-KEY"] = OPENSEA_API_KEY
+
+    params = {
+        "event_type": event_type,
+        "limit": min(limit, 50)  # API max is 50
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params) as response:
+                if response.status == 401:
+                    print("[OpenSea] API key required or invalid. Falling back to web scraping.")
+                    return await _scrape_opensea_sales_web(collection_slug, eth_price_usd, limit)
+
+                if response.status == 429:
+                    print("[OpenSea] Rate limited. Try again later.")
+                    return []
+
+                if response.status != 200:
+                    print(f"[OpenSea] API error: {response.status}")
+                    # Try web scraping fallback
+                    return await _scrape_opensea_sales_web(collection_slug, eth_price_usd, limit)
+
+                data = await response.json()
+                events = data.get("asset_events", [])
+
+                print(f"[OpenSea] Found {len(events)} sale events")
+
+                for event in events:
+                    try:
+                        # Extract payment info
+                        payment = event.get("payment", {})
+                        quantity_raw = payment.get("quantity", "0")
+                        decimals = int(payment.get("decimals", 18))
+                        price_eth = int(quantity_raw) / (10 ** decimals)
+                        price_usd = price_eth * eth_price_usd
+
+                        # Extract NFT info
+                        nft = event.get("nft", {})
+                        token_id = nft.get("identifier", "")
+                        token_name = nft.get("name", f"#{token_id}")
+                        image_url = nft.get("image_url")
+
+                        # Extract transaction info
+                        tx = event.get("transaction", {})
+                        tx_hash = tx.get("hash", "")
+
+                        # Extract timestamp
+                        event_timestamp = event.get("event_timestamp", "")
+                        sold_at = datetime.fromisoformat(event_timestamp.replace("Z", "+00:00")) if event_timestamp else datetime.utcnow()
+
+                        # Extract seller/buyer
+                        seller = event.get("seller", "")
+                        buyer = event.get("buyer", "")
+
+                        sale = OpenSeaSale(
+                            token_id=token_id,
+                            token_name=token_name,
+                            price_eth=price_eth,
+                            price_usd=price_usd,
+                            seller=seller,
+                            buyer=buyer,
+                            sold_at=sold_at,
+                            tx_hash=tx_hash,
+                            image_url=image_url
+                        )
+                        sales.append(sale)
+
+                    except Exception as e:
+                        print(f"[OpenSea] Error parsing event: {e}")
+                        continue
+
+    except aiohttp.ClientError as e:
+        print(f"[OpenSea] Network error: {e}")
+        return await _scrape_opensea_sales_web(collection_slug, eth_price_usd, limit)
+    except Exception as e:
+        print(f"[OpenSea] Error fetching sales: {e}")
+        return []
+
+    print(f"[OpenSea] Parsed {len(sales)} sales")
+    return sales
+
+
+async def _scrape_opensea_sales_web(
+    collection_slug: str,
+    eth_price_usd: float,
+    limit: int = 50
+) -> List[OpenSeaSale]:
+    """
+    Fallback: Scrape sales from OpenSea activity page by parsing embedded URQL JSON data.
+    OpenSea embeds GraphQL response data in script tags that we can extract.
+    """
+    print(f"[OpenSea] Web scraping activity page for {collection_slug}")
+
+    activity_url = f"https://opensea.io/collection/{collection_slug}/activity?eventTypes=SUCCESSFUL"
+
+    sales: List[OpenSeaSale] = []
+
+    try:
+        html = await get_page_content(activity_url)
+        await asyncio.sleep(3)  # Wait for JS to load
+
+        soup = BeautifulSoup(html, "lxml")
+        import json
+
+        # Find script tags with embedded URQL/GraphQL data
+        scripts = soup.find_all("script")
+
+        for script in scripts:
+            if not script.string:
+                continue
+
+            content = script.string
+
+            # Look for collectionActivity data in URQL transport
+            if 'collectionActivity' not in content:
+                continue
+
+            # Extract JSON from: (window[Symbol.for("urql_transport")] ??= []).push({...})
+            json_matches = re.findall(r'\.push\((\{.*?\})\)', content, re.DOTALL)
+
+            for match in json_matches:
+                try:
+                    data = json.loads(match)
+                    rehydrate = data.get('rehydrate', {})
+
+                    for key, value in rehydrate.items():
+                        activity = value.get('data', {}).get('collectionActivity', {})
+                        if not activity:
+                            continue
+
+                        items = activity.get('items', [])
+                        print(f"[OpenSea] Found {len(items)} activity items in embedded data")
+
+                        for item in items[:limit]:
+                            try:
+                                # Only process sales
+                                if item.get('__typename') != 'Sale':
+                                    continue
+
+                                # Extract timestamp
+                                event_time = item.get('eventTime', '')
+                                try:
+                                    sold_at = datetime.fromisoformat(event_time.replace('Z', '+00:00'))
+                                except:
+                                    sold_at = datetime.utcnow()
+
+                                # Extract transaction hash
+                                tx_hash = item.get('transactionHash', '')
+
+                                # Extract NFT info
+                                nft = item.get('item', {})
+                                token_id = nft.get('tokenId', '')
+                                token_name = nft.get('name', f'#{token_id}')
+                                image_url = nft.get('imageUrl', '')
+
+                                # Extract price
+                                price_data = item.get('price', {})
+                                token_price = price_data.get('token', {})
+                                price_eth = float(token_price.get('unit', 0))
+                                price_usd = float(price_data.get('usd', price_eth * eth_price_usd))
+
+                                # Extract seller/buyer if available
+                                seller = item.get('seller', {})
+                                buyer = item.get('buyer', {})
+                                seller_addr = seller.get('address', '') if isinstance(seller, dict) else str(seller)
+                                buyer_addr = buyer.get('address', '') if isinstance(buyer, dict) else str(buyer)
+
+                                sale = OpenSeaSale(
+                                    token_id=token_id,
+                                    token_name=token_name,
+                                    price_eth=price_eth,
+                                    price_usd=price_usd,
+                                    seller=seller_addr,
+                                    buyer=buyer_addr,
+                                    sold_at=sold_at,
+                                    tx_hash=tx_hash,
+                                    image_url=image_url
+                                )
+                                sales.append(sale)
+
+                            except Exception as e:
+                                print(f"[OpenSea] Error parsing sale item: {e}")
+                                continue
+
+                        # If we found sales, we're done
+                        if sales:
+                            break
+
+                except json.JSONDecodeError:
+                    continue
+
+            # If we found sales, stop searching
+            if sales:
+                break
+
+    except Exception as e:
+        print(f"[OpenSea] Web scraping error: {e}")
+
+    print(f"[OpenSea] Web scraping found {len(sales)} sales")
+    return sales
