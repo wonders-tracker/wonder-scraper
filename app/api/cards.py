@@ -211,7 +211,26 @@ def read_cards(
             
         # Get VWAP
         vwap = vwap_map.get(card.id)
+        
+        # 1. Market Trend Delta (Sales-based)
+        avg_delta = 0.0
+        
+        # Strategy A: Use actual sales delta (Current vs Prev Close) - Most Accurate
+        prev_close = prev_price_map.get(card.id)
+        if last_price and prev_close and prev_close > 0:
+             avg_delta = ((last_price - prev_close) / prev_close) * 100
+             
+        # Strategy B: Fallback to Snapshot Delta (if sales gap is too large or missing)
+        elif latest_snap and oldest_snap and oldest_snap.avg_price > 0:
+            if latest_snap.id != oldest_snap.id:
+                avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
 
+                
+        # 2. Deal Rating Delta (Last Sale vs Current Avg Price)
+        deal_delta = 0.0
+        if last_price and latest_snap and latest_snap.avg_price > 0:
+             deal_delta = ((last_price - latest_snap.avg_price) / latest_snap.avg_price) * 100
+        
         # Get LIVE active stats from MarketPrice (preferred), fallback to snapshot only if None
         # Use explicit None check since 0 is valid (no active listings)
         live_active = active_stats_map.get(card.id, {})
@@ -219,18 +238,6 @@ def read_cards(
         live_inv = live_active.get('inventory')
         lowest_ask = live_lowest if live_lowest is not None else (latest_snap.lowest_ask if latest_snap else None)
         inventory = live_inv if live_inv is not None else (latest_snap.inventory if latest_snap else 0)
-
-        # Calculate Floor Delta: How does VWAP compare to floor (lowest_ask)?
-        # Positive = VWAP above floor (premium), Negative = VWAP below floor (rare)
-        floor_delta = 0.0
-        display_vwap = vwap if vwap else (latest_snap.avg_price if latest_snap else None)
-        if display_vwap and lowest_ask and lowest_ask > 0:
-            floor_delta = ((display_vwap - lowest_ask) / lowest_ask) * 100
-
-        # Deal Rating: How does last sale compare to floor?
-        deal_delta = 0.0
-        if last_price and lowest_ask and lowest_ask > 0:
-            deal_delta = ((last_price - lowest_ask) / lowest_ask) * 100
 
         c_out = CardOut(
             id=card.id,
@@ -240,16 +247,16 @@ def read_cards(
             rarity_name=rarity_map.get(card.rarity_id, "Unknown"),
             latest_price=last_price,
             volume_30d=latest_snap.volume if latest_snap else 0,
-            price_delta_24h=floor_delta,  # VWAP vs Floor delta
-            last_sale_diff=deal_delta,    # Last Sale vs Floor delta
-            last_sale_treatment=last_treatment,
-            lowest_ask=lowest_ask,
-            inventory=inventory,
+            price_delta_24h=avg_delta, # Now reflects Market Trend (Avg Price)
+            last_sale_diff=deal_delta, # Now reflects Deal Rating (Last Sale vs Avg)
+            last_sale_treatment=last_treatment, # Added treatment
+            lowest_ask=lowest_ask,  # Use LIVE data from MarketPrice
+            inventory=inventory,    # Use LIVE data from MarketPrice
             product_type=card.product_type if hasattr(card, 'product_type') else "Single",
             max_price=latest_snap.max_price if latest_snap else None,
             avg_price=latest_snap.avg_price if latest_snap else None,
             vwap=vwap if vwap else (latest_snap.avg_price if latest_snap else None),
-            last_updated=latest_snap.timestamp if latest_snap else None
+            last_updated=latest_snap.timestamp if latest_snap else None # Add last_updated from snapshot
         )
         results.append(c_out)
     
@@ -345,6 +352,22 @@ def read_card(
     except Exception:
         pass
 
+    # 1. Market Trend Delta
+    avg_delta = 0.0
+    
+    # Strategy A: Sales-based Delta
+    if real_price and prev_close and prev_close > 0:
+        avg_delta = ((real_price - prev_close) / prev_close) * 100
+        
+    # Strategy B: Snapshot Fallback
+    elif latest_snap and oldest_snap and oldest_snap.avg_price > 0 and latest_snap.id != oldest_snap.id:
+        avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
+            
+    # 2. Deal Rating Delta
+    deal_delta = 0.0
+    if real_price and latest_snap and latest_snap.avg_price > 0:
+        deal_delta = ((real_price - latest_snap.avg_price) / latest_snap.avg_price) * 100
+
     # Fetch LIVE active stats from MarketPrice table (always fresh)
     live_lowest_ask = None
     live_inventory = 0
@@ -366,18 +389,6 @@ def read_card(
     lowest_ask = live_lowest_ask if live_lowest_ask is not None else (latest_snap.lowest_ask if latest_snap else None)
     inventory = live_inventory if live_inventory is not None else (latest_snap.inventory if latest_snap else 0)
 
-    # Calculate Floor Delta: How does VWAP compare to floor (lowest_ask)?
-    # Positive = VWAP above floor (premium), Negative = VWAP below floor (rare)
-    floor_delta = 0.0
-    display_vwap = vwap if vwap else (latest_snap.avg_price if latest_snap else None)
-    if display_vwap and lowest_ask and lowest_ask > 0:
-        floor_delta = ((display_vwap - lowest_ask) / lowest_ask) * 100
-
-    # Deal Rating: How does last sale compare to floor?
-    deal_delta = 0.0
-    if real_price and lowest_ask and lowest_ask > 0:
-        deal_delta = ((real_price - lowest_ask) / lowest_ask) * 100
-
     c_out = CardOut(
         id=card.id,
         slug=card.slug,  # Include slug for SEO-friendly URLs
@@ -386,17 +397,17 @@ def read_card(
         rarity_id=card.rarity_id,
         rarity_name=rarity_name,
         latest_price=real_price,
-        volume_30d=volume_30d,
-        price_delta_24h=floor_delta,  # VWAP vs Floor delta
-        last_sale_diff=deal_delta,    # Last Sale vs Floor delta
+        volume_30d=volume_30d,  # 30-day volume from MarketPrice
+        price_delta_24h=avg_delta,
+        last_sale_diff=deal_delta,
         last_sale_treatment=real_treatment,
-        lowest_ask=lowest_ask,
-        inventory=inventory,
+        lowest_ask=lowest_ask,  # Use LIVE data from MarketPrice
+        inventory=inventory,    # Use LIVE data from MarketPrice
         product_type=card.product_type if hasattr(card, 'product_type') else "Single",
         max_price=latest_snap.max_price if latest_snap else None,
         avg_price=latest_snap.avg_price if latest_snap else None,
         vwap=vwap if vwap else (latest_snap.avg_price if latest_snap else None),
-        last_updated=latest_snap.timestamp if latest_snap else None
+        last_updated=latest_snap.timestamp if latest_snap else None # Add last_updated from snapshot
     )
     
     # Cache result

@@ -15,7 +15,6 @@ from app.models.blokpax import (
     BlokpaxSnapshot,
     BlokpaxSale,
     BlokpaxAssetDB,
-    BlokpaxOffer,
 )
 
 router = APIRouter()
@@ -74,19 +73,6 @@ class BlokpaxAssetOut(BaseModel):
     floor_price_bpx: Optional[float] = None
     floor_price_usd: Optional[float] = None
     card_id: Optional[int] = None
-
-
-class BlokpaxOfferOut(BaseModel):
-    id: int
-    external_id: str
-    asset_id: str
-    price_bpx: float
-    price_usd: float
-    quantity: int
-    buyer_address: str
-    status: str
-    created_at: Optional[datetime] = None
-    scraped_at: datetime
 
 
 @router.get("/storefronts", response_model=List[BlokpaxStorefrontOut])
