@@ -224,14 +224,22 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
         'dragon ball', 'digimon', 'cardfight', 'weiss schwarz', 'force of will', 'keyforge',
         'lorcana', 'metazoo', 'sorcery contested', 'star wars', 'lord of the rings',
         'universus', 'ufs ', 'naruto', 'my hero academia', 'union arena',
+        'fire emblem', 'cipher',  # Fire Emblem Cipher TCG
+        # One Piece TCG specific (often has "Awakening" set)
+        'op05', 'op04', 'op03', 'op02', 'op01', 'op06', 'op07', 'op08',
+        'awakening of the new era',  # One Piece set name - NOT the WOTF card
+        'new era', 'kaido', 'luffy', 'zoro', 'sanji', 'nami', 'sakazuki', 'enel',
+        'eustass', 'straw hat', 'romance dawn', 'paramount war',
         # Pokemon-specific set names and terms
         'shining fates', 'evolving skies', 'scarlet & violet', 'scarlet violet',
         'prismatic evolutions', 'prismatic', 'sword and shield', 'sword shield',
         'paldea', 'obsidian flames', 'paradox rift', 'temporal forces', 'twilight masquerade',
         'surging sparks', 'shrouded fable', 'stellar crown', 'crown zenith', 'vivid voltage',
-        'celebrations', 'black star promo', 'swsh',
+        'celebrations', 'black star promo', 'swsh', 'psa 10', 'psa 9', 'psa 8',
         ' etb ', 'etb ', ' etb',  # Elite Trainer Box (Pokemon term)
         'elite trainer',  # Catches "Elite Trainer Box" variants
+        # Yu-Gi-Oh specific
+        'lckc', 'secret rare nm', 'melody of awakening',  # Yu-Gi-Oh card "The Melody of Awakening Dragon"
         # Game-specific terms that indicate non-Wonders
         'azkaban', 'hogwarts', 'pikachu', 'charizard', 'blue-eyes', 'dark magician',
         'planeswalker', 'earthbound', 'maze of millennia', 'duelist', 'konami',
