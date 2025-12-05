@@ -146,15 +146,20 @@ function Home() {
         </button>
       ),
       cell: ({ row }) => {
-          const price = row.original.vwap || row.original.latest_price // Prefer VWAP
+          // Price priority: VWAP > latest_price > lowest_ask (for cards with no sales yet)
+          const salePrice = row.original.vwap || row.original.latest_price
+          const askPrice = row.original.lowest_ask || 0
+          const price = salePrice || askPrice
+          const isAskOnly = !salePrice && askPrice > 0
           const delta = row.original.price_delta_24h || 0
           const isPositive = delta >= 0
           const hasPrice = price && price > 0
 
           return (
             <div className="text-right flex items-center justify-end gap-2">
-                <span className="font-mono text-sm font-semibold">
+                <span className={clsx("font-mono text-sm font-semibold", isAskOnly && "text-muted-foreground")}>
                     {hasPrice ? `$${price.toFixed(2)}` : '---'}
+                    {isAskOnly && <span className="text-[9px] ml-1">(ask)</span>}
                 </span>
                 {hasPrice && (
                     <span className={clsx(
@@ -310,7 +315,7 @@ function Home() {
                                 return
                             }
                             setTrackingCard(row.original)
-                            setTrackForm({ quantity: 1, purchase_price: row.original.vwap || row.original.latest_price || 0 })
+                            setTrackForm({ quantity: 1, purchase_price: row.original.vwap || row.original.latest_price || row.original.lowest_ask || 0 })
                         }}
                         className="p-1.5 rounded border border-border hover:bg-primary hover:text-primary-foreground transition-colors group"
                         title={user ? "Add to Portfolio" : "Login to track"}
@@ -571,7 +576,7 @@ function Home() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground uppercase">Current Value</span>
-                  <span className="font-mono font-bold">${(trackForm.quantity * (trackingCard.vwap || trackingCard.latest_price || 0)).toFixed(2)}</span>
+                  <span className="font-mono font-bold">${(trackForm.quantity * (trackingCard.vwap || trackingCard.latest_price || trackingCard.lowest_ask || 0)).toFixed(2)}</span>
                 </div>
               </div>
             </div>
