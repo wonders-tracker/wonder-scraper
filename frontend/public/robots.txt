@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Allow: /cards/
+Allow: /market
+
+Disallow: /login
+Disallow: /signup
+Disallow: /profile
+Disallow: /portfolio
+Disallow: /auth/
+Disallow: /api/
+
+Sitemap: https://wonderstracker.com/sitemap.xml

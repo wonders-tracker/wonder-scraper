@@ -11,7 +11,10 @@ export const Route = createFileRoute('/cards/$cardId')({
     const setName = card?.set_name || 'Existence'
     const rarityName = card?.rarity_name || ''
     const price = card?.latest_price ? `$${card.latest_price.toFixed(2)}` : null
+    const priceNum = card?.latest_price || 0
     const volume = card?.volume_30d || 0
+    const lowestAsk = card?.lowest_ask || 0
+    const inventory = card?.inventory || 0
 
     // Build rich, keyword-optimized description
     const priceText = price ? `Current Market Price: ${price}. ` : ''
@@ -32,6 +35,47 @@ export const Route = createFileRoute('/cards/$cardId')({
 
     // Canonical URL
     const canonicalUrl = `${SITE_URL}/cards/${params.cardId}`
+
+    // JSON-LD Product Schema for rich snippets
+    const jsonLd = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: cardName,
+      description: description,
+      image: ogImageUrl,
+      brand: {
+        '@type': 'Brand',
+        name: 'Wonders of the First',
+      },
+      category: 'Trading Card Games > Wonders of the First',
+      ...(priceNum > 0 && {
+        offers: {
+          '@type': 'AggregateOffer',
+          priceCurrency: 'USD',
+          lowPrice: lowestAsk > 0 ? lowestAsk.toFixed(2) : priceNum.toFixed(2),
+          highPrice: priceNum.toFixed(2),
+          offerCount: inventory > 0 ? inventory : 1,
+          availability: inventory > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        },
+      }),
+      additionalProperty: [
+        { '@type': 'PropertyValue', name: 'Set', value: setName },
+        ...(rarityName ? [{ '@type': 'PropertyValue', name: 'Rarity', value: rarityName }] : []),
+        ...(volume > 0 ? [{ '@type': 'PropertyValue', name: '30-Day Sales Volume', value: volume.toString() }] : []),
+      ],
+    }
+
+    // Breadcrumb JSON-LD for site navigation
+    const breadcrumbJsonLd = {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_URL },
+        { '@type': 'ListItem', position: 2, name: 'Market', item: `${SITE_URL}/market` },
+        { '@type': 'ListItem', position: 3, name: setName, item: `${SITE_URL}/market?set=${encodeURIComponent(setName)}` },
+        { '@type': 'ListItem', position: 4, name: cardName, item: canonicalUrl },
+      ],
+    }
 
     return {
       meta: [
@@ -69,6 +113,18 @@ export const Route = createFileRoute('/cards/$cardId')({
         ...(price ? [{ property: 'product:price:currency', content: 'USD' }] : []),
         { property: 'product:category', content: 'Trading Card Games' },
         { property: 'product:brand', content: 'Wonders of the First' },
+      ],
+      scripts: [
+        // JSON-LD Product Schema
+        {
+          type: 'application/ld+json',
+          children: JSON.stringify(jsonLd),
+        },
+        // JSON-LD Breadcrumb Schema
+        {
+          type: 'application/ld+json',
+          children: JSON.stringify(breadcrumbJsonLd),
+        },
       ],
     }
   },
