@@ -3,9 +3,19 @@ Blokpax API client for scraping WOTF marketplace data.
 
 API Endpoints:
 - GET /api/storefront/{slug} - Collection metadata
-- GET /api/storefront/{slug}/assets - List assets with floor_listing
-- GET /api/storefront/{slug}/asset/{id} - Individual asset details
+- GET /api/storefront/{slug}/assets - List assets (paginated)
+- GET /api/storefront/{slug}/asset/{id} - Individual asset details with listings
 - GET /api/storefront/{slug}/activity - Sales history (filled listings)
+
+IMPORTANT: Floor price computation
+The bulk /assets endpoint returns `floor_listing: null` for all assets.
+To find active listings, we must:
+1. Paginate through all assets using the bulk endpoint
+2. Fetch each asset's detail endpoint individually
+3. Check the `listings` array for `listing_status: "active"`
+4. Compute the floor price as the minimum of all active listing prices
+
+This is slow but necessary - there's no API to filter by "listed only".
 """
 import httpx
 from typing import Dict, Any, List, Optional
@@ -166,7 +176,7 @@ async def fetch_storefront(slug: str) -> Dict[str, Any]:
 async def fetch_storefront_assets(
     slug: str,
     page: int = 1,
-    per_page: int = 50,
+    per_page: int = 24,
     sort_by: str = "price_asc"
 ) -> Dict[str, Any]:
     """
@@ -175,14 +185,16 @@ async def fetch_storefront_assets(
     Args:
         slug: Storefront slug (e.g., 'wotf-existence-collector-boxes')
         page: Page number (1-indexed)
-        per_page: Items per page (max 100)
+        per_page: Items per page (default 24, matches website)
         sort_by: Sort order ('price_asc', 'price_desc', 'recent', etc.)
     """
     url = f"{BLOKPAX_API_BASE}/storefront/{slug}/assets"
+    # Use website's param names: pg, perPage, sort
     params = {
-        "page": page,
-        "per_page": per_page,
-        "sort_by": sort_by
+        "query": "",
+        "pg": page,
+        "perPage": per_page,
+        "sort": sort_by
     }
 
     async with httpx.AsyncClient() as client:
@@ -340,33 +352,133 @@ def _parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
-async def scrape_storefront_floor(slug: str) -> Dict[str, Any]:
+async def scrape_all_listings(slug: str, max_pages: int = 200) -> List[BlokpaxListing]:
+    """
+    Scrapes ALL active listings from a storefront by checking each asset.
+    This is slower but necessary because the bulk endpoint doesn't include
+    floor_listing data.
+
+    Args:
+        slug: Storefront slug
+        max_pages: Maximum pages to scan (24 assets per page)
+
+    Returns:
+        List of all active BlokpaxListing objects
+    """
+    bpx_price = await get_bpx_price()
+    all_listings: List[BlokpaxListing] = []
+    seen_listing_ids = set()
+
+    print(f"  Scanning all assets for listings (this may take a while)...")
+
+    # First get total pages
+    first_response = await fetch_storefront_assets(slug, page=1, per_page=24)
+    meta = first_response.get("meta", {})
+    total_pages = meta.get("last_page", 1)
+    total_assets = meta.get("total", 0)
+    print(f"  Total: {total_assets} assets across {total_pages} pages")
+
+    page = 1
+    while page <= min(max_pages, total_pages):
+        try:
+            if page > 1:
+                assets_response = await fetch_storefront_assets(slug, page=page, per_page=24)
+            else:
+                assets_response = first_response
+
+            assets = assets_response.get("data", [])
+
+            if not assets:
+                break
+
+            # Check each asset for listings
+            for asset_data in assets:
+                asset_id = asset_data.get("id")
+                asset_name = asset_data.get("name", "Unknown")
+                if not asset_id:
+                    continue
+
+                try:
+                    detail = await fetch_asset_details(slug, str(asset_id))
+                    asset_info = detail.get("data", {}).get("asset", {})
+                    listings = asset_info.get("listings", [])
+
+                    for listing in listings:
+                        listing_id = str(listing.get("id", ""))
+                        if listing_id in seen_listing_ids:
+                            continue
+
+                        if listing.get("listing_status") == "active":
+                            raw_price = listing.get("price", 0)
+                            if raw_price > 0:
+                                seen_listing_ids.add(listing_id)
+                                all_listings.append(BlokpaxListing(
+                                    listing_id=listing_id,
+                                    asset_id=str(asset_id),
+                                    price_bpx=bpx_to_float(raw_price),
+                                    price_usd=bpx_to_usd(raw_price, bpx_price),
+                                    quantity=listing.get("quantity", 1),
+                                    seller_address=listing.get("owner", {}).get("username", ""),
+                                    created_at=_parse_datetime(listing.get("created_at"))
+                                ))
+                                print(f"    Found: {asset_name[:30]} @ {bpx_to_float(raw_price):,.0f} BPX")
+
+                    await asyncio.sleep(0.15)  # Rate limit between asset calls
+
+                except Exception as e:
+                    print(f"    Error fetching asset {asset_id}: {e}")
+
+            print(f"    Page {page}/{total_pages}: scanned {len(assets)} assets, {len(all_listings)} listings found")
+
+            page += 1
+            await asyncio.sleep(0.3)  # Rate limit between pages
+
+        except Exception as e:
+            print(f"    Error on page {page}: {e}")
+            break
+
+    # Sort by price ascending
+    all_listings.sort(key=lambda x: x.price_bpx)
+    print(f"  Done! Found {len(all_listings)} active listings")
+    return all_listings
+
+
+async def scrape_storefront_floor(slug: str, deep_scan: bool = True) -> Dict[str, Any]:
     """
     Scrapes floor price and basic stats for a storefront.
     Returns dict with floor_price_bpx, floor_price_usd, listed_count, etc.
+
+    NOTE: The bulk /assets endpoint does NOT include floor_listing data,
+    so deep_scan=True is required to get actual listings.
+
+    Args:
+        slug: Storefront slug
+        deep_scan: If True (default), scans all assets for listings.
+                   If False, only gets metadata without listings.
     """
     bpx_price = await get_bpx_price()
 
-    # Get first page sorted by price to find floor
-    assets_response = await fetch_storefront_assets(slug, page=1, per_page=50, sort_by="price_asc")
-
-    assets = assets_response.get("data", [])
+    # Get first page for metadata
+    assets_response = await fetch_storefront_assets(slug, page=1, per_page=24, sort_by="price_asc")
 
     floor_price_bpx = None
     floor_price_usd = None
     listed_count = 0
+    all_listings: List[BlokpaxListing] = []
 
-    for asset_data in assets:
-        # floor_listing is at top level (not under 'asset')
-        floor_listing = asset_data.get("floor_listing")
+    # Deep scan to find all listings (required since bulk endpoint doesn't include floor_listing)
+    if deep_scan:
+        print(f"  Scanning {slug} for active listings...")
+        all_listings = await scrape_all_listings(slug)
+        listed_count = len(all_listings)
 
-        if floor_listing:
-            raw_price = floor_listing.get("price", 0)
-            if raw_price > 0:
-                listed_count += 1
-                if floor_price_bpx is None:
-                    floor_price_bpx = bpx_to_float(raw_price)
-                    floor_price_usd = bpx_to_usd(raw_price, bpx_price)
+    # Find floor from all collected listings
+    if all_listings:
+        # Sort by price ascending
+        all_listings.sort(key=lambda x: x.price_bpx)
+        floor_listing = all_listings[0]
+        floor_price_bpx = floor_listing.price_bpx
+        floor_price_usd = floor_listing.price_usd
 
     # Get metadata for total counts
     try:
@@ -381,7 +493,8 @@ async def scrape_storefront_floor(slug: str) -> Dict[str, Any]:
         "floor_price_usd": floor_price_usd,
         "bpx_price_usd": bpx_price,
         "listed_count": listed_count,
-        "total_tokens": total_tokens
+        "total_tokens": total_tokens,
+        "listings": all_listings  # Include all found listings
     }
 
 

@@ -21,6 +21,7 @@ from app.scraper.blokpax import (
     fetch_storefront_assets,
     fetch_storefront_activity,
     scrape_storefront_floor,
+    scrape_all_listings,
     scrape_recent_sales,
     parse_asset,
     parse_sale,
@@ -84,15 +85,21 @@ async def scrape_storefront_metadata(slug: str) -> dict:
         return {"slug": slug, "error": str(e)}
 
 
-async def scrape_floor_prices(slugs: List[str] = None):
+async def scrape_floor_prices(slugs: List[str] = None, deep_scan: bool = False):
     """
     Scrapes floor prices for all WOTF storefronts and saves snapshots.
+
+    Args:
+        slugs: List of storefront slugs to scrape
+        deep_scan: If True, scans all assets for listings (slow but accurate)
     """
     if slugs is None:
         slugs = WOTF_STOREFRONTS
 
     print("\n" + "=" * 60)
     print("BLOKPAX FLOOR PRICE SCRAPER")
+    if deep_scan:
+        print("MODE: Deep Scan (checking all assets for listings)")
     print("=" * 60)
 
     bpx_price = await get_bpx_price()
@@ -101,7 +108,7 @@ async def scrape_floor_prices(slugs: List[str] = None):
     results = []
     for slug in slugs:
         try:
-            floor_data = await scrape_storefront_floor(slug)
+            floor_data = await scrape_storefront_floor(slug, deep_scan=deep_scan)
             results.append(floor_data)
 
             floor_bpx = floor_data.get("floor_price_bpx")
@@ -317,6 +324,10 @@ async def main():
     parser.add_argument(
         "--pages", type=int, default=3, help="Max pages to scrape"
     )
+    parser.add_argument(
+        "--deep", action="store_true",
+        help="Deep scan: check each asset for listings (slow but accurate)"
+    )
     args = parser.parse_args()
 
     # Determine which storefronts to scrape
@@ -331,12 +342,12 @@ async def main():
         for slug in slugs:
             await scrape_all_assets(slug, max_pages=args.pages)
     elif args.floors:
-        await scrape_floor_prices(slugs)
+        await scrape_floor_prices(slugs, deep_scan=args.deep)
     elif args.sales:
         await scrape_sales(slugs, max_pages=args.pages)
     else:
         # Default: floors + sales
-        await scrape_floor_prices(slugs)
+        await scrape_floor_prices(slugs, deep_scan=args.deep)
         await scrape_sales(slugs, max_pages=args.pages)
 
     print("\n" + "=" * 60)
