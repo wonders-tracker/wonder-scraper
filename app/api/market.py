@@ -34,7 +34,7 @@ def read_treatments(
 @router.get("/overview")
 def read_market_overview(
     session: Session = Depends(get_session),
-    time_period: Optional[str] = Query(default="24h", regex="^(24h|7d|30d|90d|all)$"),
+    time_period: Optional[str] = Query(default="30d", regex="^(24h|7d|30d|90d|all)$"),
 ) -> Any:
     """
     Get robust market overview statistics with temporal data.
@@ -182,6 +182,9 @@ def read_market_overview(
         if last_price and latest_snap and latest_snap.avg_price > 0:
              deal_delta = ((last_price - latest_snap.avg_price) / latest_snap.avg_price) * 100
 
+        # Use actual sales count from MarketPrice (more accurate than snapshot volume)
+        period_volume = sales_stats['count'] if sales_stats else 0
+
         overview_data.append({
             "id": card.id,
             "name": card.name,
@@ -190,11 +193,11 @@ def read_market_overview(
             "latest_price": last_price or 0.0,
             "avg_price": latest_snap.avg_price if latest_snap else 0.0,
             "vwap": effective_price,
-            "volume_period": latest_snap.volume if latest_snap else 0, 
-            "volume_change": (latest_snap.volume - oldest_snap.volume) if (latest_snap and oldest_snap) else 0,
+            "volume_period": period_volume,
+            "volume_change": 0,  # TODO: Calculate from previous period if needed
             "price_delta_period": avg_delta,
             "deal_rating": deal_delta,
-            "market_cap": (last_price or 0) * (latest_snap.volume if latest_snap else 0)
+            "market_cap": (last_price or 0) * period_volume
         })
         
     return overview_data
