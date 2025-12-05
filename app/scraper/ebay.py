@@ -13,7 +13,8 @@ STOPWORDS = {"the", "of", "a", "an", "in", "on", "at", "for", "to", "with", "by"
 
 def _bulk_check_indexed(
     card_id: int,
-    listings_data: List[dict]
+    listings_data: List[dict],
+    check_global: bool = True
 ) -> set:
     """
     Bulk check if listings already exist in database (avoids N+1 query problem).
@@ -21,6 +22,7 @@ def _bulk_check_indexed(
     Args:
         card_id: Card ID to check against
         listings_data: List of dicts with keys: external_id, title, price, sold_date
+        check_global: If True, also check if external_id exists for ANY card (prevents duplicate key errors)
 
     Returns:
         Set of indices of listings that are already indexed
@@ -39,20 +41,38 @@ def _bulk_check_indexed(
         ]
 
         if external_ids:
-            # Filter by card_id to allow same listing to exist under different cards
-            existing_ids = session.exec(
-                select(MarketPrice.external_id)
-                .where(
-                    MarketPrice.external_id.in_(external_ids),
-                    MarketPrice.card_id == card_id
-                )
-            ).all()
-            existing_ids_set = set(existing_ids)
+            if check_global:
+                # Check if external_id exists for ANY card (prevents unique constraint violations
+                # when sealed products have overlapping search queries)
+                all_existing = session.exec(
+                    select(MarketPrice.external_id, MarketPrice.card_id)
+                    .where(MarketPrice.external_id.in_(external_ids))
+                ).all()
 
-            # Mark indices with existing external_ids for THIS card
-            for i, listing in enumerate(listings_data):
-                if listing.get("external_id") in existing_ids_set:
-                    indexed_indices.add(i)
+                # Build sets: existing for this card (skip) and existing for other cards (also skip to prevent conflicts)
+                existing_for_this_card = {ext_id for ext_id, cid in all_existing if cid == card_id}
+                existing_for_other_cards = {ext_id for ext_id, cid in all_existing if cid != card_id}
+
+                # Mark indices where external_id exists for this card OR another card
+                for i, listing in enumerate(listings_data):
+                    ext_id = listing.get("external_id")
+                    if ext_id and (ext_id in existing_for_this_card or ext_id in existing_for_other_cards):
+                        indexed_indices.add(i)
+            else:
+                # Original behavior: only check this card_id
+                existing_ids = session.exec(
+                    select(MarketPrice.external_id)
+                    .where(
+                        MarketPrice.external_id.in_(external_ids),
+                        MarketPrice.card_id == card_id
+                    )
+                ).all()
+                existing_ids_set = set(existing_ids)
+
+                # Mark indices with existing external_ids for THIS card
+                for i, listing in enumerate(listings_data):
+                    if listing.get("external_id") in existing_ids_set:
+                        indexed_indices.add(i)
 
         # Check by composite key for listings without external_id or not found
         # Build OR conditions for composite keys

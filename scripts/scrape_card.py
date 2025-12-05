@@ -291,13 +291,30 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     if card_id > 0:
         with Session(engine) as session:
             # Save only NEW listings to database
+            # Use individual inserts to handle duplicate key errors gracefully
             if prices_to_save:
-                session.add_all(prices_to_save)
-                print(f"Saving {len(prices_to_save)} new listings to database")
+                saved_count = 0
+                skipped_count = 0
+                discord_notifications = []
+
+                for price in prices_to_save:
+                    try:
+                        session.add(price)
+                        session.flush()  # Check for constraint violation
+                        saved_count += 1
+                        if price.listing_type == "sold":
+                            discord_notifications.append(price)
+                    except Exception as e:
+                        session.rollback()
+                        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                            skipped_count += 1
+                        else:
+                            print(f"Error saving listing: {e}")
+
+                print(f"Saved {saved_count} new listings to database" + (f", {skipped_count} duplicates skipped" if skipped_count > 0 else ""))
 
                 # Notify Discord about new sales (only sold listings, limit to 3 to avoid spam)
-                sold_listings = [p for p in prices_to_save if p.listing_type == "sold"]
-                for sale in sold_listings[:3]:
+                for sale in discord_notifications[:3]:
                     try:
                         sold_date_str = sale.sold_date.strftime("%b %d") if sale.sold_date else None
                         log_new_sale(

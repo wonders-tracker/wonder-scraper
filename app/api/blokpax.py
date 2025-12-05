@@ -15,6 +15,7 @@ from app.models.blokpax import (
     BlokpaxSnapshot,
     BlokpaxSale,
     BlokpaxAssetDB,
+    BlokpaxOffer,
 )
 
 router = APIRouter()
@@ -73,6 +74,19 @@ class BlokpaxAssetOut(BaseModel):
     floor_price_bpx: Optional[float] = None
     floor_price_usd: Optional[float] = None
     card_id: Optional[int] = None
+
+
+class BlokpaxOfferOut(BaseModel):
+    id: int
+    external_id: str
+    asset_id: str
+    price_bpx: float
+    price_usd: float
+    quantity: int
+    buyer_address: str
+    status: str
+    created_at: Optional[datetime] = None
+    scraped_at: datetime
 
 
 @router.get("/storefronts", response_model=List[BlokpaxStorefrontOut])
@@ -259,3 +273,43 @@ def get_blokpax_summary(
             "volume_7d_usd": volume_7d_usd,
         }
     }
+
+
+@router.get("/offers", response_model=List[BlokpaxOfferOut])
+def list_offers(
+    session: Session = Depends(get_session),
+    status: Optional[str] = Query(default="open", description="Filter by status: open, filled, cancelled"),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    """
+    List all offers/bids across WOTF storefronts.
+    """
+    query = select(BlokpaxOffer)
+
+    if status:
+        query = query.where(BlokpaxOffer.status == status)
+
+    query = query.order_by(desc(BlokpaxOffer.price_usd)).limit(limit)
+
+    offers = session.exec(query).all()
+    return offers
+
+
+@router.get("/offers/asset/{asset_id}", response_model=List[BlokpaxOfferOut])
+def get_asset_offers(
+    asset_id: str,
+    session: Session = Depends(get_session),
+    status: Optional[str] = Query(default=None, description="Filter by status"),
+) -> Any:
+    """
+    Get all offers for a specific asset.
+    """
+    query = select(BlokpaxOffer).where(BlokpaxOffer.asset_id == asset_id)
+
+    if status:
+        query = query.where(BlokpaxOffer.status == status)
+
+    query = query.order_by(desc(BlokpaxOffer.price_usd))
+
+    offers = session.exec(query).all()
+    return offers

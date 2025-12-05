@@ -24,6 +24,7 @@ from app.scraper.blokpax import (
     scrape_storefront_floor,
     scrape_all_listings,
     scrape_recent_sales,
+    scrape_all_offers,
     parse_asset,
     parse_sale,
     is_wotf_asset,
@@ -33,6 +34,7 @@ from app.models.blokpax import (
     BlokpaxAssetDB,
     BlokpaxSale,
     BlokpaxSnapshot,
+    BlokpaxOffer as BlokpaxOfferDB,
 )
 from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
 
@@ -226,6 +228,77 @@ async def scrape_sales(slugs: List[str] = None, max_pages: int = 3):
     return {"total": total_sales, "new": new_sales}
 
 
+async def scrape_offers(slugs: List[str] = None, max_pages: int = 200):
+    """
+    Scrapes all active offers (bids) from WOTF storefronts.
+    """
+    if slugs is None:
+        slugs = WOTF_STOREFRONTS
+
+    print("\n" + "=" * 60)
+    print("BLOKPAX OFFERS SCRAPER")
+    print("=" * 60)
+
+    total_offers = 0
+    new_offers = 0
+
+    for slug in slugs:
+        print(f"\n--- {slug} ---")
+
+        try:
+            offers = await scrape_all_offers(slug, max_pages=max_pages)
+            total_offers += len(offers)
+
+            # Filter WOTF items for reward-room (mixed storefront)
+            if slug == "reward-room":
+                offers = [o for o in offers if is_wotf_asset(o.asset_name)]
+                print(f"  Filtered to {len(offers)} WOTF items")
+
+            with Session(engine) as session:
+                for offer in offers:
+                    # Check if already indexed
+                    existing = session.exec(
+                        select(BlokpaxOfferDB).where(
+                            BlokpaxOfferDB.external_id == offer.offer_id
+                        )
+                    ).first()
+
+                    if existing:
+                        # Update existing offer
+                        existing.price_bpx = offer.price_bpx
+                        existing.price_usd = offer.price_usd
+                        existing.quantity = offer.quantity
+                        existing.status = offer.status
+                        existing.scraped_at = datetime.utcnow()
+                        session.add(existing)
+                        continue
+
+                    # Save new offer
+                    db_offer = BlokpaxOfferDB(
+                        external_id=offer.offer_id,
+                        asset_id=offer.asset_id,
+                        price_bpx=offer.price_bpx,
+                        price_usd=offer.price_usd,
+                        quantity=offer.quantity,
+                        buyer_address=offer.buyer_address,
+                        status=offer.status,
+                        created_at=offer.created_at,
+                    )
+                    session.add(db_offer)
+                    new_offers += 1
+
+                session.commit()
+
+            print(f"  Found {len(offers)} offers, {new_offers} new")
+            await asyncio.sleep(1)
+
+        except Exception as e:
+            print(f"  Error: {e}")
+
+    print(f"\nTotal: {total_offers} offers scraped, {new_offers} new saved")
+    return {"total": total_offers, "new": new_offers}
+
+
 async def scrape_all_assets(slug: str, max_pages: int = 10):
     """
     Scrapes all assets from a storefront (for initial indexing).
@@ -324,6 +397,9 @@ async def main():
         "--assets", action="store_true", help="Index all assets (slow)"
     )
     parser.add_argument(
+        "--offers", action="store_true", help="Only scrape active offers/bids"
+    )
+    parser.add_argument(
         "--pages", type=int, default=3, help="Max pages to scrape"
     )
     parser.add_argument(
@@ -351,6 +427,8 @@ async def main():
         if args.assets:
             for slug in slugs:
                 await scrape_all_assets(slug, max_pages=args.pages)
+        elif args.offers:
+            await scrape_offers(slugs, max_pages=args.pages)
         elif args.floors:
             await scrape_floor_prices(slugs, deep_scan=args.deep)
         elif args.sales:

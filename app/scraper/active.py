@@ -81,20 +81,32 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                         session.delete(old)
 
                     # Get existing active listings by external_id for upsert logic
+                    # Check GLOBALLY (any card_id) to prevent duplicate key errors
+                    # when the same eBay listing matches multiple cards
                     stmt = select(MarketPrice).where(
-                        MarketPrice.card_id == card_id,
                         MarketPrice.listing_type == "active",
                         MarketPrice.external_id.isnot(None)
                     )
-                    existing_listings = {mp.external_id: mp for mp in session.exec(stmt).all()}
+                    all_existing = session.exec(stmt).all()
+
+                    # Group by external_id - existing for THIS card (update) vs OTHER cards (skip)
+                    existing_for_this_card = {mp.external_id: mp for mp in all_existing if mp.card_id == card_id}
+                    existing_for_other_cards = {mp.external_id for mp in all_existing if mp.card_id != card_id}
 
                     new_count = 0
                     updated_count = 0
+                    skipped_count = 0
 
                     for item in items:
-                        if item.external_id in existing_listings:
+                        # Skip if this listing already belongs to a DIFFERENT card
+                        # (prevents duplicate key violation for overlapping searches)
+                        if item.external_id and item.external_id in existing_for_other_cards:
+                            skipped_count += 1
+                            continue
+
+                        if item.external_id in existing_for_this_card:
                             # Update existing listing with fresh data
-                            existing = existing_listings[item.external_id]
+                            existing = existing_for_this_card[item.external_id]
                             existing.price = item.price
                             existing.title = item.title
                             existing.url = item.url
@@ -125,7 +137,8 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                                 pass
 
                     session.commit()
-                    print(f"Active listings for {card_name}: {new_count} new, {updated_count} updated, {deleted_count} stale removed")
+                    skip_msg = f", {skipped_count} skipped (belongs to other card)" if skipped_count > 0 else ""
+                    print(f"Active listings for {card_name}: {new_count} new, {updated_count} updated, {deleted_count} stale removed{skip_msg}")
             except Exception as db_err:
                 print(f"DB save error for {card_name} active listings (stats still valid): {db_err}")
 

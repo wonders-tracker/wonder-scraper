@@ -703,3 +703,129 @@ def is_wotf_asset(asset_name: str) -> bool:
     ]
     name_lower = asset_name.lower()
     return any(kw in name_lower for kw in wotf_keywords)
+
+
+async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 20) -> List[BlokpaxOffer]:
+    """
+    Scrapes ALL active offers (bids) from a storefront.
+
+    This requires fetching individual asset details since offers are attached to assets,
+    not available via the activity feed.
+
+    Args:
+        slug: Storefront slug (e.g., 'wotf-art-proofs')
+        max_pages: Max pages of assets to fetch (50 assets per page)
+        concurrency: Number of concurrent asset detail requests
+
+    Returns:
+        List of BlokpaxOffer objects sorted by price descending (highest bids first)
+    """
+    import aiohttp
+
+    bpx_price = await get_bpx_price()
+    all_offers: List[BlokpaxOffer] = []
+    seen_offer_ids = set()
+
+    print(f"[Blokpax] Scraping offers from {slug}...")
+
+    # Step 1: Get all asset IDs from the storefront
+    asset_ids = []
+    page = 1
+
+    while page <= max_pages:
+        try:
+            response = await fetch_storefront_assets(slug, page=page, per_page=50)
+            assets = response.get("data", [])
+
+            if not assets:
+                break
+
+            for asset in assets:
+                asset_id = asset.get("id")
+                if asset_id:
+                    asset_ids.append(str(asset_id))
+
+            meta = response.get("meta", {})
+            total_pages = meta.get("last_page", 1)
+
+            if page >= total_pages:
+                break
+
+            page += 1
+            await asyncio.sleep(0.3)
+
+        except Exception as e:
+            print(f"[Blokpax] Error fetching assets page {page}: {e}")
+            break
+
+    print(f"[Blokpax] Found {len(asset_ids)} assets to check for offers")
+
+    # Step 2: Fetch asset details in batches to find offers
+    # Use the v2 API endpoint which includes offer data
+
+    async def fetch_asset_offers(session: aiohttp.ClientSession, asset_id: str) -> List[BlokpaxOffer]:
+        """Fetch offers for a single asset using v2 API."""
+        url = f"https://api.blokpax.com/api/v2/storefront/assets/{asset_id}"
+        try:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return []
+
+                data = await response.json()
+                asset_data = data.get("data", {})
+
+                offers = []
+                offer_list = asset_data.get("offers", [])
+                asset_name = asset_data.get("name", "Unknown")
+
+                for offer_data in offer_list:
+                    offer_id = str(offer_data.get("id", ""))
+                    if not offer_id or offer_id in seen_offer_ids:
+                        continue
+
+                    seen_offer_ids.add(offer_id)
+
+                    price_bpx = float(offer_data.get("price", 0))
+                    price_usd = price_bpx * bpx_price
+
+                    offer = BlokpaxOffer(
+                        offer_id=offer_id,
+                        asset_id=asset_id,
+                        asset_name=asset_name,
+                        price_bpx=price_bpx,
+                        price_usd=price_usd,
+                        quantity=int(offer_data.get("quantity", 1)),
+                        buyer_address=offer_data.get("buyer_address", ""),
+                        status=offer_data.get("status", "open"),
+                        created_at=None,
+                    )
+                    offers.append(offer)
+
+                return offers
+
+        except Exception as e:
+            return []
+
+    # Fetch in concurrent batches
+    async with aiohttp.ClientSession() as session:
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def fetch_with_semaphore(asset_id: str):
+            async with semaphore:
+                offers = await fetch_asset_offers(session, asset_id)
+                await asyncio.sleep(0.1)  # Rate limiting
+                return offers
+
+        tasks = [fetch_with_semaphore(aid) for aid in asset_ids]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, list):
+                all_offers.extend(result)
+
+    # Sort by price descending (highest bids first)
+    all_offers.sort(key=lambda x: x.price_bpx, reverse=True)
+
+    print(f"[Blokpax] Found {len(all_offers)} total offers in {slug}")
+
+    return all_offers

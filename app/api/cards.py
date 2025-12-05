@@ -140,11 +140,11 @@ def read_cards(
             results = session.execute(query, {"card_ids": card_ids}).all()
             last_sale_map = {row[0]: {'price': row[1], 'treatment': row[2]} for row in results}
 
-            # Calculate VWAP with proper parameter binding
-            # Always filter out NULL sold_date to avoid including invalid records
+            # Calculate MEDIAN price (more robust than AVG - ignores outliers)
+            # Uses PERCENTILE_CONT(0.5) for true median
             if cutoff_time:
                 vwap_query = text("""
-                    SELECT card_id, AVG(price) as vwap
+                    SELECT card_id, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price
                     FROM marketprice
                     WHERE card_id = ANY(:card_ids)
                     AND listing_type = 'sold'
@@ -155,7 +155,7 @@ def read_cards(
                 vwap_results = session.execute(vwap_query, {"card_ids": card_ids, "cutoff_time": cutoff_time}).all()
             else:
                 vwap_query = text("""
-                    SELECT card_id, AVG(price) as vwap
+                    SELECT card_id, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price
                     FROM marketprice
                     WHERE card_id = ANY(:card_ids)
                     AND listing_type = 'sold'
@@ -209,28 +209,9 @@ def read_cards(
         if last_price is None and latest_snap:
             last_price = latest_snap.avg_price
             
-        # Get VWAP
-        vwap = vwap_map.get(card.id)
-        
-        # 1. Market Trend Delta (Sales-based)
-        avg_delta = 0.0
-        
-        # Strategy A: Use actual sales delta (Current vs Prev Close) - Most Accurate
-        prev_close = prev_price_map.get(card.id)
-        if last_price and prev_close and prev_close > 0:
-             avg_delta = ((last_price - prev_close) / prev_close) * 100
-             
-        # Strategy B: Fallback to Snapshot Delta (if sales gap is too large or missing)
-        elif latest_snap and oldest_snap and oldest_snap.avg_price > 0:
-            if latest_snap.id != oldest_snap.id:
-                avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
+        # Get median price (renamed from vwap for clarity)
+        median_price = vwap_map.get(card.id)
 
-                
-        # 2. Deal Rating Delta (Last Sale vs Current Avg Price)
-        deal_delta = 0.0
-        if last_price and latest_snap and latest_snap.avg_price > 0:
-             deal_delta = ((last_price - latest_snap.avg_price) / latest_snap.avg_price) * 100
-        
         # Get LIVE active stats from MarketPrice (preferred), fallback to snapshot only if None
         # Use explicit None check since 0 is valid (no active listings)
         live_active = active_stats_map.get(card.id, {})
@@ -238,6 +219,19 @@ def read_cards(
         live_inv = live_active.get('inventory')
         lowest_ask = live_lowest if live_lowest is not None else (latest_snap.lowest_ask if latest_snap else None)
         inventory = live_inv if live_inv is not None else (latest_snap.inventory if latest_snap else 0)
+
+        # Floor Trend: How is the floor price changing over time?
+        # Positive = floor going UP (getting more expensive)
+        # Negative = floor going DOWN (better deals available)
+        floor_delta = 0.0
+        # Get previous floor from oldest snapshot in our window
+        if lowest_ask and oldest_snap and oldest_snap.lowest_ask and oldest_snap.lowest_ask > 0:
+            floor_delta = ((lowest_ask - oldest_snap.lowest_ask) / oldest_snap.lowest_ask) * 100
+
+        # Last Sale Delta: How does last sale compare to floor?
+        sale_delta = 0.0
+        if last_price and lowest_ask and lowest_ask > 0:
+            sale_delta = ((last_price - lowest_ask) / lowest_ask) * 100
 
         c_out = CardOut(
             id=card.id,
@@ -247,16 +241,16 @@ def read_cards(
             rarity_name=rarity_map.get(card.rarity_id, "Unknown"),
             latest_price=last_price,
             volume_30d=latest_snap.volume if latest_snap else 0,
-            price_delta_24h=avg_delta, # Now reflects Market Trend (Avg Price)
-            last_sale_diff=deal_delta, # Now reflects Deal Rating (Last Sale vs Avg)
-            last_sale_treatment=last_treatment, # Added treatment
-            lowest_ask=lowest_ask,  # Use LIVE data from MarketPrice
-            inventory=inventory,    # Use LIVE data from MarketPrice
+            price_delta_24h=floor_delta,   # Floor vs Median delta
+            last_sale_diff=sale_delta,     # Last Sale vs Median delta
+            last_sale_treatment=last_treatment,
+            lowest_ask=lowest_ask,
+            inventory=inventory,
             product_type=card.product_type if hasattr(card, 'product_type') else "Single",
             max_price=latest_snap.max_price if latest_snap else None,
             avg_price=latest_snap.avg_price if latest_snap else None,
-            vwap=vwap if vwap else (latest_snap.avg_price if latest_snap else None),
-            last_updated=latest_snap.timestamp if latest_snap else None # Add last_updated from snapshot
+            vwap=median_price if median_price else (latest_snap.avg_price if latest_snap else None),
+            last_updated=latest_snap.timestamp if latest_snap else None
         )
         results.append(c_out)
     
@@ -322,7 +316,7 @@ def read_card(
     real_price = last_sale.price if last_sale else (latest_snap.avg_price if latest_snap else None)
     real_treatment = last_sale.treatment if last_sale else None
     
-    # Calculate VWAP and 30-day volume for single card
+    # Calculate MEDIAN price and 30-day volume for single card
     vwap = None
     prev_close = None
     volume_30d = 0
@@ -330,15 +324,23 @@ def read_card(
         from sqlalchemy import text
         cutoff_30d = datetime.utcnow() - timedelta(days=30)
 
-        # Get VWAP and volume in one query
-        stats_q = text("""
-            SELECT AVG(price), COUNT(*) FROM marketprice
+        # Get MEDIAN price (more robust than AVG - ignores outliers)
+        median_q = text("""
+            SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) FROM marketprice
             WHERE card_id = :cid AND listing_type = 'sold' AND sold_date >= :cutoff
         """)
-        stats_res = session.execute(stats_q, {"cid": card.id, "cutoff": cutoff_30d}).first()
-        if stats_res:
-            vwap = stats_res[0]
-            volume_30d = stats_res[1] or 0
+        median_res = session.execute(median_q, {"cid": card.id, "cutoff": cutoff_30d}).first()
+        if median_res:
+            vwap = median_res[0]
+
+        # Get volume separately
+        vol_q = text("""
+            SELECT COUNT(*) FROM marketprice
+            WHERE card_id = :cid AND listing_type = 'sold' AND sold_date >= :cutoff
+        """)
+        vol_res = session.execute(vol_q, {"cid": card.id, "cutoff": cutoff_30d}).first()
+        if vol_res:
+            volume_30d = vol_res[0] or 0
 
         # Fetch Prev Close (30 days ago for trend calculation)
         prev_q = text("""
@@ -351,22 +353,6 @@ def read_card(
 
     except Exception:
         pass
-
-    # 1. Market Trend Delta
-    avg_delta = 0.0
-    
-    # Strategy A: Sales-based Delta
-    if real_price and prev_close and prev_close > 0:
-        avg_delta = ((real_price - prev_close) / prev_close) * 100
-        
-    # Strategy B: Snapshot Fallback
-    elif latest_snap and oldest_snap and oldest_snap.avg_price > 0 and latest_snap.id != oldest_snap.id:
-        avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
-            
-    # 2. Deal Rating Delta
-    deal_delta = 0.0
-    if real_price and latest_snap and latest_snap.avg_price > 0:
-        deal_delta = ((real_price - latest_snap.avg_price) / latest_snap.avg_price) * 100
 
     # Fetch LIVE active stats from MarketPrice table (always fresh)
     live_lowest_ask = None
@@ -389,25 +375,37 @@ def read_card(
     lowest_ask = live_lowest_ask if live_lowest_ask is not None else (latest_snap.lowest_ask if latest_snap else None)
     inventory = live_inventory if live_inventory is not None else (latest_snap.inventory if latest_snap else 0)
 
+    # Floor Trend: How is the floor price changing over time?
+    # Positive = floor going UP (getting more expensive)
+    # Negative = floor going DOWN (better deals available)
+    floor_delta = 0.0
+    if lowest_ask and oldest_snap and oldest_snap.lowest_ask and oldest_snap.lowest_ask > 0:
+        floor_delta = ((lowest_ask - oldest_snap.lowest_ask) / oldest_snap.lowest_ask) * 100
+
+    # Last Sale Delta: How does last sale compare to floor?
+    sale_delta = 0.0
+    if real_price and lowest_ask and lowest_ask > 0:
+        sale_delta = ((real_price - lowest_ask) / lowest_ask) * 100
+
     c_out = CardOut(
         id=card.id,
-        slug=card.slug,  # Include slug for SEO-friendly URLs
+        slug=card.slug,
         name=card.name,
         set_name=card.set_name,
         rarity_id=card.rarity_id,
         rarity_name=rarity_name,
         latest_price=real_price,
-        volume_30d=volume_30d,  # 30-day volume from MarketPrice
-        price_delta_24h=avg_delta,
-        last_sale_diff=deal_delta,
+        volume_30d=volume_30d,
+        price_delta_24h=floor_delta,   # Floor vs Median delta
+        last_sale_diff=sale_delta,     # Last Sale vs Median delta
         last_sale_treatment=real_treatment,
-        lowest_ask=lowest_ask,  # Use LIVE data from MarketPrice
-        inventory=inventory,    # Use LIVE data from MarketPrice
+        lowest_ask=lowest_ask,
+        inventory=inventory,
         product_type=card.product_type if hasattr(card, 'product_type') else "Single",
         max_price=latest_snap.max_price if latest_snap else None,
         avg_price=latest_snap.avg_price if latest_snap else None,
         vwap=vwap if vwap else (latest_snap.avg_price if latest_snap else None),
-        last_updated=latest_snap.timestamp if latest_snap else None # Add last_updated from snapshot
+        last_updated=latest_snap.timestamp if latest_snap else None
     )
     
     # Cache result
