@@ -201,8 +201,9 @@ async def job_update_blokpax_data():
 
         for slug in WOTF_STOREFRONTS:
             try:
-                # Scrape floor prices
-                floor_data = await scrape_storefront_floor(slug, deep_scan=False)
+                # Scrape floor prices with deep_scan=True to actually compute floor from listings
+                # Without deep_scan, only metadata is fetched and floor_price stays stale
+                floor_data = await scrape_storefront_floor(slug, deep_scan=True)
                 floor_bpx = floor_data.get("floor_price_bpx")
                 floor_usd = floor_data.get("floor_price_usd")
                 listed = floor_data.get("listed_count", 0)

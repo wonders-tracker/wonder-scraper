@@ -305,7 +305,8 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                             price=sale.price,
                             treatment=sale.treatment,
                             url=sale.url,
-                            sold_date=sold_date_str
+                            sold_date=sold_date_str,
+                            floor_price=active_ask if active_ask > 0 else None
                         )
                     except Exception as e:
                         print(f"Discord notification failed: {e}")

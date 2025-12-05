@@ -22,6 +22,7 @@ type CardDetail = {
   lowest_ask?: number
   inventory?: number
   max_price?: number // Added max_price type
+  product_type?: string // Single, Box, Pack, Proof, etc.
   // Calculated fields for display
   market_cap?: number
 }
@@ -42,6 +43,20 @@ type MarketPrice = {
     seller_feedback_percent?: number
     condition?: string
     shipping_cost?: number
+}
+
+type MarketSnapshot = {
+    id: number
+    card_id: number
+    min_price?: number
+    max_price?: number
+    avg_price?: number
+    volume?: number
+    lowest_ask?: number
+    highest_bid?: number
+    inventory?: number
+    timestamp: string
+    platform?: string
 }
 
 // Helper to detect PSA graded cards from title
@@ -166,14 +181,18 @@ function CardDetail() {
       // Then get market snapshot
       try {
           const market = await api.get(`cards/${cardId}/market`).json<any>()
+          // Consistent priority: prefer live data from /cards/{id} over snapshot from /cards/{id}/market
+          // basic.* = computed live from MarketPrice table
+          // market.* = from MarketSnapshot (historical aggregate)
           return {
               ...basic,
-              latest_price: market.avg_price,
-              volume_30d: market.volume,
-              lowest_ask: market.lowest_ask,
-              inventory: market.inventory,
-              max_price: market.max_price, // Added max_price for Highest Confirmed Sale
-              market_cap: (market.avg_price || 0) * (market.volume || 0) // Rough estimate
+              latest_price: basic.latest_price ?? market.avg_price,
+              volume_30d: basic.volume_30d ?? market.volume,
+              lowest_ask: basic.lowest_ask ?? market.lowest_ask,
+              inventory: basic.inventory ?? market.inventory,
+              max_price: basic.max_price ?? market.max_price,
+              product_type: basic.product_type,
+              market_cap: (basic.latest_price || market.avg_price || 0) * (basic.volume_30d || market.volume || 0)
           }
       } catch (e) {
           // If market data fails (404 or 401), return basic info
@@ -197,6 +216,28 @@ function CardDetail() {
           }
       }
   })
+
+  // Fetch Snapshot History (for OpenSea/NFT items that don't have individual sales)
+  const { data: snapshots } = useQuery({
+      queryKey: ['card-snapshots', cardId],
+      queryFn: async () => {
+          try {
+            return await api.get(`cards/${cardId}/snapshots?days=365&limit=500`).json<MarketSnapshot[]>()
+          } catch (e) {
+              return []
+          }
+      },
+      // Only fetch if we have no sales history (OpenSea items)
+      enabled: !isLoadingHistory
+  })
+
+  // Determine if this is an OpenSea/NFT item (no individual sales, only snapshots)
+  const isOpenSeaItem = useMemo(() => {
+      if (!history || history.length === 0) return true
+      // Check if it's a Proof type or has opensea platform in snapshots
+      if (card?.product_type === 'Proof') return true
+      return false
+  }, [history, card])
 
   // Mutation to Track Card
   const trackMutation = useMutation({

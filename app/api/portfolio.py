@@ -1,14 +1,49 @@
 from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func, desc
 
 from app.api import deps
 from app.db import get_session
 from app.models.portfolio import PortfolioItem
 from app.models.card import Card
-from app.models.market import MarketSnapshot
+from app.models.market import MarketSnapshot, MarketPrice
 from app.models.user import User
 from app.schemas import PortfolioItemCreate, PortfolioItemOut, PortfolioItemUpdate
+
+
+def get_live_market_price(session: Session, card_id: int) -> float:
+    """
+    Get live market price for a card, preferring actual data over snapshots.
+    Priority: 1) Latest sold price, 2) Live lowest_ask, 3) Snapshot avg_price
+    """
+    # Try to get most recent sold price
+    last_sale = session.exec(
+        select(MarketPrice.price)
+        .where(MarketPrice.card_id == card_id)
+        .where(MarketPrice.listing_type == "sold")
+        .order_by(desc(MarketPrice.sold_date))
+        .limit(1)
+    ).first()
+    if last_sale:
+        return last_sale
+
+    # Fallback to live lowest_ask from active listings
+    live_ask = session.exec(
+        select(func.min(MarketPrice.price))
+        .where(MarketPrice.card_id == card_id)
+        .where(MarketPrice.listing_type == "active")
+    ).first()
+    if live_ask:
+        return live_ask
+
+    # Final fallback to snapshot avg_price
+    snapshot = session.exec(
+        select(MarketSnapshot)
+        .where(MarketSnapshot.card_id == card_id)
+        .order_by(desc(MarketSnapshot.timestamp))
+        .limit(1)
+    ).first()
+    return snapshot.avg_price if snapshot and snapshot.avg_price else 0.0
 
 router = APIRouter()
 
@@ -63,12 +98,10 @@ def read_portfolio(
     for item in items:
         # Fetch Card Info
         card = session.get(Card, item.card_id)
-        
-        # Fetch Latest Market Price
-        market_stmt = select(MarketSnapshot).where(MarketSnapshot.card_id == item.card_id).order_by(MarketSnapshot.timestamp.desc())
-        market_snap = session.exec(market_stmt).first()
-        current_price = market_snap.avg_price if market_snap else 0.0
-        
+
+        # Get LIVE market price (prefers recent sale > lowest_ask > snapshot)
+        current_price = get_live_market_price(session, item.card_id)
+
         current_value = current_price * item.quantity
         cost_basis = item.purchase_price * item.quantity
         gain_loss = current_value - cost_basis
@@ -123,10 +156,8 @@ def update_portfolio_item(
     # Get card details
     card = session.get(Card, item.card_id)
 
-    # Get market price
-    market_stmt = select(MarketSnapshot).where(MarketSnapshot.card_id == item.card_id).order_by(MarketSnapshot.timestamp.desc())
-    market_snap = session.exec(market_stmt).first()
-    current_price = market_snap.avg_price if market_snap else 0.0
+    # Get LIVE market price (prefers recent sale > lowest_ask > snapshot)
+    current_price = get_live_market_price(session, item.card_id)
 
     current_value = current_price * item.quantity
     cost_basis = item.purchase_price * item.quantity

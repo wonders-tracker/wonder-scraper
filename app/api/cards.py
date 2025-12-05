@@ -231,10 +231,13 @@ def read_cards(
         if last_price and latest_snap and latest_snap.avg_price > 0:
              deal_delta = ((last_price - latest_snap.avg_price) / latest_snap.avg_price) * 100
         
-        # Get LIVE active stats from MarketPrice (preferred) or fallback to snapshot
+        # Get LIVE active stats from MarketPrice (preferred), fallback to snapshot only if None
+        # Use explicit None check since 0 is valid (no active listings)
         live_active = active_stats_map.get(card.id, {})
-        lowest_ask = live_active.get('lowest_ask') or (latest_snap.lowest_ask if latest_snap else None)
-        inventory = live_active.get('inventory') or (latest_snap.inventory if latest_snap else 0)
+        live_lowest = live_active.get('lowest_ask')
+        live_inv = live_active.get('inventory')
+        lowest_ask = live_lowest if live_lowest is not None else (latest_snap.lowest_ask if latest_snap else None)
+        inventory = live_inv if live_inv is not None else (latest_snap.inventory if latest_snap else 0)
 
         c_out = CardOut(
             id=card.id,
@@ -381,9 +384,10 @@ def read_card(
     except Exception:
         pass
 
-    # Use live data if available, otherwise fallback to snapshot
-    lowest_ask = live_lowest_ask or (latest_snap.lowest_ask if latest_snap else None)
-    inventory = live_inventory or (latest_snap.inventory if latest_snap else 0)
+    # Use live data from MarketPrice table (preferred), fallback to snapshot only if None
+    # Note: Use explicit None check since 0 is a valid value (no active listings)
+    lowest_ask = live_lowest_ask if live_lowest_ask is not None else (latest_snap.lowest_ask if latest_snap else None)
+    inventory = live_inventory if live_inventory is not None else (latest_snap.inventory if latest_snap else 0)
 
     c_out = CardOut(
         id=card.id,
@@ -462,3 +466,28 @@ def read_active_listings(
     ).order_by(desc(MarketPrice.scraped_at)).limit(limit)
     active = session.exec(statement).all()
     return active
+
+
+@router.get("/{card_id}/snapshots", response_model=List[MarketSnapshotOut])
+def read_snapshot_history(
+    card_id: str,  # Accept string to support both ID and slug
+    session: Session = Depends(get_session),
+    days: int = Query(default=90, ge=1, le=365, description="Number of days of history"),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> Any:
+    """
+    Get snapshot history for a card (for price charts).
+    Useful for OpenSea/NFT items that don't have individual sales records.
+    Returns aggregate market data over time.
+    """
+    card = get_card_by_id_or_slug(session, card_id)
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    statement = select(MarketSnapshot).where(
+        MarketSnapshot.card_id == card.id,
+        MarketSnapshot.timestamp >= cutoff
+    ).order_by(desc(MarketSnapshot.timestamp)).limit(limit)
+
+    snapshots = session.exec(statement).all()
+    return snapshots

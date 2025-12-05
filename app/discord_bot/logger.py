@@ -156,23 +156,43 @@ def log_new_sale(
     price: float,
     treatment: Optional[str] = None,
     url: Optional[str] = None,
-    sold_date: Optional[str] = None
+    sold_date: Optional[str] = None,
+    floor_price: Optional[float] = None
 ) -> bool:
     """Log a new sale discovery to the new-sales channel."""
     description = f"**{card_name}** sold for **${price:.2f}**"
     if treatment and treatment != "Classic Paper":
         description += f" ({treatment})"
 
+    # Add floor price comparison
+    if floor_price and floor_price > 0:
+        delta = price - floor_price
+        delta_pct = (delta / floor_price) * 100
+        if delta > 0:
+            description += f"\n📈 **+${delta:.2f}** (+{delta_pct:.1f}%) above floor"
+        elif delta < 0:
+            description += f"\n📉 **-${abs(delta):.2f}** (-{abs(delta_pct):.1f}%) below floor"
+        else:
+            description += f"\n➡️ At floor price"
+
     fields = []
+    if floor_price and floor_price > 0:
+        fields.append({"name": "Floor", "value": f"${floor_price:.2f}", "inline": True})
     if sold_date:
         fields.append({"name": "Sold", "value": sold_date, "inline": True})
     if url:
         fields.append({"name": "Link", "value": f"[View on eBay]({url})", "inline": True})
 
+    # Color based on deal quality: green if below floor, yellow if above
+    if floor_price and floor_price > 0:
+        color = 0x10B981 if price <= floor_price else 0xF59E0B  # Green if deal, yellow if premium
+    else:
+        color = 0x10B981  # Default green
+
     return _send_log(
         title="New Sale Detected",
         description=description,
-        color=0x10B981,  # Green
+        color=color,
         fields=fields if fields else None,
         webhook_url=NEW_SALES_WEBHOOK_URL,
         username="Wonders Sales"
@@ -184,7 +204,8 @@ def log_new_listing(
     price: float,
     treatment: Optional[str] = None,
     url: Optional[str] = None,
-    is_auction: bool = False
+    is_auction: bool = False,
+    floor_price: Optional[float] = None
 ) -> bool:
     """Log a new active listing discovery to the new-listings channel."""
     listing_type = "Auction" if is_auction else "Buy It Now"
@@ -192,14 +213,33 @@ def log_new_listing(
     if treatment and treatment != "Classic Paper":
         description += f" - {treatment}"
 
+    # Add floor price comparison
+    if floor_price and floor_price > 0:
+        delta = price - floor_price
+        delta_pct = (delta / floor_price) * 100
+        if delta < 0:
+            description += f"\n🔥 **${abs(delta):.2f}** ({abs(delta_pct):.1f}%) BELOW floor!"
+        elif delta > 0:
+            description += f"\n📊 +${delta:.2f} (+{delta_pct:.1f}%) above floor"
+        else:
+            description += f"\n➡️ At floor price"
+
     fields = []
+    if floor_price and floor_price > 0:
+        fields.append({"name": "Floor", "value": f"${floor_price:.2f}", "inline": True})
     if url:
         fields.append({"name": "Link", "value": f"[View on eBay]({url})", "inline": True})
 
+    # Color: green if below floor (deal!), blue if at/above
+    if floor_price and floor_price > 0 and price < floor_price:
+        color = 0x10B981  # Green for deals below floor
+    else:
+        color = 0x3B82F6  # Blue default
+
     return _send_log(
-        title="New Listing",
+        title="New Listing" if not (floor_price and price < floor_price) else "🎯 Deal Alert",
         description=description,
-        color=0x3B82F6,  # Blue
+        color=color,
         fields=fields if fields else None,
         webhook_url=NEW_LISTINGS_WEBHOOK_URL,
         username="Wonders Listings"

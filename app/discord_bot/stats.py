@@ -123,9 +123,18 @@ def _generate_insights(
         })
 
     # Insight 5: Underpriced cards (current ask significantly below recent avg sale)
+    # Compute LIVE lowest_ask from MarketPrice table instead of stale snapshot
     underpriced = []
     for card in session.exec(select(Card)).all():
-        # Get latest snapshot with lowest ask
+        # Get LIVE lowest_ask from active listings in MarketPrice
+        live_ask_result = session.exec(
+            select(func.min(MarketPrice.price))
+            .where(MarketPrice.card_id == card.id)
+            .where(MarketPrice.listing_type == "active")
+        ).first()
+        live_lowest_ask = live_ask_result if live_ask_result else None
+
+        # Get avg_price from snapshot (this is fine - it's historical aggregate)
         snapshot = session.exec(
             select(MarketSnapshot)
             .where(MarketSnapshot.card_id == card.id)
@@ -133,18 +142,22 @@ def _generate_insights(
             .limit(1)
         ).first()
 
-        if not snapshot or not snapshot.lowest_ask or snapshot.lowest_ask <= 0:
+        # Use live lowest_ask, fallback to snapshot only if no active listings
+        lowest_ask = live_lowest_ask if live_lowest_ask is not None else (snapshot.lowest_ask if snapshot else None)
+        avg_price = snapshot.avg_price if snapshot else None
+
+        if not lowest_ask or lowest_ask <= 0:
             continue
-        if not snapshot.avg_price or snapshot.avg_price <= 0:
+        if not avg_price or avg_price <= 0:
             continue
 
         # If current ask is 20%+ below avg sold price
-        discount_pct = ((snapshot.avg_price - snapshot.lowest_ask) / snapshot.avg_price) * 100
-        if discount_pct > 20 and snapshot.lowest_ask >= 5:  # Min $5 to avoid junk
+        discount_pct = ((avg_price - lowest_ask) / avg_price) * 100
+        if discount_pct > 20 and lowest_ask >= 5:  # Min $5 to avoid junk
             underpriced.append({
                 "name": card.name,
-                "ask": snapshot.lowest_ask,
-                "avg": snapshot.avg_price,
+                "ask": lowest_ask,
+                "avg": avg_price,
                 "discount": discount_pct
             })
 

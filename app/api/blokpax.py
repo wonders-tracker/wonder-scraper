@@ -1,0 +1,261 @@
+"""
+Blokpax API endpoints for frontend integration.
+Provides access to WOTF storefront data, floor prices, and sales history.
+"""
+from typing import Any, List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
+from sqlmodel import Session, select, desc
+from datetime import datetime, timedelta
+from pydantic import BaseModel
+
+from app.db import get_session
+from app.models.blokpax import (
+    BlokpaxStorefront,
+    BlokpaxSnapshot,
+    BlokpaxSale,
+    BlokpaxAssetDB,
+)
+
+router = APIRouter()
+
+
+# Pydantic schemas for API responses
+class BlokpaxStorefrontOut(BaseModel):
+    id: int
+    slug: str
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    network_id: int
+    floor_price_bpx: Optional[float] = None
+    floor_price_usd: Optional[float] = None
+    total_tokens: int
+    listed_count: int
+    updated_at: datetime
+
+
+class BlokpaxSnapshotOut(BaseModel):
+    id: int
+    storefront_slug: str
+    floor_price_bpx: Optional[float] = None
+    floor_price_usd: Optional[float] = None
+    bpx_price_usd: float
+    listed_count: int
+    total_tokens: int
+    timestamp: datetime
+
+
+class BlokpaxSaleOut(BaseModel):
+    id: int
+    listing_id: str
+    asset_id: str
+    asset_name: str
+    price_bpx: float
+    price_usd: float
+    quantity: int
+    seller_address: str
+    buyer_address: str
+    filled_at: datetime
+    card_id: Optional[int] = None
+
+
+class BlokpaxAssetOut(BaseModel):
+    id: int
+    external_id: str
+    storefront_slug: str
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    network_id: int
+    owner_count: int
+    token_count: int
+    floor_price_bpx: Optional[float] = None
+    floor_price_usd: Optional[float] = None
+    card_id: Optional[int] = None
+
+
+@router.get("/storefronts", response_model=List[BlokpaxStorefrontOut])
+def list_storefronts(
+    session: Session = Depends(get_session),
+) -> Any:
+    """
+    List all WOTF storefronts with current floor prices.
+    """
+    storefronts = session.exec(
+        select(BlokpaxStorefront).order_by(BlokpaxStorefront.name)
+    ).all()
+    return storefronts
+
+
+@router.get("/storefronts/{slug}", response_model=BlokpaxStorefrontOut)
+def get_storefront(
+    slug: str,
+    session: Session = Depends(get_session),
+) -> Any:
+    """
+    Get detailed data for a specific storefront.
+    """
+    storefront = session.exec(
+        select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)
+    ).first()
+
+    if not storefront:
+        raise HTTPException(status_code=404, detail="Storefront not found")
+
+    return storefront
+
+
+@router.get("/storefronts/{slug}/snapshots", response_model=List[BlokpaxSnapshotOut])
+def get_storefront_snapshots(
+    slug: str,
+    session: Session = Depends(get_session),
+    days: int = Query(default=30, ge=1, le=365, description="Number of days of history"),
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> Any:
+    """
+    Get price history snapshots for a storefront (for charts).
+    """
+    # Verify storefront exists
+    storefront = session.exec(
+        select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)
+    ).first()
+
+    if not storefront:
+        raise HTTPException(status_code=404, detail="Storefront not found")
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    snapshots = session.exec(
+        select(BlokpaxSnapshot)
+        .where(BlokpaxSnapshot.storefront_slug == slug)
+        .where(BlokpaxSnapshot.timestamp >= cutoff)
+        .order_by(desc(BlokpaxSnapshot.timestamp))
+        .limit(limit)
+    ).all()
+
+    return snapshots
+
+
+@router.get("/storefronts/{slug}/sales", response_model=List[BlokpaxSaleOut])
+def get_storefront_sales(
+    slug: str,
+    session: Session = Depends(get_session),
+    days: int = Query(default=30, ge=1, le=365, description="Number of days of history"),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    """
+    Get recent sales for a specific storefront.
+    """
+    # For reward-room, we filter WOTF assets in the scraper
+    # For dedicated storefronts, all sales are WOTF
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    # Get sales that match assets in this storefront
+    # Since BlokpaxSale doesn't have storefront_slug, we need to join through assets
+    # Or we can infer from asset naming patterns
+
+    # For now, get all WOTF sales and let frontend filter by storefront if needed
+    # This is a simplification - ideally we'd add storefront_slug to BlokpaxSale
+    sales = session.exec(
+        select(BlokpaxSale)
+        .where(BlokpaxSale.filled_at >= cutoff)
+        .order_by(desc(BlokpaxSale.filled_at))
+        .limit(limit)
+    ).all()
+
+    return sales
+
+
+@router.get("/sales", response_model=List[BlokpaxSaleOut])
+def list_all_sales(
+    session: Session = Depends(get_session),
+    days: int = Query(default=7, ge=1, le=90, description="Number of days of history"),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> Any:
+    """
+    Get recent sales across all WOTF storefronts.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    sales = session.exec(
+        select(BlokpaxSale)
+        .where(BlokpaxSale.filled_at >= cutoff)
+        .order_by(desc(BlokpaxSale.filled_at))
+        .limit(limit)
+    ).all()
+
+    return sales
+
+
+@router.get("/assets", response_model=List[BlokpaxAssetOut])
+def list_assets(
+    session: Session = Depends(get_session),
+    storefront_slug: Optional[str] = Query(default=None, description="Filter by storefront"),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> Any:
+    """
+    List indexed Blokpax assets, optionally filtered by storefront.
+    """
+    query = select(BlokpaxAssetDB)
+
+    if storefront_slug:
+        query = query.where(BlokpaxAssetDB.storefront_slug == storefront_slug)
+
+    query = query.order_by(BlokpaxAssetDB.floor_price_usd.asc()).limit(limit)
+
+    assets = session.exec(query).all()
+    return assets
+
+
+@router.get("/summary")
+def get_blokpax_summary(
+    session: Session = Depends(get_session),
+) -> Any:
+    """
+    Get a summary of all WOTF Blokpax data for dashboard display.
+    """
+    storefronts = session.exec(select(BlokpaxStorefront)).all()
+
+    # Calculate totals
+    total_listed = sum(sf.listed_count or 0 for sf in storefronts)
+    total_tokens = sum(sf.total_tokens or 0 for sf in storefronts)
+
+    # Get lowest floor across all storefronts
+    floors = [sf.floor_price_usd for sf in storefronts if sf.floor_price_usd]
+    lowest_floor = min(floors) if floors else None
+
+    # Get recent sales count (last 24h)
+    cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+    recent_sales = len(session.exec(
+        select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_24h)
+    ).all())
+
+    # Get total sales volume (last 7d)
+    cutoff_7d = datetime.utcnow() - timedelta(days=7)
+    week_sales = session.exec(
+        select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_7d)
+    ).all()
+    volume_7d_usd = sum(s.price_usd * s.quantity for s in week_sales)
+
+    return {
+        "storefronts": [
+            {
+                "slug": sf.slug,
+                "name": sf.name,
+                "floor_price_usd": sf.floor_price_usd,
+                "floor_price_bpx": sf.floor_price_bpx,
+                "listed_count": sf.listed_count,
+                "total_tokens": sf.total_tokens,
+            }
+            for sf in storefronts
+        ],
+        "totals": {
+            "total_listed": total_listed,
+            "total_tokens": total_tokens,
+            "lowest_floor_usd": lowest_floor,
+            "recent_sales_24h": recent_sales,
+            "volume_7d_usd": volume_7d_usd,
+        }
+    }
