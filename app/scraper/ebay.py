@@ -39,13 +39,17 @@ def _bulk_check_indexed(
         ]
 
         if external_ids:
+            # Filter by card_id to allow same listing to exist under different cards
             existing_ids = session.exec(
                 select(MarketPrice.external_id)
-                .where(MarketPrice.external_id.in_(external_ids))
+                .where(
+                    MarketPrice.external_id.in_(external_ids),
+                    MarketPrice.card_id == card_id
+                )
             ).all()
             existing_ids_set = set(existing_ids)
 
-            # Mark indices with existing external_ids
+            # Mark indices with existing external_ids for THIS card
             for i, listing in enumerate(listings_data):
                 if listing.get("external_id") in existing_ids_set:
                     indexed_indices.add(i)

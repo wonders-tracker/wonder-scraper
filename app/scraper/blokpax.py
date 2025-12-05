@@ -352,67 +352,193 @@ def _parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
-async def scrape_all_listings(slug: str, max_pages: int = 200) -> List[BlokpaxListing]:
+async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int = 20) -> List[BlokpaxListing]:
     """
-    Scrapes ALL active listings from a storefront by checking each asset.
-    This is slower but necessary because the bulk endpoint doesn't include
-    floor_listing data.
+    Scrapes ALL active listings from a storefront using an adaptive strategy.
+
+    IMPORTANT: Different storefronts have different behaviors:
+    - wotf-art-proofs: Sequential small integers (1-5000), bulk endpoint HIDES listed assets
+    - wotf-existence-collector-boxes: Large non-sequential IDs (~4.2B), requires perPage=5 for floor_listing
+    - reward-room: Large non-sequential IDs (~2.1B), requires perPage=5 for floor_listing
+
+    Strategy Detection:
+    1. First check with perPage=5 (API quirk: only returns floor_listing at small page sizes)
+    2. If bulk includes floor_listing with perPage=5: Use small page size to collect all
+    3. If bulk hides listings: Use "missing ID" strategy for sequential IDs
+    4. For non-sequential IDs without bulk data: Fall back to v2 API probing
 
     Args:
         slug: Storefront slug
-        max_pages: Maximum pages to scan (24 assets per page)
+        max_pages: Maximum pages to scan from bulk endpoint
+        concurrency: Number of concurrent requests (default 20)
 
     Returns:
         List of all active BlokpaxListing objects
     """
+    import aiohttp
+
     bpx_price = await get_bpx_price()
     all_listings: List[BlokpaxListing] = []
     seen_listing_ids = set()
 
-    print(f"  Scanning all assets for listings (this may take a while)...")
+    print(f"  Scanning {slug} for active listings...")
 
-    # First get total pages
-    first_response = await fetch_storefront_assets(slug, page=1, per_page=24)
-    meta = first_response.get("meta", {})
-    total_pages = meta.get("last_page", 1)
-    total_assets = meta.get("total", 0)
-    print(f"  Total: {total_assets} assets across {total_pages} pages")
+    async with aiohttp.ClientSession() as session:
+        # Step 0: First probe with perPage=5 to check if API returns floor_listing data
+        # This is a Blokpax API quirk: floor_listing data ONLY appears when perPage <= 5
+        probe_url = f"{BLOKPAX_API_BASE}/storefront/{slug}/assets"
+        probe_params = {"pg": 1, "perPage": 5, "query": "", "sort": "price_asc"}
+        use_small_pages = False
 
-    page = 1
-    while page <= min(max_pages, total_pages):
         try:
-            if page > 1:
-                assets_response = await fetch_storefront_assets(slug, page=page, per_page=24)
-            else:
-                assets_response = first_response
+            async with session.get(probe_url, params=probe_params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                if resp.status == 200:
+                    probe_data = await resp.json()
+                    probe_assets = probe_data.get("data", [])
+                    for a in probe_assets:
+                        fl = a.get("floor_listing")
+                        if fl and fl.get("listing_status") == "active":
+                            use_small_pages = True
+                            break
+        except Exception:
+            pass
 
-            assets = assets_response.get("data", [])
+        # Step 1: Collect all asset IDs from bulk endpoint AND check for floor_listing data
+        all_asset_ids = []  # Store as strings (API returns mixed types)
+        bulk_has_listings = False  # Track if bulk endpoint includes floor_listing data
+        page = 1
+        total_pages = 1
+        total_assets = 0
 
-            if not assets:
+        # Use perPage=5 if the probe found floor_listing data, otherwise use 100 for speed
+        per_page = 5 if use_small_pages else 100
+
+        if use_small_pages:
+            print(f"  Using small page mode (perPage=5) - API quirk requires this for floor_listing")
+            # With small pages, we need more pages but can early-exit when listings stop appearing
+            effective_max_pages = max_pages * 20  # Allow up to 4000 pages for small page mode
+        else:
+            effective_max_pages = max_pages
+
+        # Track consecutive pages without new listings (for early exit in small page mode)
+        pages_without_listings = 0
+        max_empty_pages = 10  # Exit after 10 consecutive pages with no listings
+
+        while page <= min(effective_max_pages, total_pages):
+            url = f"{BLOKPAX_API_BASE}/storefront/{slug}/assets"
+            params = {"pg": page, "perPage": per_page, "query": "", "sort": "price_asc"}
+
+            try:
+                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status != 200:
+                        break
+                    data = await resp.json()
+                    assets = data.get("data", [])
+                    meta = data.get("meta", {})
+
+                    if page == 1:
+                        total_pages = meta.get("last_page", 1)
+                        total_assets = meta.get("total", 0)
+                        print(f"  Total assets: {total_assets} across {total_pages} pages")
+
+                    page_had_listings = False
+                    for a in assets:
+                        aid = a.get("id")
+                        if aid is not None:
+                            # Store as string for consistency
+                            all_asset_ids.append(str(aid))
+
+                        # Check if bulk endpoint includes floor_listing data
+                        floor_listing = a.get("floor_listing")
+                        if floor_listing and floor_listing.get("listing_status") == "active":
+                            bulk_has_listings = True
+                            page_had_listings = True
+                            raw_price = floor_listing.get("price", 0)
+                            if raw_price > 0:
+                                listing_id = str(floor_listing.get("id", ""))
+                                if listing_id and listing_id not in seen_listing_ids:
+                                    seen_listing_ids.add(listing_id)
+                                    asset_name = a.get("name", "Unknown")
+                                    all_listings.append(BlokpaxListing(
+                                        listing_id=listing_id,
+                                        asset_id=str(aid),
+                                        price_bpx=bpx_to_float(raw_price),
+                                        price_usd=bpx_to_usd(raw_price, bpx_price),
+                                        quantity=floor_listing.get("quantity", 1),
+                                        seller_address=floor_listing.get("seller", {}).get("address", "") if isinstance(floor_listing.get("seller"), dict) else "",
+                                        created_at=_parse_datetime(floor_listing.get("created_at"))
+                                    ))
+
+                    # For small page mode: early exit if we've passed all listings
+                    # Since sorted by price_asc, listed items come first
+                    if use_small_pages:
+                        if page_had_listings:
+                            pages_without_listings = 0
+                        else:
+                            pages_without_listings += 1
+                            # If we found listings before but now have many empty pages, stop
+                            if bulk_has_listings and pages_without_listings >= max_empty_pages:
+                                print(f"  Early exit: {pages_without_listings} consecutive pages without listings")
+                                break
+
+                    page += 1
+                    await asyncio.sleep(0.05)
+
+            except Exception as e:
+                print(f"  Error fetching page {page}: {e}")
                 break
 
-            # Check each asset for listings
-            for asset_data in assets:
-                asset_id = asset_data.get("id")
-                asset_name = asset_data.get("name", "Unknown")
-                if not asset_id:
-                    continue
+        if not all_asset_ids:
+            print(f"  No assets found in bulk endpoint")
+            return []
 
-                try:
-                    detail = await fetch_asset_details(slug, str(asset_id))
-                    asset_info = detail.get("data", {}).get("asset", {})
-                    listings = asset_info.get("listings", [])
+        # If bulk endpoint already gave us listings, we're done!
+        if bulk_has_listings and all_listings:
+            print(f"  Bulk endpoint included floor_listing data - extracted {len(all_listings)} listings directly")
+            all_listings.sort(key=lambda x: x.price_bpx)
+            return all_listings
 
-                    for listing in listings:
-                        listing_id = str(listing.get("id", ""))
-                        if listing_id in seen_listing_ids:
-                            continue
+        # Step 2: Detect ID pattern to choose strategy
+        # Convert to integers for analysis
+        try:
+            int_ids = [int(aid) for aid in all_asset_ids]
+            max_id = max(int_ids)
+            min_id = min(int_ids)
+            id_range = max_id - min_id
 
+            # Check if IDs are sequential (small gaps) or non-sequential (large, scattered)
+            # Sequential: IDs are within a reasonable range of total count
+            # Non-sequential: IDs are huge (>1M) or range is >> count
+            is_sequential = max_id < 100000 and id_range < total_assets * 2
+        except (ValueError, TypeError):
+            # IDs can't be converted to int - treat as non-sequential
+            is_sequential = False
+            max_id = 0
+            min_id = 0
+
+        print(f"  Bulk returned {len(all_asset_ids)} IDs (range: {min_id}-{max_id})")
+
+        # Helper function to probe an asset for listings
+        async def check_asset_v2(asset_id: str) -> Optional[List[BlokpaxListing]]:
+            url = f"{BLOKPAX_API_BASE}/v2/storefront/{slug}/asset/{asset_id}"
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status != 200:
+                        return None
+
+                    data = await resp.json()
+                    d = data.get("data", {})
+                    asset_info = d.get("asset", {})
+                    listings_data = asset_info.get("listings", [])
+                    asset_name = d.get("name", "Unknown")
+
+                    found_listings = []
+                    for listing in listings_data:
                         if listing.get("listing_status") == "active":
                             raw_price = listing.get("price", 0)
                             if raw_price > 0:
-                                seen_listing_ids.add(listing_id)
-                                all_listings.append(BlokpaxListing(
+                                listing_id = str(listing.get("id", ""))
+                                found_listings.append(BlokpaxListing(
                                     listing_id=listing_id,
                                     asset_id=str(asset_id),
                                     price_bpx=bpx_to_float(raw_price),
@@ -421,21 +547,57 @@ async def scrape_all_listings(slug: str, max_pages: int = 200) -> List[BlokpaxLi
                                     seller_address=listing.get("owner", {}).get("username", ""),
                                     created_at=_parse_datetime(listing.get("created_at"))
                                 ))
-                                print(f"    Found: {asset_name[:30]} @ {bpx_to_float(raw_price):,.0f} BPX")
 
-                    await asyncio.sleep(0.15)  # Rate limit between asset calls
+                    if found_listings:
+                        price = found_listings[0].price_bpx
+                        print(f"    ✓ {asset_name[:35]} @ {price:,.0f} BPX")
 
-                except Exception as e:
-                    print(f"    Error fetching asset {asset_id}: {e}")
+                    return found_listings if found_listings else None
 
-            print(f"    Page {page}/{total_pages}: scanned {len(assets)} assets, {len(all_listings)} listings found")
+            except Exception:
+                return None
 
-            page += 1
-            await asyncio.sleep(0.3)  # Rate limit between pages
+        # Step 3: Choose strategy based on ID pattern
+        if is_sequential:
+            # SEQUENTIAL IDs: Bulk endpoint hides listed assets
+            # Probe "missing" IDs in the range that aren't in bulk response
+            print(f"  Strategy: Missing ID probe (sequential IDs detected)")
 
-        except Exception as e:
-            print(f"    Error on page {page}: {e}")
-            break
+            known_ids_set = set(int_ids)
+            missing_ids = []
+            for i in range(max_id + 100):
+                if i not in known_ids_set:
+                    missing_ids.append(str(i))
+
+            print(f"  Found {len(missing_ids)} missing IDs to probe")
+            ids_to_check = missing_ids
+        else:
+            # NON-SEQUENTIAL IDs: Bulk endpoint shows ALL assets, just probe each one
+            # This is slower but necessary for storefronts with large scattered IDs
+            print(f"  Strategy: Full scan (non-sequential IDs detected)")
+            ids_to_check = all_asset_ids
+
+        # Step 4: Probe assets in concurrent batches
+        checked = 0
+        total_to_check = len(ids_to_check)
+
+        for i in range(0, total_to_check, concurrency):
+            batch = ids_to_check[i:i + concurrency]
+            tasks = [check_asset_v2(aid) for aid in batch]
+            results = await asyncio.gather(*tasks)
+
+            for result in results:
+                if result:
+                    for listing in result:
+                        if listing.listing_id not in seen_listing_ids:
+                            seen_listing_ids.add(listing.listing_id)
+                            all_listings.append(listing)
+
+            checked += len(batch)
+            if checked % 200 == 0 or checked == total_to_check:
+                print(f"    Progress: {checked}/{total_to_check} assets checked, {len(all_listings)} listings found")
+
+            await asyncio.sleep(0.05)
 
     # Sort by price ascending
     all_listings.sort(key=lambda x: x.price_bpx)

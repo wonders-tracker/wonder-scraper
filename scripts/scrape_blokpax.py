@@ -9,6 +9,7 @@ Usage:
 """
 import asyncio
 import argparse
+import time
 from datetime import datetime, timedelta
 from typing import List
 
@@ -33,6 +34,7 @@ from app.models.blokpax import (
     BlokpaxSale,
     BlokpaxSnapshot,
 )
+from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
 
 
 async def scrape_storefront_metadata(slug: str) -> dict:
@@ -333,22 +335,48 @@ async def main():
     # Determine which storefronts to scrape
     slugs = [args.slug] if args.slug else WOTF_STOREFRONTS
 
-    # Ensure storefronts exist in DB
-    for slug in slugs:
-        await scrape_storefront_metadata(slug)
+    # Log scrape start to Discord
+    start_time = time.time()
+    log_scrape_start(len(slugs), scrape_type="blokpax")
 
-    # Run requested scrapers
-    if args.assets:
+    errors = 0
+    new_sales = 0
+
+    try:
+        # Ensure storefronts exist in DB
         for slug in slugs:
-            await scrape_all_assets(slug, max_pages=args.pages)
-    elif args.floors:
-        await scrape_floor_prices(slugs, deep_scan=args.deep)
-    elif args.sales:
-        await scrape_sales(slugs, max_pages=args.pages)
-    else:
-        # Default: floors + sales
-        await scrape_floor_prices(slugs, deep_scan=args.deep)
-        await scrape_sales(slugs, max_pages=args.pages)
+            await scrape_storefront_metadata(slug)
+
+        # Run requested scrapers
+        if args.assets:
+            for slug in slugs:
+                await scrape_all_assets(slug, max_pages=args.pages)
+        elif args.floors:
+            await scrape_floor_prices(slugs, deep_scan=args.deep)
+        elif args.sales:
+            result = await scrape_sales(slugs, max_pages=args.pages)
+            new_sales = result.get("new", 0)
+        else:
+            # Default: floors + sales
+            await scrape_floor_prices(slugs, deep_scan=args.deep)
+            result = await scrape_sales(slugs, max_pages=args.pages)
+            new_sales = result.get("new", 0)
+
+    except Exception as e:
+        errors += 1
+        log_scrape_error("Blokpax", str(e))
+        raise
+
+    finally:
+        # Log scrape complete to Discord
+        duration = time.time() - start_time
+        log_scrape_complete(
+            cards_processed=len(slugs),
+            new_listings=0,
+            new_sales=new_sales,
+            duration_seconds=duration,
+            errors=errors
+        )
 
     print("\n" + "=" * 60)
     print("SCRAPE COMPLETE")

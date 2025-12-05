@@ -7,6 +7,7 @@ from app.scraper.browser import BrowserManager, get_page_content
 from app.scraper.simple_http import get_page_simple
 from app.scraper.utils import build_ebay_url
 from app.scraper.ebay import parse_active_results, parse_total_results
+from app.discord_bot.logger import log_new_listing
 from typing import Tuple, Optional
 
 async def scrape_active_data(card_name: str, card_id: int, search_term: Optional[str] = None, save_to_db: bool = True, product_type: str = "Single") -> Tuple[float, int, float]:
@@ -93,6 +94,22 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                         session.add_all(new_items)
                         session.commit()
                         print(f"Saved {len(new_items)} new active listings for {card_name} (skipped {len(items) - len(new_items)} duplicates)")
+
+                        # Send webhook notifications for new listings
+                        for item in new_items:
+                            try:
+                                # Check if auction based on bid_count
+                                is_auction = getattr(item, 'bid_count', 0) > 0
+                                log_new_listing(
+                                    card_name=card_name,
+                                    price=item.price,
+                                    treatment=getattr(item, 'treatment', None),
+                                    url=item.url,
+                                    is_auction=is_auction
+                                )
+                            except Exception as webhook_err:
+                                # Don't let webhook errors affect scraping
+                                pass
                     else:
                         print(f"No new active listings to save for {card_name} (all {len(items)} already exist)")
             except Exception as db_err:

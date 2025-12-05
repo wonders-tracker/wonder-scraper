@@ -1,5 +1,6 @@
 import asyncio
 import random
+import time
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlmodel import Session, select
@@ -10,6 +11,7 @@ from app.models.market import MarketSnapshot
 from scripts.scrape_card import scrape_card as scrape_sold_data
 from app.scraper.active import scrape_active_data
 from app.scraper.browser import BrowserManager
+from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
 from datetime import datetime, timedelta
 import concurrent.futures
 
@@ -58,6 +60,7 @@ async def job_update_market_data():
     Includes robust error handling for browser startup failures.
     """
     print(f"[{datetime.utcnow()}] Starting Scheduled Market Update...")
+    start_time = time.time()
 
     with Session(engine) as session:
         # Get cards that haven't been updated in the last hour (or all if none)
@@ -95,6 +98,9 @@ async def job_update_market_data():
         return
 
     print(f"[Polling] Updating {len(cards_to_update)} cards...")
+
+    # Log scrape start to Discord
+    log_scrape_start(len(cards_to_update), scrape_type="scheduled")
 
     # Initialize browser with retry logic
     max_browser_retries = 3
@@ -148,8 +154,19 @@ async def job_update_market_data():
 
         print(f"[Polling] Results: {successful} successful, {failed} failed out of {len(cards_to_update)} cards")
 
+        # Log scrape complete to Discord
+        duration = time.time() - start_time
+        log_scrape_complete(
+            cards_processed=len(cards_to_update),
+            new_listings=0,  # Scheduled scrapes don't track new listings separately
+            new_sales=0,
+            duration_seconds=duration,
+            errors=failed
+        )
+
     except Exception as e:
         print(f"[Polling] ERROR during scraping: {type(e).__name__}: {e}")
+        log_scrape_error("Scheduled Job", str(e))
 
     finally:
         await BrowserManager.close()

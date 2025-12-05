@@ -51,11 +51,13 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
             unique_queries.append("Wonders of the First Booster Pack")
 
     elif product_type == "Lot":
-        # Use actual card name for lots
-        unique_queries.append(card_name)
-        # Add generic lot/bundle searches
+        # Lots are catch-all for bulk/bundle/collection sales
+        # Search multiple variations since sellers use different terms
         unique_queries.append("Wonders of the First Lot")
         unique_queries.append("Wonders of the First Bundle")
+        unique_queries.append("Wonders of the First Bulk")
+        unique_queries.append("Wonders of the First Collection")
+        unique_queries.append("Wonders Existence Lot")  # Abbreviated variation
 
     elif product_type == "Proof":
         # Use actual card name for proofs
