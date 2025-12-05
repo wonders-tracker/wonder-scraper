@@ -10,17 +10,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# Webhook URLs for different channels
 LOGS_WEBHOOK_URL = os.getenv("DISCORD_LOGS_WEBHOOK_URL")
+UPDATES_WEBHOOK_URL = os.getenv("DISCORD_UPDATES_WEBHOOK_URL")
+NEW_LISTINGS_WEBHOOK_URL = os.getenv("DISCORD_NEW_LISTINGS_WEBHOOK_URL")
+NEW_SALES_WEBHOOK_URL = os.getenv("DISCORD_NEW_SALES_WEBHOOK_URL")
 
 
 def _send_log(
     title: str,
     description: str,
     color: int,
-    fields: list = None
+    fields: list = None,
+    webhook_url: str = None,
+    username: str = "Wonders Logs"
 ) -> bool:
     """Send a log message to Discord webhook."""
-    if not LOGS_WEBHOOK_URL:
+    url = webhook_url or LOGS_WEBHOOK_URL
+    if not url:
         return False
 
     embed = {
@@ -28,7 +35,7 @@ def _send_log(
         "description": description,
         "color": color,
         "timestamp": datetime.utcnow().isoformat(),
-        "footer": {"text": "Wonders Scraper"}
+        "footer": {"text": "WondersTracker"}
     }
 
     if fields:
@@ -36,9 +43,9 @@ def _send_log(
 
     try:
         response = requests.post(
-            LOGS_WEBHOOK_URL,
+            url,
             json={
-                "username": "Wonders Logs",
+                "username": username,
                 "embeds": [embed]
             },
             timeout=5
@@ -151,7 +158,7 @@ def log_new_sale(
     url: Optional[str] = None,
     sold_date: Optional[str] = None
 ) -> bool:
-    """Log a new sale discovery with channel ping."""
+    """Log a new sale discovery to the new-sales channel."""
     description = f"**{card_name}** sold for **${price:.2f}**"
     if treatment and treatment != "Classic Paper":
         description += f" ({treatment})"
@@ -166,7 +173,9 @@ def log_new_sale(
         title="New Sale Detected",
         description=description,
         color=0x10B981,  # Green
-        fields=fields if fields else None
+        fields=fields if fields else None,
+        webhook_url=NEW_SALES_WEBHOOK_URL,
+        username="Wonders Sales"
     )
 
 
@@ -177,7 +186,7 @@ def log_new_listing(
     url: Optional[str] = None,
     is_auction: bool = False
 ) -> bool:
-    """Log a new active listing discovery with channel ping."""
+    """Log a new active listing discovery to the new-listings channel."""
     listing_type = "Auction" if is_auction else "Buy It Now"
     description = f"**{card_name}** listed for **${price:.2f}** ({listing_type})"
     if treatment and treatment != "Classic Paper":
@@ -191,5 +200,7 @@ def log_new_listing(
         title="New Listing",
         description=description,
         color=0x3B82F6,  # Blue
-        fields=fields if fields else None
+        fields=fields if fields else None,
+        webhook_url=NEW_LISTINGS_WEBHOOK_URL,
+        username="Wonders Listings"
     )
