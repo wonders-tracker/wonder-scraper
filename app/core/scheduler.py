@@ -3,6 +3,7 @@ import random
 import time
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 from sqlmodel import Session, select
 from sqlalchemy import func
 from app.db import engine
@@ -19,7 +20,7 @@ from app.scraper.blokpax import (
     scrape_recent_sales,
     is_wotf_asset,
 )
-from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
+from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error, log_market_insights
 from datetime import datetime, timedelta
 import concurrent.futures
 
@@ -266,6 +267,37 @@ async def job_update_blokpax_data():
     print(f"[{datetime.utcnow()}] Blokpax Update Complete. Duration: {duration:.1f}s")
 
 
+async def job_market_insights():
+    """
+    Generate and post AI-powered market insights to Discord.
+    Runs 2x daily (morning and evening).
+    """
+    print(f"[{datetime.utcnow()}] Generating Market Insights...")
+
+    try:
+        from app.services.market_insights import get_insights_generator
+
+        generator = get_insights_generator()
+
+        # Gather market data
+        data = generator.gather_market_data()
+
+        # Generate AI insights
+        insights = generator.generate_insights(data)
+
+        # Post to Discord
+        success = log_market_insights(insights)
+
+        if success:
+            print(f"[{datetime.utcnow()}] Market insights posted to Discord")
+        else:
+            print(f"[{datetime.utcnow()}] Failed to post market insights")
+
+    except Exception as e:
+        print(f"[{datetime.utcnow()}] Market insights error: {e}")
+        log_scrape_error("Market Insights", str(e))
+
+
 def start_scheduler():
     # Schedule eBay scraping to run every 30 minutes
     scheduler.add_job(job_update_market_data, IntervalTrigger(minutes=30))
@@ -273,8 +305,13 @@ def start_scheduler():
     # Schedule Blokpax scraping to run every 15 minutes (lightweight API-based)
     scheduler.add_job(job_update_blokpax_data, IntervalTrigger(minutes=15))
 
+    # Schedule AI market insights 2x daily (9 AM and 6 PM UTC)
+    scheduler.add_job(job_market_insights, CronTrigger(hour=9, minute=0))  # Morning report
+    scheduler.add_job(job_market_insights, CronTrigger(hour=18, minute=0))  # Evening report
+
     scheduler.start()
     print("Scheduler started:")
     print("  - job_update_market_data (eBay): 30m interval")
     print("  - job_update_blokpax_data (Blokpax): 15m interval")
+    print("  - job_market_insights (Discord AI): 9:00 & 18:00 UTC")
 
