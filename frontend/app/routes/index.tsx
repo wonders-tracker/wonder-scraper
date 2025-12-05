@@ -3,7 +3,7 @@ import { api, auth } from '../utils/auth'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel, getPaginationRowModel } from '@tanstack/react-table'
 import { useState, useMemo, useEffect } from 'react'
-import { ArrowUpDown, Search, ArrowUp, ArrowDown, Calendar, TrendingUp, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
+import { ArrowUpDown, Search, ArrowUp, ArrowDown, Calendar, TrendingUp, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Plus, X, Package, Layers, Gem, Archive, Info } from 'lucide-react'
 import clsx from 'clsx'
 import { Route as rootRoute } from './__root'
 
@@ -120,14 +120,36 @@ function Home() {
       },
       cell: ({ row }) => {
         const productType = row.original.product_type || 'Single'
-        const showBadge = productType !== 'Single' // Only show badge for non-singles
+        const isSingle = productType === 'Single'
+        const rarity = row.original.rarity_name || ''
+
+        // Icon component by product type
+        const IconComponent = productType === 'Box' ? Package
+          : productType === 'Pack' ? Layers
+          : productType === 'Proof' ? Gem
+          : productType === 'Lot' ? Archive
+          : null
+
         return (
           <div className="max-w-[180px] md:max-w-none">
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-foreground truncate text-sm" title={row.getValue('name')}>{row.getValue('name')}</span>
-                {showBadge && (
-                  <span className="shrink-0 px-1 py-0.5 rounded text-[7px] uppercase font-bold bg-primary/20 text-primary border border-primary/30">
-                    {productType}
+                {isSingle && rarity && (
+                  <span className={clsx(
+                    "shrink-0 text-[8px] font-bold uppercase px-1 py-0.5 rounded",
+                    rarity === 'Mythic' ? 'text-amber-900 bg-amber-400' :
+                    rarity === 'Legendary' ? 'text-orange-900 bg-orange-400' :
+                    rarity === 'Epic' ? 'text-purple-900 bg-purple-400' :
+                    rarity === 'Rare' ? 'text-blue-900 bg-blue-400' :
+                    rarity === 'Uncommon' ? 'text-emerald-900 bg-emerald-400' :
+                    'text-zinc-900 bg-zinc-400'
+                  )} title={rarity}>
+                    {rarity}
+                  </span>
+                )}
+                {!isSingle && IconComponent && (
+                  <span className="shrink-0 text-muted-foreground/40" title={productType}>
+                    <IconComponent className="w-3.5 h-3.5" />
                   </span>
                 )}
               </div>
@@ -143,7 +165,7 @@ function Home() {
           className="flex items-center gap-1 hover:text-primary uppercase tracking-wider text-xs ml-auto"
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
         >
-          Price (VWAP)
+          30d Avg
           <ArrowUpDown className="h-3 w-3" />
         </button>
       ),
@@ -163,13 +185,17 @@ function Home() {
                     {hasPrice ? `$${price.toFixed(2)}` : '---'}
                     {isAskOnly && <span className="text-[9px] ml-1">(ask)</span>}
                 </span>
-                {hasPrice && delta !== 0 && (
+                {hasPrice && delta !== 0 ? (
                     <span className={clsx(
                         "text-[10px] font-mono px-1 py-0.5 rounded",
                         delta > 0 ? "text-emerald-400 bg-emerald-500/10" :
                         "text-red-400 bg-red-500/10"
                     )}>
                         {delta > 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%
+                    </span>
+                ) : hasPrice && (
+                    <span className="text-muted-foreground/30 cursor-help" title="Stable price - last sale equals historical average">
+                        <Info className="w-3 h-3" />
                     </span>
                 )}
             </div>

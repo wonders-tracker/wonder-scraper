@@ -177,35 +177,40 @@ def read_cards(
             active_stats_results = session.execute(active_stats_query, {"card_ids": card_ids}).all()
             active_stats_map = {row[0]: {'lowest_ask': row[1], 'inventory': row[2]} for row in active_stats_results}
 
-            # Fetch Previous Floor Price from ~24h ago (for meaningful trend)
-            # Compare current floor vs floor from 24 hours ago
-            from datetime import datetime, timedelta
-            floor_cutoff = datetime.utcnow() - timedelta(hours=24)
-            prev_floor_query = text("""
-                SELECT DISTINCT ON (card_id) card_id, lowest_ask
-                FROM marketsnapshot
-                WHERE card_id = ANY(:card_ids)
-                AND lowest_ask IS NOT NULL
-                AND lowest_ask > 0
-                AND timestamp <= :cutoff
-                ORDER BY card_id, timestamp DESC
-            """)
-            prev_floor_results = session.execute(prev_floor_query, {"card_ids": card_ids, "cutoff": floor_cutoff}).all()
-            prev_floor_map = {row[0]: row[1] for row in prev_floor_results}
+            # Fetch average price with conditional rolling window
+            # Try 30d first, fallback to 90d, then all-time
+            # Delta = how does latest sale compare to historical average?
+            avg_price_map = {}
 
-            # Fetch Previous Sale Price (oldest sale overall for trend comparison)
-            # Compare most recent sale vs oldest recorded sale to show all-time trend
-            # Filter out NULL sold_date to ensure valid ordering
-            prev_price_query = text("""
-                SELECT DISTINCT ON (card_id) card_id, price
-                FROM marketprice
-                WHERE card_id = ANY(:card_ids)
-                AND listing_type = 'sold'
-                AND sold_date IS NOT NULL
-                ORDER BY card_id, sold_date ASC
-            """)
-            prev_results = session.execute(prev_price_query, {"card_ids": card_ids}).all()
-            prev_price_map = {row[0]: row[1] for row in prev_results}
+            for days, label in [(30, '30d'), (90, '90d'), (None, 'all')]:
+                if days:
+                    cutoff = datetime.utcnow() - timedelta(days=days)
+                    avg_query = text("""
+                        SELECT card_id, AVG(price) as avg_price
+                        FROM marketprice
+                        WHERE card_id = ANY(:card_ids)
+                        AND listing_type = 'sold'
+                        AND sold_date IS NOT NULL
+                        AND sold_date >= :cutoff
+                        GROUP BY card_id
+                    """)
+                    results = session.execute(avg_query, {"card_ids": card_ids, "cutoff": cutoff}).all()
+                else:
+                    # All-time average
+                    avg_query = text("""
+                        SELECT card_id, AVG(price) as avg_price
+                        FROM marketprice
+                        WHERE card_id = ANY(:card_ids)
+                        AND listing_type = 'sold'
+                        AND sold_date IS NOT NULL
+                        GROUP BY card_id
+                    """)
+                    results = session.execute(avg_query, {"card_ids": card_ids}).all()
+
+                # Only add cards not already in map (prefer shorter windows)
+                for row in results:
+                    if row[0] not in avg_price_map:
+                        avg_price_map[row[0]] = row[1]
 
         except Exception as e:
             print(f"Error fetching sales data: {e}")
@@ -236,15 +241,17 @@ def read_cards(
         lowest_ask = live_lowest if live_lowest is not None else (latest_snap.lowest_ask if latest_snap else None)
         inventory = live_inv if live_inv is not None else (latest_snap.inventory if latest_snap else 0)
 
-        # Floor Trend: How is the floor price changing over time?
-        # Positive = floor going UP (getting more expensive)
-        # Negative = floor going DOWN (better deals available)
-        floor_delta = 0.0
-        prev_floor = prev_floor_map.get(card.id)
-        if lowest_ask and prev_floor and prev_floor > 0:
-            floor_delta = ((lowest_ask - prev_floor) / prev_floor) * 100
+        # Price vs 30d Avg: How does latest sale compare to 30-day average?
+        # Positive = sold above average (hot/premium)
+        # Negative = sold below average (deal/declining)
+        price_delta = 0.0
+        avg_30d_price = avg_price_map.get(card.id)
+        if last_price and avg_30d_price and avg_30d_price > 0:
+            price_delta = ((last_price - avg_30d_price) / avg_30d_price) * 100
 
-        # Last Sale Delta: How does last sale compare to floor?
+        # Last Sale vs Floor: How does last sale compare to current floor?
+        # Positive = sold above floor (premium)
+        # Negative = sold below floor (deal)
         sale_delta = 0.0
         if last_price and lowest_ask and lowest_ask > 0:
             sale_delta = ((last_price - lowest_ask) / lowest_ask) * 100
@@ -257,8 +264,8 @@ def read_cards(
             rarity_name=rarity_map.get(card.rarity_id, "Unknown"),
             latest_price=last_price,
             volume_30d=latest_snap.volume if latest_snap else 0,
-            price_delta_24h=floor_delta,   # Floor vs Median delta
-            last_sale_diff=sale_delta,     # Last Sale vs Median delta
+            price_delta_24h=price_delta,   # Sale price change (recent vs oldest in period)
+            last_sale_diff=sale_delta,     # Last sale vs current floor
             last_sale_treatment=last_treatment,
             lowest_ask=lowest_ask,
             inventory=inventory,
@@ -391,28 +398,39 @@ def read_card(
     lowest_ask = live_lowest_ask if live_lowest_ask is not None else (latest_snap.lowest_ask if latest_snap else None)
     inventory = live_inventory if live_inventory is not None else (latest_snap.inventory if latest_snap else 0)
 
-    # Floor Trend: How is the floor price changing over time?
-    # Compare current floor to floor from ~24 hours ago
-    # Positive = floor going UP (getting more expensive)
-    # Negative = floor going DOWN (better deals available)
-    floor_delta = 0.0
-    prev_floor = None
+    # Price vs Avg: Rolling window - try 30d, 90d, then all-time
+    # Positive = sold above average (hot/premium)
+    # Negative = sold below average (deal/declining)
+    price_delta = 0.0
+    avg_price = None
     try:
-        floor_cutoff = datetime.utcnow() - timedelta(hours=24)
-        prev_floor_q = text("""
-            SELECT lowest_ask FROM marketsnapshot
-            WHERE card_id = :cid AND lowest_ask IS NOT NULL AND lowest_ask > 0
-            AND timestamp <= :cutoff
-            ORDER BY timestamp DESC LIMIT 1
-        """)
-        prev_floor_res = session.execute(prev_floor_q, {"cid": card.id, "cutoff": floor_cutoff}).first()
-        prev_floor = prev_floor_res[0] if prev_floor_res else None
+        for days in [30, 90, None]:
+            if days:
+                cutoff = datetime.utcnow() - timedelta(days=days)
+                avg_q = text("""
+                    SELECT AVG(price) FROM marketprice
+                    WHERE card_id = :cid AND listing_type = 'sold' AND sold_date IS NOT NULL
+                    AND sold_date >= :cutoff
+                """)
+                avg_res = session.execute(avg_q, {"cid": card.id, "cutoff": cutoff}).first()
+            else:
+                avg_q = text("""
+                    SELECT AVG(price) FROM marketprice
+                    WHERE card_id = :cid AND listing_type = 'sold' AND sold_date IS NOT NULL
+                """)
+                avg_res = session.execute(avg_q, {"cid": card.id}).first()
+
+            if avg_res and avg_res[0]:
+                avg_price = avg_res[0]
+                break
     except Exception:
         pass
-    if lowest_ask and prev_floor and prev_floor > 0:
-        floor_delta = ((lowest_ask - prev_floor) / prev_floor) * 100
+    if real_price and avg_price and avg_price > 0:
+        price_delta = ((real_price - avg_price) / avg_price) * 100
 
-    # Last Sale Delta: How does last sale compare to floor?
+    # Last Sale vs Floor: How does last sale compare to current floor?
+    # Positive = sold above floor (premium)
+    # Negative = sold below floor (deal)
     sale_delta = 0.0
     if real_price and lowest_ask and lowest_ask > 0:
         sale_delta = ((real_price - lowest_ask) / lowest_ask) * 100
@@ -426,8 +444,8 @@ def read_card(
         rarity_name=rarity_name,
         latest_price=real_price,
         volume_30d=volume_30d,
-        price_delta_24h=floor_delta,   # Floor vs Median delta
-        last_sale_diff=sale_delta,     # Last Sale vs Median delta
+        price_delta_24h=price_delta,   # Sale price change (recent vs oldest in period)
+        last_sale_diff=sale_delta,     # Last sale vs current floor
         last_sale_treatment=real_treatment,
         lowest_ask=lowest_ask,
         inventory=inventory,
