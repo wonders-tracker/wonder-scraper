@@ -22,15 +22,15 @@ export default async function handler(req: Request) {
     let historyData: any[] = []
 
     try {
-      // Fetch card basic info
-      const cardRes = await fetch(`${API_URL}/cards/${cardId}`)
+      // Fetch card basic info (trailing slash needed for Railway API)
+      const cardRes = await fetch(`${API_URL}/cards/${cardId}/`)
       if (!cardRes.ok) {
         return new Response(`Card not found: ${cardId}`, { status: 404 })
       }
       const basicCard = await cardRes.json()
 
       // Fetch market data
-      const marketRes = await fetch(`${API_URL}/cards/${cardId}/market`)
+      const marketRes = await fetch(`${API_URL}/cards/${cardId}/market/`)
       const marketData = marketRes.ok ? await marketRes.json() : {}
 
       cardData = {
@@ -40,7 +40,7 @@ export default async function handler(req: Request) {
       }
 
       // Fetch price history for chart
-      const historyRes = await fetch(`${API_URL}/cards/${cardId}/history?limit=30`)
+      const historyRes = await fetch(`${API_URL}/cards/${cardId}/history/?limit=30`)
       const historyJson = await historyRes.json()
       // Ensure historyData is an array
       historyData = Array.isArray(historyJson) ? historyJson : []
