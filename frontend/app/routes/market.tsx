@@ -40,7 +40,7 @@ type MarketCard = {
 function MarketAnalysis() {
   const navigate = useNavigate()
   const [sorting, setSorting] = useState<SortingState>([])
-  const [timeFrame, setTimeFrame] = useState('24h')
+  const [timeFrame, setTimeFrame] = useState('30d')
 
   // Fetch treatment price floors
   const { data: treatments } = useQuery({
@@ -52,9 +52,9 @@ function MarketAnalysis() {
 
   // Fetch optimized overview data from new endpoint
   const { data: rawCards, isLoading } = useQuery({
-    queryKey: ['market-overview'],
+    queryKey: ['market-overview', timeFrame],
     queryFn: async () => {
-        const data = await api.get('market/overview').json<any[]>()
+        const data = await api.get(`market/overview?time_period=${timeFrame}`).json<any[]>()
         return data.map(c => ({
             ...c,
             latest_price: c.latest_price ?? 0,
