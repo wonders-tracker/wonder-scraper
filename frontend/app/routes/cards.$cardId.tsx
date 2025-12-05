@@ -256,6 +256,17 @@ function CardDetail() {
       })
   }, [history, timeRange])
 
+  // Calculate total sales count (ignoring time filter) for context
+  const totalAllTimeSales = useMemo(() => {
+      if (!history) return 0
+      return history.filter(h => {
+          const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
+          const validDate = h.sold_date && !isNaN(new Date(h.sold_date).getTime())
+          const isSold = h.listing_type === 'sold' || !h.listing_type
+          return validPrice && validDate && isSold
+      }).length
+  }, [history])
+
   // Calculate chart statistics
   const chartStats = useMemo(() => {
       if (!chartData.length) return null
@@ -414,19 +425,30 @@ function CardDetail() {
                                 <div className="p-4 border-b border-border/50 flex justify-between items-center">
                                     <div className="flex items-center gap-4">
                                         <h3 className="text-xs font-bold uppercase tracking-widest">Price History</h3>
-                                        {chartStats && (
-                                            <div className="flex items-center gap-3 text-[10px]">
+                                        <div className="flex items-center gap-3 text-[10px]">
+                                            {chartStats ? (
+                                                <>
+                                                    <span className="text-muted-foreground">
+                                                        {chartStats.totalSales} sale{chartStats.totalSales !== 1 ? 's' : ''}
+                                                        {timeRange !== 'all' && totalAllTimeSales > chartStats.totalSales && (
+                                                            <span className="text-muted-foreground/60"> of {totalAllTimeSales}</span>
+                                                        )}
+                                                    </span>
+                                                    <span className={clsx(
+                                                        "font-bold",
+                                                        chartStats.priceChange >= 0 ? "text-emerald-500" : "text-red-500"
+                                                    )}>
+                                                        {chartStats.priceChange >= 0 ? '+' : ''}{chartStats.priceChange.toFixed(1)}%
+                                                    </span>
+                                                </>
+                                            ) : totalAllTimeSales > 0 ? (
                                                 <span className="text-muted-foreground">
-                                                    {chartStats.totalSales} sale{chartStats.totalSales !== 1 ? 's' : ''}
+                                                    0 of {totalAllTimeSales} sales in {timeRange}
                                                 </span>
-                                                <span className={clsx(
-                                                    "font-bold",
-                                                    chartStats.priceChange >= 0 ? "text-emerald-500" : "text-red-500"
-                                                )}>
-                                                    {chartStats.priceChange >= 0 ? '+' : ''}{chartStats.priceChange.toFixed(1)}%
-                                                </span>
-                                            </div>
-                                        )}
+                                            ) : (
+                                                <span className="text-muted-foreground">No sales</span>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-1">
                                         <Calendar className="w-3 h-3 text-muted-foreground mr-2" />
@@ -542,9 +564,20 @@ function CardDetail() {
                                         </ResponsiveContainer>
                                     ) : (
                                         <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
-                                            <div className="text-xs uppercase mb-2">No sales data available</div>
+                                            <div className="text-xs uppercase mb-2">
+                                                {timeRange !== 'all' && totalAllTimeSales > 0
+                                                    ? `No sales in last ${timeRange}`
+                                                    : 'No sales data available'}
+                                            </div>
                                             <div className="text-[10px]">
-                                                {timeRange !== 'all' ? (
+                                                {timeRange !== 'all' && totalAllTimeSales > 0 ? (
+                                                    <button
+                                                        onClick={() => setTimeRange('all')}
+                                                        className="text-primary hover:underline"
+                                                    >
+                                                        View all {totalAllTimeSales} sale{totalAllTimeSales !== 1 ? 's' : ''}
+                                                    </button>
+                                                ) : timeRange !== 'all' ? (
                                                     <button
                                                         onClick={() => setTimeRange('all')}
                                                         className="text-primary hover:underline"
