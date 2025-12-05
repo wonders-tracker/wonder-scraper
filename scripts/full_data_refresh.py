@@ -12,8 +12,10 @@ from app.models.market import MarketSnapshot
 from scripts.scrape_card import scrape_card
 from app.scraper.browser import BrowserManager
 from app.scraper.opensea import scrape_opensea_collection
+from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
 import sys
 import os
+import time
 
 # Global browser lock for the process
 _process_browser = None
@@ -173,6 +175,8 @@ async def scrape_all_opensea():
         await BrowserManager.close()
 
 async def main(num_workers: int):
+    start_time = time.time()
+
     print("\n🚀 FULL DATA REFRESH STARTING...")
     print("This will scrape:")
     print("  1. All eBay cards (singles) using parallel workers")
@@ -185,10 +189,18 @@ async def main(num_workers: int):
         snapshot_count = len(session.exec(select(MarketSnapshot)).all())
         card_count = len(session.exec(select(Card)).all())
 
+        # Count existing listings for tracking new ones
+        from app.models.market import MarketPrice
+        initial_listing_count = len(session.exec(select(MarketPrice).where(MarketPrice.listing_type == "active")).all())
+        initial_sale_count = len(session.exec(select(MarketPrice).where(MarketPrice.listing_type == "sold")).all())
+
     print(f"📊 Current Data in Neon:")
     print(f"   - Cards: {card_count}")
     print(f"   - Snapshots: {snapshot_count}")
     print()
+
+    # Log scrape start to Discord
+    log_scrape_start(card_count, scrape_type="full")
 
     # 1. Scrape eBay (all products) with parallel workers
     await scrape_all_ebay_parallel(num_workers=num_workers)
@@ -199,12 +211,30 @@ async def main(num_workers: int):
     # Final stats
     with Session(engine) as session:
         new_snapshot_count = len(session.exec(select(MarketSnapshot)).all())
+        final_listing_count = len(session.exec(select(MarketPrice).where(MarketPrice.listing_type == "active")).all())
+        final_sale_count = len(session.exec(select(MarketPrice).where(MarketPrice.listing_type == "sold")).all())
+
+    duration = time.time() - start_time
+    new_listings = final_listing_count - initial_listing_count
+    new_sales = final_sale_count - initial_sale_count
 
     print("\n" + "=" * 60)
     print("✅ FULL DATA REFRESH COMPLETE!")
     print("=" * 60)
     print(f"New snapshots created: {new_snapshot_count - snapshot_count}")
     print(f"Total snapshots: {new_snapshot_count}")
+    print(f"New listings: {new_listings}")
+    print(f"New sales: {new_sales}")
+    print(f"Duration: {duration:.1f}s")
+
+    # Log scrape completion to Discord
+    log_scrape_complete(
+        cards_processed=card_count,
+        new_listings=max(0, new_listings),
+        new_sales=max(0, new_sales),
+        duration_seconds=duration,
+        errors=0
+    )
 
 if __name__ == "__main__":
     # Parse number of workers from args (default 2)
