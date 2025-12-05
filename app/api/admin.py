@@ -45,8 +45,10 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
     from app.models.market import MarketSnapshot
     from scripts.scrape_card import scrape_card
     from app.scraper.browser import BrowserManager
+    from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
 
-    _running_jobs[job_id] = {"status": "running", "started": datetime.utcnow(), "processed": 0, "errors": 0}
+    _running_jobs[job_id] = {"status": "running", "started": datetime.utcnow(), "processed": 0, "errors": 0, "new_listings": 0}
+    start_time = datetime.utcnow()
 
     try:
         with Session(engine) as session:
@@ -79,6 +81,10 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
 
         _running_jobs[job_id]["total"] = len(cards_to_scrape)
 
+        # Log scrape start to Discord
+        scrape_type = "backfill" if is_backfill else "incremental"
+        log_scrape_start(len(cards_to_scrape), scrape_type)
+
         # Initialize browser
         await BrowserManager.get_browser()
 
@@ -106,9 +112,21 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
         _running_jobs[job_id]["status"] = "completed"
         _running_jobs[job_id]["finished"] = datetime.utcnow()
 
+        # Log scrape completion to Discord
+        duration = (datetime.utcnow() - start_time).total_seconds()
+        log_scrape_complete(
+            cards_processed=_running_jobs[job_id]["processed"],
+            new_listings=_running_jobs[job_id].get("new_listings", 0),
+            new_sales=0,  # TODO: Track this if needed
+            duration_seconds=duration,
+            errors=_running_jobs[job_id]["errors"]
+        )
+
     except Exception as e:
         _running_jobs[job_id]["status"] = "failed"
         _running_jobs[job_id]["error"] = str(e)
+        # Log error to Discord
+        log_scrape_error("Backfill Job", str(e)[:500])
 
 @router.post("/backfill", response_model=BackfillResponse)
 async def trigger_backfill(
