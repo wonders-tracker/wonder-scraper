@@ -75,6 +75,7 @@ def read_market_overview(
     vwap_map = {}
     oldest_sale_map = {}
     sales_count_map = {}
+    floor_price_map = {}
     if card_ids:
         try:
             from sqlalchemy import text
@@ -133,6 +134,23 @@ def read_market_overview(
             """)
             sales_count_results = session.execute(sales_count_query, {"card_ids": card_ids, "period_start": period_start}).all()
             sales_count_map = {row[0]: {'count': row[1], 'unique_days': row[2]} for row in sales_count_results}
+
+            # Calculate floor prices (avg of 4 lowest sales per card in period)
+            floor_query = text("""
+                SELECT card_id, AVG(price) as floor_price
+                FROM (
+                    SELECT card_id, price,
+                           ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn
+                    FROM marketprice
+                    WHERE card_id = ANY(:card_ids)
+                      AND listing_type = 'sold'
+                      AND sold_date >= :period_start
+                ) ranked
+                WHERE rn <= 4
+                GROUP BY card_id
+            """)
+            floor_results = session.execute(floor_query, {"card_ids": card_ids, "period_start": period_start}).all()
+            floor_price_map = {row[0]: round(float(row[1]), 2) for row in floor_results}
 
         except Exception as e:
             print(f"Error fetching last sales: {e}")
@@ -193,6 +211,7 @@ def read_market_overview(
             "latest_price": last_price or 0.0,
             "avg_price": latest_snap.avg_price if latest_snap else 0.0,
             "vwap": effective_price,
+            "floor_price": floor_price_map.get(card.id),  # Avg of 4 lowest sales
             "volume_period": period_volume,
             "volume_change": 0,  # TODO: Calculate from previous period if needed
             "price_delta_period": avg_delta,

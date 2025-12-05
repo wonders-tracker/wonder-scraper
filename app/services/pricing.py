@@ -1,0 +1,312 @@
+"""
+Fair Market Price (FMP) Calculation Service
+
+FMP = BaseSetPrice × RarityMultiplier × TreatmentMultiplier × ConditionMultiplier × LiquidityAdjustment
+
+Floor Price = Average of last 4 lowest sales (30-day window)
+"""
+
+from typing import Optional, Dict, Any, List
+from sqlmodel import Session, text
+from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Treatment categories for base price calculation
+BASE_TREATMENTS = ['Classic Paper', 'Classic Foil']
+
+# Default multipliers when no data available
+DEFAULT_RARITY_MULTIPLIERS = {
+    'Common': 1.0,
+    'Uncommon': 1.5,
+    'Rare': 3.0,
+    'Legendary': 8.0,
+    'Mythic': 20.0,
+    'Sealed': 1.0,  # For sealed products
+}
+
+DEFAULT_TREATMENT_MULTIPLIERS = {
+    'Classic Paper': 1.0,
+    'Classic Foil': 1.3,
+    'Stonefoil': 2.0,
+    'Formless Foil': 3.5,
+    'Prerelease': 2.0,
+    'Promo': 2.0,
+    'OCM Serialized': 10.0,
+    'Sealed': 1.0,
+    'Factory Sealed': 1.0,
+}
+
+
+class FairMarketPriceService:
+    """Service for calculating Fair Market Price and Floor Price."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def get_base_set_price(self, set_name: str, days: int = 30) -> Optional[float]:
+        """
+        Calculate base set price as median of Classic Paper Common sales.
+        This is the reference point for FMP calculations.
+        """
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        query = text("""
+            SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY mp.price) as median_price
+            FROM marketprice mp
+            JOIN card c ON mp.card_id = c.id
+            JOIN rarity r ON c.rarity_id = r.id
+            WHERE c.set_name = :set_name
+              AND r.name = 'Common'
+              AND mp.treatment IN ('Classic Paper', 'Classic Foil')
+              AND mp.listing_type = 'sold'
+              AND mp.sold_date >= :cutoff
+        """)
+
+        result = self.session.execute(query, {"set_name": set_name, "cutoff": cutoff}).fetchone()
+
+        if result and result[0]:
+            return float(result[0])
+
+        # Fallback: try 90 days
+        if days == 30:
+            return self.get_base_set_price(set_name, days=90)
+
+        return None
+
+    def get_rarity_multiplier(self, set_name: str, rarity_name: str, days: int = 30) -> float:
+        """
+        Calculate rarity multiplier dynamically from sales data.
+        Multiplier = median_price(rarity) / median_price(Common)
+        """
+        if rarity_name == 'Common':
+            return 1.0
+
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        # Get median for Common (base)
+        common_query = text("""
+            SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY mp.price) as median_price
+            FROM marketprice mp
+            JOIN card c ON mp.card_id = c.id
+            JOIN rarity r ON c.rarity_id = r.id
+            WHERE c.set_name = :set_name
+              AND r.name = 'Common'
+              AND mp.treatment IN ('Classic Paper', 'Classic Foil')
+              AND mp.listing_type = 'sold'
+              AND mp.sold_date >= :cutoff
+            HAVING COUNT(*) >= 3
+        """)
+
+        common_result = self.session.execute(common_query, {"set_name": set_name, "cutoff": cutoff}).fetchone()
+        common_median = float(common_result[0]) if common_result and common_result[0] else None
+
+        if not common_median:
+            return DEFAULT_RARITY_MULTIPLIERS.get(rarity_name, 1.0)
+
+        # Get median for target rarity
+        rarity_query = text("""
+            SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY mp.price) as median_price
+            FROM marketprice mp
+            JOIN card c ON mp.card_id = c.id
+            JOIN rarity r ON c.rarity_id = r.id
+            WHERE c.set_name = :set_name
+              AND r.name = :rarity_name
+              AND mp.treatment IN ('Classic Paper', 'Classic Foil')
+              AND mp.listing_type = 'sold'
+              AND mp.sold_date >= :cutoff
+            HAVING COUNT(*) >= 2
+        """)
+
+        rarity_result = self.session.execute(
+            rarity_query,
+            {"set_name": set_name, "rarity_name": rarity_name, "cutoff": cutoff}
+        ).fetchone()
+
+        if rarity_result and rarity_result[0]:
+            return float(rarity_result[0]) / common_median
+
+        return DEFAULT_RARITY_MULTIPLIERS.get(rarity_name, 1.0)
+
+    def get_treatment_multiplier(self, card_id: int, treatment: str, days: int = 30) -> float:
+        """
+        Calculate treatment multiplier from card-specific sales data.
+        Multiplier = median_price(treatment) / median_price(Classic Paper)
+        """
+        if treatment in ('Classic Paper', None):
+            return 1.0
+
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        # Get median for Classic Paper (base)
+        base_query = text("""
+            SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price
+            FROM marketprice
+            WHERE card_id = :card_id
+              AND treatment = 'Classic Paper'
+              AND listing_type = 'sold'
+              AND sold_date >= :cutoff
+            HAVING COUNT(*) >= 2
+        """)
+
+        base_result = self.session.execute(base_query, {"card_id": card_id, "cutoff": cutoff}).fetchone()
+        base_median = float(base_result[0]) if base_result and base_result[0] else None
+
+        if not base_median:
+            return DEFAULT_TREATMENT_MULTIPLIERS.get(treatment, 1.0)
+
+        # Get median for target treatment
+        treatment_query = text("""
+            SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price
+            FROM marketprice
+            WHERE card_id = :card_id
+              AND treatment = :treatment
+              AND listing_type = 'sold'
+              AND sold_date >= :cutoff
+            HAVING COUNT(*) >= 1
+        """)
+
+        treatment_result = self.session.execute(
+            treatment_query,
+            {"card_id": card_id, "treatment": treatment, "cutoff": cutoff}
+        ).fetchone()
+
+        if treatment_result and treatment_result[0]:
+            return float(treatment_result[0]) / base_median
+
+        return DEFAULT_TREATMENT_MULTIPLIERS.get(treatment, 1.0)
+
+    def get_liquidity_adjustment(self, card_id: int, days: int = 30) -> float:
+        """
+        Calculate liquidity adjustment based on volume/inventory ratio.
+        Higher liquidity = less discount (closer to 1.0)
+        """
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        # Get volume (sold count) and inventory (active count)
+        query = text("""
+            SELECT
+                COUNT(*) FILTER (WHERE listing_type = 'sold' AND sold_date >= :cutoff) as volume,
+                COUNT(*) FILTER (WHERE listing_type = 'active') as inventory
+            FROM marketprice
+            WHERE card_id = :card_id
+        """)
+
+        result = self.session.execute(query, {"card_id": card_id, "cutoff": cutoff}).fetchone()
+
+        if not result:
+            return 0.90
+
+        volume = result[0] or 0
+        inventory = result[1] or 0
+
+        # Calculate liquidity ratio
+        liquidity = volume / (inventory + 1)  # +1 to avoid division by zero
+
+        if liquidity > 1.0:
+            return 1.0   # High demand
+        elif liquidity > 0.5:
+            return 0.95  # Normal
+        elif liquidity > 0.2:
+            return 0.90  # Low demand
+        else:
+            return 0.85  # Very low demand
+
+    def calculate_floor_price(self, card_id: int, num_sales: int = 4, days: int = 30) -> Optional[float]:
+        """
+        Calculate floor price as average of N lowest sales in time window.
+        This is more stable than a single lowest sale.
+        """
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        query = text("""
+            SELECT AVG(price) as floor_price
+            FROM (
+                SELECT price
+                FROM marketprice
+                WHERE card_id = :card_id
+                  AND listing_type = 'sold'
+                  AND sold_date >= :cutoff
+                ORDER BY price ASC
+                LIMIT :num_sales
+            ) as lowest_sales
+        """)
+
+        result = self.session.execute(
+            query,
+            {"card_id": card_id, "cutoff": cutoff, "num_sales": num_sales}
+        ).fetchone()
+
+        if result and result[0]:
+            return round(float(result[0]), 2)
+
+        # Fallback: try 90 days if no recent sales
+        if days == 30:
+            return self.calculate_floor_price(card_id, num_sales, days=90)
+
+        return None
+
+    def calculate_fmp(
+        self,
+        card_id: int,
+        set_name: str,
+        rarity_name: str,
+        treatment: str = 'Classic Paper',
+        days: int = 30
+    ) -> Dict[str, Any]:
+        """
+        Calculate Fair Market Price using the formula:
+        FMP = BaseSetPrice × RarityMultiplier × TreatmentMultiplier × ConditionMultiplier × LiquidityAdjustment
+
+        Returns dict with FMP value and breakdown of multipliers.
+        """
+        # Get all components
+        base_price = self.get_base_set_price(set_name, days)
+        rarity_mult = self.get_rarity_multiplier(set_name, rarity_name, days)
+        treatment_mult = self.get_treatment_multiplier(card_id, treatment, days)
+        condition_mult = 1.0  # Default to Near Mint (future: parse from listings)
+        liquidity_adj = self.get_liquidity_adjustment(card_id, days)
+        floor_price = self.calculate_floor_price(card_id, num_sales=4, days=days)
+
+        # Calculate FMP
+        fmp = None
+        if base_price:
+            fmp = base_price * rarity_mult * treatment_mult * condition_mult * liquidity_adj
+            fmp = round(fmp, 2)
+
+        return {
+            'fair_market_price': fmp,
+            'floor_price': floor_price,
+            'breakdown': {
+                'base_set_price': round(base_price, 2) if base_price else None,
+                'rarity_multiplier': round(rarity_mult, 2),
+                'treatment_multiplier': round(treatment_mult, 2),
+                'condition_multiplier': condition_mult,
+                'liquidity_adjustment': round(liquidity_adj, 2),
+            },
+            'data_quality': {
+                'has_base_price': base_price is not None,
+                'has_floor_price': floor_price is not None,
+                'using_defaults': base_price is None,
+            }
+        }
+
+    def calculate_fmp_simple(
+        self,
+        card_id: int,
+        set_name: str,
+        rarity_name: str,
+        days: int = 30
+    ) -> tuple[Optional[float], Optional[float]]:
+        """
+        Simplified FMP calculation returning just (fmp, floor_price).
+        Uses Classic Paper treatment as default for base FMP.
+        """
+        result = self.calculate_fmp(card_id, set_name, rarity_name, 'Classic Paper', days)
+        return result['fair_market_price'], result['floor_price']
+
+
+def get_pricing_service(session: Session) -> FairMarketPriceService:
+    """Factory function to create pricing service."""
+    return FairMarketPriceService(session)

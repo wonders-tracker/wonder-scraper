@@ -60,6 +60,9 @@ class CardOut(CardBase):
     avg_price: Optional[float] = None  # Average price
     vwap: Optional[float] = None # Volume Weighted Average Price
     last_updated: Optional[datetime] = None # When the market data was scraped
+    # Fair Market Price fields
+    fair_market_price: Optional[float] = None  # Calculated FMP using formula
+    floor_price: Optional[float] = None  # Avg of last 4 lowest sales (30d)
 
 class CardWithMarket(CardOut):
     market_snapshot: Optional[MarketSnapshotOut] = None

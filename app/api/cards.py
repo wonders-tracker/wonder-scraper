@@ -11,6 +11,7 @@ from app.db import get_session
 from app.models.card import Card, Rarity
 from app.models.market import MarketSnapshot, MarketPrice
 from app.schemas import CardOut, MarketSnapshotOut, MarketPriceOut
+from app.services.pricing import FairMarketPriceService
 
 router = APIRouter()
 
@@ -121,6 +122,7 @@ def read_cards(
     vwap_map = {}
     prev_price_map = {} # Price N hours ago
     active_stats_map = {}  # Computed from MarketPrice for fresh lowest_ask/inventory
+    floor_price_map = {}  # Floor price (avg of 4 lowest sales)
 
     if card_ids:
         try:
@@ -176,6 +178,24 @@ def read_cards(
             """)
             active_stats_results = session.execute(active_stats_query, {"card_ids": card_ids}).all()
             active_stats_map = {row[0]: {'lowest_ask': row[1], 'inventory': row[2]} for row in active_stats_results}
+
+            # Batch calculate floor prices (avg of 4 lowest sales per card in 30d)
+            cutoff_30d = datetime.utcnow() - timedelta(days=30)
+            floor_query = text("""
+                SELECT card_id, AVG(price) as floor_price
+                FROM (
+                    SELECT card_id, price,
+                           ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn
+                    FROM marketprice
+                    WHERE card_id = ANY(:card_ids)
+                      AND listing_type = 'sold'
+                      AND sold_date >= :cutoff
+                ) ranked
+                WHERE rn <= 4
+                GROUP BY card_id
+            """)
+            floor_results = session.execute(floor_query, {"card_ids": card_ids, "cutoff": cutoff_30d}).all()
+            floor_price_map = {row[0]: round(float(row[1]), 2) for row in floor_results}
 
             # Fetch average price with conditional rolling window
             # Try 30d first, fallback to 90d, then all-time
@@ -256,6 +276,9 @@ def read_cards(
         if last_price and lowest_ask and lowest_ask > 0:
             sale_delta = ((last_price - lowest_ask) / lowest_ask) * 100
 
+        # Get floor price from batch calculation
+        card_floor_price = floor_price_map.get(card.id)
+
         c_out = CardOut(
             id=card.id,
             name=card.name,
@@ -273,7 +296,10 @@ def read_cards(
             max_price=latest_snap.max_price if latest_snap else None,
             avg_price=latest_snap.avg_price if latest_snap else None,
             vwap=median_price if median_price else (latest_snap.avg_price if latest_snap else None),
-            last_updated=latest_snap.timestamp if latest_snap else None
+            last_updated=latest_snap.timestamp if latest_snap else None,
+            floor_price=card_floor_price,
+            # FMP calculated on-demand for individual cards (too expensive for batch)
+            fair_market_price=None
         )
         results.append(c_out)
     
@@ -435,6 +461,21 @@ def read_card(
     if real_price and lowest_ask and lowest_ask > 0:
         sale_delta = ((real_price - lowest_ask) / lowest_ask) * 100
 
+    # Calculate Fair Market Price and Floor Price
+    fair_market_price = None
+    floor_price = None
+    try:
+        pricing_service = FairMarketPriceService(session)
+        fmp_result = pricing_service.calculate_fmp(
+            card_id=card.id,
+            set_name=card.set_name,
+            rarity_name=rarity_name
+        )
+        fair_market_price = fmp_result.get('fair_market_price')
+        floor_price = fmp_result.get('floor_price')
+    except Exception as e:
+        print(f"Error calculating FMP for card {card.id}: {e}")
+
     c_out = CardOut(
         id=card.id,
         slug=card.slug,
@@ -453,7 +494,9 @@ def read_card(
         max_price=latest_snap.max_price if latest_snap else None,
         avg_price=latest_snap.avg_price if latest_snap else None,
         vwap=vwap if vwap else (latest_snap.avg_price if latest_snap else None),
-        last_updated=latest_snap.timestamp if latest_snap else None
+        last_updated=latest_snap.timestamp if latest_snap else None,
+        fair_market_price=fair_market_price,
+        floor_price=floor_price
     )
     
     # Cache result
