@@ -97,12 +97,23 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                     updated_count = 0
                     skipped_count = 0
 
+                    # Track external_ids we've seen in THIS batch to avoid duplicates within same scrape
+                    seen_in_batch = set()
+                    duplicate_in_batch = 0
+
                     for item in items:
                         # Skip if this listing already belongs to a DIFFERENT card
                         # (prevents duplicate key violation for overlapping searches)
                         if item.external_id and item.external_id in existing_for_other_cards:
                             skipped_count += 1
                             continue
+
+                        # Skip duplicates within the same batch (same external_id appearing twice in results)
+                        if item.external_id and item.external_id in seen_in_batch:
+                            duplicate_in_batch += 1
+                            continue
+                        if item.external_id:
+                            seen_in_batch.add(item.external_id)
 
                         if item.external_id in existing_for_this_card:
                             # Update existing listing with fresh data
@@ -118,27 +129,36 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                             session.add(existing)
                             updated_count += 1
                         else:
-                            # Add new listing
-                            session.add(item)
-                            new_count += 1
-
-                            # Send webhook notification for NEW listings only
+                            # Add new listing - use individual commit to catch race conditions
                             try:
-                                is_auction = getattr(item, 'bid_count', 0) > 0
-                                log_new_listing(
-                                    card_name=card_name,
-                                    price=item.price,
-                                    treatment=getattr(item, 'treatment', None),
-                                    url=item.url,
-                                    is_auction=is_auction,
-                                    floor_price=lowest_ask if lowest_ask > 0 else None
-                                )
-                            except Exception:
-                                pass
+                                session.add(item)
+                                session.flush()  # Force immediate insert to catch constraint violations
+                                new_count += 1
+
+                                # Send webhook notification for NEW listings only
+                                try:
+                                    is_auction = getattr(item, 'bid_count', 0) > 0
+                                    log_new_listing(
+                                        card_name=card_name,
+                                        price=item.price,
+                                        treatment=getattr(item, 'treatment', None),
+                                        url=item.url,
+                                        is_auction=is_auction,
+                                        floor_price=lowest_ask if lowest_ask > 0 else None
+                                    )
+                                except Exception:
+                                    pass
+                            except Exception as insert_err:
+                                session.rollback()
+                                if "unique" in str(insert_err).lower() or "duplicate" in str(insert_err).lower():
+                                    skipped_count += 1
+                                else:
+                                    raise  # Re-raise non-duplicate errors
 
                     session.commit()
-                    skip_msg = f", {skipped_count} skipped (belongs to other card)" if skipped_count > 0 else ""
-                    print(f"Active listings for {card_name}: {new_count} new, {updated_count} updated, {deleted_count} stale removed{skip_msg}")
+                    skip_msg = f", {skipped_count} duplicates skipped" if skipped_count > 0 else ""
+                    batch_msg = f", {duplicate_in_batch} batch duplicates" if duplicate_in_batch > 0 else ""
+                    print(f"Active listings for {card_name}: {new_count} new, {updated_count} updated, {deleted_count} stale removed{skip_msg}{batch_msg}")
             except Exception as db_err:
                 print(f"DB save error for {card_name} active listings (stats still valid): {db_err}")
 
