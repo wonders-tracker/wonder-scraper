@@ -1197,10 +1197,13 @@ function CardDetail() {
                         {/* Product Image (if available) */}
                         {selectedListing.image_url && (
                             <div className="rounded-lg overflow-hidden border border-border">
-                                <img 
-                                    src={selectedListing.image_url} 
-                                    alt={selectedListing.title} 
-                                    className="w-full h-48 object-cover" 
+                                <img
+                                    src={selectedListing.image_url}
+                                    alt={selectedListing.title}
+                                    className="w-full h-48 object-cover"
+                                    loading="lazy"
+                                    width={400}
+                                    height={192}
                                     onError={(e) => (e.currentTarget.style.display = 'none')}
                                 />
                             </div>
