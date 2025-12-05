@@ -14,6 +14,7 @@ type UserProfile = {
 
 type Card = {
   id: number
+  slug?: string
   name: string
   latest_price?: number
   price_delta_24h?: number

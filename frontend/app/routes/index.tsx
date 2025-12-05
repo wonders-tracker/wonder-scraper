@@ -10,6 +10,7 @@ import { Route as rootRoute } from './__root'
 // Updated Type Definition including placeholder fields
 type Card = {
   id: number
+  slug?: string // SEO-friendly URL slug
   name: string
   set_name: string
   rarity_id: number
