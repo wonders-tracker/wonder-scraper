@@ -6,7 +6,7 @@ import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, Ex
 import { Link } from '@tanstack/react-router'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getFilteredRowModel } from '@tanstack/react-table'
 import { useMemo, useState } from 'react'
-import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from 'recharts'
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, ScatterChart, Scatter, Cell, ComposedChart } from 'recharts'
 import clsx from 'clsx'
 
 type CardDetail = {
@@ -41,6 +41,71 @@ type MarketPrice = {
     seller_feedback_percent?: number
     condition?: string
     shipping_cost?: number
+}
+
+// Helper to detect PSA graded cards from title
+function isPSAGraded(title: string): { graded: boolean; grade?: string } {
+    const match = title.match(/\bPSA\s*(\d+)/i)
+    if (match) {
+        return { graded: true, grade: match[1] }
+    }
+    // Also check for BGS, CGC
+    const bgsMatch = title.match(/\bBGS\s*(\d+(?:\.\d)?)/i)
+    if (bgsMatch) {
+        return { graded: true, grade: `BGS ${bgsMatch[1]}` }
+    }
+    const cgcMatch = title.match(/\bCGC\s*(\d+(?:\.\d)?)/i)
+    if (cgcMatch) {
+        return { graded: true, grade: `CGC ${cgcMatch[1]}` }
+    }
+    return { graded: false }
+}
+
+// Get treatment color based on category (handles messy treatment names)
+function getTreatmentColor(treatment: string): string {
+    const t = (treatment || '').toLowerCase()
+
+    // Serialized - highest tier (gold/amber)
+    if (t.includes('serial') || t.includes('ocm')) return '#f59e0b'
+
+    // Formless Foil - premium foil (pink)
+    if (t.includes('formless')) return '#ec4899'
+
+    // Classic Foil / other foils (purple)
+    if (t.includes('foil') || t.includes('holo')) return '#a855f7'
+
+    // Promo / Prerelease (blue)
+    if (t.includes('promo') || t.includes('prerelease') || t.includes('proof') || t.includes('sample')) return '#3b82f6'
+
+    // Alt Art / Full Art (cyan)
+    if (t.includes('alt art') || t.includes('alternate') || t.includes('full art') || t.includes('extended')) return '#06b6d4'
+
+    // Error / Errata (red)
+    if (t.includes('error') || t.includes('errata')) return '#ef4444'
+
+    // Mythic / Legendary (gold tint)
+    if (t.includes('mythic') || t.includes('legendary')) return '#eab308'
+
+    // Epic (orange)
+    if (t.includes('epic')) return '#f97316'
+
+    // Rare (green)
+    if (t.includes('rare')) return '#22c55e'
+
+    // Default - Classic Paper / Standard (gray)
+    return '#9ca3af'
+}
+
+// Simplify treatment name for display
+function simplifyTreatment(treatment: string): string {
+    const t = (treatment || '').toLowerCase()
+    if (t.includes('serial') || t.includes('ocm')) return 'Serialized'
+    if (t.includes('formless')) return 'Formless'
+    if (t.includes('foil') || t.includes('holo')) return 'Foil'
+    if (t.includes('promo') || t.includes('prerelease')) return 'Promo'
+    if (t.includes('alt') || t.includes('alternate')) return 'Alt Art'
+    if (t.includes('paper') || t === 'classic' || t === 'standard' || t === 'regular' || t === 'normal') return 'Paper'
+    return treatment || 'Paper'
 }
 
 // Server-side loader for SEO meta tags
@@ -80,6 +145,7 @@ export const Route = createRoute({
 })
 
 type TimeRange = '7d' | '30d' | '90d' | 'all'
+type ChartType = 'line' | 'scatter'
 
 function CardDetail() {
   const { cardId } = useParams({ from: Route.id })
@@ -87,6 +153,7 @@ function CardDetail() {
   const [treatmentFilter, setTreatmentFilter] = useState<string>('all')
   const [selectedListing, setSelectedListing] = useState<MarketPrice | null>(null)
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
+  const [chartType, setChartType] = useState<ChartType>('line')
   
   // Fetch Card Data
   const { data: card, isLoading: isLoadingCard } = useQuery({
@@ -176,7 +243,19 @@ function CardDetail() {
       {
           accessorKey: 'title',
           header: 'Listing Title',
-          cell: ({ row }) => <div className="truncate max-w-xl text-xs text-muted-foreground" title={row.original.title}>{row.original.title}</div>
+          cell: ({ row }) => {
+              const grading = isPSAGraded(row.original.title)
+              return (
+                  <div className="flex items-center gap-2">
+                      {grading.graded && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] uppercase font-bold border border-amber-700 bg-amber-900/30 text-amber-400 shrink-0">
+                              PSA {grading.grade}
+                          </span>
+                      )}
+                      <div className="truncate max-w-lg text-xs text-muted-foreground" title={row.original.title}>{row.original.title}</div>
+                  </div>
+              )
+          }
       },
       {
           accessorKey: 'listing_type',
@@ -235,11 +314,11 @@ function CardDetail() {
               cutoffDate = null
       }
 
-      // 1. Filter valid data first (only sold listings for price history)
-      const validHistory = history.filter(h => {
+      // 1. Filter valid sold listings first
+      const validSold = history.filter(h => {
           const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
           const validDate = h.sold_date && !isNaN(new Date(h.sold_date).getTime())
-          const isSold = h.listing_type === 'sold' || !h.listing_type // Only include sold listings
+          const isSold = h.listing_type === 'sold' || !h.listing_type
           if (!validPrice || !validDate || !isSold) return false
 
           // Apply time range filter
@@ -250,40 +329,73 @@ function CardDetail() {
           return true
       })
 
-      // 2. Sort by date, then by price (to spread same-date sales consistently)
-      const sorted = validHistory.sort((a, b) => {
+      // 2. Sort sold by date, then by price
+      const sortedSold = validSold.sort((a, b) => {
           const dateCompare = new Date(a.sold_date).getTime() - new Date(b.sold_date).getTime()
           if (dateCompare !== 0) return dateCompare
-          return a.price - b.price // Secondary sort by price for same-date sales
+          return a.price - b.price
       })
 
-      // 3. Map to chart format, spreading same-date sales apart
-      // Track how many sales per date to offset timestamps
+      // 3. Map sold listings to chart format
       const dateCount: Record<string, number> = {}
-
-      return sorted.map((h, index) => {
+      const soldData = sortedSold.map((h, index) => {
           const saleDate = new Date(h.sold_date)
-          const dateKey = saleDate.toISOString().split('T')[0] // YYYY-MM-DD
+          const dateKey = saleDate.toISOString().split('T')[0]
 
-          // Count occurrences on this date
           dateCount[dateKey] = (dateCount[dateKey] || 0) + 1
           const offsetIndex = dateCount[dateKey] - 1
-
-          // Add 2-hour offset for each same-date sale to spread them apart visually
-          const offsetMs = offsetIndex * 2 * 60 * 60 * 1000 // 2 hours per sale
+          const offsetMs = offsetIndex * 2 * 60 * 60 * 1000
           const adjustedTimestamp = saleDate.getTime() + offsetMs
 
+          const treatment = h.treatment || 'Classic Paper'
           return {
-              id: `${h.id}-${index}`, // Unique ID for Recharts
+              id: `${h.id}-${index}`,
               date: saleDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
               timestamp: adjustedTimestamp,
-              x: index,  // Sequential index for X-axis
-              price: Number(h.price), // Ensure numeric price
-              treatment: h.treatment || 'Classic Paper',
+              x: index,
+              price: Number(h.price),
+              treatment,
+              treatmentColor: getTreatmentColor(treatment),
+              treatmentSimple: simplifyTreatment(treatment),
               title: h.title,
-              listing_type: h.listing_type
+              listing_type: 'sold',
+              isGraded: isPSAGraded(h.title).graded,
+              grade: isPSAGraded(h.title).grade,
+              isActive: false
           }
       })
+
+      // 4. Add active listings at the right edge (current time)
+      const activeListings = history.filter(h => {
+          const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
+          return h.listing_type === 'active' && validPrice
+      })
+
+      // Place active listings at the right side of chart, spaced out by price
+      // Sort by price to spread vertically, then space horizontally
+      const sortedActive = [...activeListings].sort((a, b) => a.price - b.price)
+      const nowTime = now.getTime()
+      // Calculate spacing: use 6 hours between each active listing for visual clarity
+      const activeData = sortedActive.map((h, index) => {
+          const treatment = h.treatment || 'Classic Paper'
+          return {
+              id: `active-${h.id}-${index}`,
+              date: 'Active',
+              timestamp: nowTime + (index * 6 * 60 * 60 * 1000), // 6 hours offset per listing
+              x: soldData.length + index,
+              price: Number(h.price),
+              treatment,
+              treatmentColor: getTreatmentColor(treatment),
+              treatmentSimple: simplifyTreatment(treatment),
+              title: h.title,
+              listing_type: 'active',
+              isGraded: isPSAGraded(h.title).graded,
+              grade: isPSAGraded(h.title).grade,
+              isActive: true
+          }
+      })
+
+      return [...soldData, ...activeData]
   }, [history, timeRange])
 
   // Calculate total sales count (ignoring time filter) for context
@@ -495,39 +607,96 @@ function CardDetail() {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                        <Calendar className="w-3 h-3 text-muted-foreground mr-2" />
-                                        {(['7d', '30d', '90d', 'all'] as TimeRange[]).map((range) => (
+                                    <div className="flex items-center gap-4">
+                                        {/* Chart Type Toggle */}
+                                        <div className="flex items-center gap-1 border-r border-border/50 pr-4">
                                             <button
-                                                key={range}
-                                                onClick={() => setTimeRange(range)}
+                                                onClick={() => setChartType('line')}
                                                 className={clsx(
-                                                    "px-3 py-1 text-[10px] uppercase font-bold rounded transition-colors",
-                                                    timeRange === range
+                                                    "px-2 py-1 text-[10px] uppercase font-bold rounded transition-colors",
+                                                    chartType === 'line'
                                                         ? "bg-primary text-primary-foreground"
                                                         : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
                                                 )}
+                                                title="Line Chart"
                                             >
-                                                {range === 'all' ? 'All' : range}
+                                                Line
                                             </button>
-                                        ))}
+                                            <button
+                                                onClick={() => setChartType('scatter')}
+                                                className={clsx(
+                                                    "px-2 py-1 text-[10px] uppercase font-bold rounded transition-colors",
+                                                    chartType === 'scatter'
+                                                        ? "bg-primary text-primary-foreground"
+                                                        : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                                                )}
+                                                title="Scatter Plot"
+                                            >
+                                                Scatter
+                                            </button>
+                                        </div>
+                                        {/* Time Range Buttons */}
+                                        <div className="flex items-center gap-1">
+                                            <Calendar className="w-3 h-3 text-muted-foreground mr-2" />
+                                            {(['7d', '30d', '90d', 'all'] as TimeRange[]).map((range) => (
+                                                <button
+                                                    key={range}
+                                                    onClick={() => setTimeRange(range)}
+                                                    className={clsx(
+                                                        "px-3 py-1 text-[10px] uppercase font-bold rounded transition-colors",
+                                                        timeRange === range
+                                                            ? "bg-primary text-primary-foreground"
+                                                            : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                                                    )}
+                                                >
+                                                    {range === 'all' ? 'All' : range}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
 
                                 {/* Chart Stats Bar */}
                                 {chartStats && chartData.length > 0 && (
-                                    <div className="px-4 py-2 border-b border-border/30 flex gap-6 text-[10px]">
-                                        <div>
-                                            <span className="text-muted-foreground uppercase">Low: </span>
-                                            <span className="font-mono font-bold text-red-400">${chartStats.minPrice.toFixed(2)}</span>
+                                    <div className="px-4 py-2 border-b border-border/30 flex flex-wrap justify-between items-center gap-4">
+                                        <div className="flex gap-6 text-[10px]">
+                                            <div>
+                                                <span className="text-muted-foreground uppercase">Low: </span>
+                                                <span className="font-mono font-bold text-red-400">${chartStats.minPrice.toFixed(2)}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-muted-foreground uppercase">High: </span>
+                                                <span className="font-mono font-bold text-emerald-400">${chartStats.maxPrice.toFixed(2)}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-muted-foreground uppercase">Avg: </span>
+                                                <span className="font-mono font-bold">${chartStats.avgPrice.toFixed(2)}</span>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <span className="text-muted-foreground uppercase">High: </span>
-                                            <span className="font-mono font-bold text-emerald-400">${chartStats.maxPrice.toFixed(2)}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-muted-foreground uppercase">Avg: </span>
-                                            <span className="font-mono font-bold">${chartStats.avgPrice.toFixed(2)}</span>
+                                        {/* Treatment Legend */}
+                                        <div className="hidden md:flex gap-3 text-[9px]">
+                                            <div className="flex items-center gap-1">
+                                                <div className="w-2 h-2 rounded-full" style={{backgroundColor: '#9ca3af'}} />
+                                                <span className="text-muted-foreground">Paper</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <div className="w-2 h-2 rounded-full" style={{backgroundColor: '#a855f7'}} />
+                                                <span className="text-muted-foreground">Foil</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <div className="w-2 h-2 rounded-full" style={{backgroundColor: '#ec4899'}} />
+                                                <span className="text-muted-foreground">Formless</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <div className="w-2 h-2 rounded-full" style={{backgroundColor: '#f59e0b'}} />
+                                                <span className="text-muted-foreground">Serialized</span>
+                                            </div>
+                                            <div className="flex items-center gap-1 pl-2 border-l border-border/50">
+                                                <svg width="8" height="8" viewBox="0 0 8 8">
+                                                    <polygon points="4,0 8,4 4,8 0,4" fill="#3b82f6" />
+                                                </svg>
+                                                <span className="text-blue-400">Active</span>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -536,76 +705,254 @@ function CardDetail() {
                                 <div className="p-4 relative" style={{ height: '350px' }}>
                                     {chartData.length > 0 ? (
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <AreaChart data={chartData} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
-                                                <defs>
-                                                    <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                                    </linearGradient>
-                                                </defs>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} horizontal={true} />
-                                                <XAxis
-                                                    dataKey="timestamp"
-                                                    name="Date"
-                                                    type="number"
-                                                    domain={['dataMin', 'dataMax']}
-                                                    scale="time"
-                                                    tick={{fill: '#666', fontSize: 10}}
-                                                    axisLine={false}
-                                                    tickLine={false}
-                                                    tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                                />
-                                                <YAxis
-                                                    dataKey="price"
-                                                    name="Price"
-                                                    domain={[(dataMin: number) => Math.max(0, Math.floor(dataMin * 0.8)), (dataMax: number) => Math.ceil(dataMax * 1.2)]}
-                                                    orientation="right"
-                                                    tick={{fill: '#888', fontSize: 11, fontFamily: 'monospace'}}
-                                                    axisLine={false}
-                                                    tickLine={false}
-                                                    tickFormatter={(val) => `$${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val.toFixed(0)}`}
-                                                    width={60}
-                                                />
-                                                {/* Average price reference line */}
-                                                {chartStats && (
-                                                    <ReferenceLine
-                                                        y={chartStats.avgPrice}
-                                                        stroke="#666"
-                                                        strokeDasharray="5 5"
-                                                        strokeOpacity={0.5}
+                                            {chartType === 'scatter' ? (
+                                                /* Scatter Plot View */
+                                                <ScatterChart data={chartData} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} horizontal={true} />
+                                                    <XAxis
+                                                        dataKey="timestamp"
+                                                        name="Date"
+                                                        type="number"
+                                                        domain={['dataMin', 'dataMax']}
+                                                        scale="time"
+                                                        tick={{fill: '#666', fontSize: 10}}
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                                     />
-                                                )}
-                                                <Tooltip
-                                                    content={({ payload }) => {
-                                                        if (!payload || !payload[0]) return null
-                                                        const data = payload[0].payload
-                                                        if (!data) return null
+                                                    <YAxis
+                                                        dataKey="price"
+                                                        name="Price"
+                                                        domain={[(dataMin: number) => Math.max(0, Math.floor(dataMin * 0.8)), (dataMax: number) => Math.ceil(dataMax * 1.2)]}
+                                                        orientation="right"
+                                                        tick={{fill: '#888', fontSize: 11, fontFamily: 'monospace'}}
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tickFormatter={(val) => `$${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val.toFixed(0)}`}
+                                                        width={60}
+                                                    />
+                                                    {chartStats && (
+                                                        <ReferenceLine
+                                                            y={chartStats.avgPrice}
+                                                            stroke="#666"
+                                                            strokeDasharray="5 5"
+                                                            strokeOpacity={0.5}
+                                                        />
+                                                    )}
+                                                    <Tooltip
+                                                        content={({ payload }) => {
+                                                            if (!payload || !payload[0]) return null
+                                                            const data = payload[0].payload
+                                                            if (!data) return null
 
-                                                        return (
-                                                            <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', minWidth: '160px'}}>
-                                                                <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '18px', fontFamily: 'monospace'}}>${typeof data.price === 'number' ? data.price.toFixed(2) : data.price}</div>
-                                                                <div style={{color: '#a3a3a3', fontSize: '11px', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600'}}>{data.treatment}</div>
-                                                                <div style={{color: '#888', fontSize: '11px', marginBottom: '6px'}}>{data.date}</div>
-                                                                {data.listing_type === 'active' && (
-                                                                    <div style={{color: '#3b82f6', fontSize: '9px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #333'}}>ACTIVE LISTING</div>
-                                                                )}
-                                                            </div>
-                                                        )
-                                                    }}
-                                                    cursor={{strokeDasharray: '3 3', stroke: '#666'}}
-                                                />
+                                                            return (
+                                                                <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', minWidth: '180px'}}>
+                                                                    <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '18px', fontFamily: 'monospace'}}>${typeof data.price === 'number' ? data.price.toFixed(2) : data.price}</div>
+                                                                    <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px'}}>
+                                                                        <div style={{width: '10px', height: '10px', borderRadius: '50%', backgroundColor: data.treatmentColor || '#9ca3af'}} />
+                                                                        <span style={{color: data.treatmentColor || '#a3a3a3', fontSize: '11px', textTransform: 'uppercase', fontWeight: '600'}}>{data.treatmentSimple || data.treatment}</span>
+                                                                    </div>
+                                                                    <div style={{color: '#888', fontSize: '11px', marginBottom: '6px'}}>{data.date}</div>
+                                                                    {data.isGraded && (
+                                                                        <div style={{color: '#f59e0b', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '6px', padding: '4px 8px', background: 'rgba(245,158,11,0.15)', borderRadius: '4px', border: '1px solid rgba(245,158,11,0.3)'}}>
+                                                                            PSA {data.grade}
+                                                                        </div>
+                                                                    )}
+                                                                    {data.listing_type === 'active' && (
+                                                                        <div style={{color: '#3b82f6', fontSize: '9px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #333'}}>ACTIVE LISTING</div>
+                                                                    )}
+                                                                </div>
+                                                            )
+                                                        }}
+                                                        cursor={{strokeDasharray: '3 3', stroke: '#666'}}
+                                                    />
+                                                    <Scatter
+                                                        dataKey="price"
+                                                        shape={(props: any) => {
+                                                            const { cx, cy, payload } = props
+                                                            if (!cx || !cy || !payload) return <g />
 
-                                                {/* Area fill under line */}
-                                                <Area
-                                                    type="monotone"
-                                                    dataKey="price"
-                                                    stroke="#10b981"
-                                                    strokeWidth={2}
-                                                    fill="url(#priceGradient)"
-                                                    dot={{ fill: '#10b981', strokeWidth: 0, r: 3 }}
-                                                    activeDot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
-                                                />
-                                            </AreaChart>
+                                                            // Active listings: diamond shape
+                                                            if (payload.isActive) {
+                                                                const size = 7
+                                                                return (
+                                                                    <polygon
+                                                                        points={`${cx},${cy-size} ${cx+size},${cy} ${cx},${cy+size} ${cx-size},${cy}`}
+                                                                        fill={payload.treatmentColor || '#3b82f6'}
+                                                                        stroke="#0a0a0a"
+                                                                        strokeWidth={2}
+                                                                        style={{ filter: 'drop-shadow(0 0 4px rgba(59,130,246,0.5))' }}
+                                                                    />
+                                                                )
+                                                            }
+
+                                                            // Sold listings: circle
+                                                            return (
+                                                                <circle
+                                                                    cx={cx}
+                                                                    cy={cy}
+                                                                    r={6}
+                                                                    fill={payload.treatmentColor || '#10b981'}
+                                                                    stroke="#0a0a0a"
+                                                                    strokeWidth={2}
+                                                                    style={{ filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.5))' }}
+                                                                />
+                                                            )
+                                                        }}
+                                                    />
+                                                </ScatterChart>
+                                            ) : (
+                                                /* Line Chart View */
+                                                <AreaChart data={chartData} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
+                                                    <defs>
+                                                        <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.15}/>
+                                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} horizontal={true} />
+                                                    <XAxis
+                                                        dataKey="timestamp"
+                                                        name="Date"
+                                                        type="number"
+                                                        domain={['dataMin', 'dataMax']}
+                                                        scale="time"
+                                                        tick={{fill: '#666', fontSize: 10}}
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                    />
+                                                    <YAxis
+                                                        dataKey="price"
+                                                        name="Price"
+                                                        domain={[(dataMin: number) => Math.max(0, Math.floor(dataMin * 0.8)), (dataMax: number) => Math.ceil(dataMax * 1.2)]}
+                                                        orientation="right"
+                                                        tick={{fill: '#888', fontSize: 11, fontFamily: 'monospace'}}
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tickFormatter={(val) => `$${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val.toFixed(0)}`}
+                                                        width={60}
+                                                    />
+                                                    {chartStats && (
+                                                        <ReferenceLine
+                                                            y={chartStats.avgPrice}
+                                                            stroke="#666"
+                                                            strokeDasharray="5 5"
+                                                            strokeOpacity={0.5}
+                                                        />
+                                                    )}
+                                                    <Tooltip
+                                                        content={({ payload }) => {
+                                                            if (!payload || !payload[0]) return null
+                                                            const data = payload[0].payload
+                                                            if (!data) return null
+
+                                                            return (
+                                                                <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', minWidth: '180px'}}>
+                                                                    <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '18px', fontFamily: 'monospace'}}>${typeof data.price === 'number' ? data.price.toFixed(2) : data.price}</div>
+                                                                    <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px'}}>
+                                                                        <div style={{width: '10px', height: '10px', borderRadius: '50%', backgroundColor: data.treatmentColor || '#9ca3af'}} />
+                                                                        <span style={{color: data.treatmentColor || '#a3a3a3', fontSize: '11px', textTransform: 'uppercase', fontWeight: '600'}}>{data.treatmentSimple || data.treatment}</span>
+                                                                    </div>
+                                                                    <div style={{color: '#888', fontSize: '11px', marginBottom: '6px'}}>{data.date}</div>
+                                                                    {data.isGraded && (
+                                                                        <div style={{color: '#f59e0b', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '6px', padding: '4px 8px', background: 'rgba(245,158,11,0.15)', borderRadius: '4px', border: '1px solid rgba(245,158,11,0.3)'}}>
+                                                                            PSA {data.grade}
+                                                                        </div>
+                                                                    )}
+                                                                    {data.listing_type === 'active' && (
+                                                                        <div style={{color: '#3b82f6', fontSize: '9px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #333'}}>ACTIVE LISTING</div>
+                                                                    )}
+                                                                </div>
+                                                            )
+                                                        }}
+                                                        cursor={{strokeDasharray: '3 3', stroke: '#666'}}
+                                                    />
+
+                                                    {/* Area fill under line */}
+                                                    <Area
+                                                        type="monotone"
+                                                        dataKey="price"
+                                                        stroke="transparent"
+                                                        strokeWidth={0}
+                                                        fill="url(#priceGradient)"
+                                                        dot={false}
+                                                        activeDot={false}
+                                                    />
+                                                    {/* Line with custom dots */}
+                                                    <Line
+                                                        type="monotone"
+                                                        dataKey="price"
+                                                        stroke="#666"
+                                                        strokeWidth={1}
+                                                        strokeOpacity={0.5}
+                                                        dot={(props: any) => {
+                                                            const { cx, cy, payload, index } = props
+                                                            if (!cx || !cy || !payload) return null
+
+                                                            // Active listings: diamond shape
+                                                            if (payload.isActive) {
+                                                                const size = 6
+                                                                return (
+                                                                    <polygon
+                                                                        key={`dot-${index}`}
+                                                                        points={`${cx},${cy-size} ${cx+size},${cy} ${cx},${cy+size} ${cx-size},${cy}`}
+                                                                        fill={payload.treatmentColor || '#3b82f6'}
+                                                                        stroke="#0a0a0a"
+                                                                        strokeWidth={2}
+                                                                        style={{ filter: 'drop-shadow(0 0 4px rgba(59,130,246,0.5))' }}
+                                                                    />
+                                                                )
+                                                            }
+
+                                                            // Sold listings: circle
+                                                            return (
+                                                                <circle
+                                                                    key={`dot-${index}`}
+                                                                    cx={cx}
+                                                                    cy={cy}
+                                                                    r={5}
+                                                                    fill={payload.treatmentColor || '#10b981'}
+                                                                    stroke="#0a0a0a"
+                                                                    strokeWidth={2}
+                                                                    style={{ filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.5))' }}
+                                                                />
+                                                            )
+                                                        }}
+                                                        activeDot={(props: any) => {
+                                                            const { cx, cy, payload } = props
+                                                            if (!cx || !cy || !payload) return null
+
+                                                            // Active listings: larger diamond
+                                                            if (payload.isActive) {
+                                                                const size = 9
+                                                                return (
+                                                                    <polygon
+                                                                        points={`${cx},${cy-size} ${cx+size},${cy} ${cx},${cy+size} ${cx-size},${cy}`}
+                                                                        fill={payload.treatmentColor || '#3b82f6'}
+                                                                        stroke="#fff"
+                                                                        strokeWidth={3}
+                                                                        style={{ filter: 'drop-shadow(0 0 8px rgba(59,130,246,0.6))' }}
+                                                                    />
+                                                                )
+                                                            }
+
+                                                            // Sold listings: larger circle
+                                                            return (
+                                                                <circle
+                                                                    cx={cx}
+                                                                    cy={cy}
+                                                                    r={8}
+                                                                    fill={payload.treatmentColor || '#10b981'}
+                                                                    stroke="#fff"
+                                                                    strokeWidth={3}
+                                                                    style={{ filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.3))' }}
+                                                                />
+                                                            )
+                                                        }}
+                                                    />
+                                                </AreaChart>
+                                            )}
                                         </ResponsiveContainer>
                                     ) : (
                                         <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
@@ -864,6 +1211,15 @@ function CardDetail() {
                             <div className="text-sm font-medium leading-relaxed border border-border p-3 rounded bg-muted/20">
                                 {selectedListing.title}
                             </div>
+                            {/* PSA Grading Badge */}
+                            {isPSAGraded(selectedListing.title).graded && (
+                                <div className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded border border-amber-600 bg-amber-900/30">
+                                    <div className="w-3 h-3 rounded-full bg-amber-500" />
+                                    <span className="text-amber-400 text-xs font-bold uppercase">
+                                        Graded: PSA {isPSAGraded(selectedListing.title).grade}
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
