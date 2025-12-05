@@ -244,3 +244,35 @@ def log_new_listing(
         webhook_url=NEW_LISTINGS_WEBHOOK_URL,
         username="Wonders Listings"
     )
+
+
+def log_market_insights(insights_text: str) -> bool:
+    """
+    Post AI-generated market insights to the updates channel.
+    This is for the 2x daily market summary.
+    """
+    if not UPDATES_WEBHOOK_URL:
+        print("DISCORD_UPDATES_WEBHOOK_URL not set, skipping market insights")
+        return False
+
+    try:
+        # Discord has 2000 char limit per message, split if needed
+        # For embeds, description limit is 4096
+        response = requests.post(
+            UPDATES_WEBHOOK_URL,
+            json={
+                "username": "Wonders Market AI",
+                "embeds": [{
+                    "title": "📊 Market Intelligence Report",
+                    "description": insights_text[:4000],  # Trim if too long
+                    "color": 0x7C3AED,  # Purple
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "footer": {"text": "AI-Generated Analysis • WondersTracker"}
+                }]
+            },
+            timeout=10
+        )
+        return response.status_code in (200, 204)
+    except Exception as e:
+        print(f"Market insights Discord post failed: {e}")
+        return False
