@@ -8,9 +8,17 @@ from sqlalchemy import func
 from app.db import engine
 from app.models.card import Card
 from app.models.market import MarketSnapshot
+from app.models.blokpax import BlokpaxStorefront, BlokpaxSnapshot
 from scripts.scrape_card import scrape_card as scrape_sold_data
 from app.scraper.active import scrape_active_data
 from app.scraper.browser import BrowserManager
+from app.scraper.blokpax import (
+    WOTF_STOREFRONTS,
+    get_bpx_price,
+    scrape_storefront_floor,
+    scrape_recent_sales,
+    is_wotf_asset,
+)
 from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
 from datetime import datetime, timedelta
 import concurrent.futures
@@ -173,9 +181,99 @@ async def job_update_market_data():
 
     print(f"[{datetime.utcnow()}] Scheduled Update Complete.")
 
+
+async def job_update_blokpax_data():
+    """
+    Scheduled job to update Blokpax floor prices and sales.
+    Runs on a separate interval from eBay since it's lightweight (API-based).
+    """
+    print(f"[{datetime.utcnow()}] Starting Blokpax Update...")
+    start_time = time.time()
+
+    log_scrape_start(len(WOTF_STOREFRONTS), scrape_type="blokpax")
+
+    errors = 0
+    total_sales = 0
+
+    try:
+        bpx_price = await get_bpx_price()
+        print(f"[Blokpax] BPX Price: ${bpx_price:.6f} USD")
+
+        for slug in WOTF_STOREFRONTS:
+            try:
+                # Scrape floor prices
+                floor_data = await scrape_storefront_floor(slug, deep_scan=False)
+                floor_bpx = floor_data.get("floor_price_bpx")
+                floor_usd = floor_data.get("floor_price_usd")
+                listed = floor_data.get("listed_count", 0)
+                total = floor_data.get("total_tokens", 0)
+
+                print(f"[Blokpax] {slug}: Floor={floor_bpx:,.0f} BPX (${floor_usd:.2f})" if floor_bpx else f"[Blokpax] {slug}: No listings")
+
+                # Save snapshot
+                with Session(engine) as session:
+                    snapshot = BlokpaxSnapshot(
+                        storefront_slug=slug,
+                        floor_price_bpx=floor_bpx,
+                        floor_price_usd=floor_usd,
+                        bpx_price_usd=bpx_price,
+                        listed_count=listed,
+                        total_tokens=total,
+                    )
+                    session.add(snapshot)
+
+                    # Update storefront record
+                    storefront = session.exec(
+                        select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)
+                    ).first()
+                    if storefront:
+                        storefront.floor_price_bpx = floor_bpx
+                        storefront.floor_price_usd = floor_usd
+                        storefront.listed_count = listed
+                        storefront.total_tokens = total
+                        storefront.updated_at = datetime.utcnow()
+                        session.add(storefront)
+
+                    session.commit()
+
+                # Scrape recent sales (limit pages for scheduled runs)
+                sales = await scrape_recent_sales(slug, max_pages=2)
+                if slug == "reward-room":
+                    sales = [s for s in sales if is_wotf_asset(s.asset_name)]
+                total_sales += len(sales)
+
+                await asyncio.sleep(1)
+
+            except Exception as e:
+                print(f"[Blokpax] Error on {slug}: {e}")
+                errors += 1
+
+    except Exception as e:
+        print(f"[Blokpax] Fatal error: {e}")
+        log_scrape_error("Blokpax Scheduled", str(e))
+        errors += 1
+
+    duration = time.time() - start_time
+    log_scrape_complete(
+        cards_processed=len(WOTF_STOREFRONTS),
+        new_listings=0,
+        new_sales=total_sales,
+        duration_seconds=duration,
+        errors=errors
+    )
+
+    print(f"[{datetime.utcnow()}] Blokpax Update Complete. Duration: {duration:.1f}s")
+
+
 def start_scheduler():
-    # Schedule to run every 30 minutes for more frequent updates
+    # Schedule eBay scraping to run every 30 minutes
     scheduler.add_job(job_update_market_data, IntervalTrigger(minutes=30))
+
+    # Schedule Blokpax scraping to run every 15 minutes (lightweight API-based)
+    scheduler.add_job(job_update_blokpax_data, IntervalTrigger(minutes=15))
+
     scheduler.start()
-    print("✅ Scheduler started. Job 'job_update_market_data' registered (30m interval).")
+    print("Scheduler started:")
+    print("  - job_update_market_data (eBay): 30m interval")
+    print("  - job_update_blokpax_data (Blokpax): 15m interval")
 

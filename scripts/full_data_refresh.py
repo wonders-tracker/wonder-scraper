@@ -1,5 +1,5 @@
 """
-Complete data refresh: eBay cards + boxes/packs + OpenSea collections using distributed workers
+Complete data refresh: eBay cards + boxes/packs + OpenSea collections + Blokpax using distributed workers
 """
 import asyncio
 import multiprocessing as mp
@@ -9,9 +9,17 @@ from sqlmodel import Session, select
 from app.db import engine
 from app.models.card import Card
 from app.models.market import MarketSnapshot
+from app.models.blokpax import BlokpaxStorefront, BlokpaxSnapshot
 from scripts.scrape_card import scrape_card
 from app.scraper.browser import BrowserManager
 from app.scraper.opensea import scrape_opensea_collection
+from app.scraper.blokpax import (
+    WOTF_STOREFRONTS,
+    get_bpx_price,
+    scrape_storefront_floor,
+    scrape_recent_sales,
+    is_wotf_asset,
+)
 from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
 import sys
 import os
@@ -122,6 +130,84 @@ async def scrape_all_ebay_parallel(num_workers: int = 2):
     print(f"Success: {total_success}")
     print(f"Failed: {total_processed - total_success}")
 
+async def scrape_all_blokpax():
+    """Scrape all Blokpax WOTF storefronts for floor prices and sales"""
+    print("\n" + "=" * 60)
+    print("SCRAPING BLOKPAX STOREFRONTS")
+    print("=" * 60)
+
+    bpx_price = await get_bpx_price()
+    print(f"Current BPX Price: ${bpx_price:.6f} USD")
+
+    results = {"floors": 0, "sales": 0, "errors": 0}
+
+    for slug in WOTF_STOREFRONTS:
+        print(f"\n--- {slug} ---")
+        try:
+            # Scrape floor prices
+            floor_data = await scrape_storefront_floor(slug, deep_scan=False)
+            floor_bpx = floor_data.get("floor_price_bpx")
+            floor_usd = floor_data.get("floor_price_usd")
+            listed = floor_data.get("listed_count", 0)
+            total = floor_data.get("total_tokens", 0)
+
+            if floor_bpx:
+                print(f"  Floor: {floor_bpx:,.0f} BPX (${floor_usd:.2f} USD)")
+            else:
+                print(f"  Floor: No listings")
+            print(f"  Listed: {listed} / {total} tokens")
+
+            # Save snapshot
+            with Session(engine) as session:
+                snapshot = BlokpaxSnapshot(
+                    storefront_slug=slug,
+                    floor_price_bpx=floor_bpx,
+                    floor_price_usd=floor_usd,
+                    bpx_price_usd=bpx_price,
+                    listed_count=listed,
+                    total_tokens=total,
+                )
+                session.add(snapshot)
+
+                # Update storefront record
+                storefront = session.exec(
+                    select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)
+                ).first()
+                if storefront:
+                    storefront.floor_price_bpx = floor_bpx
+                    storefront.floor_price_usd = floor_usd
+                    storefront.listed_count = listed
+                    storefront.total_tokens = total
+                    storefront.updated_at = datetime.utcnow()
+                    session.add(storefront)
+
+                session.commit()
+                results["floors"] += 1
+
+            # Scrape recent sales
+            sales = await scrape_recent_sales(slug, max_pages=3)
+
+            # Filter WOTF items for reward-room (mixed storefront)
+            if slug == "reward-room":
+                sales = [s for s in sales if is_wotf_asset(s.asset_name)]
+
+            results["sales"] += len(sales)
+            print(f"  Sales: {len(sales)} recent")
+
+            await asyncio.sleep(1)
+
+        except Exception as e:
+            print(f"  ERROR: {e}")
+            results["errors"] += 1
+
+    print(f"\n=== Blokpax Scraping Complete ===")
+    print(f"Storefronts: {results['floors']}")
+    print(f"Sales found: {results['sales']}")
+    print(f"Errors: {results['errors']}")
+
+    return results
+
+
 async def scrape_all_opensea():
     """Scrape OpenSea collections"""
     print("\n" + "=" * 60)
@@ -182,6 +268,7 @@ async def main(num_workers: int):
     print("  1. All eBay cards (singles) using parallel workers")
     print("  2. All eBay boxes/packs using parallel workers")
     print("  3. All OpenSea collections")
+    print("  4. All Blokpax WOTF storefronts")
     print()
 
     # Check current data
@@ -207,6 +294,9 @@ async def main(num_workers: int):
 
     # 2. Scrape OpenSea
     await scrape_all_opensea()
+
+    # 3. Scrape Blokpax
+    await scrape_all_blokpax()
 
     # Final stats
     with Session(engine) as session:
