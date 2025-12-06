@@ -34,14 +34,13 @@ def read_treatments(
 @router.get("/overview")
 def read_market_overview(
     session: Session = Depends(get_session),
-    time_period: Optional[str] = Query(default="30d", regex="^(24h|7d|30d|90d|all)$"),
+    time_period: Optional[str] = Query(default="30d", pattern="^(7d|30d|90d|all)$"),
 ) -> Any:
     """
     Get robust market overview statistics with temporal data.
     """
     # Calculate time cutoff
     time_cutoffs = {
-        "24h": timedelta(hours=24),
         "7d": timedelta(days=7),
         "30d": timedelta(days=30),
         "90d": timedelta(days=90),
