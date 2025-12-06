@@ -248,8 +248,10 @@ function CardDetail() {
   type PricingData = {
       card_id: number
       card_name: string
+      product_type: string
       fair_market_price: number | null
       floor_price: number | null
+      calculation_method: 'formula' | 'median'  // formula for Singles, median for others
       breakdown: {
           base_set_price: number | null
           rarity_multiplier: number
@@ -1271,30 +1273,45 @@ function CardDetail() {
                                 </table>
                             </div>
 
-                            {/* FMP Breakdown Info */}
-                            {pricingData?.breakdown && (
-                                <div className="px-4 py-3 border-t border-border bg-muted/10">
-                                    <div className="text-[10px] text-muted-foreground uppercase mb-2 font-bold">FMP Formula Breakdown</div>
-                                    <div className="grid grid-cols-2 gap-2 text-[10px]">
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Base Price:</span>
-                                            <span className="font-mono">${pricingData.breakdown.base_set_price?.toFixed(2) || '---'}</span>
+                            {/* FMP Info Footer */}
+                            <div className="px-4 py-3 border-t border-border bg-muted/10">
+                                {pricingData?.breakdown ? (
+                                    <>
+                                        <div className="text-[10px] text-muted-foreground uppercase mb-2 font-bold">FMP Formula Breakdown</div>
+                                        <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Base Price:</span>
+                                                <span className="font-mono">${pricingData.breakdown.base_set_price?.toFixed(2) || '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Rarity Mult:</span>
+                                                <span className="font-mono">{pricingData.breakdown.rarity_multiplier}x</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Liquidity Adj:</span>
+                                                <span className="font-mono">{pricingData.breakdown.liquidity_adjustment}x</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Floor (4 lowest):</span>
+                                                <span className="font-mono text-emerald-400">${pricingData.floor_price?.toFixed(2) || '---'}</span>
+                                            </div>
                                         </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Rarity Mult:</span>
-                                            <span className="font-mono">{pricingData.breakdown.rarity_multiplier}x</span>
+                                    </>
+                                ) : pricingData ? (
+                                    <>
+                                        <div className="text-[10px] text-muted-foreground uppercase mb-2 font-bold">
+                                            {pricingData.product_type} Pricing
                                         </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Liquidity Adj:</span>
-                                            <span className="font-mono">{pricingData.breakdown.liquidity_adjustment}x</span>
+                                        <div className="text-[10px] text-muted-foreground">
+                                            FMP = 30-day median price (formula N/A for {pricingData.product_type}s)
                                         </div>
-                                        <div className="flex justify-between">
+                                        <div className="flex justify-between mt-2 text-[10px]">
                                             <span className="text-muted-foreground">Floor (4 lowest):</span>
                                             <span className="font-mono text-emerald-400">${pricingData.floor_price?.toFixed(2) || '---'}</span>
                                         </div>
-                                    </div>
-                                </div>
-                            )}
+                                    </>
+                                ) : null}
+                            </div>
                         </div>
                     </div>
                 </div>

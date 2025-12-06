@@ -466,12 +466,14 @@ def read_card(
     # Calculate Fair Market Price and Floor Price
     fair_market_price = None
     floor_price = None
+    product_type = card.product_type if hasattr(card, 'product_type') else 'Single'
     try:
         pricing_service = FairMarketPriceService(session)
         fmp_result = pricing_service.calculate_fmp(
             card_id=card.id,
             set_name=card.set_name,
-            rarity_name=rarity_name
+            rarity_name=rarity_name,
+            product_type=product_type
         )
         fair_market_price = fmp_result.get('fair_market_price')
         floor_price = fmp_result.get('floor_price')
@@ -577,6 +579,7 @@ def read_card_pricing(
         if rarity:
             rarity_name = rarity.name
 
+    product_type = card.product_type if hasattr(card, 'product_type') else 'Single'
     pricing_service = FairMarketPriceService(session)
 
     # Get FMP breakdown by treatment
@@ -590,15 +593,18 @@ def read_card_pricing(
     fmp_result = pricing_service.calculate_fmp(
         card_id=card.id,
         set_name=card.set_name,
-        rarity_name=rarity_name
+        rarity_name=rarity_name,
+        product_type=product_type
     )
 
     return {
         "card_id": card.id,
         "card_name": card.name,
+        "product_type": product_type,
         "fair_market_price": fmp_result.get('fair_market_price'),
         "floor_price": fmp_result.get('floor_price'),
-        "breakdown": fmp_result.get('breakdown'),
+        "calculation_method": fmp_result.get('calculation_method'),  # 'formula' or 'median'
+        "breakdown": fmp_result.get('breakdown'),  # None for non-Singles
         "by_treatment": treatment_fmps
     }
 

@@ -250,27 +250,72 @@ class FairMarketPriceService:
 
         return None
 
+    def get_median_price(self, card_id: int, days: int = 30) -> Optional[float]:
+        """
+        Get simple median price for a card (used for non-Single products).
+        """
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        query = text("""
+            SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price
+            FROM marketprice
+            WHERE card_id = :card_id
+              AND listing_type = 'sold'
+              AND sold_date >= :cutoff
+        """)
+
+        result = self.session.execute(query, {"card_id": card_id, "cutoff": cutoff}).fetchone()
+
+        if result and result[0]:
+            return round(float(result[0]), 2)
+
+        # Fallback to 90 days
+        if days == 30:
+            return self.get_median_price(card_id, days=90)
+
+        return None
+
     def calculate_fmp(
         self,
         card_id: int,
         set_name: str,
         rarity_name: str,
         treatment: str = 'Classic Paper',
-        days: int = 30
+        days: int = 30,
+        product_type: str = 'Single'
     ) -> Dict[str, Any]:
         """
-        Calculate Fair Market Price using the formula:
-        FMP = BaseSetPrice × RarityMultiplier × TreatmentMultiplier × ConditionMultiplier × LiquidityAdjustment
+        Calculate Fair Market Price.
 
-        Returns dict with FMP value and breakdown of multipliers.
+        For Singles: FMP = BaseSetPrice × RarityMultiplier × TreatmentMultiplier × LiquidityAdjustment
+        For Boxes/Packs/Bundles/Proofs/Lots: FMP = Median price (formula doesn't apply)
+
+        Returns dict with FMP value and breakdown.
         """
-        # Get all components
+        floor_price = self.calculate_floor_price(card_id, num_sales=4, days=days)
+
+        # For non-Single products, just use median price - formula doesn't apply
+        if product_type and product_type not in ['Single', None, '']:
+            median_price = self.get_median_price(card_id, days)
+            return {
+                'fair_market_price': median_price,
+                'floor_price': floor_price,
+                'breakdown': None,  # No formula breakdown for non-Singles
+                'product_type': product_type,
+                'calculation_method': 'median',  # Indicates simple median was used
+                'data_quality': {
+                    'has_base_price': False,
+                    'has_floor_price': floor_price is not None,
+                    'using_defaults': False,
+                }
+            }
+
+        # For Singles: use the full FMP formula
         base_price = self.get_base_set_price(set_name, days)
         rarity_mult = self.get_rarity_multiplier(set_name, rarity_name, days)
         treatment_mult = self.get_treatment_multiplier(card_id, treatment, days)
         condition_mult = 1.0  # Default to Near Mint (future: parse from listings)
         liquidity_adj = self.get_liquidity_adjustment(card_id, days)
-        floor_price = self.calculate_floor_price(card_id, num_sales=4, days=days)
 
         # Calculate FMP
         fmp = None
@@ -288,6 +333,8 @@ class FairMarketPriceService:
                 'condition_multiplier': condition_mult,
                 'liquidity_adjustment': round(liquidity_adj, 2),
             },
+            'product_type': product_type,
+            'calculation_method': 'formula',
             'data_quality': {
                 'has_base_price': base_price is not None,
                 'has_floor_price': floor_price is not None,
