@@ -367,13 +367,10 @@ class FairMarketPriceService:
         """
         cutoff = datetime.utcnow() - timedelta(days=days)
 
-        # Get all treatments with sales for this card
-        # Use COALESCE to handle NULL treatments - label them based on product type
-        default_treatment = 'Sealed' if product_type in ['Box', 'Pack', 'Bundle'] else 'Standard'
-
+        # Simple query - get all treatments, handle NULLs in Python
         query = text("""
             SELECT
-                COALESCE(NULLIF(treatment, ''), :default_treatment) as treatment,
+                treatment,
                 COUNT(*) as sales_count,
                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price,
                 MIN(price) as min_price,
@@ -382,23 +379,20 @@ class FairMarketPriceService:
             FROM marketprice
             WHERE card_id = :card_id
               AND listing_type = 'sold'
-              AND (sold_date >= :cutoff OR sold_date IS NULL)
-            GROUP BY COALESCE(NULLIF(treatment, ''), :default_treatment)
-            HAVING COUNT(*) >= 1
-            ORDER BY median_price ASC
+            GROUP BY treatment
+            ORDER BY median_price ASC NULLS LAST
         """)
 
-        results = self.session.execute(query, {
-            "card_id": card_id,
-            "cutoff": cutoff,
-            "default_treatment": default_treatment
-        }).fetchall()
+        results = self.session.execute(query, {"card_id": card_id}).fetchall()
 
         if not results:
             # Fallback to 90 days if no recent sales
             if days == 30:
                 return self.get_fmp_by_treatment(card_id, set_name, rarity_name, days=90, product_type=product_type)
             return []
+
+        # Default treatment label for NULL values based on product type
+        default_treatment = 'Sealed' if product_type in ['Box', 'Pack', 'Bundle'] else 'Classic Paper'
 
         treatment_fmps = []
         for row in results:
