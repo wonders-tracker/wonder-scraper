@@ -197,23 +197,23 @@ function Home() {
       }
     },
     {
-      accessorKey: 'vwap', // FMP / median price
+      accessorKey: 'vwap', // 30d median price
       header: ({ column }) => (
         <button
           className="flex items-center gap-1 hover:text-primary uppercase tracking-wider text-xs ml-auto"
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          title="Fair Market Price (30d median)"
+          title="30-day median sale price"
         >
-          FMP
+          Median
           <ArrowUpDown className="h-3 w-3" />
         </button>
       ),
       cell: ({ row }) => {
-          const fmp = row.original.vwap || row.original.fair_market_price
-          const hasFMP = !!fmp && fmp > 0
+          const median = row.original.vwap
+          const hasMedian = !!median && median > 0
           return (
-            <div className="text-right font-mono text-sm">
-                {hasFMP ? `$${fmp.toFixed(2)}` : '---'}
+            <div className="text-right font-mono text-sm text-muted-foreground">
+                {hasMedian ? `$${median.toFixed(2)}` : '---'}
             </div>
           )
       }
