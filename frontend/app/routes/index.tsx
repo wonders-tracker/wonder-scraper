@@ -174,11 +174,24 @@ function Home() {
         </button>
       ),
       cell: ({ row }) => {
-          const floorPrice = row.original.floor_price
+          // Use floor_price, fallback to vwap if no floor
+          const floorPrice = row.original.floor_price || row.original.vwap
           const hasFloor = !!floorPrice && floorPrice > 0
+          const delta = row.original.price_delta_24h || 0
           return (
-            <div className="text-right font-mono text-sm">
-                {hasFloor ? `$${floorPrice.toFixed(2)}` : '---'}
+            <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-mono text-sm">
+                    {hasFloor ? `$${floorPrice.toFixed(2)}` : '---'}
+                </span>
+                {hasFloor && delta !== 0 && (
+                    <span className={clsx(
+                        "text-[10px] font-mono px-1 py-0.5 rounded",
+                        delta > 0 ? "text-emerald-400 bg-emerald-500/10" :
+                        "text-red-400 bg-red-500/10"
+                    )}>
+                        {delta > 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%
+                    </span>
+                )}
             </div>
           )
       }
@@ -198,21 +211,9 @@ function Home() {
       cell: ({ row }) => {
           const fmp = row.original.vwap || row.original.fair_market_price
           const hasFMP = !!fmp && fmp > 0
-          const delta = row.original.price_delta_24h || 0
           return (
-            <div className="text-right flex items-center justify-end gap-2">
-                <span className="font-mono text-sm">
-                    {hasFMP ? `$${fmp.toFixed(2)}` : '---'}
-                </span>
-                {hasFMP && delta !== 0 && (
-                    <span className={clsx(
-                        "text-[10px] font-mono px-1 py-0.5 rounded",
-                        delta > 0 ? "text-emerald-400 bg-emerald-500/10" :
-                        "text-red-400 bg-red-500/10"
-                    )}>
-                        {delta > 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%
-                    </span>
-                )}
+            <div className="text-right font-mono text-sm">
+                {hasFMP ? `$${fmp.toFixed(2)}` : '---'}
             </div>
           )
       }

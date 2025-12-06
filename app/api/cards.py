@@ -179,19 +179,21 @@ def read_cards(
             active_stats_results = session.execute(active_stats_query, {"card_ids": card_ids}).all()
             active_stats_map = {row[0]: {'lowest_ask': row[1], 'inventory': row[2]} for row in active_stats_results}
 
-            # Batch calculate floor prices (avg of 4 lowest sales per card in 30d)
+            # Batch calculate floor prices (avg of up to 4 lowest sales per card in 30d)
+            # If fewer than 4 sales exist, use whatever is available
             cutoff_30d = datetime.utcnow() - timedelta(days=30)
             floor_query = text("""
                 SELECT card_id, AVG(price) as floor_price
                 FROM (
                     SELECT card_id, price,
-                           ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn
+                           ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn,
+                           COUNT(*) OVER (PARTITION BY card_id) as total_sales
                     FROM marketprice
                     WHERE card_id = ANY(:card_ids)
                       AND listing_type = 'sold'
                       AND sold_date >= :cutoff
                 ) ranked
-                WHERE rn <= 4
+                WHERE rn <= LEAST(4, total_sales)
                 GROUP BY card_id
             """)
             floor_results = session.execute(floor_query, {"card_ids": card_ids, "cutoff": cutoff_30d}).all()

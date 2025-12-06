@@ -215,8 +215,8 @@ class FairMarketPriceService:
 
     def calculate_floor_price(self, card_id: int, num_sales: int = 4, days: int = 30) -> Optional[float]:
         """
-        Calculate floor price as average of N lowest sales in time window.
-        This is more stable than a single lowest sale.
+        Calculate floor price as average of up to N lowest sales in time window.
+        Uses whatever sales are available if fewer than N exist.
         """
         cutoff = datetime.utcnow() - timedelta(days=days)
 
@@ -229,7 +229,10 @@ class FairMarketPriceService:
                   AND listing_type = 'sold'
                   AND sold_date >= :cutoff
                 ORDER BY price ASC
-                LIMIT :num_sales
+                LIMIT GREATEST(1, LEAST(:num_sales, (
+                    SELECT COUNT(*) FROM marketprice
+                    WHERE card_id = :card_id AND listing_type = 'sold' AND sold_date >= :cutoff
+                )))
             ) as lowest_sales
         """)
 
