@@ -5,6 +5,7 @@ import { api, auth } from '../utils/auth'
 import { useState, useMemo } from 'react'
 import Marquee from '../components/ui/marquee'
 import { Analytics } from '@vercel/analytics/react'
+import { TimePeriodProvider, useTimePeriod } from '../context/TimePeriodContext'
 
 type UserProfile = {
     id: number
@@ -17,8 +18,12 @@ type Card = {
   slug?: string
   name: string
   latest_price?: number
-  price_delta_24h?: number
+  // New field names
+  volume?: number
+  price_delta?: number
+  // Deprecated (backwards compat)
   volume_30d?: number
+  price_delta_24h?: number
 }
 
 export const Route = createRootRoute({
@@ -28,6 +33,17 @@ export const Route = createRootRoute({
 function RootComponent() {
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  return (
+    <TimePeriodProvider>
+      <RootLayout navigate={navigate} mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+    </TimePeriodProvider>
+  )
+}
+
+function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate: any, mobileMenuOpen: boolean, setMobileMenuOpen: (v: boolean) => void }) {
+  const { timePeriod } = useTimePeriod()
+
   const { data: user } = useQuery({
       queryKey: ['me'],
       queryFn: async () => {
@@ -43,19 +59,24 @@ function RootComponent() {
       retry: false
   })
 
-  // Fetch cards for marquee
+  // Fetch cards for marquee ticker - uses shared time period
   const { data: cards = [] } = useQuery({
-      queryKey: ['cards'],
+      queryKey: ['cards-marquee', timePeriod],
       queryFn: async () => {
-          return await api.get('cards/').json<Card[]>()
-      }
+          return await api.get(`cards/?limit=500&time_period=${timePeriod}`).json<Card[]>()
+      },
+      staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
-  const topGainers = useMemo(() => [...cards].filter(c => c.price_delta_24h && c.price_delta_24h > 0).sort((a, b) => (b.price_delta_24h || 0) - (a.price_delta_24h || 0)).slice(0, 5), [cards])
-  const topLosers = useMemo(() => [...cards].filter(c => c.price_delta_24h && c.price_delta_24h < 0).sort((a, b) => (a.price_delta_24h || 0) - (b.price_delta_24h || 0)).slice(0, 3), [cards])
-  const topVolume = useMemo(() => [...cards].sort((a, b) => (b.volume_30d || 0) - (a.volume_30d || 0)).slice(0, 8), [cards])
+  // Helper to get delta with fallback
+  const getDelta = (c: Card) => c.price_delta ?? c.price_delta_24h ?? 0
+  const getVolume = (c: Card) => c.volume ?? c.volume_30d ?? 0
+
+  const topGainers = useMemo(() => [...cards].filter(c => getDelta(c) > 0).sort((a, b) => getDelta(b) - getDelta(a)).slice(0, 5), [cards])
+  const topLosers = useMemo(() => [...cards].filter(c => getDelta(c) < 0).sort((a, b) => getDelta(a) - getDelta(b)).slice(0, 3), [cards])
+  const topVolume = useMemo(() => [...cards].sort((a, b) => getVolume(b) - getVolume(a)).slice(0, 8), [cards])
   const marketMetrics = useMemo(() => {
-      const totalVolume = cards.reduce((acc, c) => acc + (c.volume_30d || 0), 0)
+      const totalVolume = cards.reduce((acc, c) => acc + getVolume(c), 0)
       const avgVelocity = cards.length > 0 ? totalVolume / cards.length : 0
       return { totalVolume, avgVelocity }
   }, [cards])
@@ -235,13 +256,13 @@ function RootComponent() {
               {topGainers.map(c => (
                 <div key={`ticker-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
                   <span className="font-bold uppercase">{c.name}</span>
-                  <span className="text-emerald-500">+{Number(c.price_delta_24h).toFixed(1)}%</span>
+                  <span className="text-emerald-500">+{getDelta(c).toFixed(1)}%</span>
                 </div>
               ))}
               {topLosers.map(c => (
                 <div key={`ticker-loss-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
                   <span className="font-bold uppercase">{c.name}</span>
-                  <span className="text-red-500">{Number(c.price_delta_24h).toFixed(1)}%</span>
+                  <span className="text-red-500">{getDelta(c).toFixed(1)}%</span>
                 </div>
               ))}
             </Marquee>

@@ -1,5 +1,6 @@
 import { createRoute, useRouter, useSearch } from '@tanstack/react-router'
 import { useEffect } from 'react'
+import { analytics } from '~/services/analytics'
 import { Route as rootRoute } from './__root'
 
 export const Route = createRoute({
@@ -20,6 +21,8 @@ function AuthCallback() {
   useEffect(() => {
     if (search.token) {
       localStorage.setItem('token', search.token)
+      // Track successful Discord login
+      analytics.trackLogin('discord')
       // Redirect to home and refresh to ensure auth state is picked up
       window.location.href = '/'
     } else {

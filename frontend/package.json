@@ -8,7 +8,10 @@
     "dev": "npm run clean:temp && vite",
     "build": "npm run clean:temp && tsc --noEmit && vite build",
     "build:vercel": "npm run clean:temp && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.51.0",
@@ -26,16 +29,20 @@
   },
   "devDependencies": {
     "@tanstack/react-router-devtools": "^1.45.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
     "@types/marked": "^5.0.2",
     "@types/node": "^24.10.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
+    "jsdom": "^27.2.0",
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.6",
     "typescript": "^5.5.4",
     "vite": "^5.3.4",
-    "vite-tsconfig-paths": "^4.3.2"
+    "vite-tsconfig-paths": "^4.3.2",
+    "vitest": "^4.0.15"
   }
 }
