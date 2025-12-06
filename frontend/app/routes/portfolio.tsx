@@ -1,10 +1,11 @@
 import { createRoute, Link, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
+import { analytics } from '~/services/analytics'
 import { Route as rootRoute } from './__root'
 import { ArrowLeft, TrendingUp, Trash2, Search, Edit, X, TrendingDown, BarChart3 } from 'lucide-react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import clsx from 'clsx'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
@@ -37,6 +38,11 @@ function Portfolio() {
   const queryClient = useQueryClient()
   const [editingItem, setEditingItem] = useState<PortfolioItem | null>(null)
   const [editForm, setEditForm] = useState({ quantity: 1, purchase_price: 0, acquired_at: '' })
+
+  // Track portfolio access
+  useEffect(() => {
+    analytics.trackPortfolioAccess()
+  }, [])
 
   // Fetch Portfolio Data
   const { data: portfolio, isLoading } = useQuery({

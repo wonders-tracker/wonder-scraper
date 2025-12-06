@@ -1,6 +1,7 @@
 import { createRoute, redirect, useRouter, Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { auth, api } from '../utils/auth'
+import { analytics } from '~/services/analytics'
 import { Route as rootRoute } from './__root'
 import { Wallet, Bell, TrendingUp, BarChart3, Shield, Zap } from 'lucide-react'
 
@@ -21,11 +22,17 @@ function Login() {
   const [error, setError] = useState('')
   const router = useRouter()
 
+  // Track login page view
+  useEffect(() => {
+    analytics.trackLoginPageView()
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     const success = await auth.login(email, password)
     if (success) {
+      analytics.trackLogin('email')
       router.navigate({ to: '/' })
     } else {
       setError('Invalid credentials')
@@ -34,6 +41,7 @@ function Login() {
 
   const handleDiscordLogin = async () => {
     try {
+      analytics.trackDiscordLoginInitiated()
       const res = await api.get('auth/discord/login').json<{ url: string }>()
       window.location.href = res.url
     } catch (e) {

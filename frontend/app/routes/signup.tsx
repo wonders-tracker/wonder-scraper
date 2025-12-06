@@ -1,6 +1,7 @@
 import { createRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api } from '~/utils/auth'
+import { analytics } from '~/services/analytics'
 import { LogIn, AlertCircle } from 'lucide-react'
 
 import { Route as rootRoute } from './__root'
@@ -52,6 +53,7 @@ function Signup() {
 
       if (loginRes.access_token) {
         localStorage.setItem('token', loginRes.access_token)
+        analytics.trackSignup('email')
         navigate({ to: '/' })
       }
     } catch (err: any) {

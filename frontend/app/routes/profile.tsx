@@ -1,6 +1,7 @@
 import { createRoute, Link, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
+import { analytics } from '~/services/analytics'
 import { Route as rootRoute } from './__root'
 import { ArrowLeft, User, Save, Server, Shield } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -42,6 +43,11 @@ function Profile() {
       return data
     }
   })
+
+  // Track profile access
+  useEffect(() => {
+    analytics.trackProfileAccess()
+  }, [])
 
   // Update local state when data is loaded
   useEffect(() => {
