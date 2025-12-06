@@ -1,5 +1,6 @@
 from typing import Optional
 from sqlmodel import Field, SQLModel
+from sqlalchemy import Index
 from datetime import datetime
 
 class MarketSnapshot(SQLModel, table=True):
@@ -51,3 +52,13 @@ class MarketPrice(SQLModel, table=True):
     shipping_cost: Optional[float] = Field(default=None) # Shipping price (0 = free)
 
     scraped_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Composite indexes for FMP queries
+    __table_args__ = (
+        # For FMP: card_id + listing_type + sold_date queries
+        Index('ix_marketprice_card_listing_sold', 'card_id', 'listing_type', 'sold_date'),
+        # For treatment queries
+        Index('ix_marketprice_card_treatment', 'card_id', 'treatment'),
+        # For listing type + sold_date range scans
+        Index('ix_marketprice_listing_sold', 'listing_type', 'sold_date'),
+    )

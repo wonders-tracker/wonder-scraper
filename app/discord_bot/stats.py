@@ -212,11 +212,12 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
 
     with Session(engine) as session:
         # Get all sold listings in period
+        # Use COALESCE(sold_date, scraped_at) to include sales with NULL sold_date
         sales = session.exec(
             select(MarketPrice)
             .where(MarketPrice.listing_type == "sold")
-            .where(MarketPrice.sold_date >= start_time)
-            .where(MarketPrice.sold_date <= end_time)
+            .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= start_time)
+            .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) <= end_time)
         ).all()
 
         total_sales = len(sales)
@@ -261,8 +262,8 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
         prev_sales = session.exec(
             select(MarketPrice)
             .where(MarketPrice.listing_type == "sold")
-            .where(MarketPrice.sold_date >= prev_start)
-            .where(MarketPrice.sold_date < start_time)
+            .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= prev_start)
+            .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) < start_time)
         ).all()
 
         prev_total_sales = len(prev_sales)
@@ -301,8 +302,8 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
                 select(MarketPrice)
                 .where(MarketPrice.card_id == card.id)
                 .where(MarketPrice.listing_type == "sold")
-                .where(MarketPrice.sold_date >= prev_start)
-                .where(MarketPrice.sold_date < start_time)
+                .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= prev_start)
+                .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) < start_time)
             ).all()
 
             if not prev_sales:
@@ -354,12 +355,12 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
 
             max_current = max(s.price for s in current_sales)
 
-            # Check historical max
+            # Check historical max - use COALESCE for NULL sold_date
             hist_max = session.exec(
                 select(func.max(MarketPrice.price))
                 .where(MarketPrice.card_id == card.id)
                 .where(MarketPrice.listing_type == "sold")
-                .where(MarketPrice.sold_date < start_time)
+                .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) < start_time)
             ).first()
 
             if hist_max is None or max_current > hist_max:
@@ -382,11 +383,12 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
 
             min_current = min(s.price for s in current_sales)
 
+            # Use COALESCE for NULL sold_date
             hist_min = session.exec(
                 select(func.min(MarketPrice.price))
                 .where(MarketPrice.card_id == card.id)
                 .where(MarketPrice.listing_type == "sold")
-                .where(MarketPrice.sold_date < start_time)
+                .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) < start_time)
             ).first()
 
             if hist_min is None or min_current < hist_min:
@@ -441,13 +443,14 @@ def generate_csv_report(period: str = "daily") -> tuple[str, bytes]:
 
     with Session(engine) as session:
         # Get all sales in period with card info
+        # Use COALESCE(sold_date, scraped_at) to include sales with NULL sold_date
         sales = session.exec(
             select(MarketPrice, Card)
             .join(Card)
             .where(MarketPrice.listing_type == "sold")
-            .where(MarketPrice.sold_date >= start_time)
-            .where(MarketPrice.sold_date <= end_time)
-            .order_by(desc(MarketPrice.sold_date))
+            .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= start_time)
+            .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) <= end_time)
+            .order_by(desc(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at)))
         ).all()
 
         # Create CSV

@@ -44,12 +44,19 @@ class FairMarketPriceService:
 
     def __init__(self, session: Session):
         self.session = session
+        # In-memory caches for batch operations (cleared per request)
+        self._base_price_cache: Dict[str, Optional[float]] = {}
+        self._rarity_mult_cache: Dict[str, float] = {}
 
     def get_base_set_price(self, set_name: str, days: int = 30) -> Optional[float]:
         """
         Calculate base set price as median of Classic Paper Common sales.
         This is the reference point for FMP calculations.
         """
+        cache_key = f"{set_name}:{days}"
+        if cache_key in self._base_price_cache:
+            return self._base_price_cache[cache_key]
+
         cutoff = datetime.utcnow() - timedelta(days=days)
 
         query = text("""
@@ -61,18 +68,23 @@ class FairMarketPriceService:
               AND r.name = 'Common'
               AND mp.treatment IN ('Classic Paper', 'Classic Foil')
               AND mp.listing_type = 'sold'
-              AND mp.sold_date >= :cutoff
+              AND COALESCE(mp.sold_date, mp.scraped_at) >= :cutoff
         """)
 
         result = self.session.execute(query, {"set_name": set_name, "cutoff": cutoff}).fetchone()
 
         if result and result[0]:
-            return float(result[0])
+            price = float(result[0])
+            self._base_price_cache[cache_key] = price
+            return price
 
         # Fallback: try 90 days
         if days == 30:
-            return self.get_base_set_price(set_name, days=90)
+            result = self.get_base_set_price(set_name, days=90)
+            self._base_price_cache[cache_key] = result
+            return result
 
+        self._base_price_cache[cache_key] = None
         return None
 
     def get_rarity_multiplier(self, set_name: str, rarity_name: str, days: int = 30) -> float:
@@ -82,6 +94,10 @@ class FairMarketPriceService:
         """
         if rarity_name == 'Common':
             return 1.0
+
+        cache_key = f"{set_name}:{rarity_name}:{days}"
+        if cache_key in self._rarity_mult_cache:
+            return self._rarity_mult_cache[cache_key]
 
         cutoff = datetime.utcnow() - timedelta(days=days)
 
@@ -95,7 +111,7 @@ class FairMarketPriceService:
               AND r.name = 'Common'
               AND mp.treatment IN ('Classic Paper', 'Classic Foil')
               AND mp.listing_type = 'sold'
-              AND mp.sold_date >= :cutoff
+              AND COALESCE(mp.sold_date, mp.scraped_at) >= :cutoff
             HAVING COUNT(*) >= 3
         """)
 
@@ -115,7 +131,7 @@ class FairMarketPriceService:
               AND r.name = :rarity_name
               AND mp.treatment IN ('Classic Paper', 'Classic Foil')
               AND mp.listing_type = 'sold'
-              AND mp.sold_date >= :cutoff
+              AND COALESCE(mp.sold_date, mp.scraped_at) >= :cutoff
             HAVING COUNT(*) >= 2
         """)
 
@@ -125,9 +141,13 @@ class FairMarketPriceService:
         ).fetchone()
 
         if rarity_result and rarity_result[0]:
-            return float(rarity_result[0]) / common_median
+            mult = float(rarity_result[0]) / common_median
+            self._rarity_mult_cache[cache_key] = mult
+            return mult
 
-        return DEFAULT_RARITY_MULTIPLIERS.get(rarity_name, 1.0)
+        default_mult = DEFAULT_RARITY_MULTIPLIERS.get(rarity_name, 1.0)
+        self._rarity_mult_cache[cache_key] = default_mult
+        return default_mult
 
     def get_treatment_multiplier(self, card_id: int, treatment: str, days: int = 30) -> float:
         """
@@ -146,7 +166,7 @@ class FairMarketPriceService:
             WHERE card_id = :card_id
               AND treatment = 'Classic Paper'
               AND listing_type = 'sold'
-              AND sold_date >= :cutoff
+              AND COALESCE(sold_date, scraped_at) >= :cutoff
             HAVING COUNT(*) >= 2
         """)
 
@@ -163,7 +183,7 @@ class FairMarketPriceService:
             WHERE card_id = :card_id
               AND treatment = :treatment
               AND listing_type = 'sold'
-              AND sold_date >= :cutoff
+              AND COALESCE(sold_date, scraped_at) >= :cutoff
             HAVING COUNT(*) >= 1
         """)
 
@@ -187,7 +207,7 @@ class FairMarketPriceService:
         # Get volume (sold count) and inventory (active count)
         query = text("""
             SELECT
-                COUNT(*) FILTER (WHERE listing_type = 'sold' AND sold_date >= :cutoff) as volume,
+                COUNT(*) FILTER (WHERE listing_type = 'sold' AND COALESCE(sold_date, scraped_at) >= :cutoff) as volume,
                 COUNT(*) FILTER (WHERE listing_type = 'active') as inventory
             FROM marketprice
             WHERE card_id = :card_id
@@ -215,34 +235,66 @@ class FairMarketPriceService:
 
     def calculate_floor_price(self, card_id: int, num_sales: int = 4, days: int = 30) -> Optional[float]:
         """
-        Calculate floor price as average of up to N lowest sales in time window.
-        Uses whatever sales are available if fewer than N exist.
+        Calculate floor price as average of up to N lowest sales.
+        Prefers base treatments (Classic Paper/Classic Foil), but falls back to
+        the CHEAPEST available treatment if no base treatment sales exist.
         """
         cutoff = datetime.utcnow() - timedelta(days=days)
 
-        query = text("""
+        # Use COALESCE(sold_date, scraped_at) as fallback when sold_date is NULL
+        # First try base treatments only (Classic Paper, Classic Foil)
+        base_query = text("""
             SELECT AVG(price) as floor_price
             FROM (
                 SELECT price
                 FROM marketprice
                 WHERE card_id = :card_id
                   AND listing_type = 'sold'
-                  AND sold_date >= :cutoff
+                  AND treatment IN ('Classic Paper', 'Classic Foil')
+                  AND COALESCE(sold_date, scraped_at) >= :cutoff
                 ORDER BY price ASC
                 LIMIT GREATEST(1, LEAST(:num_sales, (
                     SELECT COUNT(*) FROM marketprice
-                    WHERE card_id = :card_id AND listing_type = 'sold' AND sold_date >= :cutoff
+                    WHERE card_id = :card_id AND listing_type = 'sold'
+                      AND treatment IN ('Classic Paper', 'Classic Foil')
+                      AND COALESCE(sold_date, scraped_at) >= :cutoff
                 )))
             ) as lowest_sales
         """)
 
         result = self.session.execute(
-            query,
+            base_query,
             {"card_id": card_id, "cutoff": cutoff, "num_sales": num_sales}
         ).fetchone()
 
         if result and result[0]:
             return round(float(result[0]), 2)
+
+        # Fallback: find cheapest treatment and use that treatment's lowest sales
+        # This avoids mixing expensive promos with cheaper treatments
+        cheapest_treatment_query = text("""
+            SELECT treatment, AVG(price) as floor_price
+            FROM (
+                SELECT treatment, price,
+                       ROW_NUMBER() OVER (PARTITION BY treatment ORDER BY price ASC) as rn
+                FROM marketprice
+                WHERE card_id = :card_id
+                  AND listing_type = 'sold'
+                  AND COALESCE(sold_date, scraped_at) >= :cutoff
+            ) ranked
+            WHERE rn <= :num_sales
+            GROUP BY treatment
+            ORDER BY floor_price ASC
+            LIMIT 1
+        """)
+
+        cheapest_result = self.session.execute(
+            cheapest_treatment_query,
+            {"card_id": card_id, "cutoff": cutoff, "num_sales": num_sales}
+        ).fetchone()
+
+        if cheapest_result and cheapest_result[1]:
+            return round(float(cheapest_result[1]), 2)
 
         # Fallback: try 90 days if no recent sales
         if days == 30:
@@ -261,7 +313,7 @@ class FairMarketPriceService:
             FROM marketprice
             WHERE card_id = :card_id
               AND listing_type = 'sold'
-              AND sold_date >= :cutoff
+              AND COALESCE(sold_date, scraped_at) >= :cutoff
         """)
 
         result = self.session.execute(query, {"card_id": card_id, "cutoff": cutoff}).fetchone()
@@ -367,7 +419,8 @@ class FairMarketPriceService:
         """
         cutoff = datetime.utcnow() - timedelta(days=days)
 
-        # Simple query - get all treatments, handle NULLs in Python
+        # Query with time window filter - get treatments with recent sales
+        # Use COALESCE(sold_date, scraped_at) as fallback when sold_date is NULL
         query = text("""
             SELECT
                 treatment,
@@ -379,11 +432,12 @@ class FairMarketPriceService:
             FROM marketprice
             WHERE card_id = :card_id
               AND listing_type = 'sold'
+              AND COALESCE(sold_date, scraped_at) >= :cutoff
             GROUP BY treatment
             ORDER BY median_price ASC NULLS LAST
         """)
 
-        results = self.session.execute(query, {"card_id": card_id}).fetchall()
+        results = self.session.execute(query, {"card_id": card_id, "cutoff": cutoff}).fetchall()
 
         if not results:
             # Fallback to 90 days if no recent sales

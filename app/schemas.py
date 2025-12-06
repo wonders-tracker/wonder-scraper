@@ -46,23 +46,35 @@ class CardBase(BaseModel):
 class CardOut(CardBase):
     id: int
     slug: Optional[str] = None  # URL-friendly slug for SEO
-    rarity_name: Optional[str] = None # Added rarity_name
-    # Flattened fields for easy table access
-    latest_price: Optional[float] = None
-    volume_30d: Optional[int] = None  # 30-day sales volume (count of sold listings)
-    price_delta_24h: Optional[float] = None
-    last_sale_diff: Optional[float] = None # Diff between last sale and avg price
-    last_sale_treatment: Optional[str] = None # Treatment of the last sold item
-    lowest_ask: Optional[float] = None
-    inventory: Optional[int] = None
-    product_type: Optional[str] = None  # Single, Box, Pack, Proof
-    max_price: Optional[float] = None  # Highest confirmed sale
-    avg_price: Optional[float] = None  # Average price
-    vwap: Optional[float] = None # Volume Weighted Average Price
-    last_updated: Optional[datetime] = None # When the market data was scraped
-    # Fair Market Price fields
-    fair_market_price: Optional[float] = None  # Calculated FMP using formula
-    floor_price: Optional[float] = None  # Avg of last 4 lowest sales (30d)
+    rarity_name: Optional[str] = None
+    product_type: Optional[str] = None  # Single, Box, Pack, Bundle, Proof, Lot
+
+    # === PRICES (clear hierarchy) ===
+    floor_price: Optional[float] = None       # Avg of 4 lowest sales - THE standard price
+    vwap: Optional[float] = None              # Volume Weighted Avg Price = SUM(price)/COUNT
+    latest_price: Optional[float] = None      # Most recent sale price
+    lowest_ask: Optional[float] = None        # Cheapest active listing
+    max_price: Optional[float] = None         # Highest confirmed sale
+    avg_price: Optional[float] = None         # Simple average (from snapshot)
+    fair_market_price: Optional[float] = None # FMP from formula (detail page only)
+
+    # === VOLUME & INVENTORY ===
+    volume: Optional[int] = None              # Sales count for selected time period
+    inventory: Optional[int] = None           # Active listings count
+
+    # === DELTAS (% changes) ===
+    price_delta: Optional[float] = None       # Last sale vs rolling avg (%)
+    floor_delta: Optional[float] = None       # Last sale vs floor price (%)
+
+    # === METADATA ===
+    last_treatment: Optional[str] = None      # Treatment of last sale (e.g., "Classic Foil")
+    last_updated: Optional[datetime] = None   # When market data was last scraped
+
+    # === DEPRECATED (keep for backwards compat, remove later) ===
+    volume_30d: Optional[int] = None          # @deprecated: use 'volume'
+    price_delta_24h: Optional[float] = None   # @deprecated: use 'price_delta'
+    last_sale_diff: Optional[float] = None    # @deprecated: use 'floor_delta'
+    last_sale_treatment: Optional[str] = None # @deprecated: use 'last_treatment'
 
 class CardWithMarket(CardOut):
     market_snapshot: Optional[MarketSnapshotOut] = None

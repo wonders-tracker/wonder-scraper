@@ -82,23 +82,25 @@ def read_market_overview(
             period_start = cutoff_time if cutoff_time else datetime.utcnow() - timedelta(hours=24)
 
             # Use parameterized queries to prevent SQL injection
+            # Use COALESCE(sold_date, scraped_at) to include sales with NULL sold_date
             query = text("""
-                SELECT DISTINCT ON (card_id) card_id, price, treatment, sold_date
+                SELECT DISTINCT ON (card_id) card_id, price, treatment, COALESCE(sold_date, scraped_at) as effective_date
                 FROM marketprice
                 WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
-                ORDER BY card_id, sold_date DESC NULLS LAST
+                ORDER BY card_id, COALESCE(sold_date, scraped_at) DESC
             """)
             results = session.execute(query, {"card_ids": card_ids}).all()
             last_sale_map = {row[0]: {'price': row[1], 'treatment': row[2], 'date': row[3]} for row in results}
 
             # Calculate VWAP with proper parameter binding
+            # Use COALESCE(sold_date, scraped_at) as fallback when sold_date is NULL
             if cutoff_time:
                 vwap_query = text("""
                     SELECT card_id, AVG(price) as vwap
                     FROM marketprice
                     WHERE card_id = ANY(:card_ids)
                     AND listing_type = 'sold'
-                    AND sold_date >= :cutoff_time
+                    AND COALESCE(sold_date, scraped_at) >= :cutoff_time
                     GROUP BY card_id
                 """)
                 vwap_results = session.execute(vwap_query, {"card_ids": card_ids, "cutoff_time": cutoff_time}).all()
@@ -114,22 +116,23 @@ def read_market_overview(
             vwap_map = {row[0]: row[1] for row in vwap_results}
 
             # Get oldest sale in period for delta calculation
+            # Use COALESCE(sold_date, scraped_at) as fallback when sold_date is NULL
             oldest_sale_query = text("""
-                SELECT DISTINCT ON (card_id) card_id, price, sold_date
+                SELECT DISTINCT ON (card_id) card_id, price, COALESCE(sold_date, scraped_at) as effective_date
                 FROM marketprice
                 WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
-                AND sold_date >= :period_start
-                ORDER BY card_id, sold_date ASC
+                AND COALESCE(sold_date, scraped_at) >= :period_start
+                ORDER BY card_id, COALESCE(sold_date, scraped_at) ASC
             """)
             oldest_results = session.execute(oldest_sale_query, {"card_ids": card_ids, "period_start": period_start}).all()
             oldest_sale_map = {row[0]: {'price': row[1], 'date': row[2]} for row in oldest_results}
 
             # Count sales in period for each card
             sales_count_query = text("""
-                SELECT card_id, COUNT(*) as sale_count, COUNT(DISTINCT DATE(sold_date)) as unique_days
+                SELECT card_id, COUNT(*) as sale_count, COUNT(DISTINCT DATE(COALESCE(sold_date, scraped_at))) as unique_days
                 FROM marketprice
                 WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
-                AND sold_date >= :period_start
+                AND COALESCE(sold_date, scraped_at) >= :period_start
                 GROUP BY card_id
             """)
             sales_count_results = session.execute(sales_count_query, {"card_ids": card_ids, "period_start": period_start}).all()
@@ -144,7 +147,7 @@ def read_market_overview(
                     FROM marketprice
                     WHERE card_id = ANY(:card_ids)
                       AND listing_type = 'sold'
-                      AND sold_date >= :period_start
+                      AND COALESCE(sold_date, scraped_at) >= :period_start
                 ) ranked
                 WHERE rn <= 4
                 GROUP BY card_id
@@ -171,29 +174,25 @@ def read_market_overview(
         vwap = vwap_map.get(card.id)
         effective_price = vwap if vwap else (latest_snap.avg_price if latest_snap else 0.0)
             
-        # Market Trend Delta - Use batch-fetched oldest sale with validation
+        # Market Trend Delta - Compare last sale to VWAP (more stable than oldest vs newest)
+        # This shows if the most recent sale was above or below the period average
         avg_delta = 0.0
-        oldest_sale_data = oldest_sale_map.get(card.id)
         sales_stats = sales_count_map.get(card.id)
-        last_sale_data_full = last_sale_map.get(card.id)
+        floor_price = floor_price_map.get(card.id)
 
-        # Require minimum data: at least 2 sales on different days
-        if (oldest_sale_data and last_sale_data_full and sales_stats and
-            sales_stats['count'] >= 2 and sales_stats['unique_days'] >= 2):
-
-            oldest_price = oldest_sale_data['price']
-            oldest_date = oldest_sale_data['date']
-            newest_date = last_sale_data_full.get('date') if isinstance(last_sale_data_full, dict) else None
-
-            # Only calculate if we have different dates and valid prices
-            if oldest_price > 0 and last_price and last_price > 0:
-                # Ensure the sales are actually from different times
-                if newest_date and oldest_date and newest_date > oldest_date:
-                    avg_delta = ((last_price - oldest_price) / oldest_price) * 100
-
-        # Fallback to snapshot comparison if sales data insufficient
-        if avg_delta == 0.0 and latest_snap and oldest_snap and oldest_snap.avg_price > 0 and latest_snap.id != oldest_snap.id:
+        # Primary method: Compare last sale to floor price (shows premium/discount to floor)
+        if last_price and floor_price and floor_price > 0 and sales_stats and sales_stats['count'] >= 2:
+            avg_delta = ((last_price - floor_price) / floor_price) * 100
+            # Cap extreme values at ±200% to filter outliers
+            avg_delta = max(-200, min(200, avg_delta))
+        # Fallback: Compare last sale to VWAP
+        elif last_price and vwap and vwap > 0:
+            avg_delta = ((last_price - vwap) / vwap) * 100
+            avg_delta = max(-200, min(200, avg_delta))
+        # Last fallback: snapshot comparison
+        elif latest_snap and oldest_snap and oldest_snap.avg_price > 0 and latest_snap.id != oldest_snap.id:
             avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
+            avg_delta = max(-200, min(200, avg_delta))
                 
         # Deal Rating Delta
         deal_delta = 0.0

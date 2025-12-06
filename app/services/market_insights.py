@@ -45,16 +45,17 @@ class MarketInsightsGenerator:
             }
 
             # Total sales this period
+            # Use COALESCE(sold_date, scraped_at) to include sales with NULL sold_date
             total = session.execute(text("""
                 SELECT COUNT(*), COALESCE(SUM(price), 0), COALESCE(AVG(price), 0)
-                FROM marketprice WHERE listing_type = 'sold' AND sold_date >= :start
+                FROM marketprice WHERE listing_type = 'sold' AND COALESCE(sold_date, scraped_at) >= :start
             """), {"start": period_start}).first()
 
             # Previous period for comparison
             prev_total = session.execute(text("""
                 SELECT COUNT(*), COALESCE(SUM(price), 0)
                 FROM marketprice WHERE listing_type = 'sold'
-                AND sold_date >= :prev_start AND sold_date < :start
+                AND COALESCE(sold_date, scraped_at) >= :prev_start AND COALESCE(sold_date, scraped_at) < :start
             """), {"start": period_start, "prev_start": prev_period_start}).first()
 
             data["summary"] = {
@@ -70,9 +71,9 @@ class MarketInsightsGenerator:
             # Daily breakdown (for weekly reports)
             if days >= 7:
                 daily = session.execute(text("""
-                    SELECT DATE(sold_date) as day, COUNT(*), SUM(price)
-                    FROM marketprice WHERE listing_type = 'sold' AND sold_date >= :start
-                    GROUP BY DATE(sold_date) ORDER BY day
+                    SELECT DATE(COALESCE(sold_date, scraped_at)) as day, COUNT(*), SUM(price)
+                    FROM marketprice WHERE listing_type = 'sold' AND COALESCE(sold_date, scraped_at) >= :start
+                    GROUP BY DATE(COALESCE(sold_date, scraped_at)) ORDER BY day
                 """), {"start": period_start}).all()
                 data["daily"] = [{"date": row[0], "sales": row[1], "volume": row[2]} for row in daily]
             else:
@@ -82,7 +83,7 @@ class MarketInsightsGenerator:
             by_type = session.execute(text("""
                 SELECT c.product_type, COUNT(*), SUM(mp.price)
                 FROM marketprice mp JOIN card c ON mp.card_id = c.id
-                WHERE mp.listing_type = 'sold' AND mp.sold_date >= :start
+                WHERE mp.listing_type = 'sold' AND COALESCE(mp.sold_date, mp.scraped_at) >= :start
                 GROUP BY c.product_type ORDER BY SUM(mp.price) DESC
             """), {"start": period_start}).all()
             data["by_type"] = [{"type": row[0], "sales": row[1], "volume": row[2]} for row in by_type]
@@ -91,7 +92,7 @@ class MarketInsightsGenerator:
             top_vol = session.execute(text("""
                 SELECT c.name, c.product_type, COUNT(*), SUM(mp.price), AVG(mp.price)
                 FROM marketprice mp JOIN card c ON mp.card_id = c.id
-                WHERE mp.listing_type = 'sold' AND mp.sold_date >= :start
+                WHERE mp.listing_type = 'sold' AND COALESCE(mp.sold_date, mp.scraped_at) >= :start
                 GROUP BY c.id, c.name, c.product_type ORDER BY SUM(mp.price) DESC LIMIT 5
             """), {"start": period_start}).all()
             data["top_volume"] = [
@@ -103,13 +104,13 @@ class MarketInsightsGenerator:
             gainers = session.execute(text("""
                 WITH this_period AS (
                     SELECT card_id, AVG(price) as avg_price, COUNT(*) as cnt
-                    FROM marketprice WHERE listing_type = 'sold' AND sold_date >= :start
+                    FROM marketprice WHERE listing_type = 'sold' AND COALESCE(sold_date, scraped_at) >= :start
                     GROUP BY card_id HAVING COUNT(*) >= 2
                 ),
                 last_period AS (
                     SELECT card_id, AVG(price) as avg_price
                     FROM marketprice WHERE listing_type = 'sold'
-                    AND sold_date >= :prev_start AND sold_date < :start
+                    AND COALESCE(sold_date, scraped_at) >= :prev_start AND COALESCE(sold_date, scraped_at) < :start
                     GROUP BY card_id
                 )
                 SELECT c.name, tp.avg_price, lp.avg_price,
@@ -129,13 +130,13 @@ class MarketInsightsGenerator:
             losers = session.execute(text("""
                 WITH this_period AS (
                     SELECT card_id, AVG(price) as avg_price, COUNT(*) as cnt
-                    FROM marketprice WHERE listing_type = 'sold' AND sold_date >= :start
+                    FROM marketprice WHERE listing_type = 'sold' AND COALESCE(sold_date, scraped_at) >= :start
                     GROUP BY card_id HAVING COUNT(*) >= 2
                 ),
                 last_period AS (
                     SELECT card_id, AVG(price) as avg_price
                     FROM marketprice WHERE listing_type = 'sold'
-                    AND sold_date >= :prev_start AND sold_date < :start
+                    AND COALESCE(sold_date, scraped_at) >= :prev_start AND COALESCE(sold_date, scraped_at) < :start
                     GROUP BY card_id
                 )
                 SELECT c.name, tp.avg_price, lp.avg_price,
@@ -163,7 +164,7 @@ class MarketInsightsGenerator:
                 FROM marketprice mp
                 JOIN card c ON mp.card_id = c.id
                 JOIN floors f ON mp.card_id = f.card_id
-                WHERE mp.listing_type = 'sold' AND mp.sold_date >= :start
+                WHERE mp.listing_type = 'sold' AND COALESCE(mp.sold_date, mp.scraped_at) >= :start
                 AND mp.price < f.floor * 0.80
                 ORDER BY discount_pct DESC LIMIT 5
             """), {"start": period_start}).all()

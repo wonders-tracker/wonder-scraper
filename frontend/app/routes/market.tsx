@@ -1,6 +1,7 @@
 import { createRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
+import { analytics } from '~/services/analytics'
 import { Route as rootRoute } from './__root'
 import { ArrowLeft, TrendingUp, ArrowUp, ArrowDown, Activity, Zap, BarChart3, DollarSign } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from 'recharts'
@@ -44,6 +45,11 @@ function MarketAnalysis() {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'volume_30d', desc: true }])
   const [timeFrame, setTimeFrame] = useState('30d')
   const [hideLowSignal, setHideLowSignal] = useState(true)
+
+  // Track market page view
+  useEffect(() => {
+    analytics.trackMarketPageView()
+  }, [])
 
   // Fetch treatment price floors
   const { data: treatments } = useQuery({

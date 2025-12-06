@@ -1,6 +1,7 @@
 import { createRoute, useParams, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../utils/auth'
+import { analytics } from '~/services/analytics'
 import { Route as rootRoute } from './__root'
 import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink, Calendar } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
@@ -25,6 +26,7 @@ type CardDetail = {
   product_type?: string // Single, Box, Pack, Proof, etc.
   floor_price?: number // Avg of 4 lowest sales (30d) - THE standard price
   fair_market_price?: number // FMP calculated from formula
+  vwap?: number // Volume-weighted average price
   // Calculated fields for display
   market_cap?: number
 }
@@ -33,7 +35,8 @@ type MarketPrice = {
     id: number
     price: number
     title: string
-    sold_date: string
+    sold_date?: string | null  // Can be NULL - use scraped_at as fallback
+    scraped_at: string         // Always present - fallback for NULL sold_date
     listing_type: string
     treatment?: string
     bid_count?: number
@@ -173,6 +176,13 @@ function CardDetail() {
   const [selectedListing, setSelectedListing] = useState<MarketPrice | null>(null)
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
   const [chartType, setChartType] = useState<ChartType>('line')
+
+  // Track card listing view (with session-based milestone tracking)
+  useEffect(() => {
+    if (cardId) {
+      analytics.trackCardViewWithSession(cardId)
+    }
+  }, [cardId])
 
   // Fetch Card Data
   const { data: card, isLoading: isLoadingCard } = useQuery({
@@ -399,23 +409,27 @@ function CardDetail() {
       }
 
       // 1. Filter valid sold listings first
+      // Use sold_date OR scraped_at as fallback (matches backend COALESCE logic)
       const validSold = history.filter(h => {
           const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
-          const validDate = h.sold_date && !isNaN(new Date(h.sold_date).getTime())
+          const effectiveDate = h.sold_date || h.scraped_at
+          const validDate = effectiveDate && !isNaN(new Date(effectiveDate).getTime())
           const isSold = h.listing_type === 'sold' || !h.listing_type
           if (!validPrice || !validDate || !isSold) return false
 
           // Apply time range filter
           if (cutoffDate) {
-              const saleDate = new Date(h.sold_date)
+              const saleDate = new Date(effectiveDate)
               return saleDate >= cutoffDate
           }
           return true
       })
 
-      // 2. Sort sold by date, then by price
+      // 2. Sort sold by date, then by price (using effectiveDate pattern)
       const sortedSold = validSold.sort((a, b) => {
-          const dateCompare = new Date(a.sold_date).getTime() - new Date(b.sold_date).getTime()
+          const aDate = a.sold_date || a.scraped_at
+          const bDate = b.sold_date || b.scraped_at
+          const dateCompare = new Date(aDate).getTime() - new Date(bDate).getTime()
           if (dateCompare !== 0) return dateCompare
           return a.price - b.price
       })
@@ -423,7 +437,8 @@ function CardDetail() {
       // 3. Map sold listings to chart format
       const dateCount: Record<string, number> = {}
       const soldData = sortedSold.map((h, index) => {
-          const saleDate = new Date(h.sold_date)
+          const effectiveDate = h.sold_date || h.scraped_at
+          const saleDate = new Date(effectiveDate)
           const dateKey = saleDate.toISOString().split('T')[0]
 
           dateCount[dateKey] = (dateCount[dateKey] || 0) + 1
@@ -600,10 +615,10 @@ function CardDetail() {
                             </div>
                             <div className="hidden md:block border-l border-border pl-8">
                                 <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">
-                                    FMP
+                                    Fair Price
                                 </div>
                                 <div className="text-4xl font-mono font-bold">
-                                    ${pricingData?.fair_market_price ? pricingData.fair_market_price.toFixed(2) : card.fair_market_price?.toFixed(2) || '---'}
+                                    ${pricingData?.fair_market_price?.toFixed(2) || card.vwap?.toFixed(2) || '---'}
                                 </div>
                             </div>
                             <div className="hidden md:block border-l border-border pl-8">
@@ -703,7 +718,10 @@ function CardDetail() {
                                         {/* Chart Type Toggle */}
                                         <div className="flex items-center gap-1 border-r border-border/50 pr-4">
                                             <button
-                                                onClick={() => setChartType('line')}
+                                                onClick={() => {
+                                                    setChartType('line')
+                                                    analytics.trackChartInteraction('chart_type', 'line')
+                                                }}
                                                 className={clsx(
                                                     "px-2 py-1 text-[10px] uppercase font-bold rounded transition-colors",
                                                     chartType === 'line'
@@ -715,7 +733,10 @@ function CardDetail() {
                                                 Line
                                             </button>
                                             <button
-                                                onClick={() => setChartType('scatter')}
+                                                onClick={() => {
+                                                    setChartType('scatter')
+                                                    analytics.trackChartInteraction('chart_type', 'scatter')
+                                                }}
                                                 className={clsx(
                                                     "px-2 py-1 text-[10px] uppercase font-bold rounded transition-colors",
                                                     chartType === 'scatter'
@@ -733,7 +754,10 @@ function CardDetail() {
                                             {(['7d', '30d', '90d', 'all'] as TimeRange[]).map((range) => (
                                                 <button
                                                     key={range}
-                                                    onClick={() => setTimeRange(range)}
+                                                    onClick={() => {
+                                                        setTimeRange(range)
+                                                        analytics.trackChartInteraction('time_range', range)
+                                                    }}
                                                     className={clsx(
                                                         "px-3 py-1 text-[10px] uppercase font-bold rounded transition-colors",
                                                         timeRange === range
@@ -1086,7 +1110,7 @@ function CardDetail() {
                             <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/20">
                                 <div className="flex items-center gap-4">
                                     <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                                        Recent Sales
+                                        Sales & Listings
                                         <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px]">{filteredData.length || 0}</span>
                                     </h3>
 
@@ -1215,8 +1239,8 @@ function CardDetail() {
                                 </h3>
                                 <p className="text-[10px] text-muted-foreground mt-1">
                                     {card.product_type === 'Single'
-                                        ? 'Fair Market Price by card treatment (30d median)'
-                                        : `Fair Market Price by ${card.product_type?.toLowerCase() || 'product'} condition (30d median)`
+                                        ? 'Based on confirmed sales only (30d median)'
+                                        : `Based on confirmed ${card.product_type?.toLowerCase() || 'product'} sales only (30d median)`
                                     }
                                 </p>
                             </div>
@@ -1547,11 +1571,15 @@ function CardDetail() {
 
                         {/* External Link */}
                         <div className="pt-4">
-                            <a 
-                                href={selectedListing.url || `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(selectedListing.title)}&LH_Complete=1`} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
+                            <a
+                                href={selectedListing.url || `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(selectedListing.title)}&LH_Complete=1`}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="flex items-center justify-center gap-2 w-full border border-border hover:bg-muted/50 text-xs uppercase font-bold py-3 rounded transition-colors"
+                                onClick={() => {
+                                    const platform = selectedListing.url?.includes('ebay') ? 'ebay' : 'external'
+                                    analytics.trackExternalLinkClick(platform, cardId, selectedListing.title)
+                                }}
                             >
                                 <ExternalLink className="w-3 h-3" /> View Original Listing
                             </a>
