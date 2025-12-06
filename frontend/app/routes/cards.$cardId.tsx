@@ -601,9 +601,13 @@ function CardDetail() {
                             <div className="hidden md:block border-l border-border pl-8">
                                 <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider flex items-center gap-1">
                                     FMP
-                                    <span className="text-[8px] text-muted-foreground/60">(Paper)</span>
+                                    {card.product_type === 'Single' ? (
+                                        <span className="text-[8px] text-muted-foreground/60">(Base)</span>
+                                    ) : (
+                                        <span className="text-[8px] text-muted-foreground/60">(Median)</span>
+                                    )}
                                 </div>
-                                <div className="text-4xl font-mono font-bold text-blue-500">
+                                <div className="text-4xl font-mono font-bold">
                                     ${pricingData?.fair_market_price ? pricingData.fair_market_price.toFixed(2) : card.fair_market_price?.toFixed(2) || '---'}
                                 </div>
                             </div>
@@ -1202,26 +1206,33 @@ function CardDetail() {
                             )}
                         </div>
 
-                        {/* FMP by Treatment Table */}
+                        {/* FMP by Treatment/Variant Table */}
                         <div className="border border-border rounded bg-card overflow-hidden">
                             <div className="px-6 py-4 border-b border-border bg-muted/20">
                                 <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
                                     <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                                    FMP by Treatment
+                                    FMP by {card.product_type === 'Single' ? 'Treatment' : 'Variant'}
                                     {pricingData?.by_treatment && (
                                         <span className="bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded text-[10px]">
                                             {pricingData.by_treatment.length}
                                         </span>
                                     )}
                                 </h3>
-                                <p className="text-[10px] text-muted-foreground mt-1">Fair Market Price by card variant (30d median)</p>
+                                <p className="text-[10px] text-muted-foreground mt-1">
+                                    {card.product_type === 'Single'
+                                        ? 'Fair Market Price by card treatment (30d median)'
+                                        : `Fair Market Price by ${card.product_type?.toLowerCase() || 'product'} condition (30d median)`
+                                    }
+                                </p>
                             </div>
 
                             <div className="overflow-y-auto max-h-[500px]">
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs uppercase bg-zinc-100 text-zinc-600 sticky top-0">
                                         <tr>
-                                            <th className="px-4 py-2 font-medium border-b border-border">Treatment</th>
+                                            <th className="px-4 py-2 font-medium border-b border-border">
+                                                {card.product_type === 'Single' ? 'Treatment' : 'Condition'}
+                                            </th>
                                             <th className="px-4 py-2 font-medium border-b border-border text-right">FMP</th>
                                             <th className="px-4 py-2 font-medium border-b border-border text-right">Range</th>
                                             <th className="px-4 py-2 font-medium border-b border-border text-right">Sales</th>

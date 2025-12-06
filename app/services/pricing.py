@@ -357,17 +357,23 @@ class FairMarketPriceService:
         return result['fair_market_price'], result['floor_price']
 
 
-    def get_fmp_by_treatment(self, card_id: int, set_name: str, rarity_name: str, days: int = 30) -> List[Dict[str, Any]]:
+    def get_fmp_by_treatment(self, card_id: int, set_name: str, rarity_name: str, days: int = 30, product_type: str = 'Single') -> List[Dict[str, Any]]:
         """
-        Calculate FMP for all treatments available for this card.
+        Calculate FMP for all treatments/variants available for this card.
         Returns list of treatment FMPs sorted by price.
+
+        For Singles: treatments like Classic Paper, Foil, Serialized, etc.
+        For Boxes/Packs: treatments like Sealed, Unsealed, Factory Sealed, etc.
         """
         cutoff = datetime.utcnow() - timedelta(days=days)
 
         # Get all treatments with sales for this card
+        # Use COALESCE to handle NULL treatments - label them based on product type
+        default_treatment = 'Sealed' if product_type in ['Box', 'Pack', 'Bundle'] else 'Standard'
+
         query = text("""
             SELECT
-                treatment,
+                COALESCE(NULLIF(treatment, ''), :default_treatment) as treatment,
                 COUNT(*) as sales_count,
                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price,
                 MIN(price) as min_price,
@@ -377,23 +383,26 @@ class FairMarketPriceService:
             WHERE card_id = :card_id
               AND listing_type = 'sold'
               AND sold_date >= :cutoff
-              AND treatment IS NOT NULL
-            GROUP BY treatment
+            GROUP BY COALESCE(NULLIF(treatment, ''), :default_treatment)
             HAVING COUNT(*) >= 1
             ORDER BY median_price ASC
         """)
 
-        results = self.session.execute(query, {"card_id": card_id, "cutoff": cutoff}).fetchall()
+        results = self.session.execute(query, {
+            "card_id": card_id,
+            "cutoff": cutoff,
+            "default_treatment": default_treatment
+        }).fetchall()
 
         if not results:
             # Fallback to 90 days if no recent sales
             if days == 30:
-                return self.get_fmp_by_treatment(card_id, set_name, rarity_name, days=90)
+                return self.get_fmp_by_treatment(card_id, set_name, rarity_name, days=90, product_type=product_type)
             return []
 
         treatment_fmps = []
         for row in results:
-            treatment = row[0] or 'Classic Paper'
+            treatment = row[0] or default_treatment
             sales_count = row[1]
             median_price = float(row[2]) if row[2] else None
             min_price = float(row[3]) if row[3] else None

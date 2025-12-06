@@ -582,11 +582,12 @@ def read_card_pricing(
     product_type = card.product_type if hasattr(card, 'product_type') else 'Single'
     pricing_service = FairMarketPriceService(session)
 
-    # Get FMP breakdown by treatment
+    # Get FMP breakdown by treatment/variant
     treatment_fmps = pricing_service.get_fmp_by_treatment(
         card_id=card.id,
         set_name=card.set_name,
-        rarity_name=rarity_name
+        rarity_name=rarity_name,
+        product_type=product_type
     )
 
     # Also get overall FMP and floor
