@@ -197,23 +197,25 @@ function Home() {
       }
     },
     {
-      accessorKey: 'vwap', // 30d median price
+      accessorKey: 'vwap', // Fair price based on recent sales
       header: ({ column }) => (
         <button
           className="flex items-center gap-1 hover:text-primary uppercase tracking-wider text-xs ml-auto"
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          title="30-day median sale price"
         >
-          Median
+          Fair Price
+          <span className="text-muted-foreground/50 hover:text-muted-foreground cursor-help" title="What this card typically sells for based on recent sales">
+            <Info className="h-3 w-3" />
+          </span>
           <ArrowUpDown className="h-3 w-3" />
         </button>
       ),
       cell: ({ row }) => {
-          const median = row.original.vwap
-          const hasMedian = !!median && median > 0
+          const fairPrice = row.original.vwap
+          const hasFairPrice = !!fairPrice && fairPrice > 0
           return (
-            <div className="text-right font-mono text-sm text-muted-foreground">
-                {hasMedian ? `$${median.toFixed(2)}` : '---'}
+            <div className="text-right font-mono text-sm">
+                {hasFairPrice ? `$${fairPrice.toFixed(2)}` : '---'}
             </div>
           )
       }
