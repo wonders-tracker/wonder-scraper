@@ -97,6 +97,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=1,
             price=price,
+            title=f"Test Card Common - Classic Paper #{i}",
             treatment="Classic Paper",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -109,6 +110,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=1,
             price=price,
+            title=f"Test Card Common - Classic Foil #{i}",
             treatment="Classic Foil",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -121,6 +123,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=2,
             price=price,
+            title=f"Test Card Rare - Classic Paper #{i}",
             treatment="Classic Paper",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -134,6 +137,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=3,
             price=price,
+            title=f"Promo Only Card - Formless Foil #{i}",
             treatment="Formless Foil",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -145,6 +149,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=3,
             price=price,
+            title=f"Promo Only Card - OCM Serialized #{i}",
             treatment="OCM Serialized",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -156,6 +161,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=3,
             price=price,
+            title=f"Promo Only Card - Promo #{i}",
             treatment="Promo",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -167,6 +173,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
     prices.append(MarketPrice(
         card_id=3,
         price=0.99,  # Low active listing
+        title="Promo Only Card - Classic Paper (Active)",
         treatment="Classic Paper",
         listing_type="active",
         scraped_at=now,
@@ -191,6 +198,7 @@ def old_market_prices(test_session: Session, sample_cards: List[Card]) -> List[M
         prices.append(MarketPrice(
             card_id=4,
             price=price,
+            title=f"Test Box - Sealed #{i}",
             treatment="Sealed",
             listing_type="sold",
             sold_date=now - timedelta(days=45 + i),  # 45-48 days ago
@@ -216,6 +224,7 @@ def null_sold_date_prices(test_session: Session, sample_cards: List[Card]) -> Li
         prices.append(MarketPrice(
             card_id=1,
             price=price,
+            title=f"Test Card Common - Classic Paper (null date) #{i}",
             treatment="Classic Paper",
             listing_type="sold",
             sold_date=None,  # NULL sold_date

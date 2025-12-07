@@ -100,7 +100,7 @@ class UserUpdate(BaseModel):
     discord_handle: Optional[str] = None
     bio: Optional[str] = None
 
-# Portfolio Schemas
+# Portfolio Schemas (Legacy - quantity based)
 class PortfolioItemBase(BaseModel):
     card_id: int
     quantity: int
@@ -125,3 +125,68 @@ class PortfolioItemOut(PortfolioItemBase):
     current_value: Optional[float] = None
     gain_loss: Optional[float] = None
     gain_loss_percent: Optional[float] = None
+
+
+# Portfolio Card Schemas (New - individual card tracking)
+class PortfolioCardBase(BaseModel):
+    card_id: int
+    treatment: str = "Classic Paper"
+    source: str = "Other"  # eBay, Blokpax, TCGPlayer, LGS, Trade, Pack Pull, Other
+    purchase_price: float
+    purchase_date: Optional[datetime] = None
+    grading: Optional[str] = None  # e.g., "PSA 10", "BGS 9.5", null for raw
+    notes: Optional[str] = None
+
+
+class PortfolioCardCreate(PortfolioCardBase):
+    """Create a single card in portfolio."""
+    pass
+
+
+class PortfolioCardBatchCreate(BaseModel):
+    """Create multiple cards at once (split entry)."""
+    cards: List[PortfolioCardBase]
+
+
+class PortfolioCardUpdate(BaseModel):
+    """Update an existing portfolio card."""
+    treatment: Optional[str] = None
+    source: Optional[str] = None
+    purchase_price: Optional[float] = None
+    purchase_date: Optional[datetime] = None
+    grading: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class PortfolioCardOut(PortfolioCardBase):
+    """Portfolio card with computed market data."""
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    # Card details for display
+    card_name: Optional[str] = None
+    card_set: Optional[str] = None
+    card_slug: Optional[str] = None
+    rarity_name: Optional[str] = None
+    product_type: Optional[str] = None
+
+    # Market data (treatment-specific)
+    market_price: Optional[float] = None  # Current market price for this treatment
+    profit_loss: Optional[float] = None  # market_price - purchase_price
+    profit_loss_percent: Optional[float] = None  # (market_price / purchase_price - 1) * 100
+
+
+class PortfolioSummary(BaseModel):
+    """Summary of user's portfolio."""
+    total_cards: int
+    total_cost_basis: float
+    total_market_value: float
+    total_profit_loss: float
+    total_profit_loss_percent: float
+
+    # Breakdown by treatment
+    by_treatment: Optional[dict] = None
+    # Breakdown by source
+    by_source: Optional[dict] = None
