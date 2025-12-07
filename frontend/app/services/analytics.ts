@@ -82,6 +82,28 @@ function trackLoginPageView() {
 }
 
 /**
+ * Event: Signup Page View
+ * Triggered when a user visits the signup page
+ */
+function trackSignupPageView() {
+  track('signup_page_view', {
+    event_category: 'engagement',
+    event_label: 'viewed_signup_page',
+  })
+}
+
+/**
+ * Event: Discord Signup Initiated
+ * Triggered when a user starts the Discord OAuth flow from signup page
+ */
+function trackDiscordSignupInitiated() {
+  track('discord_signup_initiated', {
+    event_category: 'engagement',
+    event_label: 'started_discord_oauth_signup',
+  })
+}
+
+/**
  * Event: Profile Access
  * Triggered when a user accesses their profile page
  */
@@ -275,7 +297,9 @@ export const analytics = {
   trackSignup,
   trackLogin,
   trackLoginPageView,
+  trackSignupPageView,
   trackDiscordLoginInitiated,
+  trackDiscordSignupInitiated,
 
   // User Events
   trackProfileAccess,
