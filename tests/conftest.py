@@ -5,7 +5,7 @@ Provides database session fixtures and mock data generators.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Generator, List
 from sqlmodel import Session, SQLModel, create_engine, text
 from sqlalchemy.pool import StaticPool
@@ -270,7 +270,7 @@ def sample_user_with_reset_token(test_session: Session) -> User:
         is_active=True,
         is_superuser=False,
         password_reset_token=secrets.token_urlsafe(32),
-        password_reset_expires=datetime.utcnow() + timedelta(hours=1),
+        password_reset_expires=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1),
     )
     test_session.add(user)
     test_session.commit()
@@ -289,7 +289,7 @@ def sample_user_with_expired_token(test_session: Session) -> User:
         is_active=True,
         is_superuser=False,
         password_reset_token=secrets.token_urlsafe(32),
-        password_reset_expires=datetime.utcnow() - timedelta(hours=1),  # Expired
+        password_reset_expires=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1),  # Expired
     )
     test_session.add(user)
     test_session.commit()
