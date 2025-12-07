@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, func, desc
 
@@ -226,7 +226,6 @@ def get_treatment_market_price(session: Session, card_id: int, treatment: str) -
     Falls back to card-level price if treatment-specific not available.
     """
     # Try to get treatment-specific VWAP (last 30 days)
-    from datetime import timedelta
     cutoff = datetime.utcnow() - timedelta(days=30)
 
     treatment_avg = session.exec(
@@ -307,9 +306,6 @@ def create_portfolio_card(
     db_card = session.get(Card, card_in.card_id)
     if not db_card:
         raise HTTPException(status_code=404, detail="Card not found")
-
-    # Validate treatment exists in market data (optional - warn but allow)
-    # For now, accept any treatment string
 
     # Validate purchase price
     if card_in.purchase_price < 0:
