@@ -3,7 +3,7 @@ export const config = {
 }
 
 const SITE_URL = 'https://wonderstracker.com'
-const API_URL = 'https://wonders-scraper-production.up.railway.app'
+const API_URL = 'https://wonder-scraper-production.up.railway.app'
 
 interface Card {
   id: number
@@ -15,7 +15,7 @@ interface Card {
 export default async function handler(request: Request) {
   try {
     // Fetch all cards from the API
-    const response = await fetch(`${API_URL}/api/cards`)
+    const response = await fetch(`${API_URL}/api/v1/cards`)
     const cards: Card[] = await response.json()
 
     const today = new Date().toISOString().split('T')[0]
