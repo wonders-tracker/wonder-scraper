@@ -97,6 +97,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=1,
             price=price,
+            title=f"Test Card Common - Classic Paper #{i}",
             treatment="Classic Paper",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -109,6 +110,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=1,
             price=price,
+            title=f"Test Card Common - Classic Foil #{i}",
             treatment="Classic Foil",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -121,6 +123,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=2,
             price=price,
+            title=f"Test Card Rare - Classic Paper #{i}",
             treatment="Classic Paper",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -134,6 +137,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=3,
             price=price,
+            title=f"Promo Only Card - Formless Foil #{i}",
             treatment="Formless Foil",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -145,6 +149,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=3,
             price=price,
+            title=f"Promo Only Card - OCM Serialized #{i}",
             treatment="OCM Serialized",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -156,6 +161,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
         prices.append(MarketPrice(
             card_id=3,
             price=price,
+            title=f"Promo Only Card - Promo #{i}",
             treatment="Promo",
             listing_type="sold",
             sold_date=now - timedelta(days=i),
@@ -167,6 +173,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
     prices.append(MarketPrice(
         card_id=3,
         price=0.99,  # Low active listing
+        title="Promo Only Card - Classic Paper (Active)",
         treatment="Classic Paper",
         listing_type="active",
         scraped_at=now,
@@ -191,6 +198,7 @@ def old_market_prices(test_session: Session, sample_cards: List[Card]) -> List[M
         prices.append(MarketPrice(
             card_id=4,
             price=price,
+            title=f"Test Box - Sealed #{i}",
             treatment="Sealed",
             listing_type="sold",
             sold_date=now - timedelta(days=45 + i),  # 45-48 days ago
@@ -216,6 +224,7 @@ def null_sold_date_prices(test_session: Session, sample_cards: List[Card]) -> Li
         prices.append(MarketPrice(
             card_id=1,
             price=price,
+            title=f"Test Card Common - Classic Paper (null date) #{i}",
             treatment="Classic Paper",
             listing_type="sold",
             sold_date=None,  # NULL sold_date
@@ -302,3 +311,321 @@ def inactive_user(test_session: Session) -> User:
     test_session.commit()
     test_session.refresh(user)
     return user
+
+
+# ============================================
+# Test Data Factory
+# ============================================
+
+import random
+import string
+from typing import Optional
+
+
+class TestDataFactory:
+    """
+    Factory for generating randomized test data.
+    Useful for creating varied test scenarios without hard-coded values.
+    """
+
+    # Sample card names for realistic test data
+    CARD_NAMES = [
+        "Sandura of Heliosynth", "The Prisoner", "Azure Sky Chaser",
+        "Progo", "Lightbringer Leonis", "Shadowveil Assassin",
+        "Crystal Guardian", "Flame Dancer", "Storm Caller",
+        "Earth Warden", "Void Walker", "Divine Protector",
+        "Chaos Bringer", "Time Weaver", "Space Drifter",
+    ]
+
+    TREATMENTS = [
+        "Classic Paper", "Classic Foil", "Formless Foil",
+        "OCM Serialized", "Promo", "Prerelease",
+    ]
+
+    SOURCES = ["eBay", "Blokpax", "TCGPlayer", "LGS", "Trade", "Pack Pull", "Other"]
+
+    RARITIES = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"]
+
+    SET_NAMES = ["Wonders of the First", "Existence", "Genesis"]
+
+    PRODUCT_TYPES = ["Single", "Box", "Pack", "Lot", "Proof"]
+
+    def __init__(self, session: Session):
+        self.session = session
+        self._rarity_cache = {}
+        self._card_cache = {}
+
+    def random_string(self, length: int = 8) -> str:
+        """Generate a random string."""
+        return "".join(random.choices(string.ascii_lowercase, k=length))
+
+    def random_price(self, min_price: float = 0.50, max_price: float = 100.00) -> float:
+        """Generate a random price."""
+        return round(random.uniform(min_price, max_price), 2)
+
+    def random_date(self, days_back: int = 30) -> datetime:
+        """Generate a random date within the past N days."""
+        days = random.randint(0, days_back)
+        return datetime.utcnow() - timedelta(days=days)
+
+    def get_or_create_rarity(self, name: str) -> Rarity:
+        """Get or create a rarity by name."""
+        if name in self._rarity_cache:
+            return self._rarity_cache[name]
+
+        from sqlmodel import select
+        rarity = self.session.exec(
+            select(Rarity).where(Rarity.name == name)
+        ).first()
+
+        if not rarity:
+            rarity = Rarity(name=name)
+            self.session.add(rarity)
+            self.session.commit()
+            self.session.refresh(rarity)
+
+        self._rarity_cache[name] = rarity
+        return rarity
+
+    def create_card(
+        self,
+        name: Optional[str] = None,
+        rarity_name: Optional[str] = None,
+        product_type: Optional[str] = None,
+        set_name: Optional[str] = None,
+    ) -> Card:
+        """Create a card with optional overrides."""
+        name = name or random.choice(self.CARD_NAMES) + f" #{self.random_string(4)}"
+        rarity_name = rarity_name or random.choice(self.RARITIES)
+        product_type = product_type or random.choice(self.PRODUCT_TYPES)
+        set_name = set_name or random.choice(self.SET_NAMES)
+
+        rarity = self.get_or_create_rarity(rarity_name)
+
+        from app.models.card import generate_slug
+        card = Card(
+            name=name,
+            slug=generate_slug(name),
+            rarity_id=rarity.id,
+            product_type=product_type,
+            set_name=set_name,
+        )
+        self.session.add(card)
+        self.session.commit()
+        self.session.refresh(card)
+
+        self._card_cache[card.id] = card
+        return card
+
+    def create_cards(self, count: int, **kwargs) -> List[Card]:
+        """Create multiple cards."""
+        return [self.create_card(**kwargs) for _ in range(count)]
+
+    def create_market_price(
+        self,
+        card: Card,
+        price: Optional[float] = None,
+        treatment: Optional[str] = None,
+        listing_type: str = "sold",
+        sold_date: Optional[datetime] = None,
+    ) -> MarketPrice:
+        """Create a market price record."""
+        price = price or self.random_price()
+        treatment = treatment or random.choice(self.TREATMENTS)
+        sold_date = sold_date or (self.random_date() if listing_type == "sold" else None)
+
+        mp = MarketPrice(
+            card_id=card.id,
+            price=price,
+            treatment=treatment,
+            listing_type=listing_type,
+            sold_date=sold_date,
+            scraped_at=datetime.utcnow(),
+            title=f"{card.name} - {treatment}",
+            platform="ebay",
+        )
+        self.session.add(mp)
+        self.session.commit()
+        self.session.refresh(mp)
+        return mp
+
+    def create_market_prices_for_card(
+        self,
+        card: Card,
+        count: int = 5,
+        treatment: Optional[str] = None,
+        price_range: tuple = (1.0, 50.0),
+    ) -> List[MarketPrice]:
+        """Create multiple market prices for a card."""
+        prices = []
+        for i in range(count):
+            price = self.random_price(price_range[0], price_range[1])
+            mp = self.create_market_price(
+                card=card,
+                price=price,
+                treatment=treatment or random.choice(self.TREATMENTS),
+                sold_date=datetime.utcnow() - timedelta(days=i),
+            )
+            prices.append(mp)
+        return prices
+
+    def create_user(
+        self,
+        email: Optional[str] = None,
+        password: str = "testpassword123",
+        is_superuser: bool = False,
+    ) -> User:
+        """Create a user for testing."""
+        email = email or f"user_{self.random_string()}@test.com"
+        user = User(
+            email=email,
+            hashed_password=security.get_password_hash(password),
+            is_active=True,
+            is_superuser=is_superuser,
+        )
+        self.session.add(user)
+        self.session.commit()
+        self.session.refresh(user)
+        return user
+
+    def create_portfolio_card(
+        self,
+        user: User,
+        card: Card,
+        treatment: Optional[str] = None,
+        source: Optional[str] = None,
+        purchase_price: Optional[float] = None,
+        purchase_date: Optional[datetime] = None,
+        grading: Optional[str] = None,
+    ):
+        """Create a portfolio card entry."""
+        from app.models.portfolio import PortfolioCard
+
+        treatment = treatment or random.choice(self.TREATMENTS)
+        source = source or random.choice(self.SOURCES)
+        purchase_price = purchase_price or self.random_price()
+        purchase_date = purchase_date or self.random_date().date()
+
+        pc = PortfolioCard(
+            user_id=user.id,
+            card_id=card.id,
+            treatment=treatment,
+            source=source,
+            purchase_price=purchase_price,
+            purchase_date=purchase_date,
+            grading=grading,
+        )
+        self.session.add(pc)
+        self.session.commit()
+        self.session.refresh(pc)
+        return pc
+
+    def create_portfolio_cards(
+        self,
+        user: User,
+        card: Card,
+        count: int,
+        **kwargs
+    ) -> List:
+        """Create multiple portfolio cards for the same base card."""
+        from app.models.portfolio import PortfolioCard
+        return [self.create_portfolio_card(user, card, **kwargs) for _ in range(count)]
+
+
+@pytest.fixture
+def factory(test_session: Session) -> TestDataFactory:
+    """Provide a test data factory."""
+    return TestDataFactory(test_session)
+
+
+@pytest.fixture
+def integration_factory(integration_session: Session) -> TestDataFactory:
+    """Provide a test data factory for integration tests."""
+    return TestDataFactory(integration_session)
+
+
+# ============================================
+# Portfolio Test Fixtures
+# ============================================
+
+from app.models.portfolio import PortfolioCard, PortfolioItem
+
+
+@pytest.fixture
+def sample_portfolio_cards(test_session: Session, sample_user: User, sample_cards: List[Card]) -> List[PortfolioCard]:
+    """Create sample portfolio cards for testing."""
+    cards = []
+
+    # User has 3 copies of Card 1 with different treatments
+    cards.append(PortfolioCard(
+        user_id=sample_user.id,
+        card_id=sample_cards[0].id,
+        treatment="Classic Paper",
+        source="eBay",
+        purchase_price=1.50,
+        purchase_date=datetime.utcnow().date() - timedelta(days=10),
+    ))
+    cards.append(PortfolioCard(
+        user_id=sample_user.id,
+        card_id=sample_cards[0].id,
+        treatment="Classic Foil",
+        source="LGS",
+        purchase_price=5.00,
+        purchase_date=datetime.utcnow().date() - timedelta(days=5),
+    ))
+    cards.append(PortfolioCard(
+        user_id=sample_user.id,
+        card_id=sample_cards[0].id,
+        treatment="Classic Paper",
+        source="Pack Pull",
+        purchase_price=0.00,  # Pulled from pack
+        purchase_date=datetime.utcnow().date() - timedelta(days=20),
+    ))
+
+    # User has 1 graded card
+    cards.append(PortfolioCard(
+        user_id=sample_user.id,
+        card_id=sample_cards[1].id,
+        treatment="Classic Paper",
+        source="eBay",
+        purchase_price=25.00,
+        purchase_date=datetime.utcnow().date() - timedelta(days=30),
+        grading="PSA 10",
+    ))
+
+    for c in cards:
+        test_session.add(c)
+    test_session.commit()
+
+    for c in cards:
+        test_session.refresh(c)
+
+    return cards
+
+
+@pytest.fixture
+def sample_legacy_portfolio(test_session: Session, sample_user: User, sample_cards: List[Card]) -> List[PortfolioItem]:
+    """Create legacy portfolio items for migration testing."""
+    items = [
+        PortfolioItem(
+            user_id=sample_user.id,
+            card_id=sample_cards[0].id,
+            quantity=5,
+            purchase_price=2.00,
+        ),
+        PortfolioItem(
+            user_id=sample_user.id,
+            card_id=sample_cards[1].id,
+            quantity=2,
+            purchase_price=15.00,
+        ),
+    ]
+
+    for item in items:
+        test_session.add(item)
+    test_session.commit()
+
+    for item in items:
+        test_session.refresh(item)
+
+    return items

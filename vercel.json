@@ -4,7 +4,7 @@
   "installCommand": "npm install",
   "framework": null,
   "rewrites": [
-    { "source": "/sitemap.xml", "destination": "/api/sitemap.xml" },
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/api/og/:cardId", "destination": "/api/og/[cardId]" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
