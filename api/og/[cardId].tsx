@@ -1,15 +1,14 @@
 import { ImageResponse } from '@vercel/og'
+import { NextRequest } from 'next/server'
 
 export const config = {
   runtime: 'edge',
 }
 
-export default async function handler(req: Request) {
+export default async function handler(req: NextRequest) {
   try {
-    const url = new URL(req.url)
-    // Get cardId from path: /api/og/123 -> 123
-    const pathParts = url.pathname.split('/')
-    const cardId = pathParts[pathParts.length - 1]
+    const { searchParams } = new URL(req.url)
+    const cardId = searchParams.get('cardId')
 
     if (!cardId) {
       return new Response('Missing cardId', { status: 400 })
@@ -22,53 +21,36 @@ export default async function handler(req: Request) {
     let historyData: any[] = []
 
     try {
-      // Fetch card basic info (trailing slash needed for Railway API)
-      const cardRes = await fetch(`${API_URL}/cards/${cardId}/`)
-      if (!cardRes.ok) {
-        return new Response(`Card not found: ${cardId}`, { status: 404 })
-      }
+      // Fetch card basic info
+      const cardRes = await fetch(`${API_URL}/cards/${cardId}`)
       const basicCard = await cardRes.json()
 
-      // Use the card data directly - floor_price is the standard market price
+      // Fetch market data
+      const marketRes = await fetch(`${API_URL}/cards/${cardId}/market`)
+      const marketData = await marketRes.json()
+
       cardData = {
         ...basicCard,
-        // Use floor_price (avg of 4 lowest sales), fallback to latest_price, then avg_price
-        display_price: basicCard.floor_price || basicCard.latest_price || basicCard.avg_price || null,
+        latest_price: marketData.avg_price,
+        volume_30d: marketData.volume,
       }
 
       // Fetch price history for chart
-      const historyRes = await fetch(`${API_URL}/cards/${cardId}/history/?limit=30`)
-      const historyJson = await historyRes.json()
-      // Ensure historyData is an array
-      historyData = Array.isArray(historyJson) ? historyJson : []
+      const historyRes = await fetch(`${API_URL}/cards/${cardId}/history?limit=30`)
+      historyData = await historyRes.json()
     } catch (e) {
       return new Response('Failed to fetch card data', { status: 500 })
     }
 
     // Prepare chart data (last 10 points for simplicity)
-    const filteredHistory = historyData
+    const chartPoints = historyData
       .filter(h => h.price && h.sold_date)
       .slice(-10)
-
-    // Calculate min/max for proper scaling
-    const prices = filteredHistory.map(h => h.price)
-    const minPrice = prices.length > 0 ? Math.min(...prices) : 0
-    const maxPrice = prices.length > 0 ? Math.max(...prices) : 1
-    const priceRange = maxPrice - minPrice || 1 // Avoid division by zero
-
-    // Chart dimensions (within the SVG viewBox)
-    const chartWidth = 1000
-    const chartHeight = 220
-    const chartPadding = 50
-    const chartTop = 40
-
-    const chartPoints = filteredHistory.map((h, idx, arr) => ({
-      // Spread points evenly across chart width
-      x: chartPadding + (arr.length > 1 ? (idx / (arr.length - 1)) * chartWidth : chartWidth / 2),
-      // Scale price to fit chart height (inverted: higher price = lower Y)
-      y: chartTop + chartHeight - ((h.price - minPrice) / priceRange) * chartHeight,
-      price: h.price
-    }))
+      .map((h, idx) => ({
+        x: idx * 110, // Spacing
+        y: 280 - (h.price / (cardData.latest_price || 1)) * 100, // Scale to fit
+        price: h.price
+      }))
 
     return new ImageResponse(
       (
@@ -108,7 +90,7 @@ export default async function handler(req: Request) {
               marginBottom: '32px',
             }}
           >
-            ${cardData.display_price?.toFixed(2) || '---'}
+            ${cardData.latest_price?.toFixed(2) || '---'}
           </div>
 
           {/* Chart Area */}
