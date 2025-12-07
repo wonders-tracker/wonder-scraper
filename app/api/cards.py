@@ -1,10 +1,12 @@
 from typing import Any, List, Optional
 import json
 import hashlib
+import threading
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select, func, desc
 from datetime import datetime, timedelta
+from cachetools import TTLCache
 
 from app.api import deps
 from app.db import get_session
@@ -15,9 +17,10 @@ from app.services.pricing import FairMarketPriceService
 
 router = APIRouter()
 
-# Simple in-memory cache
-_cache = {}
-_cache_ttl = {}
+# Thread-safe LRU cache with TTL (max 1000 entries, 5 min TTL)
+# Prevents unbounded memory growth
+_cache = TTLCache(maxsize=1000, ttl=300)
+_cache_lock = threading.Lock()
 
 def get_cache_key(endpoint: str, **params) -> str:
     """Generate cache key from endpoint and params."""
@@ -25,22 +28,14 @@ def get_cache_key(endpoint: str, **params) -> str:
     return hashlib.md5(f"{endpoint}:{param_str}".encode()).hexdigest()
 
 def get_cached(key: str) -> Optional[Any]:
-    """Get cached response if not expired."""
-    import time
-    if key in _cache and key in _cache_ttl:
-        if time.time() < _cache_ttl[key]:
-            return _cache[key]
-        else:
-            # Expired, clean up
-            del _cache[key]
-            del _cache_ttl[key]
-    return None
+    """Get cached response if not expired (thread-safe)."""
+    with _cache_lock:
+        return _cache.get(key)
 
 def set_cache(key: str, value: Any, ttl: int = 300):
-    """Set cache with TTL (default 5 minutes)."""
-    import time
-    _cache[key] = value
-    _cache_ttl[key] = time.time() + ttl
+    """Set cache entry (thread-safe). TTL managed by TTLCache."""
+    with _cache_lock:
+        _cache[key] = value
 
 @router.get("/", response_model=List[CardOut])
 def read_cards(

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from app.core.config import settings
@@ -39,6 +40,9 @@ origins = list(set([o for o in origins if o]))
 # CRITICAL: Add ProxyHeadersMiddleware FIRST to trust X-Forwarded-* headers from Railway
 # This prevents FastAPI from redirecting HTTPS requests to HTTP
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+
+# GZip compression for responses > 1KB (80-90% bandwidth reduction)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,

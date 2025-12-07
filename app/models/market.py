@@ -6,13 +6,13 @@ from datetime import datetime
 class MarketSnapshot(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     card_id: int = Field(foreign_key="card.id", index=True)
-    
+
     # Sold Data
     min_price: float
     max_price: float
     avg_price: float
     volume: int = Field(default=0)
-    
+
     # Active Data (New)
     lowest_ask: Optional[float] = None
     highest_bid: Optional[float] = None # eBay auctions only
@@ -23,8 +23,13 @@ class MarketSnapshot(SQLModel, table=True):
     last_sale_date: Optional[datetime] = None
 
     platform: str = Field(default="ebay") # 'ebay', 'opensea'
-    
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+    timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    # Composite index for common query pattern: card_id + timestamp ORDER BY
+    __table_args__ = (
+        Index('ix_marketsnapshot_card_timestamp', 'card_id', 'timestamp'),
+    )
 
 class MarketPrice(SQLModel, table=True):
     """Individual raw price data points (optional, for detailed history)"""

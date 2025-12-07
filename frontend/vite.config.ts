@@ -27,7 +27,20 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: undefined
+        manualChunks: {
+          // Vendor chunk - core React libraries
+          'vendor-react': ['react', 'react-dom'],
+          // Router chunk
+          'vendor-router': ['@tanstack/react-router'],
+          // Query chunk
+          'vendor-query': ['@tanstack/react-query'],
+          // Table chunk - only needed on dashboard/market pages
+          'vendor-table': ['@tanstack/react-table'],
+          // Charts chunk - heavy (~200KB), only needed on market/card detail
+          'vendor-charts': ['recharts'],
+          // Icons chunk
+          'vendor-icons': ['lucide-react'],
+        }
       }
     }
   },
