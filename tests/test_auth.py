@@ -10,9 +10,9 @@ Tests cover:
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.models.user import User
 from app.core import security
@@ -26,7 +26,7 @@ class TestUserRegistration:
         from app.api.auth import UserCreate
 
         # Check user doesn't exist
-        existing = test_session.query(User).filter(User.email == "newuser@example.com").first()
+        existing = test_session.exec(select(User).where(User.email == "newuser@example.com")).first()
         assert existing is None
 
         # Create user directly (simulating the registration logic)
@@ -49,7 +49,7 @@ class TestUserRegistration:
     def test_register_duplicate_email_fails(self, test_session: Session, sample_user: User):
         """Test registration with existing email fails."""
         # sample_user fixture creates user with test@example.com
-        existing = test_session.query(User).filter(User.email == sample_user.email).first()
+        existing = test_session.exec(select(User).where(User.email == sample_user.email)).first()
         assert existing is not None
 
         # Attempting to create another user with same email should fail
@@ -80,7 +80,7 @@ class TestUserLogin:
 
     def test_login_nonexistent_user(self, test_session: Session):
         """Test login with nonexistent email fails."""
-        user = test_session.query(User).filter(User.email == "nonexistent@example.com").first()
+        user = test_session.exec(select(User).where(User.email == "nonexistent@example.com")).first()
         assert user is None
 
     def test_login_inactive_user(self, test_session: Session, inactive_user: User):
@@ -98,29 +98,29 @@ class TestPasswordReset:
         # Simulate forgot password logic
         reset_token = secrets.token_urlsafe(32)
         sample_user.password_reset_token = reset_token
-        sample_user.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
+        sample_user.password_reset_expires = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
         test_session.add(sample_user)
         test_session.commit()
         test_session.refresh(sample_user)
 
         assert sample_user.password_reset_token is not None
         assert len(sample_user.password_reset_token) > 20
-        assert sample_user.password_reset_expires > datetime.utcnow()
+        assert sample_user.password_reset_expires > datetime.now(timezone.utc).replace(tzinfo=None)
 
     def test_forgot_password_token_has_expiry(self, test_session: Session, sample_user: User):
         """Test forgot password token has proper expiry."""
         import secrets
 
         reset_token = secrets.token_urlsafe(32)
-        expiry = datetime.utcnow() + timedelta(hours=1)
+        expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
         sample_user.password_reset_token = reset_token
         sample_user.password_reset_expires = expiry
         test_session.add(sample_user)
         test_session.commit()
 
         # Token should be valid for 1 hour
-        assert sample_user.password_reset_expires > datetime.utcnow()
-        assert sample_user.password_reset_expires < datetime.utcnow() + timedelta(hours=2)
+        assert sample_user.password_reset_expires > datetime.now(timezone.utc).replace(tzinfo=None)
+        assert sample_user.password_reset_expires < datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=2)
 
     def test_reset_password_with_valid_token(
         self, test_session: Session, sample_user_with_reset_token: User
@@ -152,13 +152,13 @@ class TestPasswordReset:
         user = sample_user_with_expired_token
 
         # Token should be expired
-        assert user.password_reset_expires < datetime.utcnow()
+        assert user.password_reset_expires < datetime.now(timezone.utc).replace(tzinfo=None)
 
     def test_reset_password_with_invalid_token_fails(self, test_session: Session):
         """Test password reset with invalid token fails."""
-        user = test_session.query(User).filter(
+        user = test_session.exec(select(User).where(
             User.password_reset_token == "invalid_token_that_does_not_exist"
-        ).first()
+        )).first()
         assert user is None
 
     def test_reset_password_clears_token(
@@ -181,9 +181,9 @@ class TestPasswordReset:
     def test_forgot_password_nonexistent_email_no_error(self, test_session: Session):
         """Test forgot password with nonexistent email doesn't reveal user existence."""
         # This is important for security - we should not reveal if an email exists
-        user = test_session.query(User).filter(
+        user = test_session.exec(select(User).where(
             User.email == "nonexistent@example.com"
-        ).first()
+        )).first()
         assert user is None
         # In real endpoint, this should still return success message
 
