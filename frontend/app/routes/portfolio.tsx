@@ -218,13 +218,16 @@ function Portfolio() {
       }
   }, [summary])
 
-  // Prepare pie chart data
+  // Prepare pie chart data - filter to only valid physical card treatments
+  const VALID_TREATMENTS = new Set(TREATMENTS)
   const treatmentPieData = useMemo(() => {
       if (!summary?.by_treatment) return []
-      return Object.entries(summary.by_treatment).map(([name, data]) => ({
-          name,
-          value: data.count
-      }))
+      return Object.entries(summary.by_treatment)
+          .filter(([name]) => VALID_TREATMENTS.has(name))
+          .map(([name, data]) => ({
+              name,
+              value: data.count
+          }))
   }, [summary])
 
   const sourcePieData = useMemo(() => {

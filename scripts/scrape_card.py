@@ -100,7 +100,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     if active_ask == 0 and active_inv == 0 and card_id > 0:
         print("No active data from scrape. Checking existing DB records...")
         with Session(engine) as fallback_session:
-            from app.models.market import MarketPrice
+            # MarketPrice already imported at top of file
             cutoff = datetime.now() - timedelta(hours=24)
             existing_active = fallback_session.exec(
                 select(MarketPrice)
