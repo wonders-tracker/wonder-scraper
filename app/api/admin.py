@@ -446,3 +446,204 @@ async def get_scheduler_status(
         "running": scheduler.running,
         "jobs": jobs,
     }
+
+
+# ============== API KEY MANAGEMENT (Admin) ==============
+
+@router.get("/api-keys")
+async def list_all_api_keys(
+    current_user: User = Depends(deps.get_current_superuser),
+):
+    """List all API keys across all users (admin only)."""
+    from sqlmodel import Session, select
+    from app.db import engine
+    from app.models.api_key import APIKey
+    from app.models.user import User as UserModel
+
+    with Session(engine) as session:
+        # Get all API keys with user info
+        keys = session.exec(
+            select(APIKey).order_by(APIKey.created_at.desc())
+        ).all()
+
+        result = []
+        for key in keys:
+            user = session.get(UserModel, key.user_id)
+            result.append({
+                "id": key.id,
+                "user_id": key.user_id,
+                "user_email": user.email if user else "Unknown",
+                "key_prefix": key.key_prefix,
+                "name": key.name,
+                "is_active": key.is_active,
+                "rate_limit_per_minute": key.rate_limit_per_minute,
+                "rate_limit_per_day": key.rate_limit_per_day,
+                "requests_today": key.requests_today,
+                "requests_total": key.requests_total,
+                "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None,
+                "created_at": key.created_at.isoformat() if key.created_at else None,
+                "expires_at": key.expires_at.isoformat() if key.expires_at else None,
+            })
+
+        return result
+
+
+@router.get("/api-keys/stats")
+async def get_api_key_stats(
+    current_user: User = Depends(deps.get_current_superuser),
+):
+    """Get API key usage statistics (admin only)."""
+    from sqlmodel import Session, select, func
+    from sqlalchemy import text
+    from app.db import engine
+    from app.models.api_key import APIKey
+
+    with Session(engine) as session:
+        # Total keys
+        total_keys = session.exec(select(func.count(APIKey.id))).one()
+
+        # Active keys
+        active_keys = session.exec(
+            select(func.count(APIKey.id)).where(APIKey.is_active == True)
+        ).one()
+
+        # Keys used today
+        keys_used_today = session.exec(
+            select(func.count(APIKey.id)).where(APIKey.requests_today > 0)
+        ).one()
+
+        # Total requests today
+        total_requests_today = session.exec(
+            select(func.sum(APIKey.requests_today))
+        ).one() or 0
+
+        # Total requests all time
+        total_requests_all = session.exec(
+            select(func.sum(APIKey.requests_total))
+        ).one() or 0
+
+        # Top users by API usage
+        top_users_result = session.execute(text("""
+            SELECT u.email, SUM(ak.requests_total) as total_requests, COUNT(ak.id) as key_count
+            FROM apikey ak
+            JOIN "user" u ON ak.user_id = u.id
+            GROUP BY u.id, u.email
+            ORDER BY total_requests DESC
+            LIMIT 10
+        """)).all()
+        top_users = [
+            {"email": row[0], "total_requests": row[1] or 0, "key_count": row[2]}
+            for row in top_users_result
+        ]
+
+        return {
+            "total_keys": total_keys,
+            "active_keys": active_keys,
+            "keys_used_today": keys_used_today,
+            "total_requests_today": total_requests_today,
+            "total_requests_all_time": total_requests_all,
+            "top_users": top_users,
+        }
+
+
+@router.put("/api-keys/{key_id}/toggle")
+async def admin_toggle_api_key(
+    key_id: int,
+    current_user: User = Depends(deps.get_current_superuser),
+):
+    """Enable or disable any API key (admin only)."""
+    from sqlmodel import Session
+    from app.db import engine
+    from app.models.api_key import APIKey
+
+    with Session(engine) as session:
+        key = session.get(APIKey, key_id)
+        if not key:
+            raise HTTPException(status_code=404, detail="API key not found")
+
+        key.is_active = not key.is_active
+        session.add(key)
+        session.commit()
+
+        return {
+            "id": key.id,
+            "is_active": key.is_active,
+            "message": f"API key {'enabled' if key.is_active else 'disabled'}"
+        }
+
+
+@router.delete("/api-keys/{key_id}")
+async def admin_delete_api_key(
+    key_id: int,
+    current_user: User = Depends(deps.get_current_superuser),
+):
+    """Delete any API key (admin only)."""
+    from sqlmodel import Session
+    from app.db import engine
+    from app.models.api_key import APIKey
+
+    with Session(engine) as session:
+        key = session.get(APIKey, key_id)
+        if not key:
+            raise HTTPException(status_code=404, detail="API key not found")
+
+        key_prefix = key.key_prefix
+        session.delete(key)
+        session.commit()
+
+        return {
+            "message": "API key deleted",
+            "key_prefix": key_prefix
+        }
+
+
+@router.put("/api-keys/{key_id}/limits")
+async def admin_update_api_key_limits(
+    key_id: int,
+    rate_limit_per_minute: int = Query(default=60, ge=1, le=1000),
+    rate_limit_per_day: int = Query(default=10000, ge=100, le=1000000),
+    current_user: User = Depends(deps.get_current_superuser),
+):
+    """Update rate limits for an API key (admin only)."""
+    from sqlmodel import Session
+    from app.db import engine
+    from app.models.api_key import APIKey
+
+    with Session(engine) as session:
+        key = session.get(APIKey, key_id)
+        if not key:
+            raise HTTPException(status_code=404, detail="API key not found")
+
+        key.rate_limit_per_minute = rate_limit_per_minute
+        key.rate_limit_per_day = rate_limit_per_day
+        session.add(key)
+        session.commit()
+
+        return {
+            "id": key.id,
+            "rate_limit_per_minute": key.rate_limit_per_minute,
+            "rate_limit_per_day": key.rate_limit_per_day,
+            "message": "Rate limits updated"
+        }
+
+
+@router.post("/api-keys/reset-daily")
+async def admin_reset_daily_counts(
+    current_user: User = Depends(deps.get_current_superuser),
+):
+    """Reset daily request counts for all API keys (admin only)."""
+    from sqlmodel import Session
+    from sqlalchemy import text
+    from app.db import engine
+
+    with Session(engine) as session:
+        result = session.execute(text("""
+            UPDATE apikey
+            SET requests_today = 0, last_reset_date = NOW()
+        """))
+        session.commit()
+
+        return {
+            "message": "Daily counts reset for all API keys",
+            "keys_affected": result.rowcount
+        }
