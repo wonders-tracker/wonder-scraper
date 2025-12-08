@@ -51,7 +51,7 @@ type CardPricingResponse = {
 // Actual WOTF card treatments by product type
 const TREATMENTS_BY_TYPE: Record<string, string[]> = {
     'Single': [
-        'Classic Paper', 'Classic Foil', 'Starfoil',
+        'Classic Paper', 'Classic Foil',
         'Full Art', 'Full Art Foil',
         'Formless', 'Formless Foil',
         'Serialized',
@@ -65,7 +65,7 @@ const TREATMENTS_BY_TYPE: Record<string, string[]> = {
     'Proof': ['Character Proof', 'Set Proof', 'Other'],
     'NFT': ['Standard', 'Animated', 'Legendary', '1/1'],
     'default': [
-        'Classic Paper', 'Classic Foil', 'Starfoil',
+        'Classic Paper', 'Classic Foil',
         'Full Art', 'Full Art Foil',
         'Formless', 'Formless Foil',
         'Serialized',

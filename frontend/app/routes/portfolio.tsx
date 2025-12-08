@@ -58,7 +58,7 @@ export const Route = createRoute({
 
 // Actual WOTF card treatments
 const TREATMENTS = [
-  'Classic Paper', 'Classic Foil', 'Starfoil',
+  'Classic Paper', 'Classic Foil',
   'Full Art', 'Full Art Foil',
   'Formless', 'Formless Foil',
   'Serialized',
