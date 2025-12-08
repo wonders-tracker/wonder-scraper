@@ -186,14 +186,14 @@ class BrowserManager:
     @classmethod
     async def restart(cls):
         """Force restart of the browser instance"""
-        cls._restart_count += 1
-
-        if cls._restart_count > cls._max_restarts:
-            print(f"Browser has been restarted {cls._restart_count} times. Applying extended cooldown...")
+        # Check if we've hit the restart limit BEFORE incrementing
+        if cls._restart_count >= cls._max_restarts:
+            print(f"Browser restarted {cls._restart_count} times. Applying extended cooldown...")
             await asyncio.sleep(10)
             cls._restart_count = 0
 
-        print(f"Restarting browser instance (attempt {cls._restart_count})...")
+        cls._restart_count += 1
+        print(f"Restarting browser instance (attempt {cls._restart_count}/{cls._max_restarts})...")
         await cls.close()
         await asyncio.sleep(2)
         return await cls.get_browser()

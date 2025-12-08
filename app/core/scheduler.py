@@ -299,19 +299,59 @@ async def job_market_insights():
 
 
 def start_scheduler():
-    # Schedule eBay scraping to run every 30 minutes
-    scheduler.add_job(job_update_market_data, IntervalTrigger(minutes=30))
+    # Job configuration for durability:
+    # - max_instances=1: Prevent overlapping runs
+    # - misfire_grace_time: Allow late execution if within grace period (then skip)
+    # - coalesce=True: If multiple runs were missed, only run once when catching up
 
-    # Schedule Blokpax scraping to run every 15 minutes (lightweight API-based)
-    scheduler.add_job(job_update_blokpax_data, IntervalTrigger(minutes=15))
+    # eBay scraping: 45 min interval (realistic for full card scan)
+    # Grace time of 30 min - if job is late by <30 min, still run it
+    scheduler.add_job(
+        job_update_market_data,
+        IntervalTrigger(minutes=45),
+        id="job_update_market_data",
+        max_instances=1,
+        misfire_grace_time=1800,  # 30 minutes
+        coalesce=True,
+        replace_existing=True
+    )
 
-    # Schedule AI market insights 2x daily (9 AM and 6 PM UTC)
-    scheduler.add_job(job_market_insights, CronTrigger(hour=9, minute=0))  # Morning report
-    scheduler.add_job(job_market_insights, CronTrigger(hour=18, minute=0))  # Evening report
+    # Blokpax scraping: 20 min interval (API-based, faster)
+    # Grace time of 10 min
+    scheduler.add_job(
+        job_update_blokpax_data,
+        IntervalTrigger(minutes=20),
+        id="job_update_blokpax_data",
+        max_instances=1,
+        misfire_grace_time=600,  # 10 minutes
+        coalesce=True,
+        replace_existing=True
+    )
+
+    # AI market insights 2x daily (9 AM and 6 PM UTC)
+    # Grace time of 1 hour - daily jobs should be more forgiving
+    scheduler.add_job(
+        job_market_insights,
+        CronTrigger(hour=9, minute=0),
+        id="job_market_insights_morning",
+        max_instances=1,
+        misfire_grace_time=3600,  # 1 hour
+        coalesce=True,
+        replace_existing=True
+    )
+    scheduler.add_job(
+        job_market_insights,
+        CronTrigger(hour=18, minute=0),
+        id="job_market_insights_evening",
+        max_instances=1,
+        misfire_grace_time=3600,  # 1 hour
+        coalesce=True,
+        replace_existing=True
+    )
 
     scheduler.start()
-    print("Scheduler started:")
-    print("  - job_update_market_data (eBay): 30m interval")
-    print("  - job_update_blokpax_data (Blokpax): 15m interval")
-    print("  - job_market_insights (Discord AI): 9:00 & 18:00 UTC")
+    print("Scheduler started (with misfire handling):")
+    print("  - job_update_market_data (eBay): 45m interval, 30m grace")
+    print("  - job_update_blokpax_data (Blokpax): 20m interval, 10m grace")
+    print("  - job_market_insights (Discord AI): 9:00 & 18:00 UTC, 1h grace")
 
