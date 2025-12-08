@@ -24,6 +24,7 @@ import { Route as IndexImport } from './routes/index'
 import { Route as AuthCallbackImport } from './routes/auth.callback'
 import { Route as CardsCardIdImport } from './routes/cards.$cardId'
 import { Route as AdminImport } from './routes/admin'
+import { Route as ApiImport } from './routes/api'
 
 // Create Virtual Routes
 
@@ -83,6 +84,11 @@ const CardsCardIdRoute = CardsCardIdImport.update({
 
 const AdminRoute = AdminImport.update({
   path: '/admin',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const ApiRoute = ApiImport.update({
+  path: '/api',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -167,6 +173,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminImport
       parentRoute: typeof rootRoute
     }
+    '/api': {
+      id: '/api'
+      path: '/api'
+      fullPath: '/api'
+      preLoaderRoute: typeof ApiImport
+      parentRoute: typeof rootRoute
+    }
   }
 }
 
@@ -184,6 +197,7 @@ export const routeTree = rootRoute.addChildren({
   ProfileRoute,
   CardsCardIdRoute,
   AdminRoute,
+  ApiRoute,
 })
 
 /* prettier-ignore-end */
