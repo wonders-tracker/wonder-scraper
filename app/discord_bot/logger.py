@@ -58,14 +58,22 @@ def _send_log(
 
 def log_scrape_start(card_count: int, scrape_type: str = "full") -> bool:
     """Log when a scrape job starts."""
+    type_emoji = {
+        "full": "🔄",
+        "scheduled": "⏰",
+        "blokpax": "🎯",
+        "active": "📋",
+        "sold": "💰"
+    }.get(scrape_type.lower(), "🔄")
+
     return _send_log(
-        title="Scrape Started",
-        description=f"Starting **{scrape_type}** scrape job",
+        title=f"{type_emoji} Scrape Started",
+        description=f"Starting **{scrape_type.title()}** scrape job",
         color=0x3B82F6,  # Blue
         fields=[
-            {"name": "Cards", "value": str(card_count), "inline": True},
-            {"name": "Type", "value": scrape_type.title(), "inline": True},
-            {"name": "Time", "value": datetime.utcnow().strftime("%H:%M UTC"), "inline": True}
+            {"name": "📦 Cards", "value": f"`{card_count:,}`", "inline": True},
+            {"name": "📋 Type", "value": scrape_type.title(), "inline": True},
+            {"name": "🕐 Time", "value": datetime.utcnow().strftime("%H:%M UTC"), "inline": True}
         ]
     )
 
@@ -78,23 +86,27 @@ def log_scrape_complete(
     errors: int = 0
 ) -> bool:
     """Log when a scrape job completes."""
-    status = "with errors" if errors > 0 else "successfully"
-    color = 0xF59E0B if errors > 0 else 0x10B981  # Yellow if errors, green otherwise
+    if errors > 0:
+        title = "⚠️ Scrape Complete (with errors)"
+        color = 0xF59E0B  # Yellow
+    else:
+        title = "✅ Scrape Complete"
+        color = 0x10B981  # Green
 
     minutes = int(duration_seconds // 60)
     seconds = int(duration_seconds % 60)
     duration_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
 
     return _send_log(
-        title=f"Scrape Complete",
-        description=f"Scrape finished {status}",
+        title=title,
+        description=f"Successfully processed **{cards_processed:,}** cards",
         color=color,
         fields=[
-            {"name": "Cards Processed", "value": str(cards_processed), "inline": True},
-            {"name": "New Listings", "value": str(new_listings), "inline": True},
-            {"name": "New Sales", "value": str(new_sales), "inline": True},
-            {"name": "Duration", "value": duration_str, "inline": True},
-            {"name": "Errors", "value": str(errors), "inline": True}
+            {"name": "📦 Cards", "value": f"`{cards_processed:,}`", "inline": True},
+            {"name": "📋 Listings", "value": f"`{new_listings:,}`", "inline": True},
+            {"name": "💰 Sales", "value": f"`{new_sales:,}`", "inline": True},
+            {"name": "⏱️ Duration", "value": f"`{duration_str}`", "inline": True},
+            {"name": "❌ Errors", "value": f"`{errors}`", "inline": True}
         ]
     )
 
@@ -102,11 +114,11 @@ def log_scrape_complete(
 def log_scrape_error(card_name: str, error: str) -> bool:
     """Log a scrape error for a specific card."""
     return _send_log(
-        title="Scrape Error",
+        title="🚨 Scrape Error",
         description=f"Error scraping **{card_name}**",
         color=0xEF4444,  # Red
         fields=[
-            {"name": "Error", "value": error[:1000], "inline": False}
+            {"name": "❌ Error Details", "value": f"```{error[:900]}```", "inline": False}
         ]
     )
 
@@ -114,12 +126,12 @@ def log_scrape_error(card_name: str, error: str) -> bool:
 def log_snapshot_update(cards_updated: int) -> bool:
     """Log when market snapshots are updated."""
     return _send_log(
-        title="Snapshots Updated",
-        description=f"Updated market snapshots for **{cards_updated}** cards",
+        title="📸 Snapshots Updated",
+        description=f"Updated market snapshots for **{cards_updated:,}** cards",
         color=0x8B5CF6,  # Purple
         fields=[
-            {"name": "Cards", "value": str(cards_updated), "inline": True},
-            {"name": "Time", "value": datetime.utcnow().strftime("%H:%M UTC"), "inline": True}
+            {"name": "📦 Cards", "value": f"`{cards_updated:,}`", "inline": True},
+            {"name": "🕐 Time", "value": datetime.utcnow().strftime("%H:%M UTC"), "inline": True}
         ]
     )
 
@@ -127,7 +139,7 @@ def log_snapshot_update(cards_updated: int) -> bool:
 def log_info(title: str, message: str) -> bool:
     """Log a general info message."""
     return _send_log(
-        title=title,
+        title=f"ℹ️ {title}",
         description=message,
         color=0x6B7280  # Gray
     )
@@ -136,7 +148,7 @@ def log_info(title: str, message: str) -> bool:
 def log_warning(title: str, message: str) -> bool:
     """Log a warning message."""
     return _send_log(
-        title=f"Warning: {title}",
+        title=f"⚠️ Warning: {title}",
         description=message,
         color=0xF59E0B  # Yellow
     )
@@ -145,7 +157,7 @@ def log_warning(title: str, message: str) -> bool:
 def log_error(title: str, message: str) -> bool:
     """Log an error message."""
     return _send_log(
-        title=f"Error: {title}",
+        title=f"🚨 Error: {title}",
         description=message,
         color=0xEF4444  # Red
     )

@@ -32,6 +32,9 @@ class MarketPriceBase(BaseModel):
     # Listing details
     condition: Optional[str] = None
     shipping_cost: Optional[float] = None
+    # Product classification (for boxes/packs/lots)
+    product_subtype: Optional[str] = None
+    quantity: int = 1
     scraped_at: datetime
 
 class MarketPriceOut(MarketPriceBase):

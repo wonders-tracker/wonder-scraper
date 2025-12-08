@@ -29,6 +29,7 @@ class OpenSeaSale:
     sold_at: datetime
     tx_hash: str
     image_url: Optional[str] = None
+    traits: Optional[List[str]] = None  # NFT traits (e.g., ["Rare", "Fire", "Level 5"])
 
 async def scrape_opensea_collection(collection_url: str) -> Dict[str, Any]:
     """
@@ -270,6 +271,29 @@ async def scrape_opensea_sales(
                         token_name = nft.get("name", f"#{token_id}")
                         image_url = nft.get("image_url")
 
+                        # Extract traits from NFT metadata
+                        # OpenSea events API may include traits in the 'nft' object
+                        traits = []
+                        nft_traits = nft.get("traits", [])
+                        for trait in nft_traits:
+                            trait_type = trait.get("trait_type", "")
+                            trait_value = trait.get("value", "")
+                            # Prioritize treatment-related traits
+                            if trait_type and trait_type.lower() in ["treatment", "type", "variant", "edition", "rarity"]:
+                                traits.insert(0, f"{trait_value}")  # Put treatment traits first
+                            elif trait_value:
+                                traits.append(f"{trait_value}")
+
+                        # If no traits from event, try to extract from token name
+                        if not traits and token_name:
+                            name_lower = token_name.lower()
+                            if "foil" in name_lower:
+                                traits.append("Foil")
+                            elif "serial" in name_lower or "/50" in name_lower or "/100" in name_lower:
+                                traits.append("Serialized")
+                            elif "proof" in name_lower:
+                                traits.append("Proof")
+
                         # Extract transaction info
                         tx = event.get("transaction", {})
                         tx_hash = tx.get("hash", "")
@@ -291,7 +315,8 @@ async def scrape_opensea_sales(
                             buyer=buyer,
                             sold_at=sold_at,
                             tx_hash=tx_hash,
-                            image_url=image_url
+                            image_url=image_url,
+                            traits=traits if traits else None
                         )
                         sales.append(sale)
 
@@ -395,6 +420,31 @@ async def _scrape_opensea_sales_web(
                                 seller_addr = seller.get('address', '') if isinstance(seller, dict) else str(seller)
                                 buyer_addr = buyer.get('address', '') if isinstance(buyer, dict) else str(buyer)
 
+                                # Extract traits from NFT data if available
+                                traits = []
+                                nft_traits = nft.get('traits', [])
+                                for trait in nft_traits:
+                                    if isinstance(trait, dict):
+                                        trait_type = trait.get('trait_type', '').lower()
+                                        trait_value = trait.get('value', '')
+                                        # Prioritize treatment-related traits
+                                        if trait_type in ["treatment", "type", "variant", "edition", "rarity"]:
+                                            traits.insert(0, str(trait_value))
+                                        elif trait_value:
+                                            traits.append(str(trait_value))
+                                    elif trait:
+                                        traits.append(str(trait))
+
+                                # If no traits from data, try to extract from token name
+                                if not traits and token_name:
+                                    name_lower = token_name.lower()
+                                    if "foil" in name_lower:
+                                        traits.append("Foil")
+                                    elif "serial" in name_lower or "/50" in name_lower or "/100" in name_lower:
+                                        traits.append("Serialized")
+                                    elif "proof" in name_lower:
+                                        traits.append("Proof")
+
                                 sale = OpenSeaSale(
                                     token_id=token_id,
                                     token_name=token_name,
@@ -404,7 +454,8 @@ async def _scrape_opensea_sales_web(
                                     buyer=buyer_addr,
                                     sold_at=sold_at,
                                     tx_hash=tx_hash,
-                                    image_url=image_url
+                                    image_url=image_url,
+                                    traits=traits if traits else None
                                 )
                                 sales.append(sale)
 

@@ -1,7 +1,39 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Auto-detect system theme preference (runs immediately to prevent flash)
+      (function() {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const savedTheme = localStorage.getItem('theme');
+
+        console.log('[Theme] System prefers dark:', prefersDark, '| Saved theme:', savedTheme);
+
+        // Determine if dark mode should be enabled
+        const shouldBeDark = savedTheme === 'dark' || (savedTheme !== 'light' && prefersDark);
+
+        console.log('[Theme] Should be dark:', shouldBeDark);
+
+        if (shouldBeDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+
+        // Listen for system theme changes (only if no saved preference)
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+          console.log('[Theme] System preference changed to dark:', e.matches);
+          if (!localStorage.getItem('theme')) {
+            if (e.matches) {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+          }
+        });
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 

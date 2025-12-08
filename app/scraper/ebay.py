@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 from app.models.market import MarketPrice
 from app.services.ai_extractor import get_ai_extractor
 from app.db import engine
+from app.scraper.blocklist import load_blocklist, get_blocklist_version
 
 STOPWORDS = {"the", "of", "a", "an", "in", "on", "at", "for", "to", "with", "by", "and", "or", "wonders", "first", "existence"}
 
@@ -177,26 +178,20 @@ def _detect_treatment(title: str, product_type: str = "Single") -> str:
     """
     Detects treatment based on title keywords.
     For singles: card treatments (Foil, Serialized, etc.)
-    For boxes/packs/lots: product condition (Sealed, New, etc.)
+    For boxes/packs/lots: simplified condition (Sealed, Open Box, Unknown)
     """
     title_lower = title.lower()
 
     # Handle sealed products (Box, Pack, Lot, Bundle)
+    # Simplified to: Sealed, Open Box
     if product_type in ("Box", "Pack", "Lot", "Bundle"):
-        # Check for sealed/new indicators (higher priority)
-        if "factory sealed" in title_lower or "factory-sealed" in title_lower:
-            return "Factory Sealed"
-        if "sealed" in title_lower:
+        # Check for sealed indicators first (unopened before opened check!)
+        if any(kw in title_lower for kw in ["sealed", "factory sealed", "factory-sealed", "new", "unopened", "nib", "mint"]):
             return "Sealed"
-        if "new" in title_lower and ("brand new" in title_lower or "new sealed" in title_lower or "new in box" in title_lower or "nib" in title_lower):
-            return "New"
-        if "unopened" in title_lower:
-            return "Unopened"
-        if "open box" in title_lower or "opened" in title_lower:
+        # Check for opened/used indicators
+        if "open box" in title_lower or "opened" in title_lower or "used" in title_lower:
             return "Open Box"
-        if "used" in title_lower:
-            return "Used"
-        # Default for sealed products - assume sealed if no indicators
+        # Default - assume sealed if no indicators (most eBay listings are sealed)
         return "Sealed"
 
     # Handle singles (cards)
@@ -228,6 +223,88 @@ def _detect_treatment(title: str, product_type: str = "Single") -> str:
     return "Classic Paper"
 
 
+def _detect_product_subtype(title: str, product_type: str = "Single") -> Optional[str]:
+    """
+    Detects the specific product subtype for sealed products.
+
+    Subtypes:
+    - Boxes: 'Collector Booster Box', 'Case'
+    - Bundles: 'Play Bundle', 'Blaster Box', 'Serialized Advantage', 'Starter Set'
+    - Packs: 'Collector Booster Pack', 'Play Booster Pack', 'Silver Pack'
+    - Lots: 'Lot', 'Bulk'
+
+    Returns None for singles or undetectable subtypes.
+    """
+    if product_type == "Single":
+        return None
+
+    title_lower = title.lower()
+
+    # === BOXES ===
+    if product_type == "Box":
+        # Case (highest value - 6-box case)
+        if "case" in title_lower:
+            return "Case"
+        # Collector Booster Box (12 packs)
+        if "collector" in title_lower and "booster" in title_lower and "box" in title_lower:
+            return "Collector Booster Box"
+        if "collector booster box" in title_lower:
+            return "Collector Booster Box"
+        # Generic booster box
+        if "booster" in title_lower and "box" in title_lower:
+            return "Collector Booster Box"
+        return "Box"
+
+    # === BUNDLES ===
+    if product_type == "Bundle":
+        # Serialized Advantage (premium bundle - 4 packs + guaranteed serialized)
+        if "serialized advantage" in title_lower:
+            return "Serialized Advantage"
+        # Starter Set / Starter Kit
+        if "starter" in title_lower and ("set" in title_lower or "kit" in title_lower):
+            return "Starter Set"
+        # Play Bundle (6 packs)
+        if "play bundle" in title_lower:
+            return "Play Bundle"
+        # Blaster Box (6 packs, same as Play Bundle)
+        if "blaster" in title_lower and "box" in title_lower:
+            return "Blaster Box"
+        if "blaster box" in title_lower:
+            return "Blaster Box"
+        # Generic bundle
+        if "bundle" in title_lower:
+            return "Play Bundle"
+        return "Bundle"
+
+    # === PACKS ===
+    if product_type == "Pack":
+        # Silver Pack (special promo pack)
+        if "silver" in title_lower and "pack" in title_lower:
+            return "Silver Pack"
+        # Collector Booster Pack
+        if "collector" in title_lower and ("booster" in title_lower or "pack" in title_lower):
+            return "Collector Booster Pack"
+        if "collector booster" in title_lower:
+            return "Collector Booster Pack"
+        # Play Booster Pack
+        if "play" in title_lower and ("booster" in title_lower or "pack" in title_lower):
+            return "Play Booster Pack"
+        if "play booster" in title_lower:
+            return "Play Booster Pack"
+        # Generic booster pack (default to collector since they're more common on eBay)
+        if "booster" in title_lower:
+            return "Collector Booster Pack"
+        return "Pack"
+
+    # === LOTS ===
+    if product_type == "Lot":
+        if "bulk" in title_lower:
+            return "Bulk"
+        return "Lot"
+
+    return None
+
+
 def _detect_quantity(title: str, product_type: str = "Single") -> int:
     """
     Detects quantity from listing title for multi-unit listings.
@@ -237,10 +314,15 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
     - "3x Booster Pack" -> 3
     - "Lot of 5 packs" -> 5
     - "Bundle Box 6 Booster Packs" -> 1 (this is a single bundle containing 6 packs)
+    - "2025 Wonders of the First" -> 1 (NOT 2025 - that's the year!)
 
     Returns 1 if no quantity detected.
     """
     title_lower = title.lower()
+
+    # Helper to check if a number is likely a year (2020-2030)
+    def is_likely_year(num: int) -> bool:
+        return 2020 <= num <= 2030
 
     # For singles, quantity is usually 1 unless explicitly stated
     if product_type == "Single":
@@ -255,7 +337,8 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
             match = re.search(pattern, title_lower)
             if match:
                 qty = int(match.group(1))
-                if 1 < qty <= 100:  # Reasonable quantity range
+                # Exclude years (2020-2030) and unreasonable quantities
+                if 1 < qty <= 100 and not is_likely_year(qty):
                     return qty
         return 1
 
@@ -276,18 +359,20 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
 
     # Now look for actual quantity being sold
     quantity_patterns = [
-        r'^(\d+)\s*x?\s*(wonders|existence|booster|play|collector|bundle|box|pack)',  # "2 Wonders of..." or "2x Bundle"
-        r'^(\d+)\s+(?!st\b|nd\b|rd\b|th\b)',  # "2 Something" but not "1st Edition"
+        r'^(\d+)\s*x\s*(wonders|existence|booster|play|collector|bundle|box|pack)',  # "2x Bundle" (requires x)
+        r'^(\d{1,2})\s+(wonders|existence|booster|play|collector|bundle|box|pack)',  # "2 Wonders..." (max 2 digits to exclude years)
         r'(\d+)\s*(?:ct|count)\b',            # "5ct" or "5 count"
         r'lot\s+of\s+(\d+)',                  # "lot of 3"
         r'set\s+of\s+(\d+)',                  # "set of 2"
+        r'x(\d+)\b',                          # "x4" at end
     ]
 
     for pattern in quantity_patterns:
         match = re.search(pattern, title_lower)
         if match:
             qty = int(match.group(1))
-            if 1 < qty <= 50:  # Reasonable quantity for sealed products
+            # Exclude years (2020-2030) and unreasonable quantities
+            if 1 < qty <= 50 and not is_likely_year(qty):
                 return qty
 
     return 1
@@ -353,48 +438,23 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
     title_lower = title.lower()
     name_lower = card_name.lower()
 
+    # FIRST: Check for positive WOTF identifiers
+    # If present, we trust this is a WOTF listing and skip most blocklist checks
+    wonders_identifiers = ['wonders of the first', 'wotf']
+    has_wonders_identifier = any(ident in title_lower for ident in wonders_identifiers)
+
     # CRITICAL: Reject non-Wonders TCG products that might match on keywords
     # e.g., "The Prisoner" should NOT match "Harry Potter Prisoner of Azkaban"
-    non_wonders_keywords = [
-        # Other TCGs (include accent variations)
-        'harry potter', 'pokemon', 'pokémon', 'poke mon', 'yu-gi-oh', 'yugioh', 'yu gi oh',
-        'magic the gathering', 'mtg ', ' mtg', 'flesh and blood', 'fab ', 'one piece',
-        'dragon ball', 'digimon', 'cardfight', 'weiss schwarz', 'force of will', 'keyforge',
-        'lorcana', 'metazoo', 'sorcery contested', 'star wars', 'lord of the rings',
-        'universus', 'ufs ', 'naruto', 'my hero academia', 'union arena',
-        'fire emblem', 'cipher',  # Fire Emblem Cipher TCG
-        # One Piece TCG specific (often has "Awakening" set)
-        'op05', 'op04', 'op03', 'op02', 'op01', 'op06', 'op07', 'op08',
-        'awakening of the new era',  # One Piece set name - NOT the WOTF card
-        'new era', 'kaido', 'luffy', 'zoro', 'sanji', 'nami', 'sakazuki', 'enel',
-        'eustass', 'straw hat', 'romance dawn', 'paramount war',
-        # Pokemon-specific set names and terms
-        'shining fates', 'evolving skies', 'scarlet & violet', 'scarlet violet',
-        'prismatic evolutions', 'prismatic', 'sword and shield', 'sword shield',
-        'paldea', 'obsidian flames', 'paradox rift', 'temporal forces', 'twilight masquerade',
-        'surging sparks', 'shrouded fable', 'stellar crown', 'crown zenith', 'vivid voltage',
-        'celebrations', 'black star promo', 'swsh', 'psa 10', 'psa 9', 'psa 8',
-        ' etb ', 'etb ', ' etb',  # Elite Trainer Box (Pokemon term)
-        'elite trainer',  # Catches "Elite Trainer Box" variants
-        # Yu-Gi-Oh specific
-        'lckc', 'secret rare nm', 'melody of awakening',  # Yu-Gi-Oh card "The Melody of Awakening Dragon"
-        # Game-specific terms that indicate non-Wonders
-        'azkaban', 'hogwarts', 'pikachu', 'charizard', 'blue-eyes', 'dark magician',
-        'planeswalker', 'earthbound', 'maze of millennia', 'duelist', 'konami',
-        'eevee', 'mewtwo', 'bulbasaur', 'squirtle', 'jigglypuff', 'snorlax', 'gengar',
-        # Sports cards
-        'topps', 'panini', 'upper deck', 'bowman', 'prizm', 'donruss',
-        'nba', 'nfl', 'mlb', 'nhl', 'fifa', 'ufc',
-    ]
-
-    for keyword in non_wonders_keywords:
-        if keyword in title_lower:
-            return False
-
-    # Positive signal: title should ideally contain Wonders identifiers
-    # (but don't require it - some listings are abbreviated)
-    wonders_identifiers = ['wonders', 'existence', 'wotf', 'wonders of the first']
-    has_wonders_identifier = any(ident in title_lower for ident in wonders_identifiers)
+    # Blocklist loaded from blocklist.yaml (version: {version})
+    #
+    # Only apply blocklist if NO positive WOTF identifier is present
+    # This prevents false positives like "Wonders of the First Dragon's Gold"
+    # being blocked because "gold" matches some Pokemon/MTG term
+    if not has_wonders_identifier:
+        blocklist = load_blocklist()
+        for keyword in blocklist:
+            if keyword in title_lower:
+                return False
 
     # Detect product types - use more lenient matching for sealed products
     product_type_keywords = ['box', 'pack', 'case', 'lot', 'bundle', 'collection', 'bulk', 'sealed']
@@ -478,9 +538,20 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
     # Helper function for fuzzy token matching (handles typos like "Atherion" vs "Aetherion")
     def fuzzy_token_match(card_token: str, title_tokens_list: list) -> bool:
         """Check if card_token has a close match in title_tokens using fuzzy matching."""
-        # Use lower threshold for shorter words (e.g., "lich" vs "lieh")
-        threshold = 0.75 if len(card_token) <= 5 else 0.85
+        # IMPORTANT: Short words need HIGHER threshold to avoid false matches
+        # e.g., "progo" vs "promo" = 0.80 - should NOT match!
+        # Longer words can use lower threshold for typo tolerance
+        if len(card_token) <= 5:
+            threshold = 0.90  # Very strict for short words
+        elif len(card_token) <= 7:
+            threshold = 0.85  # Strict for medium words
+        else:
+            threshold = 0.80  # More lenient for long words (typo tolerance)
+
         for title_token in title_tokens_list:
+            # Skip if lengths are too different (likely not a typo)
+            if abs(len(card_token) - len(title_token)) > 2:
+                continue
             # Use SequenceMatcher for fuzzy matching
             ratio = difflib.SequenceMatcher(None, card_token, title_token).ratio()
             if ratio >= threshold:
@@ -491,13 +562,26 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
     common_tokens = card_tokens_set.intersection(title_tokens_set)
 
     # If exact match is low, try fuzzy matching for remaining tokens
+    # IMPORTANT: For SHORT single-token card names, DISABLE fuzzy matching
+    # to prevent "Progo" (5 chars) matching "Promo"
+    # But allow fuzzy for LONGER single-token names to catch typos
+    # e.g., "Aetherion" (9 chars) should match "Atherion"
     unmatched_card_tokens = card_tokens_set - common_tokens
     fuzzy_matches = 0
     title_tokens_list = list(title_tokens_set)
 
-    for card_token in unmatched_card_tokens:
-        if len(card_token) >= 4 and fuzzy_token_match(card_token, title_tokens_list):
-            fuzzy_matches += 1
+    # Determine if we should use fuzzy matching
+    use_fuzzy = True
+    if len(card_tokens_set) == 1:
+        # For single-token names, only allow fuzzy if the token is long enough
+        single_token = list(card_tokens_set)[0]
+        if len(single_token) <= 6:
+            use_fuzzy = False  # Short names like "Progo" - no fuzzy matching
+
+    if use_fuzzy:
+        for card_token in unmatched_card_tokens:
+            if len(card_token) >= 4 and fuzzy_token_match(card_token, title_tokens_list):
+                fuzzy_matches += 1
 
     total_matches = len(common_tokens) + fuzzy_matches
 
@@ -817,10 +901,13 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             treatment = _detect_treatment(metadata["title"], product_type)
             # Use rule-based quantity detection for sealed products
             quantity = _detect_quantity(metadata["title"], product_type)
+            # Detect product subtype (Collector Booster Box, Play Bundle, etc.)
+            product_subtype = _detect_product_subtype(metadata["title"], product_type)
         else:
             # For singles, use AI extraction with fallback to rule-based if low confidence
             treatment = extracted_data["treatment"]
             quantity = extracted_data["quantity"]
+            product_subtype = None  # Singles don't have subtypes
             if extracted_data["confidence"] < 0.7:
                 treatment = _detect_treatment(metadata["title"], product_type)
                 # Also use rule-based quantity for low confidence
@@ -847,6 +934,7 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             title=metadata["title"],
             price=round(unit_price, 2),  # Store normalized per-unit price
             quantity=quantity,
+            product_subtype=product_subtype,
             sold_date=metadata["sold_date"],
             listing_type=listing_type,
             treatment=treatment,

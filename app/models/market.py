@@ -1,6 +1,7 @@
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from sqlmodel import Field, SQLModel
-from sqlalchemy import Index
+from sqlalchemy import Index, Column
+from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
 
 class MarketSnapshot(SQLModel, table=True):
@@ -39,13 +40,21 @@ class MarketPrice(SQLModel, table=True):
     title: str
     sold_date: Optional[datetime] = None
     listing_type: str = Field(default="sold") # 'sold' or 'active'
-    treatment: str = Field(default="Classic Paper") # New field: Classic Paper, Foil, Serialized, etc.
-    bid_count: int = Field(default=0) # New field: Number of bids (for auctions)
+    treatment: str = Field(default="Classic Paper") # Classic Paper, Foil, Serialized, etc.
+    bid_count: int = Field(default=0) # Number of bids (for auctions)
     external_id: Optional[str] = Field(default=None, index=True) # Unique ID from source (e.g., eBay item ID)
     url: Optional[str] = Field(default=None) # Link to the listing
     image_url: Optional[str] = Field(default=None) # Link to listing image
     description: Optional[str] = Field(default=None) # Short description or specifics
     platform: str = Field(default="ebay") # 'ebay', 'opensea', 'tcgplayer', etc.
+
+    # Product classification for boxes/packs/lots
+    # Subtypes: 'Collector Booster Box', 'Play Bundle', 'Collector Pack', 'Play Pack',
+    #           'Starter Set', 'Serialized Advantage', 'Case', 'Silver Pack', etc.
+    product_subtype: Optional[str] = Field(default=None, index=True)
+
+    # Quantity: Number of units in this listing (e.g., 'Lot of 4' = 4, '5ct' = 5)
+    quantity: int = Field(default=1)
 
     # Seller Info
     seller_name: Optional[str] = Field(default=None, index=True) # Seller username
@@ -56,7 +65,15 @@ class MarketPrice(SQLModel, table=True):
     condition: Optional[str] = Field(default=None) # "New", "Like New", "Used", etc.
     shipping_cost: Optional[float] = Field(default=None) # Shipping price (0 = free)
 
+    # NFT Traits (for OpenSea/Blokpax listings)
+    # Format: [{"trait_type": "Hierarchy", "value": "Spell"}, {"trait_type": "Artist", "value": "Romall Smith"}, ...]
+    traits: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSONB))
+
     scraped_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # When listing was first seen (for active->sold tracking)
+    # Set once when listing first appears, preserved when it sells
+    listed_at: Optional[datetime] = Field(default=None, index=True)
 
     # Composite indexes for FMP queries
     __table_args__ = (
@@ -67,3 +84,26 @@ class MarketPrice(SQLModel, table=True):
         # For listing type + sold_date range scans
         Index('ix_marketprice_listing_sold', 'listing_type', 'sold_date'),
     )
+
+
+class ListingReport(SQLModel, table=True):
+    """User-submitted reports for incorrect/fake/duplicate listings"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    listing_id: int = Field(foreign_key="marketprice.id", index=True)
+    card_id: int = Field(foreign_key="card.id", index=True)
+
+    # Report details
+    reason: str  # 'wrong_price', 'fake_listing', 'duplicate', 'wrong_card', 'other'
+    notes: Optional[str] = Field(default=None)
+
+    # Listing context (snapshot at time of report)
+    listing_title: Optional[str] = Field(default=None)
+    listing_price: Optional[float] = Field(default=None)
+    listing_url: Optional[str] = Field(default=None)
+
+    # Status tracking
+    status: str = Field(default="pending")  # 'pending', 'reviewed', 'resolved', 'dismissed'
+    resolution_notes: Optional[str] = Field(default=None)
+    resolved_at: Optional[datetime] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

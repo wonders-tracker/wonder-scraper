@@ -245,3 +245,93 @@ def read_market_activity(
         })
         
     return activity_data
+
+
+# ============== LISTING REPORTS ==============
+
+from pydantic import BaseModel
+
+class ListingReportCreate(BaseModel):
+    listing_id: int
+    card_id: int
+    reason: str  # 'wrong_price', 'fake_listing', 'duplicate', 'wrong_card', 'other'
+    notes: Optional[str] = None
+    listing_title: Optional[str] = None
+    listing_price: Optional[float] = None
+    listing_url: Optional[str] = None
+
+
+@router.post("/reports")
+def create_listing_report(
+    report: ListingReportCreate,
+    session: Session = Depends(get_session),
+) -> Any:
+    """
+    Submit a report for an incorrect, fake, or duplicate listing.
+    """
+    from app.models.market import ListingReport
+
+    # Verify the listing exists
+    listing = session.get(MarketPrice, report.listing_id)
+    if not listing:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    # Create the report
+    db_report = ListingReport(
+        listing_id=report.listing_id,
+        card_id=report.card_id,
+        reason=report.reason,
+        notes=report.notes,
+        listing_title=report.listing_title or listing.title,
+        listing_price=report.listing_price or listing.price,
+        listing_url=report.listing_url or listing.url,
+    )
+    session.add(db_report)
+    session.commit()
+    session.refresh(db_report)
+
+    return {
+        "id": db_report.id,
+        "listing_id": db_report.listing_id,
+        "reason": db_report.reason,
+        "status": db_report.status,
+        "created_at": db_report.created_at,
+        "message": "Report submitted successfully"
+    }
+
+
+@router.get("/reports")
+def get_listing_reports(
+    session: Session = Depends(get_session),
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, le=200),
+) -> Any:
+    """
+    Get listing reports (for admin review).
+    """
+    from app.models.market import ListingReport
+
+    query = select(ListingReport).order_by(desc(ListingReport.created_at))
+
+    if status:
+        query = query.where(ListingReport.status == status)
+
+    query = query.limit(limit)
+    reports = session.exec(query).all()
+
+    return [
+        {
+            "id": r.id,
+            "listing_id": r.listing_id,
+            "card_id": r.card_id,
+            "reason": r.reason,
+            "notes": r.notes,
+            "listing_title": r.listing_title,
+            "listing_price": r.listing_price,
+            "listing_url": r.listing_url,
+            "status": r.status,
+            "created_at": r.created_at,
+        }
+        for r in reports
+    ]

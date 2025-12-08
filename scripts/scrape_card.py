@@ -291,19 +291,51 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     if card_id > 0:
         with Session(engine) as session:
             # Save only NEW listings to database
-            # Use individual inserts to handle duplicate key errors gracefully
+            # Check if sold listings match existing active listings (for active->sold tracking)
             if prices_to_save:
                 saved_count = 0
                 skipped_count = 0
+                converted_count = 0
                 discord_notifications = []
+
+                # Batch fetch existing active listings by external_id for this card
+                sold_external_ids = [p.external_id for p in prices_to_save if p.external_id and p.listing_type == "sold"]
+                active_by_external_id = {}
+                if sold_external_ids:
+                    existing_active = session.exec(
+                        select(MarketPrice).where(
+                            MarketPrice.card_id == card_id,
+                            MarketPrice.listing_type == "active",
+                            MarketPrice.external_id.in_(sold_external_ids)
+                        )
+                    ).all()
+                    active_by_external_id = {a.external_id: a for a in existing_active}
 
                 for price in prices_to_save:
                     try:
-                        session.add(price)
-                        session.flush()  # Check for constraint violation
-                        saved_count += 1
-                        if price.listing_type == "sold":
-                            discord_notifications.append(price)
+                        # Check if this sold listing was previously tracked as active
+                        if price.external_id and price.external_id in active_by_external_id:
+                            # Convert active listing to sold (preserves listed_at!)
+                            active_listing = active_by_external_id[price.external_id]
+                            active_listing.listing_type = "sold"
+                            active_listing.sold_date = price.sold_date
+                            active_listing.price = price.price  # May have changed
+                            active_listing.scraped_at = datetime.utcnow()
+                            # listed_at preserved from when it was first seen as active
+                            session.add(active_listing)
+                            session.flush()
+                            converted_count += 1
+                            discord_notifications.append(active_listing)
+                        else:
+                            # New sold listing (we didn't track it as active)
+                            # Set listed_at = sold_date as best approximation
+                            if price.listing_type == "sold" and price.sold_date and not price.listed_at:
+                                price.listed_at = price.sold_date
+                            session.add(price)
+                            session.flush()  # Check for constraint violation
+                            saved_count += 1
+                            if price.listing_type == "sold":
+                                discord_notifications.append(price)
                     except Exception as e:
                         session.rollback()
                         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
@@ -311,7 +343,9 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                         else:
                             print(f"Error saving listing: {e}")
 
-                print(f"Saved {saved_count} new listings to database" + (f", {skipped_count} duplicates skipped" if skipped_count > 0 else ""))
+                converted_msg = f", {converted_count} active->sold converted" if converted_count > 0 else ""
+                skipped_msg = f", {skipped_count} duplicates skipped" if skipped_count > 0 else ""
+                print(f"Saved {saved_count} new listings to database{converted_msg}{skipped_msg}")
 
                 # Notify Discord about new sales (only sold listings, limit to 3 to avoid spam)
                 for sale in discord_notifications[:3]:

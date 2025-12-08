@@ -65,6 +65,24 @@
   .animate-marquee-vertical {
     animation: marquee-vertical var(--duration) linear infinite;
   }
+
+  /* Shimmer animation for rare treatments - subtle and slow */
+  .animate-shimmer {
+    animation: shimmer 6s ease-in-out infinite;
+    background-size: 200% 100%;
+  }
+
+  .animate-shimmer-slow {
+    animation: shimmer 10s ease-in-out infinite;
+    background-size: 200% 100%;
+  }
+
+  /* Holographic effect for ultra rare - very slow */
+  .animate-holo {
+    animation: holo 8s ease-in-out infinite;
+    background-size: 300% 300%;
+  }
+
 }
 
 @keyframes marquee {
@@ -84,4 +102,27 @@
     transform: translateY(calc(-100% - var(--gap)));
   }
 }
+
+/* Shimmer effect - smooth left-to-right shine */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Holographic rainbow effect */
+@keyframes holo {
+  0%, 100% {
+    background-position: 0% 50%;
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: hue-rotate(30deg);
+  }
+}
+
 

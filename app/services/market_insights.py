@@ -194,83 +194,75 @@ class MarketInsightsGenerator:
             return data
 
     def generate_insights(self, data: Dict[str, Any]) -> str:
-        """Generate formatted market insights for Discord."""
+        """Generate formatted market insights for Discord with rich formatting."""
         lines = []
 
         period_label = "24h" if data["days"] == 1 else f"{data['days']}-Day"
         s = data["summary"]
 
-        # Header
-        lines.append(f"**{period_label} Market Update** • {data['period_end'].strftime('%b %d, %Y')}")
+        # Header with emoji
+        lines.append(f"# 📊 {period_label} Market Update")
+        lines.append(f"*{data['period_end'].strftime('%B %d, %Y')}*")
         lines.append("")
 
-        # Summary stats
-        sales_arrow = "📈" if s["sales_change_pct"] >= 0 else "📉"
-        vol_arrow = "📈" if s["volume_change_pct"] >= 0 else "📉"
-        lines.append("```")
-        lines.append("══════════════════════════════════════")
-        lines.append("  MARKET SUMMARY")
-        lines.append("══════════════════════════════════════")
-        lines.append(f"  Sales:   {s['total_sales']:>5}  ({'+' if s['sales_change_pct'] >= 0 else ''}{s['sales_change_pct']:.1f}%)")
-        lines.append(f"  Volume:  {format_currency(s['total_volume']):>10}  ({'+' if s['volume_change_pct'] >= 0 else ''}{s['volume_change_pct']:.1f}%)")
-        lines.append(f"  Avg:     {format_currency(s['avg_price']):>10}")
-        lines.append("```")
+        # Summary stats with emojis
+        sales_emoji = "🟢" if s["sales_change_pct"] >= 0 else "🔴"
+        vol_emoji = "🟢" if s["volume_change_pct"] >= 0 else "🔴"
+        sales_arrow = "↑" if s["sales_change_pct"] >= 0 else "↓"
+        vol_arrow = "↑" if s["volume_change_pct"] >= 0 else "↓"
 
-        # Product type breakdown
+        lines.append("## 💰 Market Summary")
+        lines.append(f"📦 **Sales:** {s['total_sales']:,} {sales_emoji} {sales_arrow}{abs(s['sales_change_pct']):.1f}%")
+        lines.append(f"💵 **Volume:** {format_currency(s['total_volume'])} {vol_emoji} {vol_arrow}{abs(s['volume_change_pct']):.1f}%")
+        lines.append(f"📈 **Avg Price:** {format_currency(s['avg_price'])}")
+        lines.append("")
+
+        # Product type breakdown with visual bars
         if data["by_type"]:
-            lines.append("```")
-            lines.append("══════════════════════════════════════")
-            lines.append("  BY PRODUCT TYPE")
-            lines.append("══════════════════════════════════════")
-            max_vol = max(t["volume"] for t in data["by_type"]) if data["by_type"] else 1
+            lines.append("## 📋 By Product Type")
             total_vol = sum(t["volume"] for t in data["by_type"]) if data["by_type"] else 1
+            type_emojis = {"Single": "🃏", "Box": "📦", "Pack": "🎴", "Bundle": "🎁", "Lot": "📚", "Proof": "✨"}
             for t in data["by_type"]:
+                emoji = type_emojis.get(t["type"], "•")
                 pct = (t["volume"] / total_vol * 100) if total_vol > 0 else 0
-                lines.append(f"  {t['type']:8} │ {bar(t['volume'], max_vol)} │ {pct:4.1f}%")
-            lines.append("```")
+                bar_fill = "█" * int(pct / 10) + "░" * (10 - int(pct / 10))
+                lines.append(f"{emoji} **{t['type']}** `{bar_fill}` {pct:.1f}% ({format_currency(t['volume'])})")
+            lines.append("")
 
-        # Top sellers
+        # Top sellers with medals
         if data["top_volume"]:
-            lines.append("```")
-            lines.append("══════════════════════════════════════")
-            lines.append("  TOP SELLERS")
-            lines.append("══════════════════════════════════════")
-            max_vol = max(t["volume"] for t in data["top_volume"]) if data["top_volume"] else 1
-            for i, t in enumerate(data["top_volume"][:5], 1):
-                name = t["name"][:22]
-                lines.append(f"  {i}. {name:22} │ {t['sales']:2}x │ {format_currency(t['volume']):>9}")
-            lines.append("```")
+            lines.append("## 🏆 Top Sellers")
+            medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+            for i, t in enumerate(data["top_volume"][:5]):
+                medal = medals[i] if i < len(medals) else f"{i+1}."
+                lines.append(f"{medal} **{t['name']}** — {t['sales']}x sales, {format_currency(t['volume'])}")
+            lines.append("")
 
         # Price movers
         if data["gainers"] or data["losers"]:
-            lines.append("```")
-            lines.append("══════════════════════════════════════")
-            lines.append("  PRICE MOVERS")
-            lines.append("══════════════════════════════════════")
+            lines.append("## 📈 Price Movers")
             if data["gainers"]:
+                lines.append("**Gainers:**")
                 for g in data["gainers"][:3]:
-                    name = g["name"][:20]
-                    lines.append(f"  ▲ {name:20} │ +{g['change_pct']:.1f}%")
+                    lines.append(f"🟢 **{g['name']}** +{g['change_pct']:.1f}% ({format_currency(g['previous'])} → {format_currency(g['current'])})")
             if data["losers"]:
+                lines.append("**Losers:**")
                 for l in data["losers"][:3]:
-                    name = l["name"][:20]
-                    lines.append(f"  ▼ {name:20} │ {l['change_pct']:.1f}%")
-            lines.append("```")
+                    lines.append(f"🔴 **{l['name']}** {l['change_pct']:.1f}% ({format_currency(l['previous'])} → {format_currency(l['current'])})")
+            lines.append("")
 
         # Hot deals
         if data["deals"]:
-            lines.append("```")
-            lines.append("══════════════════════════════════════")
-            lines.append("  🔥 HOT DEALS (below floor)")
-            lines.append("══════════════════════════════════════")
+            lines.append("## 🔥 Hot Deals")
             for d in data["deals"][:3]:
-                name = d["name"][:22]
-                lines.append(f"  {name:22} │ {format_currency(d['sold_price']):>7} │ {d['discount_pct']:.0f}% off")
-            lines.append("```")
+                lines.append(f"• **{d['name']}** — {format_currency(d['sold_price'])} ({d['discount_pct']:.0f}% below floor)")
+            lines.append("")
 
         # Market health footer
         h = data["market_health"]
-        lines.append(f"*{h['active_listings']:,} active listings • {h['unique_cards']} unique cards*")
+        lines.append("---")
+        lines.append(f"📊 **{h['active_listings']:,}** active listings • **{h['unique_cards']}** unique cards")
+        lines.append(f"💲 Price range: {format_currency(h['min_price'])} – {format_currency(h['max_price'])}")
 
         return "\n".join(lines)
 

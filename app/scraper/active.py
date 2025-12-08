@@ -67,9 +67,9 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                     from datetime import datetime, timedelta
                     from app.models.market import MarketPrice
 
-                    # Delete stale active listings (older than 24 hours)
-                    # Increased from 1 hour to retain more listings for display
-                    cutoff = datetime.utcnow() - timedelta(hours=24)
+                    # Delete stale active listings (older than 30 days)
+                    # Keep listings long enough to track active->sold transitions
+                    cutoff = datetime.utcnow() - timedelta(days=30)
                     stmt = select(MarketPrice).where(
                         MarketPrice.card_id == card_id,
                         MarketPrice.listing_type == "active",
@@ -117,11 +117,13 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
 
                         if item.external_id in existing_for_this_card:
                             # Update existing listing with fresh data
+                            # IMPORTANT: Preserve listed_at (when first seen)
                             existing = existing_for_this_card[item.external_id]
                             existing.price = item.price
                             existing.title = item.title
                             existing.url = item.url
                             existing.scraped_at = datetime.utcnow()
+                            # Don't update listed_at - preserve original "first seen" time
                             existing.image_url = getattr(item, 'image_url', existing.image_url)
                             existing.seller_name = getattr(item, 'seller_name', existing.seller_name)
                             existing.condition = getattr(item, 'condition', existing.condition)
@@ -129,7 +131,8 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                             session.add(existing)
                             updated_count += 1
                         else:
-                            # Add new listing - use individual commit to catch race conditions
+                            # Add new listing - set listed_at to track when first seen
+                            item.listed_at = datetime.utcnow()
                             try:
                                 session.add(item)
                                 session.flush()  # Force immediate insert to catch constraint violations

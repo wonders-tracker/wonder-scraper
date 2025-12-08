@@ -9,6 +9,7 @@ import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowMode
 import { useState, useMemo, useEffect } from 'react'
 import clsx from 'clsx'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock } from 'lucide-react'
+import { TreatmentBadge } from '../components/TreatmentBadge'
 import {
   Select,
   SelectContent,
@@ -396,7 +397,7 @@ function MarketAnalysis() {
                             {treatments?.map(treatment => (
                                 <div key={treatment.name} className="p-2 flex justify-between items-center">
                                     <div className="flex items-center gap-2">
-                                        <div className="text-xs font-bold">{treatment.name}</div>
+                                        <TreatmentBadge treatment={treatment.name} size="xs" />
                                         <div className="text-[10px] text-muted-foreground">({treatment.count})</div>
                                     </div>
                                     <div className="text-right">

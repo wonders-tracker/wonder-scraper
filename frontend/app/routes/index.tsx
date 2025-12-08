@@ -1,13 +1,24 @@
 import { createRoute, useNavigate, Link } from '@tanstack/react-router'
 import { api, auth } from '../utils/auth'
 import { analytics } from '~/services/analytics'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel, getPaginationRowModel } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { ArrowUpDown, Search, ArrowUp, ArrowDown, Calendar, TrendingUp, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Plus, X, Package, Layers, Gem, Archive, Info } from 'lucide-react'
+import { ArrowUpDown, Search, ArrowUp, ArrowDown, Calendar, TrendingUp, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Plus, Package, Layers, Gem, Archive, Info } from 'lucide-react'
 import clsx from 'clsx'
 import { Route as rootRoute } from './__root'
 import { useTimePeriod } from '../context/TimePeriodContext'
+import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
+
+// Truncate treatment for display if too long
+function simplifyTreatmentForDisplay(treatment: string): string {
+    if (!treatment) return ''
+    // Truncate if longer than 25 chars
+    if (treatment.length > 25) {
+        return treatment.substring(0, 22) + '...'
+    }
+    return treatment
+}
 
 // Updated Type Definition with clean field names
 type Card = {
@@ -64,7 +75,6 @@ function Home() {
   const [productType, setProductType] = useState<string>('all')
   const [hideLowSignal, setHideLowSignal] = useState<boolean>(true)  // Hide low signal cards by default
   const [trackingCard, setTrackingCard] = useState<Card | null>(null)
-  const [trackForm, setTrackForm] = useState({ quantity: 1, purchase_price: 0 })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -90,18 +100,6 @@ function Home() {
       retry: false
   })
 
-  // Mutation for adding cards to portfolio
-  const addToPortfolioMutation = useMutation({
-      mutationFn: async (data: { card_id: number, quantity: number, purchase_price: number }) => {
-          return await api.post('portfolio/', { json: data }).json()
-      },
-      onSuccess: (_data, variables) => {
-          analytics.trackAddToPortfolio(variables.card_id, trackingCard?.name)
-          queryClient.invalidateQueries({ queryKey: ['portfolio'] })
-          setTrackingCard(null)
-          setTrackForm({ quantity: 1, purchase_price: 0 })
-      }
-  })
 
   const { data: cards, isLoading } = useQuery({
     queryKey: ['cards', timePeriod, productType],
@@ -300,11 +298,19 @@ function Home() {
         ),
         cell: ({ row }) => {
             const price = row.original.latest_price || 0
-            const treatment = row.original.last_treatment ?? row.original.last_sale_treatment ?? ''
+            const rawTreatment = row.original.last_treatment ?? row.original.last_sale_treatment ?? ''
+            const treatment = simplifyTreatmentForDisplay(rawTreatment)
             return (
                 <div className="flex flex-col items-end">
                     <span className="font-mono text-sm">{price > 0 ? `$${price.toFixed(2)}` : '---'}</span>
-                    {treatment && <span className="text-[9px] text-muted-foreground">{treatment}</span>}
+                    {treatment && (
+                        <span
+                            className="text-[9px] text-muted-foreground max-w-[80px] truncate"
+                            title={rawTreatment}
+                        >
+                            {treatment}
+                        </span>
+                    )}
                 </div>
             )
         }
@@ -392,7 +398,6 @@ function Home() {
                                 return
                             }
                             setTrackingCard(row.original)
-                            setTrackForm({ quantity: 1, purchase_price: row.original.floor_price || row.original.vwap || row.original.latest_price || row.original.lowest_ask || 0 })
                         }}
                         className="p-1.5 rounded border border-border hover:bg-primary hover:text-primary-foreground transition-colors group"
                         title={user ? "Add to Portfolio" : "Login to track"}
@@ -629,85 +634,20 @@ function Home() {
         </div>
       </div>
 
-      {/* Track Card Dialog */}
+      {/* Add to Portfolio Drawer */}
       {trackingCard && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setTrackingCard(null)}>
-          <div className="bg-background border border-border rounded-lg max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider">Add to Portfolio</h3>
-              <button onClick={() => setTrackingCard(null)} className="text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="mb-4">
-              <div className="text-xs text-muted-foreground uppercase mb-1">Card</div>
-              <div className="font-bold">{trackingCard.name}</div>
-              <div className="text-xs text-muted-foreground">{trackingCard.set_name}</div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-muted-foreground uppercase block mb-1">Quantity</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={trackForm.quantity}
-                  onChange={(e) => setTrackForm({ ...trackForm, quantity: parseInt(e.target.value) || 1 })}
-                  className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground uppercase block mb-1">Purchase Price (per card)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-muted-foreground">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={trackForm.purchase_price}
-                    onChange={(e) => setTrackForm({ ...trackForm, purchase_price: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-background border border-border rounded pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-border">
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <span className="text-muted-foreground uppercase">Total Cost</span>
-                  <span className="font-mono font-bold">${(trackForm.quantity * trackForm.purchase_price).toFixed(2)}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground uppercase">Current Value</span>
-                  <span className="font-mono font-bold">${(trackForm.quantity * (trackingCard.floor_price || trackingCard.vwap || trackingCard.latest_price || trackingCard.lowest_ask || 0)).toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={() => setTrackingCard(null)}
-                className="flex-1 px-4 py-2 text-sm font-bold uppercase border border-border rounded hover:bg-muted transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  addToPortfolioMutation.mutate({
-                    card_id: trackingCard.id,
-                    quantity: trackForm.quantity,
-                    purchase_price: trackForm.purchase_price
-                  })
-                }}
-                disabled={addToPortfolioMutation.isPending}
-                className="flex-1 px-4 py-2 text-sm font-bold uppercase bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {addToPortfolioMutation.isPending ? 'Adding...' : 'Add to Portfolio'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <AddToPortfolioModal
+          card={{
+            id: trackingCard.id,
+            name: trackingCard.name,
+            set_name: trackingCard.set_name,
+            floor_price: trackingCard.floor_price,
+            latest_price: trackingCard.latest_price,
+            product_type: trackingCard.product_type
+          }}
+          isOpen={!!trackingCard}
+          onClose={() => setTrackingCard(null)}
+        />
       )}
     </div>
   )

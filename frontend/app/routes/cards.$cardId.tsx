@@ -3,12 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { Route as rootRoute } from './__root'
-import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink, Calendar } from 'lucide-react'
+import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink, Calendar, Flag, AlertTriangle } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getFilteredRowModel } from '@tanstack/react-table'
 import { useMemo, useState, useEffect } from 'react'
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, ScatterChart, Scatter, Cell, ComposedChart } from 'recharts'
 import clsx from 'clsx'
+import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
+import { TreatmentBadge } from '../components/TreatmentBadge'
+import { ProductSubtypeBadge } from '../components/ProductSubtypeBadge'
 
 type CardDetail = {
   id: number
@@ -37,8 +40,11 @@ type MarketPrice = {
     title: string
     sold_date?: string | null  // Can be NULL - use scraped_at as fallback
     scraped_at: string         // Always present - fallback for NULL sold_date
+    listed_at?: string | null  // When listing was first seen (for active->sold tracking)
     listing_type: string
     treatment?: string
+    product_subtype?: string   // Collector Booster Box, Play Bundle, etc.
+    quantity?: number          // Number of units in listing
     bid_count?: number
     url?: string
     image_url?: string
@@ -48,6 +54,7 @@ type MarketPrice = {
     seller_feedback_percent?: number
     condition?: string
     shipping_cost?: number
+    traits?: Array<{ trait_type: string; value: string }>  // NFT traits from OpenSea
 }
 
 type MarketSnapshot = {
@@ -83,38 +90,62 @@ function isPSAGraded(title: string): { graded: boolean; grade?: string } {
 }
 
 // Get treatment color based on category (handles messy treatment names)
+// Colors match TreatmentBadge component for consistency
 function getTreatmentColor(treatment: string): string {
     const t = (treatment || '').toLowerCase()
 
-    // Serialized - highest tier (gold/amber)
-    if (t.includes('serial') || t.includes('ocm')) return '#f59e0b'
+    // === ULTRA RARE ===
+    // Formless Foil - premium foil (fuchsia/magenta)
+    if (t.includes('formless')) return '#d946ef'
 
-    // Formless Foil - premium foil (pink)
-    if (t.includes('formless')) return '#ec4899'
+    // Serialized / OCM - highest tier (gold/yellow)
+    if (t.includes('serial') || t.includes('ocm')) return '#facc15'
 
-    // Classic Foil / other foils (purple)
-    if (t.includes('foil') || t.includes('holo')) return '#a855f7'
+    // 1/1 or Legendary (rose/red)
+    if (t === '1/1' || t.includes('legendary')) return '#fb7185'
 
-    // Promo / Prerelease (blue)
-    if (t.includes('promo') || t.includes('prerelease') || t.includes('proof') || t.includes('sample')) return '#3b82f6'
+    // === RARE ===
+    // Stonefoil (stone/warm gray)
+    if (t.includes('stone')) return '#a8a29e'
 
-    // Alt Art / Full Art (cyan)
-    if (t.includes('alt art') || t.includes('alternate') || t.includes('full art') || t.includes('extended')) return '#06b6d4'
+    // Starfoil (violet)
+    if (t.includes('star')) return '#a78bfa'
+
+    // Full Art Foil (emerald)
+    if (t.includes('full art') && t.includes('foil')) return '#34d399'
+
+    // Animated NFT (cyan)
+    if (t.includes('animated')) return '#22d3ee'
+
+    // === UNCOMMON ===
+    // Classic Foil / other foils (sky blue)
+    if (t.includes('foil') || t.includes('holo') || t.includes('refractor')) return '#38bdf8'
+
+    // Full Art (indigo)
+    if (t.includes('full art') || t.includes('alt art') || t.includes('extended')) return '#818cf8'
+
+    // Prerelease (pink)
+    if (t.includes('prerelease')) return '#f472b6'
+
+    // Promo (rose)
+    if (t.includes('promo')) return '#fb7185'
+
+    // Proof / Sample (amber)
+    if (t.includes('proof') || t.includes('sample')) return '#fbbf24'
 
     // Error / Errata (red)
-    if (t.includes('error') || t.includes('errata')) return '#ef4444'
+    if (t.includes('error') || t.includes('errata')) return '#f87171'
 
-    // Mythic / Legendary (gold tint)
-    if (t.includes('mythic') || t.includes('legendary')) return '#eab308'
+    // === SEALED PRODUCTS ===
+    // Factory Sealed (green)
+    if (t.includes('factory') && t.includes('seal')) return '#4ade80'
 
-    // Epic (orange)
-    if (t.includes('epic')) return '#f97316'
+    // Sealed (emerald)
+    if (t.includes('seal')) return '#34d399'
 
-    // Rare (green)
-    if (t.includes('rare')) return '#22c55e'
-
-    // Default - Classic Paper / Standard (gray)
-    return '#9ca3af'
+    // === DEFAULT ===
+    // Classic Paper / Standard (zinc gray)
+    return '#a1a1aa'
 }
 
 // Simplify treatment name for display
@@ -125,8 +156,22 @@ function simplifyTreatment(treatment: string): string {
     if (t.includes('foil') || t.includes('holo')) return 'Foil'
     if (t.includes('promo') || t.includes('prerelease')) return 'Promo'
     if (t.includes('alt') || t.includes('alternate')) return 'Alt Art'
+    if (t.includes('proof')) return 'Proof'
     if (t.includes('paper') || t === 'classic' || t === 'standard' || t === 'regular' || t === 'normal') return 'Paper'
+    // For NFT items, return the treatment as-is (could be token name or actual trait)
     return treatment || 'Paper'
+}
+
+// Extract treatment from title for items where treatment field is generic (e.g., "NFT")
+function extractTreatmentFromTitle(title: string): string | null {
+    if (!title) return null
+    const t = title.toLowerCase()
+    if (t.includes('serial') || t.includes('ocm') || t.includes('/50') || t.includes('/100') || t.includes('/250')) return 'Serialized'
+    if (t.includes('formless')) return 'Formless Foil'
+    if (t.includes('foil') || t.includes('holo')) return 'Classic Foil'
+    if (t.includes('promo') || t.includes('prerelease')) return 'Promo'
+    if (t.includes('proof')) return 'Proof'
+    return null
 }
 
 // Server-side loader for SEO meta tags
@@ -176,6 +221,12 @@ function CardDetail() {
   const [selectedListing, setSelectedListing] = useState<MarketPrice | null>(null)
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
   const [chartType, setChartType] = useState<ChartType>('line')
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportReason, setReportReason] = useState<string>('')
+  const [reportNotes, setReportNotes] = useState<string>('')
+  const [reportSubmitting, setReportSubmitting] = useState(false)
+  const [reportSubmitted, setReportSubmitted] = useState(false)
 
   // Track card listing view (with session-based milestone tracking)
   useEffect(() => {
@@ -290,31 +341,37 @@ function CardDetail() {
       return false
   }, [history, card])
 
-  // Mutation to Track Card
-  const trackMutation = useMutation({
-      mutationFn: async () => {
-          await api.post('portfolio/', {
-              json: {
-                  card_id: parseInt(cardId),
-                  quantity: 1,
-                  purchase_price: card?.floor_price || card?.latest_price || 0
-              }
-          })
-      },
-      onSuccess: () => {
-          alert('Card added to your Portfolio!')
-          queryClient.invalidateQueries({ queryKey: ['portfolio'] })
-      },
-      onError: () => {
-          alert('Failed to add card. You might already have it or need to log in.')
-      }
-  })
+  // Track Card (now opens modal instead of direct mutation)
 
   const columns = useMemo<ColumnDef<MarketPrice>[]>(() => [
       {
           accessorKey: 'sold_date',
           header: 'Date',
-          cell: ({ row }) => row.original.sold_date ? new Date(row.original.sold_date).toLocaleDateString() : 'N/A'
+          cell: ({ row }) => {
+              const soldDate = row.original.sold_date
+              const listedAt = row.original.listed_at
+              const scrapedAt = row.original.scraped_at
+              const isActive = row.original.listing_type === 'active'
+
+              if (soldDate) {
+                  return new Date(soldDate).toLocaleDateString()
+              } else if (isActive && listedAt) {
+                  // For active listings, show when it was first listed
+                  return (
+                      <span className="text-muted-foreground" title="First seen">
+                          {new Date(listedAt).toLocaleDateString()}
+                      </span>
+                  )
+              } else if (scrapedAt) {
+                  // Fallback to scraped_at
+                  return (
+                      <span className="text-muted-foreground">
+                          {new Date(scrapedAt).toLocaleDateString()}
+                      </span>
+                  )
+              }
+              return 'N/A'
+          }
       },
       {
           accessorKey: 'price',
@@ -324,15 +381,25 @@ function CardDetail() {
       {
           accessorKey: 'treatment',
           header: 'Treatment',
-          cell: ({ row }) => (
-              <span className={clsx("px-1.5 py-0.5 rounded text-[10px] uppercase font-bold border", 
-                  row.original.treatment?.includes("Foil") ? "border-purple-800 bg-purple-900/20 text-purple-500" : 
-                  row.original.treatment?.includes("Serialized") ? "border-amber-800 bg-amber-900/20 text-amber-500" :
-                  "border-zinc-800 bg-zinc-900/20 text-zinc-500"
-              )}>
-                  {row.original.treatment || 'Classic Paper'}
-              </span>
-          )
+          cell: ({ row }) => {
+              // If treatment is "NFT" or empty, try to extract from title
+              const rawTreatment = row.original.treatment
+              const isGeneric = !rawTreatment || rawTreatment.toLowerCase() === 'nft'
+              const effectiveTreatment = isGeneric
+                  ? (extractTreatmentFromTitle(row.original.title) || 'Classic Paper')
+                  : rawTreatment
+
+              return <TreatmentBadge treatment={effectiveTreatment} size="xs" />
+          }
+      },
+      {
+          accessorKey: 'product_subtype',
+          header: 'Subtype',
+          cell: ({ row }) => {
+              const subtype = row.original.product_subtype
+              if (!subtype) return null
+              return <ProductSubtypeBadge subtype={subtype} size="xs" />
+          }
       },
       {
           accessorKey: 'title',
@@ -577,13 +644,12 @@ function CardDetail() {
                         <ArrowLeft className="w-3 h-3" /> Dashboard
                     </Link>
                     
-                    <button 
-                        onClick={() => trackMutation.mutate()}
-                        disabled={trackMutation.isPending}
-                        className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded text-xs uppercase font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded text-xs uppercase font-bold hover:bg-primary/90 transition-colors"
                     >
                         <Wallet className="w-3 h-3" />
-                        {trackMutation.isPending ? 'Tracking...' : 'Track in Portfolio'}
+                        Add to Portfolio
                     </button>
                 </div>
                 
@@ -591,18 +657,38 @@ function CardDetail() {
                 <div className="mb-10 border-b border-border pb-8">
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                         <div>
-                            <div className="flex items-center gap-3 mb-2">
+                            <div className="flex items-center gap-3 mb-2 flex-wrap">
                                 <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
                                     ID: {card.id.toString().padStart(4, '0')}
                                 </span>
-                                <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-zinc-700">
-                                    Rarity: {card.rarity_name || card.rarity_id}
-                                </span>
+                                {/* Show different badges for NFT vs regular products */}
+                                {card.product_type === 'Proof' || card.name?.toLowerCase().includes('proof') || card.name?.toLowerCase().includes('collector box') ? (
+                                    <>
+                                        <span className="bg-cyan-900/50 text-cyan-400 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-cyan-700">
+                                            NFT
+                                        </span>
+                                        <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded text-[10px] font-mono tracking-wider border border-zinc-700" title={
+                                            card.name?.toLowerCase().includes('character proof') ? '0x05f08b01971cf70bcd4e743a8906790cfb9a8fb8' :
+                                            card.name?.toLowerCase().includes('collector box') ? '0x28a11da34a93712b1fde4ad15da217a3b14d9465' : ''
+                                        }>
+                                            {card.name?.toLowerCase().includes('character proof') ? '0x05f0...a8fb' :
+                                             card.name?.toLowerCase().includes('collector box') ? '0x28a1...d9465' : 'Contract'}
+                                        </span>
+                                    </>
+                                ) : (
+                                    <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-zinc-700">
+                                        Rarity: {card.rarity_name || card.rarity_id}
+                                    </span>
+                                )}
                             </div>
                             <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter mb-2">{card.name}</h1>
                             <div className="text-sm text-muted-foreground uppercase tracking-[0.2em] flex items-center gap-2">
                                 <span className="w-2 h-2 bg-primary rounded-full"></span>
                                 {card.set_name}
+                                {/* Platform indicator for NFTs */}
+                                {(card.product_type === 'Proof' || card.name?.toLowerCase().includes('proof') || card.name?.toLowerCase().includes('collector box')) && (
+                                    <span className="text-cyan-400 text-[10px] ml-2">• OpenSea</span>
+                                )}
                             </div>
                         </div>
                         
@@ -638,48 +724,40 @@ function CardDetail() {
                     </div>
                 </div>
 
-                {/* Stats Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                     <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
-                        <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                            Lowest Ask
-                        </div>
-                        <div className="text-xl font-mono font-bold">{(card.lowest_ask && card.lowest_ask > 0) ? `$${card.lowest_ask.toFixed(2)}` : '---'}</div>
+                {/* Stats Grid - Compact inline layout */}
+                <div className="flex flex-wrap items-center gap-6 mb-4 text-sm">
+                    <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                        <span className="text-[10px] text-muted-foreground uppercase">Lowest Ask</span>
+                        <span className="font-mono font-bold">{(card.lowest_ask && card.lowest_ask > 0) ? `$${card.lowest_ask.toFixed(2)}` : '---'}</span>
                     </div>
-                     <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
-                        <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-                            Active Listings
-                        </div>
-                        <div className="text-xl font-mono font-bold">{(card.inventory || 0).toLocaleString()}</div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                        <span className="text-[10px] text-muted-foreground uppercase">Active Listings</span>
+                        <span className="font-mono font-bold">{(card.inventory || 0).toLocaleString()}</span>
                     </div>
-                     <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
-                        <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
-                            Vol (USD)
-                        </div>
-                        <div className="text-xl font-mono font-bold">${((card.volume_30d || 0) * (card.floor_price || card.latest_price || 0)).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
+                        <span className="text-[10px] text-muted-foreground uppercase">Vol (USD)</span>
+                        <span className="font-mono font-bold">${((card.volume_30d || 0) * (card.floor_price || card.latest_price || 0)).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
                     </div>
-                     <div className="border border-border p-4 rounded bg-card/50 hover:bg-card transition-colors">
-                        <div className="text-[10px] text-muted-foreground uppercase mb-2 flex items-center gap-2">
-                            <TrendingUp className="w-3 h-3" />
-                            {timeRange} Trend
-                        </div>
+                    <div className="flex items-center gap-2">
+                        <TrendingUp className="w-3 h-3 text-muted-foreground" />
+                        <span className="text-[10px] text-muted-foreground uppercase">{timeRange} Trend</span>
                         {(chartStats?.priceChange ?? 0) === 0 ? (
-                            <div className="text-xl font-mono text-muted-foreground">-</div>
+                            <span className="font-mono text-muted-foreground">-</span>
                         ) : (
-                            <div className={clsx("text-xl font-mono font-bold", (chartStats?.priceChange ?? 0) > 0 ? "text-emerald-500" : "text-red-500")}>
+                            <span className={clsx("font-mono font-bold", (chartStats?.priceChange ?? 0) > 0 ? "text-emerald-500" : "text-red-500")}>
                                 {(chartStats?.priceChange ?? 0) > 0 ? '↑' : '↓'}{Math.abs(chartStats?.priceChange ?? 0).toFixed(1)}%
-                            </div>
+                            </span>
                         )}
                     </div>
                 </div>
 
-                {/* Stacked Layout: Chart then Table */}
-                <div className="space-y-8">
-                    
-                    {/* Chart Section (Full Width) */}
+                {/* Stacked Layout: Chart -> FMP -> Sales */}
+                <div className="space-y-4">
+
+                    {/* Chart Section (Full Width) - MOVED TO TOP */}
                     <div>
                         <div className="border border-border rounded bg-card p-1">
                             <div className="w-full bg-muted/10 rounded flex flex-col">
@@ -690,200 +768,185 @@ function CardDetail() {
                                         <div className="flex items-center gap-3 text-[10px]">
                                             {chartStats ? (
                                                 <>
-                                                    <span className="text-muted-foreground">
-                                                        {chartStats.totalSales} sale{chartStats.totalSales !== 1 ? 's' : ''}
-                                                        {timeRange !== 'all' && totalAllTimeSales > chartStats.totalSales && (
-                                                            <span className="text-muted-foreground/60"> of {totalAllTimeSales}</span>
-                                                        )}
-                                                    </span>
+                                                    <span className="text-muted-foreground">{chartStats.totalSales} sales</span>
                                                     {chartStats.priceChange !== 0 && (
-                                                        <span className={clsx(
-                                                            "font-bold",
-                                                            chartStats.priceChange > 0 ? "text-emerald-500" : "text-red-500"
-                                                        )}>
-                                                            {chartStats.priceChange > 0 ? '↑' : '↓'}{Math.abs(chartStats.priceChange).toFixed(1)}%
+                                                        <span className={chartStats.priceChange >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                                                            {chartStats.priceChange >= 0 ? '+' : ''}{chartStats.priceChange.toFixed(1)}%
                                                         </span>
                                                     )}
                                                 </>
-                                            ) : totalAllTimeSales > 0 ? (
-                                                <span className="text-muted-foreground">
-                                                    0 of {totalAllTimeSales} sales in {timeRange}
-                                                </span>
-                                            ) : (
-                                                <span className="text-muted-foreground">No sales</span>
-                                            )}
+                                            ) : null}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
+
+                                    <div className="flex items-center gap-2">
                                         {/* Chart Type Toggle */}
-                                        <div className="flex items-center gap-1 border-r border-border/50 pr-4">
+                                        <div className="flex items-center bg-background rounded border border-border overflow-hidden mr-2">
                                             <button
-                                                onClick={() => {
-                                                    setChartType('line')
-                                                    analytics.trackChartInteraction('chart_type', 'line')
-                                                }}
+                                                onClick={() => setChartType('line')}
                                                 className={clsx(
-                                                    "px-2 py-1 text-[10px] uppercase font-bold rounded transition-colors",
-                                                    chartType === 'line'
-                                                        ? "bg-primary text-primary-foreground"
-                                                        : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                                                    "px-3 py-1.5 text-[10px] font-bold uppercase transition-colors",
+                                                    chartType === 'line' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                                                 )}
-                                                title="Line Chart"
                                             >
                                                 Line
                                             </button>
                                             <button
-                                                onClick={() => {
-                                                    setChartType('scatter')
-                                                    analytics.trackChartInteraction('chart_type', 'scatter')
-                                                }}
+                                                onClick={() => setChartType('scatter')}
                                                 className={clsx(
-                                                    "px-2 py-1 text-[10px] uppercase font-bold rounded transition-colors",
-                                                    chartType === 'scatter'
-                                                        ? "bg-primary text-primary-foreground"
-                                                        : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                                                    "px-3 py-1.5 text-[10px] font-bold uppercase transition-colors",
+                                                    chartType === 'scatter' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                                                 )}
-                                                title="Scatter Plot"
                                             >
                                                 Scatter
                                             </button>
                                         </div>
-                                        {/* Time Range Buttons */}
-                                        <div className="flex items-center gap-1">
-                                            <Calendar className="w-3 h-3 text-muted-foreground mr-2" />
-                                            {(['7d', '30d', '90d', 'all'] as TimeRange[]).map((range) => (
+
+                                        {/* Time Range */}
+                                        <div className="flex items-center bg-background rounded border border-border overflow-hidden">
+                                            {['7d', '30d', '90d', 'all'].map((range) => (
                                                 <button
                                                     key={range}
-                                                    onClick={() => {
-                                                        setTimeRange(range)
-                                                        analytics.trackChartInteraction('time_range', range)
-                                                    }}
+                                                    onClick={() => setTimeRange(range as TimeRange)}
                                                     className={clsx(
-                                                        "px-3 py-1 text-[10px] uppercase font-bold rounded transition-colors",
-                                                        timeRange === range
-                                                            ? "bg-primary text-primary-foreground"
-                                                            : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                                                        "px-3 py-1.5 text-[10px] font-bold uppercase transition-colors",
+                                                        timeRange === range ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                                                     )}
                                                 >
-                                                    {range === 'all' ? 'All' : range}
+                                                    {range}
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Chart Stats Bar */}
-                                {chartStats && chartData.length > 0 && (
-                                    <div className="px-4 py-2 border-b border-border/30 flex flex-wrap justify-between items-center gap-4">
-                                        <div className="flex gap-6 text-[10px]">
-                                            <div>
-                                                <span className="text-muted-foreground uppercase">Low: </span>
-                                                <span className="font-mono font-bold text-red-400">${chartStats.minPrice.toFixed(2)}</span>
-                                            </div>
-                                            <div>
-                                                <span className="text-muted-foreground uppercase">High: </span>
-                                                <span className="font-mono font-bold text-emerald-400">${chartStats.maxPrice.toFixed(2)}</span>
-                                            </div>
-                                            <div>
-                                                <span className="text-muted-foreground uppercase">Avg: </span>
-                                                <span className="font-mono font-bold">${chartStats.avgPrice.toFixed(2)}</span>
-                                            </div>
+                                {/* Chart Stats Row */}
+                                <div className="px-4 py-2 border-b border-border/30 flex items-center justify-between text-[10px]">
+                                    <div className="flex items-center gap-6">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-muted-foreground uppercase">Low:</span>
+                                            <span className="font-mono text-rose-400">${chartStats?.minPrice?.toFixed(2) || '---'}</span>
                                         </div>
-                                        {/* Treatment Legend */}
-                                        <div className="hidden md:flex gap-3 text-[9px]">
-                                            <div className="flex items-center gap-1">
-                                                <div className="w-2 h-2 rounded-full" style={{backgroundColor: '#9ca3af'}} />
-                                                <span className="text-muted-foreground">Paper</span>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <div className="w-2 h-2 rounded-full" style={{backgroundColor: '#a855f7'}} />
-                                                <span className="text-muted-foreground">Foil</span>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <div className="w-2 h-2 rounded-full" style={{backgroundColor: '#ec4899'}} />
-                                                <span className="text-muted-foreground">Formless</span>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <div className="w-2 h-2 rounded-full" style={{backgroundColor: '#f59e0b'}} />
-                                                <span className="text-muted-foreground">Serialized</span>
-                                            </div>
-                                            <div className="flex items-center gap-1 pl-2 border-l border-border/50">
-                                                <svg width="8" height="8" viewBox="0 0 8 8">
-                                                    <polygon points="4,0 8,4 4,8 0,4" fill="#3b82f6" />
-                                                </svg>
-                                                <span className="text-blue-400">Active</span>
-                                            </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-muted-foreground uppercase">High:</span>
+                                            <span className="font-mono text-emerald-400">${chartStats?.maxPrice?.toFixed(2) || '---'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-muted-foreground uppercase">Avg:</span>
+                                            <span className="font-mono">${chartStats?.avgPrice?.toFixed(2) || '---'}</span>
                                         </div>
                                     </div>
-                                )}
 
-                                {/* Chart Area */}
-                                <div className="p-4 relative" style={{ height: '350px' }}>
+                                    {/* Legend */}
+                                    <div className="flex items-center gap-4">
+                                        {chartType === 'scatter' && (
+                                            <>
+                                                <div className="flex items-center gap-1">
+                                                    <div className="w-2 h-2 rounded-full bg-gray-400"></div>
+                                                    <span className="text-muted-foreground">Paper</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <div className="w-2 h-2 rounded-full bg-cyan-400"></div>
+                                                    <span className="text-muted-foreground">Foil</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <div className="w-2 h-2 rounded-full bg-pink-400"></div>
+                                                    <span className="text-muted-foreground">Formless</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <div className="w-2 h-2 rounded-full bg-amber-400"></div>
+                                                    <span className="text-muted-foreground">Serialized</span>
+                                                </div>
+                                            </>
+                                        )}
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-2 h-2 bg-emerald-400" style={{ clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' }}></div>
+                                            <span className="text-muted-foreground">Active</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Chart */}
+                                <div className="h-[300px] p-4">
                                     {chartData.length > 0 ? (
                                         <ResponsiveContainer width="100%" height="100%">
                                             {chartType === 'scatter' ? (
-                                                /* Scatter Plot View */
-                                                <ScatterChart data={chartData} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} horizontal={true} />
+                                                /* Scatter Chart View */
+                                                <ScatterChart margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} />
                                                     <XAxis
                                                         dataKey="timestamp"
-                                                        name="Date"
                                                         type="number"
                                                         domain={['dataMin', 'dataMax']}
-                                                        scale="time"
-                                                        tick={{fill: '#666', fontSize: 10}}
-                                                        axisLine={false}
-                                                        tickLine={false}
                                                         tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                        tick={{ fill: '#71717a', fontSize: 10 }}
+                                                        axisLine={{ stroke: '#27272a' }}
+                                                        tickLine={{ stroke: '#27272a' }}
                                                     />
                                                     <YAxis
                                                         dataKey="price"
-                                                        name="Price"
-                                                        domain={[(dataMin: number) => Math.max(0, Math.floor(dataMin * 0.8)), (dataMax: number) => Math.ceil(dataMax * 1.2)]}
                                                         orientation="right"
-                                                        tick={{fill: '#888', fontSize: 11, fontFamily: 'monospace'}}
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        tickFormatter={(val) => `$${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val.toFixed(0)}`}
-                                                        width={60}
+                                                        tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val.toFixed(0)}`}
+                                                        tick={{ fill: '#71717a', fontSize: 10 }}
+                                                        axisLine={{ stroke: '#27272a' }}
+                                                        tickLine={{ stroke: '#27272a' }}
+                                                        domain={['auto', 'auto']}
                                                     />
-                                                    {chartStats && (
+                                                    {/* Fair Market Price reference line */}
+                                                    {pricingData?.fair_market_price && pricingData.fair_market_price > 0 && (
                                                         <ReferenceLine
-                                                            y={chartStats.avgPrice}
-                                                            stroke="#666"
+                                                            y={pricingData.fair_market_price}
+                                                            stroke="#3b82f6"
                                                             strokeDasharray="5 5"
-                                                            strokeOpacity={0.5}
+                                                            strokeWidth={1.5}
+                                                            label={{ value: `FMP $${pricingData.fair_market_price.toFixed(2)}`, fill: '#3b82f6', fontSize: 9, position: 'left' }}
+                                                        />
+                                                    )}
+                                                    {/* Floor Price reference line */}
+                                                    {card.floor_price && card.floor_price > 0 && (
+                                                        <ReferenceLine
+                                                            y={card.floor_price}
+                                                            stroke="#10b981"
+                                                            strokeDasharray="3 3"
+                                                            strokeWidth={1.5}
+                                                            label={{ value: `Floor $${card.floor_price.toFixed(2)}`, fill: '#10b981', fontSize: 9, position: 'left' }}
                                                         />
                                                     )}
                                                     <Tooltip
-                                                        content={({ payload }) => {
-                                                            if (!payload || !payload[0]) return null
-                                                            const data = payload[0].payload
-                                                            if (!data) return null
-
-                                                            return (
-                                                                <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', minWidth: '180px'}}>
-                                                                    <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '18px', fontFamily: 'monospace'}}>${typeof data.price === 'number' ? data.price.toFixed(2) : data.price}</div>
-                                                                    <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px'}}>
-                                                                        <div style={{width: '10px', height: '10px', borderRadius: '50%', backgroundColor: data.treatmentColor || '#9ca3af'}} />
-                                                                        <span style={{color: data.treatmentColor || '#a3a3a3', fontSize: '11px', textTransform: 'uppercase', fontWeight: '600'}}>{data.treatmentSimple || data.treatment}</span>
-                                                                    </div>
-                                                                    <div style={{color: '#888', fontSize: '11px', marginBottom: '6px'}}>{data.date}</div>
-                                                                    {data.isGraded && (
-                                                                        <div style={{color: '#f59e0b', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '6px', padding: '4px 8px', background: 'rgba(245,158,11,0.15)', borderRadius: '4px', border: '1px solid rgba(245,158,11,0.3)'}}>
-                                                                            PSA {data.grade}
+                                                        cursor={{ strokeDasharray: '3 3', stroke: '#71717a' }}
+                                                        content={({ active, payload }) => {
+                                                            if (active && payload && payload.length) {
+                                                                const data = payload[0].payload as any
+                                                                return (
+                                                                    <div className="bg-black/90 border border-border rounded p-3 shadow-lg">
+                                                                        <div className="text-emerald-400 font-bold font-mono text-lg">${data.price.toFixed(2)}</div>
+                                                                        <div className="text-muted-foreground text-xs mt-1">
+                                                                            {data.date}
                                                                         </div>
-                                                                    )}
-                                                                    {data.listing_type === 'active' && (
-                                                                        <div style={{color: '#3b82f6', fontSize: '9px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #333'}}>ACTIVE LISTING</div>
-                                                                    )}
-                                                                </div>
-                                                            )
+                                                                        {data.treatment && (
+                                                                            <div className="mt-2">
+                                                                                <span
+                                                                                    className="px-2 py-0.5 rounded text-[9px] uppercase font-bold"
+                                                                                    style={{
+                                                                                        backgroundColor: `${data.treatmentColor}30`,
+                                                                                        color: data.treatmentColor
+                                                                                    }}
+                                                                                >
+                                                                                    {data.treatment}
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+                                                                        <div className="text-[10px] text-muted-foreground mt-1">
+                                                                            {data.isActive ? '◆ Active Listing' : '● Sold'}
+                                                                        </div>
+                                                                    </div>
+                                                                )
+                                                            }
+                                                            return null
                                                         }}
-                                                        cursor={{strokeDasharray: '3 3', stroke: '#666'}}
                                                     />
                                                     <Scatter
-                                                        dataKey="price"
+                                                        data={chartData}
                                                         shape={(props: any) => {
                                                             const { cx, cy, payload } = props
                                                             if (!cx || !cy || !payload) return <g />
@@ -929,115 +992,88 @@ function CardDetail() {
                                                     <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} horizontal={true} />
                                                     <XAxis
                                                         dataKey="timestamp"
-                                                        name="Date"
                                                         type="number"
                                                         domain={['dataMin', 'dataMax']}
-                                                        scale="time"
-                                                        tick={{fill: '#666', fontSize: 10}}
-                                                        axisLine={false}
-                                                        tickLine={false}
                                                         tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                        tick={{ fill: '#71717a', fontSize: 10 }}
+                                                        axisLine={{ stroke: '#27272a' }}
+                                                        tickLine={{ stroke: '#27272a' }}
                                                     />
                                                     <YAxis
-                                                        dataKey="price"
-                                                        name="Price"
-                                                        domain={[(dataMin: number) => Math.max(0, Math.floor(dataMin * 0.8)), (dataMax: number) => Math.ceil(dataMax * 1.2)]}
                                                         orientation="right"
-                                                        tick={{fill: '#888', fontSize: 11, fontFamily: 'monospace'}}
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        tickFormatter={(val) => `$${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val.toFixed(0)}`}
-                                                        width={60}
+                                                        tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val.toFixed(0)}`}
+                                                        tick={{ fill: '#71717a', fontSize: 10 }}
+                                                        axisLine={{ stroke: '#27272a' }}
+                                                        tickLine={{ stroke: '#27272a' }}
+                                                        domain={['auto', 'auto']}
                                                     />
-                                                    {chartStats && (
+                                                    {/* Fair Market Price reference line */}
+                                                    {pricingData?.fair_market_price && pricingData.fair_market_price > 0 && (
                                                         <ReferenceLine
-                                                            y={chartStats.avgPrice}
-                                                            stroke="#666"
+                                                            y={pricingData.fair_market_price}
+                                                            stroke="#3b82f6"
                                                             strokeDasharray="5 5"
-                                                            strokeOpacity={0.5}
+                                                            strokeWidth={1.5}
+                                                            label={{ value: `FMP $${pricingData.fair_market_price.toFixed(2)}`, fill: '#3b82f6', fontSize: 9, position: 'left' }}
+                                                        />
+                                                    )}
+                                                    {/* Floor Price reference line */}
+                                                    {card.floor_price && card.floor_price > 0 && (
+                                                        <ReferenceLine
+                                                            y={card.floor_price}
+                                                            stroke="#10b981"
+                                                            strokeDasharray="3 3"
+                                                            strokeWidth={1.5}
+                                                            label={{ value: `Floor $${card.floor_price.toFixed(2)}`, fill: '#10b981', fontSize: 9, position: 'left' }}
                                                         />
                                                     )}
                                                     <Tooltip
-                                                        content={({ payload }) => {
-                                                            if (!payload || !payload[0]) return null
-                                                            const data = payload[0].payload
-                                                            if (!data) return null
-
-                                                            return (
-                                                                <div style={{backgroundColor: '#1a1a1a', border: '1px solid #333', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', minWidth: '180px'}}>
-                                                                    <div style={{color: '#10b981', fontWeight: 'bold', marginBottom: '8px', fontSize: '18px', fontFamily: 'monospace'}}>${typeof data.price === 'number' ? data.price.toFixed(2) : data.price}</div>
-                                                                    <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px'}}>
-                                                                        <div style={{width: '10px', height: '10px', borderRadius: '50%', backgroundColor: data.treatmentColor || '#9ca3af'}} />
-                                                                        <span style={{color: data.treatmentColor || '#a3a3a3', fontSize: '11px', textTransform: 'uppercase', fontWeight: '600'}}>{data.treatmentSimple || data.treatment}</span>
-                                                                    </div>
-                                                                    <div style={{color: '#888', fontSize: '11px', marginBottom: '6px'}}>{data.date}</div>
-                                                                    {data.isGraded && (
-                                                                        <div style={{color: '#f59e0b', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '6px', padding: '4px 8px', background: 'rgba(245,158,11,0.15)', borderRadius: '4px', border: '1px solid rgba(245,158,11,0.3)'}}>
-                                                                            PSA {data.grade}
+                                                        cursor={{ strokeDasharray: '3 3', stroke: '#71717a' }}
+                                                        content={({ active, payload }) => {
+                                                            if (active && payload && payload.length) {
+                                                                const data = payload[0].payload as any
+                                                                return (
+                                                                    <div className="bg-black/90 border border-border rounded p-3 shadow-lg">
+                                                                        <div className="text-emerald-400 font-bold font-mono text-lg">${data.price.toFixed(2)}</div>
+                                                                        <div className="text-muted-foreground text-xs mt-1">
+                                                                            {data.date}
                                                                         </div>
-                                                                    )}
-                                                                    {data.listing_type === 'active' && (
-                                                                        <div style={{color: '#3b82f6', fontSize: '9px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #333'}}>ACTIVE LISTING</div>
-                                                                    )}
-                                                                </div>
-                                                            )
+                                                                        {data.treatment && (
+                                                                            <div className="mt-2">
+                                                                                <span
+                                                                                    className="px-2 py-0.5 rounded text-[9px] uppercase font-bold"
+                                                                                    style={{
+                                                                                        backgroundColor: `${data.treatmentColor}30`,
+                                                                                        color: data.treatmentColor
+                                                                                    }}
+                                                                                >
+                                                                                    {data.treatment}
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+                                                                        <div className="text-[10px] text-muted-foreground mt-1">
+                                                                            {data.isActive ? '◆ Active Listing' : '● Sold'}
+                                                                        </div>
+                                                                    </div>
+                                                                )
+                                                            }
+                                                            return null
                                                         }}
-                                                        cursor={{strokeDasharray: '3 3', stroke: '#666'}}
                                                     />
-
-                                                    {/* Area fill under line */}
                                                     <Area
                                                         type="monotone"
                                                         dataKey="price"
-                                                        stroke="transparent"
-                                                        strokeWidth={0}
+                                                        stroke="#10b981"
+                                                        strokeWidth={2}
                                                         fill="url(#priceGradient)"
                                                         dot={false}
                                                         activeDot={false}
                                                     />
-                                                    {/* Line with custom dots */}
-                                                    <Line
-                                                        type="monotone"
-                                                        dataKey="price"
-                                                        stroke="#666"
-                                                        strokeWidth={1}
-                                                        strokeOpacity={0.5}
-                                                        dot={(props: any) => {
-                                                            const { cx, cy, payload, index } = props
-                                                            if (!cx || !cy || !payload) return null
-
-                                                            // Active listings: diamond shape
-                                                            if (payload.isActive) {
-                                                                const size = 6
-                                                                return (
-                                                                    <polygon
-                                                                        key={`dot-${index}`}
-                                                                        points={`${cx},${cy-size} ${cx+size},${cy} ${cx},${cy+size} ${cx-size},${cy}`}
-                                                                        fill={payload.treatmentColor || '#3b82f6'}
-                                                                        stroke="#0a0a0a"
-                                                                        strokeWidth={2}
-                                                                        style={{ filter: 'drop-shadow(0 0 4px rgba(59,130,246,0.5))' }}
-                                                                    />
-                                                                )
-                                                            }
-
-                                                            // Sold listings: circle
-                                                            return (
-                                                                <circle
-                                                                    key={`dot-${index}`}
-                                                                    cx={cx}
-                                                                    cy={cy}
-                                                                    r={5}
-                                                                    fill={payload.treatmentColor || '#10b981'}
-                                                                    stroke="#0a0a0a"
-                                                                    strokeWidth={2}
-                                                                    style={{ filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.5))' }}
-                                                                />
-                                                            )
-                                                        }}
-                                                        activeDot={(props: any) => {
+                                                    <Scatter
+                                                        data={chartData}
+                                                        shape={(props: any) => {
                                                             const { cx, cy, payload } = props
-                                                            if (!cx || !cy || !payload) return null
+                                                            if (!cx || !cy || !payload) return <g />
 
                                                             // Active listings: larger diamond
                                                             if (payload.isActive) {
@@ -1103,247 +1139,153 @@ function CardDetail() {
                         </div>
                     </div>
 
-                    {/* Two Column Layout: Recent Sales + FMP by Treatment */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Recent Sales Activity Table */}
-                        <div className="border border-border rounded bg-card overflow-hidden">
-                            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/20">
-                                <div className="flex items-center gap-4">
-                                    <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                                        Sales & Listings
-                                        <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px]">{filteredData.length || 0}</span>
-                                    </h3>
-
-                                    {/* Filters */}
-                                    <div className="flex items-center gap-2">
-                                        <Filter className="w-3 h-3 text-muted-foreground" />
-                                        <select
-                                            className="bg-background border border-border rounded text-[10px] uppercase px-2 py-1 focus:outline-none focus:border-primary"
-                                            value={treatmentFilter}
-                                            onChange={(e) => setTreatmentFilter(e.target.value)}
+                    {/* Fair Market Price by Treatment - Horizontal Text Row */}
+                    {pricingData?.by_treatment && pricingData.by_treatment.length > 0 && (
+                        <div className="border border-border rounded bg-card px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                        Fair Market Price by {card.product_type === 'Single' ? 'Treatment' : 'Variant'}
+                                    </span>
+                                </div>
+                                <div className="h-4 w-px bg-border hidden sm:block"></div>
+                                {pricingData.by_treatment.map((item, idx) => (
+                                    <div key={idx} className="flex items-center gap-2">
+                                        <span
+                                            className="px-1.5 py-0.5 rounded text-[9px] uppercase font-bold"
+                                            style={{
+                                                backgroundColor: `${getTreatmentColor(item.treatment)}20`,
+                                                color: getTreatmentColor(item.treatment)
+                                            }}
                                         >
-                                            <option value="all">All Treatments</option>
-                                            {uniqueTreatments.map(t => (
-                                                <option key={t} value={t}>{t}</option>
-                                            ))}
-                                        </select>
+                                            {simplifyTreatment(item.treatment)}
+                                        </span>
+                                        <span className="font-mono font-bold text-blue-400">
+                                            ${item.fmp?.toFixed(2) || '---'}
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground font-mono">
+                                            ({item.sales_count})
+                                        </span>
                                     </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Sales Table (Full Width) */}
+                    <div className="border border-border rounded bg-card overflow-hidden">
+                        <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/20">
+                            <div className="flex items-center gap-4">
+                                <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                                    Sales & Listings
+                                    <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px]">{filteredData.length || 0}</span>
+                                </h3>
+
+                                {/* Filters */}
+                                <div className="flex items-center gap-2">
+                                    <Filter className="w-3 h-3 text-muted-foreground" />
+                                    <select
+                                        className="bg-background border border-border rounded text-[10px] uppercase px-2 py-1 focus:outline-none focus:border-primary"
+                                        value={treatmentFilter}
+                                        onChange={(e) => setTreatmentFilter(e.target.value)}
+                                    >
+                                        <option value="all">All Treatments</option>
+                                        {uniqueTreatments.map(t => (
+                                            <option key={t} value={t}>{t}</option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
+                        </div>
 
-                            <div className="overflow-y-auto max-h-[500px]">
-                                <table className="w-full text-sm text-left table-fixed">
-                                    <colgroup>
-                                        <col className="w-20" />
-                                        <col className="w-20" />
-                                        <col className="w-24" />
-                                        <col />
-                                        <col className="w-16" />
-                                    </colgroup>
-                                    <thead className="text-xs uppercase bg-zinc-100 text-zinc-600 sticky top-0">
-                                        {table.getHeaderGroups().map(headerGroup => (
-                                            <tr key={headerGroup.id}>
-                                                {headerGroup.headers.map(header => (
-                                                    <th key={header.id} className="px-3 py-2 font-medium border-b border-border">
-                                                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                                    </th>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="text-xs uppercase bg-muted/30 text-muted-foreground sticky top-0">
+                                    {table.getHeaderGroups().map(headerGroup => (
+                                        <tr key={headerGroup.id}>
+                                            {headerGroup.headers.map(header => (
+                                                <th key={header.id} className="px-4 py-3 font-medium border-b border-border whitespace-nowrap">
+                                                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </thead>
+                                <tbody className="divide-y divide-border/50">
+                                    {isLoadingHistory ? (
+                                        <tr><td colSpan={5} className="p-12 text-center text-muted-foreground animate-pulse">Fetching ledger data...</td></tr>
+                                    ) : table.getRowModel().rows?.length ? (
+                                        table.getRowModel().rows.map(row => (
+                                            <tr
+                                                key={row.id}
+                                                className="hover:bg-muted/30 transition-colors cursor-pointer group"
+                                                onClick={() => setSelectedListing(row.original)}
+                                            >
+                                                {row.getVisibleCells().map(cell => (
+                                                    <td key={cell.id} className="px-4 py-3">
+                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                    </td>
                                                 ))}
                                             </tr>
-                                        ))}
-                                    </thead>
-                                    <tbody className="divide-y divide-border/50">
-                                        {isLoadingHistory ? (
-                                            <tr><td colSpan={5} className="p-12 text-center text-muted-foreground animate-pulse">Fetching ledger data...</td></tr>
-                                        ) : table.getRowModel().rows?.length ? (
-                                            table.getRowModel().rows.map(row => (
-                                                <tr
-                                                    key={row.id}
-                                                    className="hover:bg-muted/30 transition-colors cursor-pointer group"
-                                                    onClick={() => setSelectedListing(row.original)}
-                                                >
-                                                    {row.getVisibleCells().map(cell => (
-                                                        <td key={cell.id} className="px-3 py-2 truncate">
-                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan={5} className="p-12 text-center text-muted-foreground text-xs uppercase border-dashed">
-                                                    No verified sales recorded in this period.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={5} className="p-12 text-center text-muted-foreground text-xs uppercase border-dashed">
+                                                No verified sales recorded in this period.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
 
-                            {/* Pagination Controls */}
-                            {table.getPageCount() > 1 && (
-                                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/10">
-                                    <div className="flex-1 flex justify-between sm:hidden">
+                        {/* Pagination Controls */}
+                        {table.getPageCount() > 1 && (
+                            <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/10">
+                                <div className="flex-1 flex justify-between sm:hidden">
+                                    <button
+                                        onClick={() => table.previousPage()}
+                                        disabled={!table.getCanPreviousPage()}
+                                        className="relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-muted-foreground bg-card hover:bg-muted/50 disabled:opacity-50"
+                                    >
+                                        Previous
+                                    </button>
+                                    <button
+                                        onClick={() => table.nextPage()}
+                                        disabled={!table.getCanNextPage()}
+                                        className="ml-3 relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-muted-foreground bg-card hover:bg-muted/50 disabled:opacity-50"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">
+                                            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-1">
                                         <button
                                             onClick={() => table.previousPage()}
                                             disabled={!table.getCanPreviousPage()}
-                                            className="relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-muted-foreground bg-card hover:bg-muted/50 disabled:opacity-50"
+                                            className="px-2 py-1 rounded border border-border bg-card text-xs font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
                                         >
-                                            Previous
+                                            <ChevronLeft className="h-4 w-4" />
                                         </button>
                                         <button
                                             onClick={() => table.nextPage()}
                                             disabled={!table.getCanNextPage()}
-                                            className="ml-3 relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-muted-foreground bg-card hover:bg-muted/50 disabled:opacity-50"
+                                            className="px-2 py-1 rounded border border-border bg-card text-xs font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
                                         >
-                                            Next
+                                            <ChevronRight className="h-4 w-4" />
                                         </button>
                                     </div>
-                                    <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">
-                                                Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-1">
-                                            <button
-                                                onClick={() => table.previousPage()}
-                                                disabled={!table.getCanPreviousPage()}
-                                                className="px-2 py-1 rounded border border-border bg-card text-xs font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
-                                            >
-                                                <ChevronLeft className="h-4 w-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => table.nextPage()}
-                                                disabled={!table.getCanNextPage()}
-                                                className="px-2 py-1 rounded border border-border bg-card text-xs font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
-                                            >
-                                                <ChevronRight className="h-4 w-4" />
-                                            </button>
-                                        </div>
-                                    </div>
                                 </div>
-                            )}
-                        </div>
-
-                        {/* FMP by Treatment/Variant Table */}
-                        <div className="border border-border rounded bg-card overflow-hidden">
-                            <div className="px-6 py-4 border-b border-border bg-muted/20">
-                                <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                                    FMP by {card.product_type === 'Single' ? 'Treatment' : 'Variant'}
-                                    {pricingData?.by_treatment && (
-                                        <span className="bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded text-[10px]">
-                                            {pricingData.by_treatment.length}
-                                        </span>
-                                    )}
-                                </h3>
-                                <p className="text-[10px] text-muted-foreground mt-1">
-                                    {card.product_type === 'Single'
-                                        ? 'Based on confirmed sales only (30d median)'
-                                        : `Based on confirmed ${card.product_type?.toLowerCase() || 'product'} sales only (30d median)`
-                                    }
-                                </p>
                             </div>
-
-                            <div className="overflow-y-auto max-h-[500px]">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="text-xs uppercase bg-zinc-100 text-zinc-600 sticky top-0">
-                                        <tr>
-                                            <th className="px-4 py-2 font-medium border-b border-border">
-                                                {card.product_type === 'Single' ? 'Treatment' : 'Condition'}
-                                            </th>
-                                            <th className="px-4 py-2 font-medium border-b border-border text-right">FMP</th>
-                                            <th className="px-4 py-2 font-medium border-b border-border text-right">Range</th>
-                                            <th className="px-4 py-2 font-medium border-b border-border text-right">Sales</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border/50">
-                                        {isLoadingPricing ? (
-                                            <tr><td colSpan={4} className="p-12 text-center text-muted-foreground animate-pulse">Calculating FMP...</td></tr>
-                                        ) : pricingData?.by_treatment?.length ? (
-                                            pricingData.by_treatment.map((item, idx) => (
-                                                <tr key={idx} className="hover:bg-muted/30 transition-colors">
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <span
-                                                            className="px-2 py-1 rounded text-[10px] uppercase font-bold border inline-block"
-                                                            style={{
-                                                                borderColor: getTreatmentColor(item.treatment),
-                                                                backgroundColor: `${getTreatmentColor(item.treatment)}20`,
-                                                                color: getTreatmentColor(item.treatment)
-                                                            }}
-                                                        >
-                                                            {simplifyTreatment(item.treatment)}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap text-right">
-                                                        <span className="font-mono font-bold text-blue-400">
-                                                            ${item.fmp?.toFixed(2) || '---'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap text-right">
-                                                        <span className="font-mono text-xs text-muted-foreground">
-                                                            ${item.min_price?.toFixed(0) || '?'} - ${item.max_price?.toFixed(0) || '?'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap text-right">
-                                                        <span className="font-mono text-xs text-muted-foreground">
-                                                            {item.sales_count}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan={4} className="p-12 text-center text-muted-foreground text-xs uppercase">
-                                                    No treatment data available
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {/* FMP Info Footer */}
-                            <div className="px-4 py-3 border-t border-border bg-muted/10">
-                                {pricingData?.breakdown ? (
-                                    <>
-                                        <div className="text-[10px] text-muted-foreground uppercase mb-2 font-bold">FMP Formula Breakdown</div>
-                                        <div className="grid grid-cols-2 gap-2 text-[10px]">
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Base Price:</span>
-                                                <span className="font-mono">${pricingData.breakdown.base_set_price?.toFixed(2) || '---'}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Rarity Mult:</span>
-                                                <span className="font-mono">{pricingData.breakdown.rarity_multiplier}x</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Liquidity Adj:</span>
-                                                <span className="font-mono">{pricingData.breakdown.liquidity_adjustment}x</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Floor (4 lowest):</span>
-                                                <span className="font-mono text-emerald-400">${pricingData.floor_price?.toFixed(2) || '---'}</span>
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : pricingData ? (
-                                    <>
-                                        <div className="text-[10px] text-muted-foreground uppercase mb-2 font-bold">
-                                            {pricingData.product_type} Pricing
-                                        </div>
-                                        <div className="text-[10px] text-muted-foreground">
-                                            FMP = 30-day median price (formula N/A for {pricingData.product_type}s)
-                                        </div>
-                                        <div className="flex justify-between mt-2 text-[10px]">
-                                            <span className="text-muted-foreground">Floor (4 lowest):</span>
-                                            <span className="font-mono text-emerald-400">${pricingData.floor_price?.toFixed(2) || '---'}</span>
-                                        </div>
-                                    </>
-                                ) : null}
-                            </div>
-                        </div>
+                        )}
                     </div>
+
                 </div>
             </div>
         </div>
@@ -1453,9 +1395,17 @@ function CardDetail() {
                                 </div>
                             </div>
                             <div>
-                                <div className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-1">Date</div>
+                                <div className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-1">
+                                    {selectedListing.listing_type === 'active' ? 'Listed' : 'Sold'}
+                                </div>
                                 <div className="text-sm font-mono">
-                                    {selectedListing.sold_date ? new Date(selectedListing.sold_date).toLocaleDateString() : 'N/A'}
+                                    {selectedListing.sold_date
+                                        ? new Date(selectedListing.sold_date).toLocaleDateString()
+                                        : selectedListing.listed_at
+                                            ? new Date(selectedListing.listed_at).toLocaleDateString()
+                                            : selectedListing.scraped_at
+                                                ? new Date(selectedListing.scraped_at).toLocaleDateString()
+                                                : 'N/A'}
                                 </div>
                             </div>
                         </div>
@@ -1470,13 +1420,7 @@ function CardDetail() {
                             </div>
                             <div>
                                 <div className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-1">Treatment</div>
-                                <span className={clsx("px-2 py-1 rounded text-[10px] uppercase font-bold border inline-block", 
-                                    selectedListing.treatment?.includes("Foil") ? "border-purple-800 bg-purple-900/20 text-purple-500" : 
-                                    selectedListing.treatment?.includes("Serialized") ? "border-amber-800 bg-amber-900/20 text-amber-500" :
-                                    "border-zinc-800 bg-zinc-900/20 text-zinc-500"
-                                )}>
-                                    {selectedListing.treatment || 'Classic Paper'}
-                                </span>
+                                <TreatmentBadge treatment={selectedListing.treatment || 'Classic Paper'} size="xs" />
                             </div>
                         </div>
 
@@ -1486,6 +1430,88 @@ function CardDetail() {
                                 {selectedListing.bid_count ?? '0'}
                              </div>
                         </div>
+
+                        {/* Traits/Treatment Section */}
+                        {(selectedListing.traits || selectedListing.treatment) && (
+                            <div className="pt-6 border-t border-border">
+                                <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <div className={clsx("w-1 h-4 rounded-full", selectedListing.traits ? "bg-cyan-500" : "bg-purple-500")}></div>
+                                    {selectedListing.traits ? 'Traits' : 'Treatment'}
+                                    {selectedListing.traits && selectedListing.traits.length > 3 && (
+                                        <span className="text-[10px] text-muted-foreground font-normal ml-2">
+                                            ({selectedListing.traits.length} total)
+                                        </span>
+                                    )}
+                                </h3>
+                                <div className="bg-muted/10 rounded p-4 border border-border space-y-3">
+                                    {/* Show traits if available (max 3, then +N more) */}
+                                    {selectedListing.traits && selectedListing.traits.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {selectedListing.traits.slice(0, 3).map((trait, idx) => (
+                                                <div key={idx} className="flex justify-between items-center">
+                                                    <span className="text-[10px] text-muted-foreground uppercase">
+                                                        {trait.trait_type}
+                                                    </span>
+                                                    <span
+                                                        className="px-2 py-0.5 rounded text-[10px] font-bold border"
+                                                        style={{
+                                                            borderColor: trait.trait_type.toLowerCase() === 'hierarchy' ? '#06b6d450' :
+                                                                        trait.trait_type.toLowerCase() === 'legendary' && trait.value.toLowerCase() === 'yes' ? '#f59e0b50' :
+                                                                        trait.trait_type.toLowerCase() === 'artist' ? '#a855f750' :
+                                                                        '#71717a50',
+                                                            backgroundColor: trait.trait_type.toLowerCase() === 'hierarchy' ? '#06b6d415' :
+                                                                            trait.trait_type.toLowerCase() === 'legendary' && trait.value.toLowerCase() === 'yes' ? '#f59e0b15' :
+                                                                            trait.trait_type.toLowerCase() === 'artist' ? '#a855f715' :
+                                                                            '#71717a15',
+                                                            color: trait.trait_type.toLowerCase() === 'hierarchy' ? '#06b6d4' :
+                                                                   trait.trait_type.toLowerCase() === 'legendary' && trait.value.toLowerCase() === 'yes' ? '#f59e0b' :
+                                                                   trait.trait_type.toLowerCase() === 'artist' ? '#a855f7' :
+                                                                   '#a1a1aa'
+                                                        }}
+                                                    >
+                                                        {trait.value}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                            {selectedListing.traits.length > 3 && (
+                                                <div className="text-[10px] text-muted-foreground text-center pt-1">
+                                                    + {selectedListing.traits.length - 3} more attributes
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        /* Fallback to treatment if no traits */
+                                        <div className="flex flex-wrap gap-2">
+                                            <span
+                                                className="px-2 py-1 rounded text-[10px] uppercase font-bold border"
+                                                style={{
+                                                    borderColor: `${getTreatmentColor(selectedListing.treatment || '')}50`,
+                                                    backgroundColor: `${getTreatmentColor(selectedListing.treatment || '')}15`,
+                                                    color: getTreatmentColor(selectedListing.treatment || '')
+                                                }}
+                                            >
+                                                {selectedListing.treatment}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {/* Show PSA grade as trait if graded */}
+                                    {isPSAGraded(selectedListing.title).graded && (
+                                        <div className="flex justify-between items-center pt-2 border-t border-border/50">
+                                            <span className="text-[10px] text-muted-foreground uppercase">Grading</span>
+                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-amber-700 bg-amber-900/30 text-amber-400">
+                                                PSA {isPSAGraded(selectedListing.title).grade}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {/* Note about viewing on OpenSea if no traits loaded yet */}
+                                    {!selectedListing.traits && selectedListing.url?.includes('opensea') && (
+                                        <p className="text-[10px] text-muted-foreground pt-2 border-t border-border/50">
+                                            View full traits on the OpenSea listing.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Card Metadata Context */}
                         <div className="pt-6 border-t border-border">
@@ -1499,15 +1525,48 @@ function CardDetail() {
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-xs text-muted-foreground uppercase">Set</span>
-                                    <span className="text-xs font-bold">{card?.set_name}</span>
+                                    <span className="text-xs font-bold">
+                                        {card?.set_name}
+                                        {selectedListing.url?.includes('opensea') && (
+                                            <span className="text-[10px] text-cyan-400 ml-1">* OpenSea</span>
+                                        )}
+                                        {selectedListing.url?.includes('ebay') && (
+                                            <span className="text-[10px] text-blue-400 ml-1">* eBay</span>
+                                        )}
+                                        {selectedListing.url?.includes('blokpax') && (
+                                            <span className="text-[10px] text-purple-400 ml-1">* Blokpax</span>
+                                        )}
+                                    </span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-xs text-muted-foreground uppercase">Rarity</span>
-                                    <span className="text-xs font-bold">{card?.rarity_name || card?.rarity_id}</span>
-                                </div>
+                                {/* Show Collection Address for NFTs, Rarity for others */}
+                                {selectedListing.url?.includes('opensea') ? (
+                                    <div className="flex justify-between">
+                                        <span className="text-xs text-muted-foreground uppercase">Collection</span>
+                                        <span className="text-xs font-bold font-mono">
+                                            {(() => {
+                                                // Extract contract address from OpenSea URL
+                                                const match = selectedListing.url?.match(/opensea\.io\/(?:item|assets)\/[^/]+\/([^/]+)/)
+                                                if (match && match[1]) {
+                                                    const addr = match[1]
+                                                    // Truncate address: 0x1234...5678
+                                                    if (addr.startsWith('0x') && addr.length > 12) {
+                                                        return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+                                                    }
+                                                    return addr.length > 15 ? `${addr.slice(0, 12)}...` : addr
+                                                }
+                                                return 'N/A'
+                                            })()}
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <div className="flex justify-between">
+                                        <span className="text-xs text-muted-foreground uppercase">Rarity</span>
+                                        <span className="text-xs font-bold">{card?.rarity_name || card?.rarity_id}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
-                        
+
                         {/* Seller Info */}
                         {(selectedListing.seller_name || selectedListing.condition || selectedListing.shipping_cost != null) && (
                         <div className="pt-6 border-t border-border">
@@ -1550,6 +1609,24 @@ function CardDetail() {
                         </div>
                         )}
 
+                        {/* Report Listing Button */}
+                        <div className="pt-6 border-t border-border">
+                            <button
+                                onClick={() => {
+                                    setReportReason('')
+                                    setReportNotes('')
+                                    setReportSubmitted(false)
+                                    setShowReportModal(true)
+                                }}
+                                className="flex items-center justify-center gap-2 w-full border border-amber-700/50 hover:border-amber-600 bg-amber-900/10 hover:bg-amber-900/20 text-amber-500 text-xs uppercase font-bold py-3 rounded transition-colors"
+                            >
+                                <Flag className="w-3 h-3" /> Report Listing
+                            </button>
+                            <p className="text-[10px] text-center text-muted-foreground mt-2">
+                                Flag incorrect, fake, or duplicate listings
+                            </p>
+                        </div>
+
                         {/* Listing Info */}
                         <div className="pt-6 border-t border-border">
                             <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -1557,15 +1634,44 @@ function CardDetail() {
                                 Listing Info
                             </h3>
                             <div className="bg-muted/10 rounded p-4 border border-border space-y-3 text-xs">
-                                {selectedListing.description ? (
+                                {selectedListing.description && (
                                     <p className="text-muted-foreground italic">"{selectedListing.description}"</p>
-                                ) : !selectedListing.seller_name && (
-                                    <p className="text-muted-foreground">No additional details provided for this listing.</p>
                                 )}
-                                <div className="pt-2 border-t border-border/50 mt-2">
-                                    <div className="text-foreground font-bold mb-1">Source</div>
-                                    <p className="text-muted-foreground">Verified Market Data aggregated from {selectedListing.url?.includes('ebay') ? 'eBay' : 'External Market'}.</p>
+                                {/* Platform Info */}
+                                <div className={selectedListing.description ? "pt-2 border-t border-border/50 mt-2" : ""}>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-muted-foreground">Platform</span>
+                                        <span className={clsx("font-bold",
+                                            selectedListing.url?.includes('opensea') ? "text-cyan-400" :
+                                            selectedListing.url?.includes('ebay') ? "text-blue-400" :
+                                            selectedListing.url?.includes('blokpax') ? "text-purple-400" :
+                                            "text-muted-foreground"
+                                        )}>
+                                            {selectedListing.url?.includes('opensea') ? 'OpenSea' :
+                                             selectedListing.url?.includes('ebay') ? 'eBay' :
+                                             selectedListing.url?.includes('blokpax') ? 'Blokpax' :
+                                             'External'}
+                                        </span>
+                                    </div>
                                 </div>
+                                {/* Scraped timestamp */}
+                                <div className="flex justify-between items-center">
+                                    <span className="text-muted-foreground">Data Updated</span>
+                                    <span className="font-mono text-muted-foreground">
+                                        {selectedListing.scraped_at
+                                            ? new Date(selectedListing.scraped_at).toLocaleDateString()
+                                            : 'N/A'}
+                                    </span>
+                                </div>
+                                {/* External ID if available */}
+                                {selectedListing.url && (
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-muted-foreground">Listing ID</span>
+                                        <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[150px]">
+                                            {selectedListing.id}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -1598,6 +1704,182 @@ function CardDetail() {
                 className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
                 onClick={() => setSelectedListing(null)}
             />
+        )}
+
+        {/* Add to Portfolio Modal */}
+        {card && (
+            <AddToPortfolioModal
+                card={{
+                    id: card.id,
+                    name: card.name,
+                    set_name: card.set_name,
+                    floor_price: card.floor_price,
+                    latest_price: card.latest_price,
+                    product_type: card.product_type
+                }}
+                isOpen={showAddModal}
+                onClose={() => setShowAddModal(false)}
+            />
+        )}
+
+        {/* Report Listing Modal */}
+        {showReportModal && selectedListing && (
+            <>
+                <div className="fixed inset-0 bg-black/70 z-[60] backdrop-blur-sm" onClick={() => setShowReportModal(false)} />
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                    <div className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-md">
+                        <div className="p-6 border-b border-border flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-amber-900/30 border border-amber-700 flex items-center justify-center">
+                                    <AlertTriangle className="w-5 h-5 text-amber-500" />
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-bold uppercase tracking-tight">Report Listing</h2>
+                                    <p className="text-xs text-muted-foreground">ID: {selectedListing.id}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowReportModal(false)}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {reportSubmitted ? (
+                                <div className="text-center py-8">
+                                    <div className="w-16 h-16 rounded-full bg-emerald-900/30 border border-emerald-700 flex items-center justify-center mx-auto mb-4">
+                                        <svg className="w-8 h-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-lg font-bold mb-2">Report Submitted</h3>
+                                    <p className="text-sm text-muted-foreground mb-6">
+                                        Thank you for helping us maintain data quality. We'll review this listing.
+                                    </p>
+                                    <button
+                                        onClick={() => setShowReportModal(false)}
+                                        className="px-6 py-2 bg-primary text-primary-foreground rounded text-sm font-bold uppercase hover:bg-primary/90 transition-colors"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Listing Preview */}
+                                    <div className="bg-muted/20 rounded p-3 border border-border">
+                                        <div className="text-[10px] uppercase text-muted-foreground mb-1">Reporting:</div>
+                                        <div className="text-sm font-medium truncate">{selectedListing.title}</div>
+                                        <div className="text-xs text-emerald-500 font-mono mt-1">${selectedListing.price.toFixed(2)}</div>
+                                    </div>
+
+                                    {/* Reason Selection */}
+                                    <div>
+                                        <label className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-3 block">
+                                            Reason for Report *
+                                        </label>
+                                        <div className="space-y-2">
+                                            {[
+                                                { value: 'wrong_price', label: 'Incorrect Price', desc: 'The price doesn\'t match the actual sale' },
+                                                { value: 'fake_listing', label: 'Fake/Scam Listing', desc: 'This listing appears to be fraudulent' },
+                                                { value: 'duplicate', label: 'Duplicate Entry', desc: 'This listing is already recorded' },
+                                                { value: 'wrong_card', label: 'Wrong Card', desc: 'This is a different card or product' },
+                                                { value: 'other', label: 'Other', desc: 'Another issue not listed above' }
+                                            ].map((option) => (
+                                                <label
+                                                    key={option.value}
+                                                    className={clsx(
+                                                        "flex items-start gap-3 p-3 rounded border cursor-pointer transition-colors",
+                                                        reportReason === option.value
+                                                            ? "border-primary bg-primary/10"
+                                                            : "border-border hover:border-muted-foreground/50"
+                                                    )}
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="reportReason"
+                                                        value={option.value}
+                                                        checked={reportReason === option.value}
+                                                        onChange={(e) => setReportReason(e.target.value)}
+                                                        className="mt-1"
+                                                    />
+                                                    <div>
+                                                        <div className="text-sm font-bold">{option.label}</div>
+                                                        <div className="text-xs text-muted-foreground">{option.desc}</div>
+                                                    </div>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Additional Notes */}
+                                    <div>
+                                        <label className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-2 block">
+                                            Additional Details (Optional)
+                                        </label>
+                                        <textarea
+                                            value={reportNotes}
+                                            onChange={(e) => setReportNotes(e.target.value)}
+                                            placeholder="Provide any additional context..."
+                                            className="w-full bg-background border border-border rounded p-3 text-sm resize-none h-20 focus:outline-none focus:border-primary"
+                                        />
+                                    </div>
+
+                                    {/* Submit Button */}
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => setShowReportModal(false)}
+                                            className="flex-1 px-4 py-3 border border-border rounded text-sm font-bold uppercase hover:bg-muted/50 transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                if (!reportReason) return
+                                                setReportSubmitting(true)
+                                                try {
+                                                    await api.post('market/reports', {
+                                                        json: {
+                                                            listing_id: selectedListing.id,
+                                                            card_id: parseInt(cardId),
+                                                            reason: reportReason,
+                                                            notes: reportNotes || null,
+                                                            listing_title: selectedListing.title,
+                                                            listing_price: selectedListing.price,
+                                                            listing_url: selectedListing.url
+                                                        }
+                                                    }).json()
+                                                    setReportSubmitted(true)
+                                                } catch (err) {
+                                                    console.error('Failed to submit report:', err)
+                                                    alert('Failed to submit report. Please try again.')
+                                                } finally {
+                                                    setReportSubmitting(false)
+                                                }
+                                            }}
+                                            disabled={!reportReason || reportSubmitting}
+                                            className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-500 disabled:bg-amber-600/50 disabled:cursor-not-allowed text-white rounded text-sm font-bold uppercase transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            {reportSubmitting ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    Submitting...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Flag className="w-4 h-4" />
+                                                    Submit Report
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </>
         )}
       </div>
     </>
