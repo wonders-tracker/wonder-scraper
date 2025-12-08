@@ -68,6 +68,25 @@ const TREATMENTS = [
 const SOURCES = ['eBay', 'Blokpax', 'TCGPlayer', 'LGS', 'Trade', 'Pack Pull', 'Other']
 const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
 
+// Treatment colors matching TreatmentBadge
+const TREATMENT_COLORS: Record<string, string> = {
+  'Classic Paper': '#71717a',     // zinc-500
+  'Classic Foil': '#0ea5e9',      // sky-500
+  'Full Art': '#6366f1',          // indigo-500
+  'Full Art Foil': '#10b981',     // emerald-500
+  'Formless': '#a855f7',          // purple-500
+  'Formless Foil': '#d946ef',     // fuchsia-500
+  'Serialized': '#eab308',        // yellow-500
+  '1st Edition': '#f97316',       // orange-500
+  '1st Edition Foil': '#ea580c',  // orange-600
+  'Promo': '#f43f5e',             // rose-500
+  'Prerelease': '#ec4899',        // pink-500
+}
+
+const getTreatmentColor = (treatment: string): string => {
+  return TREATMENT_COLORS[treatment] || PIE_COLORS[Object.keys(TREATMENT_COLORS).length % PIE_COLORS.length]
+}
+
 function Portfolio() {
   const queryClient = useQueryClient()
   const [editingCard, setEditingCard] = useState<PortfolioCard | null>(null)
@@ -359,29 +378,95 @@ function Portfolio() {
                 </Link>
             </div>
 
-            {/* Portfolio Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div className="border border-border p-6 rounded-lg bg-card shadow-sm">
-                    <div className="text-xs text-muted-foreground uppercase mb-2">Total Value</div>
-                    <div className="text-3xl font-mono font-bold">${stats.totalValue.toFixed(2)}</div>
+            {/* Portfolio Summary - Inline Stats with Mini Pie Charts */}
+            <div className="flex flex-wrap items-center gap-6 mb-6 text-sm">
+                <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                    <span className="text-[10px] text-muted-foreground uppercase">Value</span>
+                    <span className="font-mono font-bold text-lg">${stats.totalValue.toFixed(2)}</span>
                 </div>
-                <div className="border border-border p-6 rounded-lg bg-card shadow-sm">
-                    <div className="text-xs text-muted-foreground uppercase mb-2">Total Cost</div>
-                    <div className="text-3xl font-mono text-muted-foreground">${stats.totalCost.toFixed(2)}</div>
+                <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-gray-500"></div>
+                    <span className="text-[10px] text-muted-foreground uppercase">Cost</span>
+                    <span className="font-mono text-muted-foreground text-lg">${stats.totalCost.toFixed(2)}</span>
                 </div>
-                <div className="border border-border p-6 rounded-lg bg-card shadow-sm">
-                    <div className="text-xs text-muted-foreground uppercase mb-2">Total Return</div>
-                    <div className={clsx("text-3xl font-mono font-bold", stats.totalGain >= 0 ? "text-emerald-500" : "text-red-500")}>
-                        {stats.totalGain >= 0 ? '+' : ''}{stats.totalGain.toFixed(2)}
+                <div className="flex items-center gap-2">
+                    <div className={clsx("w-1.5 h-1.5 rounded-full", stats.totalGain >= 0 ? "bg-emerald-500" : "bg-red-500")}></div>
+                    <span className="text-[10px] text-muted-foreground uppercase">Return</span>
+                    <span className={clsx("font-mono font-bold text-lg", stats.totalGain >= 0 ? "text-emerald-500" : "text-red-500")}>
+                        {stats.totalGain >= 0 ? '+' : ''}${Math.abs(stats.totalGain).toFixed(2)}
+                    </span>
+                    <span className={clsx("text-xs", stats.totalGain >= 0 ? "text-emerald-500" : "text-red-500")}>
+                        ({stats.totalGain >= 0 ? '+' : ''}{stats.totalGainPercent.toFixed(1)}%)
+                    </span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                    <span className="text-[10px] text-muted-foreground uppercase">Cards</span>
+                    <span className="font-mono font-bold text-lg">{stats.count}</span>
+                </div>
+
+                {/* Mini Pie Charts with Tooltip Legends */}
+                {treatmentPieData.length > 0 && (
+                    <div className="flex items-center gap-1 ml-4 border-l border-border pl-4 group relative">
+                        <div className="h-10 w-10">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie data={treatmentPieData} cx="50%" cy="50%" innerRadius={10} outerRadius={18} dataKey="value" strokeWidth={0}>
+                                        {treatmentPieData.map((item) => (
+                                            <Cell key={`t-${item.name}`} fill={getTreatmentColor(item.name)} />
+                                        ))}
+                                    </Pie>
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground uppercase">Treatment</span>
+                        <span className="w-4 h-4 rounded-full bg-muted flex items-center justify-center text-[9px] text-muted-foreground cursor-help">i</span>
+                        {/* Tooltip */}
+                        <div className="absolute left-0 top-full mt-2 z-50 hidden group-hover:block bg-card border border-border rounded-lg p-3 shadow-xl min-w-[140px]">
+                            <div className="text-[10px] uppercase text-muted-foreground mb-2 font-bold">By Treatment</div>
+                            {treatmentPieData.map((item) => (
+                                <div key={item.name} className="flex items-center justify-between text-xs py-0.5">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getTreatmentColor(item.name) }} />
+                                        <span className="text-muted-foreground">{item.name}</span>
+                                    </div>
+                                    <span className="font-mono ml-3">{item.value}</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                    <div className={clsx("text-xs font-bold mt-1", stats.totalGain >= 0 ? "text-emerald-500" : "text-red-500")}>
-                        {stats.totalGain >= 0 ? '+' : ''}{stats.totalGainPercent.toFixed(2)}% All Time
+                )}
+                {sourcePieData.length > 0 && (
+                    <div className="flex items-center gap-1 group relative">
+                        <div className="h-10 w-10">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie data={sourcePieData} cx="50%" cy="50%" innerRadius={10} outerRadius={18} dataKey="value" strokeWidth={0}>
+                                        {sourcePieData.map((_, index) => (
+                                            <Cell key={`s-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground uppercase">Source</span>
+                        <span className="w-4 h-4 rounded-full bg-muted flex items-center justify-center text-[9px] text-muted-foreground cursor-help">i</span>
+                        {/* Tooltip */}
+                        <div className="absolute left-0 top-full mt-2 z-50 hidden group-hover:block bg-card border border-border rounded-lg p-3 shadow-xl min-w-[120px]">
+                            <div className="text-[10px] uppercase text-muted-foreground mb-2 font-bold">By Source</div>
+                            {sourcePieData.map((item, idx) => (
+                                <div key={item.name} className="flex items-center justify-between text-xs py-0.5">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
+                                        <span className="text-muted-foreground">{item.name}</span>
+                                    </div>
+                                    <span className="font-mono ml-3">{item.value}</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                </div>
-                <div className="border border-border p-6 rounded-lg bg-card shadow-sm">
-                    <div className="text-xs text-muted-foreground uppercase mb-2">Total Cards</div>
-                    <div className="text-3xl font-mono">{stats.count}</div>
-                </div>
+                )}
             </div>
 
             {/* Portfolio Value Chart */}
@@ -449,93 +534,6 @@ function Portfolio() {
                             <span className="text-muted-foreground">Cost Basis</span>
                         </div>
                     </div>
-                </div>
-            )}
-
-            {/* Breakdown Charts */}
-            {(treatmentPieData.length > 0 || sourcePieData.length > 0) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    {/* By Treatment */}
-                    {treatmentPieData.length > 0 && (
-                        <div className="border border-border rounded-lg bg-card p-6">
-                            <div className="flex items-center gap-2 mb-4">
-                                <Package className="w-4 h-4 text-primary" />
-                                <h3 className="text-sm font-bold uppercase tracking-widest">By Treatment</h3>
-                            </div>
-                            <div className="flex items-center">
-                                <div className="h-32 w-32 min-w-[128px] min-h-[128px]">
-                                    <ResponsiveContainer width="100%" height="100%" minWidth={128} minHeight={128}>
-                                        <PieChart>
-                                            <Pie
-                                                data={treatmentPieData}
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius={25}
-                                                outerRadius={50}
-                                                dataKey="value"
-                                            >
-                                                {treatmentPieData.map((_, index) => (
-                                                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                                ))}
-                                            </Pie>
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </div>
-                                <div className="flex-1 ml-4 space-y-1">
-                                    {treatmentPieData.map((item, idx) => (
-                                        <div key={item.name} className="flex items-center justify-between text-xs">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
-                                                <span className="text-muted-foreground">{item.name}</span>
-                                            </div>
-                                            <span className="font-mono">{item.value}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* By Source */}
-                    {sourcePieData.length > 0 && (
-                        <div className="border border-border rounded-lg bg-card p-6">
-                            <div className="flex items-center gap-2 mb-4">
-                                <BarChart3 className="w-4 h-4 text-primary" />
-                                <h3 className="text-sm font-bold uppercase tracking-widest">By Source</h3>
-                            </div>
-                            <div className="flex items-center">
-                                <div className="h-32 w-32 min-w-[128px] min-h-[128px]">
-                                    <ResponsiveContainer width="100%" height="100%" minWidth={128} minHeight={128}>
-                                        <PieChart>
-                                            <Pie
-                                                data={sourcePieData}
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius={25}
-                                                outerRadius={50}
-                                                dataKey="value"
-                                            >
-                                                {sourcePieData.map((_, index) => (
-                                                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                                ))}
-                                            </Pie>
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </div>
-                                <div className="flex-1 ml-4 space-y-1">
-                                    {sourcePieData.map((item, idx) => (
-                                        <div key={item.name} className="flex items-center justify-between text-xs">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
-                                                <span className="text-muted-foreground">{item.name}</span>
-                                            </div>
-                                            <span className="font-mono">{item.value}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
             )}
 
