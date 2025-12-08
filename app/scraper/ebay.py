@@ -305,6 +305,85 @@ def _detect_product_subtype(title: str, product_type: str = "Single") -> Optiona
     return None
 
 
+def _detect_grading(title: str) -> Optional[str]:
+    """
+    Detects grading company and grade from listing title.
+
+    Grading Companies:
+    - PSA (Professional Sports Authenticator) - scores 1-10
+    - BGS (Beckett Grading Services) - scores 1-10, with .5 increments
+    - TAG (Texas Authentication & Grading) - scores 1-10
+    - CGC (Certified Guaranty Company) - scores 1-10, with .5 increments
+    - SGC (Sportscard Guaranty Corporation) - scores 1-10
+
+    Returns: Grade string (e.g., "PSA 10", "BGS 9.5") or None for raw cards.
+    """
+    import re
+    title_upper = title.upper()
+
+    # PSA grading patterns
+    # "PSA 10", "PSA10", "PSA-10", "PSA GEM MINT 10"
+    psa_patterns = [
+        r'PSA\s*[-]?\s*(\d+(?:\.\d)?)',  # PSA 10, PSA-10, PSA10
+        r'PSA\s+GEM\s*(?:MINT|MT)?\s*(\d+)',  # PSA GEM MINT 10
+        r'PSA\s+MINT\s*(\d+)',  # PSA MINT 9
+    ]
+    for pattern in psa_patterns:
+        match = re.search(pattern, title_upper)
+        if match:
+            grade = match.group(1)
+            return f"PSA {grade}"
+
+    # BGS (Beckett) grading patterns
+    # "BGS 9.5", "BGS9.5", "BGS 10 BLACK LABEL", "BECKETT 9.5"
+    bgs_patterns = [
+        r'BGS\s*[-]?\s*(\d+(?:\.\d)?)',  # BGS 9.5, BGS-9.5
+        r'BECKETT\s*[-]?\s*(\d+(?:\.\d)?)',  # BECKETT 9.5
+        r'BGS\s+(\d+)\s*(?:BLACK\s*LABEL|PRISTINE)',  # BGS 10 BLACK LABEL
+    ]
+    for pattern in bgs_patterns:
+        match = re.search(pattern, title_upper)
+        if match:
+            grade = match.group(1)
+            return f"BGS {grade}"
+
+    # TAG (Texas Authentication & Grading) patterns
+    # "TAG 10", "TAG-10", "TAG PERFECT 10"
+    tag_patterns = [
+        r'(?<!S)TAG\s*[-]?\s*(\d+(?:\.\d)?)',  # TAG 10 (exclude STAG)
+        r'TAG\s+PERFECT\s*(\d+)',  # TAG PERFECT 10
+    ]
+    for pattern in tag_patterns:
+        match = re.search(pattern, title_upper)
+        if match:
+            grade = match.group(1)
+            return f"TAG {grade}"
+
+    # CGC grading patterns
+    # "CGC 9.8", "CGC-9.8"
+    cgc_patterns = [
+        r'CGC\s*[-]?\s*(\d+(?:\.\d)?)',  # CGC 9.8
+    ]
+    for pattern in cgc_patterns:
+        match = re.search(pattern, title_upper)
+        if match:
+            grade = match.group(1)
+            return f"CGC {grade}"
+
+    # SGC grading patterns
+    # "SGC 10", "SGC-10"
+    sgc_patterns = [
+        r'SGC\s*[-]?\s*(\d+(?:\.\d)?)',  # SGC 10
+    ]
+    for pattern in sgc_patterns:
+        match = re.search(pattern, title_upper)
+        if match:
+            grade = match.group(1)
+            return f"SGC {grade}"
+
+    return None
+
+
 def _detect_quantity(title: str, product_type: str = "Single") -> int:
     """
     Detects quantity from listing title for multi-unit listings.
@@ -929,6 +1008,9 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             # Update quantity to reflect total packs
             quantity = total_packs
 
+        # Detect grading (PSA, TAG, BGS, CGC, SGC)
+        grading = _detect_grading(metadata["title"]) if product_type == "Single" else None
+
         mp = MarketPrice(
             card_id=card_id,
             title=metadata["title"],
@@ -950,6 +1032,7 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             # Listing details
             condition=metadata.get("condition"),
             shipping_cost=metadata.get("shipping_cost"),
+            grading=grading,
             scraped_at=datetime.utcnow()
         )
 

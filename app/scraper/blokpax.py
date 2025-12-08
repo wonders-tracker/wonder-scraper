@@ -18,10 +18,12 @@ To find active listings, we must:
 This is slow but necessary - there's no API to filter by "listed only".
 """
 import httpx
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 import asyncio
+
+from sqlmodel import Session, select
 
 # Blokpax API base URL
 BLOKPAX_API_BASE = "https://api.blokpax.com/api"
@@ -988,3 +990,259 @@ async def scrape_redemption_stats(slug: str = "wotf-existence-collector-boxes") 
         "by_box_art": by_box_art,
         "redemptions": redemptions
     }
+
+
+async def scrape_preslab_sales(
+    session: Session,
+    max_pages: int = 10,
+    save_to_db: bool = True
+) -> Tuple[int, int, int]:
+    """
+    Scrape preslab sales from Blokpax and create MarketPrice records linked to cards.
+
+    Preslabs are graded singles (TAG graded) sold on Blokpax. Each preslab asset name
+    contains the card name, grade, serial, and cert ID. We parse these and link them
+    to our existing card database.
+
+    Args:
+        session: SQLModel database session
+        max_pages: Maximum pages of activity to scrape (50 items per page)
+        save_to_db: If True, save MarketPrice records to database
+
+    Returns:
+        Tuple of (sales_processed, sales_matched, sales_saved)
+    """
+    from app.models.market import MarketPrice
+    from app.scraper.preslab_parser import parse_preslab_name, find_matching_card
+
+    slug = "wotf-existence-preslabs"
+    bpx_price = await get_bpx_price()
+    if not bpx_price or bpx_price <= 0:
+        print(f"[Blokpax] Warning: Invalid BPX price ({bpx_price}), using fallback")
+        bpx_price = 0.002
+
+    sales_processed = 0
+    sales_matched = 0
+    sales_saved = 0
+
+    print(f"[Blokpax] Scraping preslab sales (max {max_pages} pages)...")
+
+    for page in range(1, max_pages + 1):
+        try:
+            activity = await fetch_storefront_activity(slug, page=page, activity_type="sales")
+            items = activity.get("data", [])
+
+            if not items:
+                break
+
+            for item in items:
+                listing = item.get("listing", {})
+
+                # Only process filled (completed) listings
+                if listing.get("listing_status") != "filled":
+                    continue
+
+                asset = item.get("asset", {})
+                asset_name = asset.get("name", "")
+
+                sales_processed += 1
+
+                # Parse the preslab name
+                parsed = parse_preslab_name(asset_name)
+                if not parsed:
+                    continue
+
+                # Find matching card in database
+                card_match = find_matching_card(parsed.card_name, session)
+                if not card_match:
+                    continue
+
+                sales_matched += 1
+
+                if not save_to_db:
+                    continue
+
+                # Check if we already have this sale (by external_id)
+                listing_id = str(listing.get("id", ""))
+                existing = session.exec(
+                    select(MarketPrice).where(
+                        MarketPrice.external_id == listing_id,
+                        MarketPrice.platform == "blokpax"
+                    )
+                ).first()
+
+                if existing:
+                    continue  # Already saved
+
+                # Get sale details
+                raw_price = listing.get("price", 0)
+                price_usd = bpx_to_usd(raw_price, bpx_price)
+                filled_at = _parse_datetime(listing.get("filled_at"))
+
+                # Extract traits from asset attributes
+                traits = []
+                for attr in asset.get("attributes", []):
+                    traits.append({
+                        "trait_type": attr.get("trait_type", ""),
+                        "value": attr.get("value", "")
+                    })
+
+                # Create MarketPrice record
+                mp = MarketPrice(
+                    card_id=card_match["id"],
+                    title=asset_name,
+                    price=round(price_usd, 2),
+                    sold_date=filled_at,
+                    listing_type="sold",
+                    treatment=parsed.treatment,
+                    grading=parsed.grading,
+                    external_id=listing_id,
+                    platform="blokpax",
+                    traits=traits if traits else None,
+                    seller_name=listing.get("seller", {}).get("address", "")[:20] if listing.get("seller") else None,
+                    scraped_at=datetime.now()
+                )
+
+                session.add(mp)
+                sales_saved += 1
+
+            # Commit after each page
+            if save_to_db:
+                session.commit()
+
+            # Rate limiting
+            await asyncio.sleep(0.5)
+
+            # Check pagination
+            meta = activity.get("meta", {})
+            if page >= meta.get("last_page", 1):
+                break
+
+        except Exception as e:
+            print(f"[Blokpax] Error fetching preslab activity page {page}: {e}")
+            break
+
+    print(f"[Blokpax] Preslab sales: {sales_processed} processed, {sales_matched} matched, {sales_saved} saved")
+    return sales_processed, sales_matched, sales_saved
+
+
+async def scrape_preslab_listings(
+    session: Session,
+    save_to_db: bool = True
+) -> Tuple[int, int, int]:
+    """
+    Scrape active preslab listings from Blokpax and create MarketPrice records.
+
+    Args:
+        session: SQLModel database session
+        save_to_db: If True, save MarketPrice records to database
+
+    Returns:
+        Tuple of (listings_processed, listings_matched, listings_saved)
+    """
+    from app.models.market import MarketPrice
+    from app.scraper.preslab_parser import parse_preslab_name, find_matching_card
+
+    slug = "wotf-existence-preslabs"
+    bpx_price = await get_bpx_price()
+    if not bpx_price or bpx_price <= 0:
+        print(f"[Blokpax] Warning: Invalid BPX price ({bpx_price}), using fallback")
+        bpx_price = 0.002
+
+    listings_processed = 0
+    listings_matched = 0
+    listings_saved = 0
+
+    print(f"[Blokpax] Scraping preslab listings...")
+
+    # Use existing scrape_all_listings function
+    all_listings = await scrape_all_listings(slug)
+
+    # Need to fetch asset details to get names (listings only have IDs)
+    # Batch fetch asset details
+    async with httpx.AsyncClient() as client:
+        for listing in all_listings:
+            try:
+                # Fetch asset details
+                url = f"{BLOKPAX_API_BASE}/storefront/{slug}/asset/{listing.asset_id}"
+                response = await client.get(url, timeout=15.0)
+                if response.status_code != 200:
+                    continue
+
+                data = response.json()
+                asset_data = data.get("data", {})
+                asset_name = asset_data.get("name", "")
+
+                listings_processed += 1
+
+                # Parse the preslab name
+                parsed = parse_preslab_name(asset_name)
+                if not parsed:
+                    continue
+
+                # Find matching card
+                card_match = find_matching_card(parsed.card_name, session)
+                if not card_match:
+                    continue
+
+                listings_matched += 1
+
+                if not save_to_db:
+                    await asyncio.sleep(0.1)
+                    continue
+
+                # Check if we already have this listing
+                existing = session.exec(
+                    select(MarketPrice).where(
+                        MarketPrice.external_id == listing.listing_id,
+                        MarketPrice.platform == "blokpax",
+                        MarketPrice.listing_type == "active"
+                    )
+                ).first()
+
+                if existing:
+                    # Update price if changed
+                    if existing.price != round(listing.price_usd, 2):
+                        existing.price = round(listing.price_usd, 2)
+                        existing.scraped_at = datetime.now()
+                        session.add(existing)
+                    continue
+
+                # Extract traits
+                traits = []
+                for attr in asset_data.get("attributes", []):
+                    traits.append({
+                        "trait_type": attr.get("trait_type", ""),
+                        "value": attr.get("value", "")
+                    })
+
+                # Create MarketPrice record for active listing
+                mp = MarketPrice(
+                    card_id=card_match["id"],
+                    title=asset_name,
+                    price=round(listing.price_usd, 2),
+                    listing_type="active",
+                    treatment=parsed.treatment,
+                    grading=parsed.grading,
+                    external_id=listing.listing_id,
+                    platform="blokpax",
+                    traits=traits if traits else None,
+                    seller_name=listing.seller_address[:20] if listing.seller_address else None,
+                    listed_at=listing.created_at,
+                    scraped_at=datetime.now()
+                )
+
+                session.add(mp)
+                listings_saved += 1
+
+                await asyncio.sleep(0.1)
+
+            except Exception as e:
+                print(f"[Blokpax] Error processing listing {listing.listing_id}: {e}")
+                continue
+
+    if save_to_db:
+        session.commit()
+
+    print(f"[Blokpax] Preslab listings: {listings_processed} processed, {listings_matched} matched, {listings_saved} saved")
+    return listings_processed, listings_matched, listings_saved
