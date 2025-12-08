@@ -653,7 +653,7 @@ def read_market_data(
     if not snapshot:
         raise HTTPException(status_code=404, detail="Market data not found for this card")
 
-    return snapshot
+    return MarketSnapshotOut.model_validate(snapshot)
 
 @router.get("/{card_id}/history")
 def read_sales_history(
@@ -679,9 +679,12 @@ def read_sales_history(
     ).order_by(desc(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at))).offset(offset).limit(limit)
     prices = session.exec(statement).all()
 
+    # Convert to output schema
+    prices_out = [MarketPriceOut.model_validate(p) for p in prices]
+
     # Return array by default (backwards compatible)
     if not paginated:
-        return prices
+        return prices_out
 
     # Get total count only when paginated (avoids extra query)
     count_stmt = select(func.count(MarketPrice.id)).where(
@@ -691,11 +694,11 @@ def read_sales_history(
     total = session.exec(count_stmt).one()
 
     return {
-        "items": [MarketPriceOut.model_validate(p) for p in prices],
+        "items": prices_out,
         "total": total,
         "offset": offset,
         "limit": limit,
-        "hasMore": offset + len(prices) < total
+        "hasMore": offset + len(prices_out) < total
     }
 
 @router.get("/{card_id}/active", response_model=List[MarketPriceOut])
@@ -713,7 +716,7 @@ def read_active_listings(
         MarketPrice.listing_type == "active"
     ).order_by(desc(MarketPrice.scraped_at)).limit(limit)
     active = session.exec(statement).all()
-    return active
+    return [MarketPriceOut.model_validate(a) for a in active]
 
 
 @router.get("/{card_id}/pricing")
@@ -787,4 +790,4 @@ def read_snapshot_history(
     ).order_by(desc(MarketSnapshot.timestamp)).limit(limit)
 
     snapshots = session.exec(statement).all()
-    return snapshots
+    return [MarketSnapshotOut.model_validate(s) for s in snapshots]

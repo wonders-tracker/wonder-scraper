@@ -35,6 +35,8 @@ class BlokpaxStorefrontOut(BaseModel):
     listed_count: int
     updated_at: datetime
 
+    model_config = {"from_attributes": True}
+
 
 class BlokpaxSnapshotOut(BaseModel):
     id: int
@@ -45,6 +47,8 @@ class BlokpaxSnapshotOut(BaseModel):
     listed_count: int
     total_tokens: int
     timestamp: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class BlokpaxSaleOut(BaseModel):
@@ -59,6 +63,8 @@ class BlokpaxSaleOut(BaseModel):
     buyer_address: str
     filled_at: datetime
     card_id: Optional[int] = None
+
+    model_config = {"from_attributes": True}
 
 
 class BlokpaxAssetOut(BaseModel):
@@ -75,6 +81,8 @@ class BlokpaxAssetOut(BaseModel):
     floor_price_usd: Optional[float] = None
     card_id: Optional[int] = None
 
+    model_config = {"from_attributes": True}
+
 
 class BlokpaxOfferOut(BaseModel):
     id: int
@@ -88,6 +96,8 @@ class BlokpaxOfferOut(BaseModel):
     created_at: Optional[datetime] = None
     scraped_at: datetime
 
+    model_config = {"from_attributes": True}
+
 
 @router.get("/storefronts", response_model=List[BlokpaxStorefrontOut])
 def list_storefronts(
@@ -99,7 +109,7 @@ def list_storefronts(
     storefronts = session.exec(
         select(BlokpaxStorefront).order_by(BlokpaxStorefront.name)
     ).all()
-    return storefronts
+    return [BlokpaxStorefrontOut.model_validate(s) for s in storefronts]
 
 
 @router.get("/storefronts/{slug}", response_model=BlokpaxStorefrontOut)
@@ -117,7 +127,7 @@ def get_storefront(
     if not storefront:
         raise HTTPException(status_code=404, detail="Storefront not found")
 
-    return storefront
+    return BlokpaxStorefrontOut.model_validate(storefront)
 
 
 @router.get("/storefronts/{slug}/snapshots", response_model=List[BlokpaxSnapshotOut])
@@ -148,7 +158,7 @@ def get_storefront_snapshots(
         .limit(limit)
     ).all()
 
-    return snapshots
+    return [BlokpaxSnapshotOut.model_validate(s) for s in snapshots]
 
 
 @router.get("/storefronts/{slug}/sales", response_model=List[BlokpaxSaleOut])
@@ -179,7 +189,7 @@ def get_storefront_sales(
         .limit(limit)
     ).all()
 
-    return sales
+    return [BlokpaxSaleOut.model_validate(s) for s in sales]
 
 
 @router.get("/sales", response_model=List[BlokpaxSaleOut])
@@ -200,7 +210,7 @@ def list_all_sales(
         .limit(limit)
     ).all()
 
-    return sales
+    return [BlokpaxSaleOut.model_validate(s) for s in sales]
 
 
 @router.get("/assets", response_model=List[BlokpaxAssetOut])
@@ -220,7 +230,7 @@ def list_assets(
     query = query.order_by(BlokpaxAssetDB.floor_price_usd.asc()).limit(limit)
 
     assets = session.exec(query).all()
-    return assets
+    return [BlokpaxAssetOut.model_validate(a) for a in assets]
 
 
 @router.get("/summary")
@@ -292,7 +302,7 @@ def list_offers(
     query = query.order_by(desc(BlokpaxOffer.price_usd)).limit(limit)
 
     offers = session.exec(query).all()
-    return offers
+    return [BlokpaxOfferOut.model_validate(o) for o in offers]
 
 
 @router.get("/offers/asset/{asset_id}", response_model=List[BlokpaxOfferOut])
@@ -312,4 +322,4 @@ def get_asset_offers(
     query = query.order_by(desc(BlokpaxOffer.price_usd))
 
     offers = session.exec(query).all()
-    return offers
+    return [BlokpaxOfferOut.model_validate(o) for o in offers]

@@ -65,6 +65,10 @@ class MarketPrice(SQLModel, table=True):
     condition: Optional[str] = Field(default=None) # "New", "Like New", "Used", etc.
     shipping_cost: Optional[float] = Field(default=None) # Shipping price (0 = free)
 
+    # Grading (for slabbed cards)
+    # Format: "PSA 10", "BGS 9.5", "TAG 10", "CGC 9.8", null for raw
+    grading: Optional[str] = Field(default=None, index=True)
+
     # NFT Traits (for OpenSea/Blokpax listings)
     # Format: [{"trait_type": "Hierarchy", "value": "Spell"}, {"trait_type": "Artist", "value": "Romall Smith"}, ...]
     traits: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON))

@@ -18,6 +18,7 @@ from app.scraper.blokpax import (
     get_bpx_price,
     scrape_storefront_floor,
     scrape_recent_sales,
+    scrape_preslab_sales,
     is_wotf_asset,
 )
 from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error, log_market_insights
@@ -249,6 +250,16 @@ async def job_update_blokpax_data():
             except Exception as e:
                 print(f"[Blokpax] Error on {slug}: {e}")
                 errors += 1
+
+        # Scrape preslab sales and link to cards
+        try:
+            with Session(engine) as session:
+                processed, matched, saved = await scrape_preslab_sales(session, max_pages=5)
+                total_sales += saved
+                print(f"[Blokpax] Preslab sales: {saved} new sales linked to cards")
+        except Exception as e:
+            print(f"[Blokpax] Error scraping preslab sales: {e}")
+            errors += 1
 
     except Exception as e:
         print(f"[Blokpax] Fatal error: {e}")
