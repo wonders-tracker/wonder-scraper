@@ -56,13 +56,14 @@ export const Route = createRoute({
   }
 })
 
+// Actual WOTF card treatments
 const TREATMENTS = [
-  'Classic Paper', 'Classic Foil', 'Starfoil', 'Full Art', 'Full Art Foil',
-  'Alt Art', 'Alternate Art', 'Formless Foil', 'Formless Common',
-  'Serialized', 'OCM Serialized', 'Epic Alt Art Serialized',
+  'Classic Paper', 'Classic Foil', 'Starfoil',
+  'Full Art', 'Full Art Foil',
+  'Formless', 'Formless Foil',
+  'Serialized',
   '1st Edition', '1st Edition Foil',
-  'Holo Foil', 'Red Foil', 'Stonefoil', 'Secret Rare Mythic Foil',
-  'Promo', 'Prerelease', 'Error/Errata', 'Proof/Sample'
+  'Promo', 'Prerelease'
 ]
 const SOURCES = ['eBay', 'Blokpax', 'TCGPlayer', 'LGS', 'Trade', 'Pack Pull', 'Other']
 const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
