@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # Resend Email
     RESEND_API_KEY: str = ""
     FROM_EMAIL: str = "WondersTracker <noreply@wonderstrader.com>"
+    ADMIN_EMAIL: str = ""  # Admin notification email (falls back to FROM_EMAIL)
     
     model_config = ConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 
