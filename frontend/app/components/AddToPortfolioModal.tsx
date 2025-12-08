@@ -50,14 +50,28 @@ type CardPricingResponse = {
 
 // Treatment options by product type
 const TREATMENTS_BY_TYPE: Record<string, string[]> = {
-    'Single': ['Classic Paper', 'Classic Foil', 'Starfoil', 'Full Art', 'Full Art Foil', 'Serialized', 'Formless Foil', 'Promo'],
-    'Box': ['Sealed', 'Opened'],
+    'Single': [
+        'Classic Paper', 'Classic Foil', 'Starfoil', 'Full Art', 'Full Art Foil',
+        'Alt Art', 'Alternate Art', 'Formless Foil', 'Formless Common',
+        'Serialized', 'OCM Serialized', 'Epic Alt Art Serialized',
+        '1st Edition', '1st Edition Foil',
+        'Holo Foil', 'Red Foil', 'Stonefoil', 'Secret Rare Mythic Foil',
+        'Promo', 'Prerelease', 'Error/Errata', 'Proof/Sample'
+    ],
+    'Box': ['Factory Sealed', 'Sealed', 'Open Box', 'Opened'],
     'Pack': ['Sealed', 'Opened'],
     'Bundle': ['Sealed', 'Opened'],
     'Lot': ['Mixed', 'All Sealed', 'All Raw'],
     'Proof': ['Character Proof', 'Set Proof', 'Other'],
     'NFT': ['Standard', 'Animated', 'Legendary', '1/1'],
-    'default': ['Classic Paper', 'Classic Foil', 'Starfoil', 'Full Art', 'Full Art Foil', 'Serialized', 'Formless Foil', 'Promo']
+    'default': [
+        'Classic Paper', 'Classic Foil', 'Starfoil', 'Full Art', 'Full Art Foil',
+        'Alt Art', 'Alternate Art', 'Formless Foil', 'Formless Common',
+        'Serialized', 'OCM Serialized', 'Epic Alt Art Serialized',
+        '1st Edition', '1st Edition Foil',
+        'Holo Foil', 'Red Foil', 'Stonefoil', 'Secret Rare Mythic Foil',
+        'Promo', 'Prerelease', 'Error/Errata', 'Proof/Sample'
+    ]
 }
 
 // Source options by product type
