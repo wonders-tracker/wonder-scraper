@@ -112,6 +112,17 @@ function Portfolio() {
     }
   })
 
+  // Fetch Portfolio Value History
+  const { data: valueHistory } = useQuery({
+    queryKey: ['portfolio-value-history'],
+    queryFn: async () => {
+      return await api.get('portfolio/cards/history/value?days=30').json<{
+        history: { date: string; value: number }[]
+        cost_basis_history: { date: string; value: number }[]
+      }>()
+    }
+  })
+
   // Update Mutation (PATCH for individual cards)
   const updateMutation = useMutation({
       mutationFn: async ({ id, data }: { id: number, data: any }) => {
@@ -204,6 +215,16 @@ function Portfolio() {
           value: data.count
       }))
   }, [summary])
+
+  // Prepare value history chart data
+  const valueChartData = useMemo(() => {
+      if (!valueHistory?.history?.length) return []
+      return valueHistory.history.map((h, idx) => ({
+          date: new Date(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: h.value,
+          cost: valueHistory.cost_basis_history[idx]?.value || 0
+      }))
+  }, [valueHistory])
 
   const columns = useMemo<ColumnDef<PortfolioCard>[]>(() => [
       {
@@ -362,6 +383,74 @@ function Portfolio() {
                     <div className="text-3xl font-mono">{stats.count}</div>
                 </div>
             </div>
+
+            {/* Portfolio Value Chart */}
+            {valueChartData.length > 0 && (
+                <div className="border border-border rounded-lg bg-card p-6 mb-8">
+                    <div className="flex items-center gap-2 mb-4">
+                        <TrendingUp className="w-4 h-4 text-primary" />
+                        <h3 className="text-sm font-bold uppercase tracking-widest">Portfolio Value (30 Days)</h3>
+                    </div>
+                    <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={valueChartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                                <XAxis
+                                    dataKey="date"
+                                    tick={{ fontSize: 10, fill: '#888' }}
+                                    tickLine={false}
+                                    interval="preserveStartEnd"
+                                />
+                                <YAxis
+                                    tick={{ fontSize: 10, fill: '#888' }}
+                                    tickLine={false}
+                                    tickFormatter={(v) => `$${v}`}
+                                    domain={['auto', 'auto']}
+                                />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: '#1a1a1a',
+                                        border: '1px solid #333',
+                                        borderRadius: '8px',
+                                        fontSize: '12px'
+                                    }}
+                                    formatter={(value: number, name: string) => [
+                                        `$${value.toFixed(2)}`,
+                                        name === 'value' ? 'Market Value' : 'Cost Basis'
+                                    ]}
+                                />
+                                <Line
+                                    type="monotone"
+                                    dataKey="cost"
+                                    stroke="#666"
+                                    strokeWidth={1}
+                                    strokeDasharray="5 5"
+                                    dot={false}
+                                    name="cost"
+                                />
+                                <Line
+                                    type="monotone"
+                                    dataKey="value"
+                                    stroke="#10b981"
+                                    strokeWidth={2}
+                                    dot={false}
+                                    name="value"
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <div className="flex items-center justify-center gap-6 mt-4 text-xs">
+                        <div className="flex items-center gap-2">
+                            <div className="w-4 h-0.5 bg-emerald-500" />
+                            <span className="text-muted-foreground">Market Value</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-4 h-0.5 bg-gray-500 border-dashed" style={{ borderTop: '2px dashed #666' }} />
+                            <span className="text-muted-foreground">Cost Basis</span>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Breakdown Charts */}
             {(treatmentPieData.length > 0 || sourcePieData.length > 0) && (

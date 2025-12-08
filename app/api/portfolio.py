@@ -603,3 +603,118 @@ def get_available_sources() -> Any:
     """
     return ["eBay", "Blokpax", "TCGPlayer", "LGS", "Trade", "Pack Pull", "Other"]
 
+
+@router.get("/cards/history/value")
+def get_portfolio_value_history(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(deps.get_current_user),
+    days: int = Query(default=30, ge=7, le=365, description="Number of days of history"),
+) -> Any:
+    """
+    Get portfolio value history over time.
+    Returns daily portfolio value based on cards owned at each date.
+    """
+    from sqlalchemy import text
+
+    # Get all user's portfolio cards (including purchase dates)
+    cards = session.exec(
+        select(PortfolioCard)
+        .where(PortfolioCard.user_id == current_user.id)
+        .where(PortfolioCard.deleted_at.is_(None))
+    ).all()
+
+    if not cards:
+        return {"history": [], "cost_basis_history": []}
+
+    # Build date range
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=days)
+
+    # Get unique card_ids
+    card_ids = list(set(c.card_id for c in cards))
+
+    # Get historical prices for all cards - use daily VWAP from sold listings
+    # This query gets the average sold price per card per day
+    price_query = text("""
+        SELECT
+            card_id,
+            DATE(COALESCE(sold_date, scraped_at)) as sale_date,
+            AVG(price) as avg_price
+        FROM marketprice
+        WHERE card_id = ANY(:card_ids)
+          AND listing_type = 'sold'
+          AND COALESCE(sold_date, scraped_at) >= :start_date
+        GROUP BY card_id, DATE(COALESCE(sold_date, scraped_at))
+        ORDER BY card_id, sale_date
+    """)
+
+    price_results = session.execute(
+        price_query,
+        {"card_ids": card_ids, "start_date": start_date}
+    ).all()
+
+    # Build price lookup: {card_id: {date: price}}
+    price_by_card_date = {}
+    for row in price_results:
+        cid, sale_date, avg_price = row
+        if cid not in price_by_card_date:
+            price_by_card_date[cid] = {}
+        price_by_card_date[cid][sale_date] = float(avg_price)
+
+    # Get current prices as fallback
+    current_prices = {}
+    for card in cards:
+        current_prices[card.card_id] = get_treatment_market_price(
+            session, card.card_id, card.treatment
+        )
+
+    # Calculate daily portfolio value
+    history = []
+    cost_basis_history = []
+    current_date = start_date
+
+    while current_date <= end_date:
+        daily_value = 0.0
+        daily_cost = 0.0
+
+        for card in cards:
+            # Check if card was owned on this date
+            card_purchase_date = card.purchase_date
+            if card_purchase_date and card_purchase_date > current_date:
+                continue  # Card not yet purchased
+
+            # Add cost basis
+            daily_cost += card.purchase_price
+
+            # Get price for this card on this date
+            card_prices = price_by_card_date.get(card.card_id, {})
+
+            # Find the most recent price on or before current_date
+            price = None
+            for d in sorted(card_prices.keys(), reverse=True):
+                if d <= current_date:
+                    price = card_prices[d]
+                    break
+
+            # If no historical price, use current price
+            if price is None:
+                price = current_prices.get(card.card_id, card.purchase_price)
+
+            daily_value += price
+
+        history.append({
+            "date": current_date.isoformat(),
+            "value": round(daily_value, 2)
+        })
+        cost_basis_history.append({
+            "date": current_date.isoformat(),
+            "value": round(daily_cost, 2)
+        })
+
+        current_date += timedelta(days=1)
+
+    return {
+        "history": history,
+        "cost_basis_history": cost_basis_history
+    }
+
