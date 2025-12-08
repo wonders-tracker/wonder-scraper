@@ -4,9 +4,10 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from app.core.config import settings
-from app.api import auth, cards, portfolio, users, market, admin, blokpax, analytics
+from app.api import auth, cards, portfolio, users, market, admin, blokpax, analytics, meta
 from contextlib import asynccontextmanager
 from app.core.scheduler import start_scheduler
+from app.core.anti_scraping import AntiScrapingMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 @asynccontextmanager
@@ -17,7 +18,7 @@ async def lifespan(app: FastAPI):
     # Shutdown (scheduler stops automatically usually or we can stop it)
 
 app = FastAPI(
-    title=settings.PROJECT_NAME, 
+    title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan
 )
@@ -41,6 +42,10 @@ origins = list(set([o for o in origins if o]))
 # This prevents FastAPI from redirecting HTTPS requests to HTTP
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
+# Anti-scraping middleware - detects bots, headless browsers, rate limits
+# Protects /api/v1/cards, /api/v1/market, /api/v1/blokpax endpoints
+app.add_middleware(AntiScrapingMiddleware, enabled=True)
+
 # GZip compression for responses > 1KB (80-90% bandwidth reduction)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -50,10 +55,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Bot-Warning", "X-Automation-Warning"],  # Expose warning headers
 )
 
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(cards.router, prefix=f"{settings.API_V1_STR}/cards", tags=["cards"])
+app.include_router(meta.router, prefix=f"{settings.API_V1_STR}/cards", tags=["meta"])  # /cards/{id}/meta
 app.include_router(portfolio.router, prefix=f"{settings.API_V1_STR}/portfolio", tags=["portfolio"])
 app.include_router(users.router, prefix=f"{settings.API_V1_STR}/users", tags=["users"])
 app.include_router(market.router, prefix=f"{settings.API_V1_STR}/market", tags=["market"])

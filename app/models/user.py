@@ -8,6 +8,7 @@ class User(SQLModel, table=True):
     hashed_password: str
     is_active: bool = Field(default=True)
     is_superuser: bool = Field(default=False)
+    has_api_access: bool = Field(default=False)  # Must be granted by admin
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Profile Fields

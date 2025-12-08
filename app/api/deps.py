@@ -1,20 +1,27 @@
-from typing import Generator, Optional
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordBearer
+from typing import Generator, Optional, Tuple
+from fastapi import Depends, HTTPException, Request, status, Header
+from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
 
 import jwt
 from jwt.exceptions import PyJWTError
 from pydantic import BaseModel
-from sqlmodel import Session
+from sqlmodel import Session, select
+from datetime import datetime
 
 from app.db import get_session
 from app.models.user import User
+from app.models.api_key import APIKey
 from app.core.config import settings
+from app.core.anti_scraping import api_key_limiter
 
 # Cookie name for auth token
 COOKIE_NAME = "access_token"
 
+# API Key header name
+API_KEY_HEADER = "X-API-Key"
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login", auto_error=False)
+api_key_header = APIKeyHeader(name=API_KEY_HEADER, auto_error=False)
 
 
 class TokenData(BaseModel):
@@ -113,4 +120,174 @@ def get_current_superuser(
             detail="Not enough permissions",
         )
     return current_user
+
+
+# ============== API KEY AUTHENTICATION ==============
+
+def validate_api_key(
+    request: Request,
+    api_key: Optional[str] = Depends(api_key_header),
+    session: Session = Depends(get_session),
+) -> Optional[Tuple[APIKey, User]]:
+    """
+    Validate API key from X-API-Key header.
+    Returns (api_key, user) tuple or None if no key provided.
+    """
+    if not api_key:
+        return None
+
+    # Hash the key for lookup
+    key_hash = APIKey.hash_key(api_key)
+
+    # Find the API key
+    db_key = session.exec(
+        select(APIKey).where(APIKey.key_hash == key_hash)
+    ).first()
+
+    if not db_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+        )
+
+    # Check if key is active
+    if not db_key.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key is disabled",
+        )
+
+    # Check if key is expired
+    if db_key.expires_at and db_key.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key has expired",
+        )
+
+    # Check rate limits
+    allowed, reason = api_key_limiter.check_limit(
+        key_hash,
+        per_minute=db_key.rate_limit_per_minute,
+        per_day=db_key.rate_limit_per_day,
+    )
+
+    if not allowed:
+        if reason == "daily_limit":
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Daily API limit exceeded. Limit resets at midnight UTC.",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded. Please slow down.",
+                headers={"Retry-After": "60"}
+            )
+
+    # Record the request
+    api_key_limiter.record_request(key_hash)
+
+    # Update usage stats
+    db_key.requests_today += 1
+    db_key.requests_total += 1
+    db_key.last_used_at = datetime.utcnow()
+    session.add(db_key)
+    session.commit()
+
+    # Get the user
+    user = session.get(User, db_key.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key owner account is inactive",
+        )
+
+    return db_key, user
+
+
+def require_api_key(
+    api_key_data: Optional[Tuple[APIKey, User]] = Depends(validate_api_key),
+) -> Tuple[APIKey, User]:
+    """
+    Require a valid API key. Raises 401 if not provided.
+    Use this dependency for endpoints that REQUIRE API key access.
+    """
+    if not api_key_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key required. Get your key at /api/v1/users/api-keys",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+    return api_key_data
+
+
+# ============== PROTECTED DATA ACCESS ==============
+
+def get_data_access(
+    request: Request,
+    header_token: Optional[str] = Depends(oauth2_scheme),
+    api_key_data: Optional[Tuple[APIKey, User]] = Depends(validate_api_key),
+    session: Session = Depends(get_session),
+) -> User:
+    """
+    Require either JWT authentication OR API key for data access.
+    This is the dependency for protected data endpoints.
+
+    Priority: API Key > JWT Cookie > JWT Header
+    """
+    # Try API key first (programmatic access)
+    if api_key_data:
+        return api_key_data[1]  # Return the user
+
+    # Try JWT (browser/app access)
+    token = get_token_from_request(request, header_token)
+
+    if token:
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            email: str = payload.get("sub")
+            if email:
+                user = session.query(User).filter(User.email == email).first()
+                if user and user.is_active:
+                    return user
+        except PyJWTError:
+            pass
+
+    # No valid auth found
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required. Please log in or provide an API key.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def get_data_access_optional(
+    request: Request,
+    header_token: Optional[str] = Depends(oauth2_scheme),
+    api_key_data: Optional[Tuple[APIKey, User]] = Depends(validate_api_key),
+    session: Session = Depends(get_session),
+) -> Optional[User]:
+    """
+    Optional data access - returns user if authenticated, None otherwise.
+    Use this for endpoints that have different behavior for auth vs anon users.
+    """
+    # Try API key first
+    if api_key_data:
+        return api_key_data[1]
+
+    # Try JWT
+    token = get_token_from_request(request, header_token)
+
+    if token:
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            email: str = payload.get("sub")
+            if email:
+                user = session.query(User).filter(User.email == email).first()
+                if user and user.is_active:
+                    return user
+        except PyJWTError:
+            pass
+
+    return None
 

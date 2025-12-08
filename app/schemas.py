@@ -16,6 +16,8 @@ class MarketSnapshotOut(MarketSnapshotBase):
     id: int
     card_id: int
 
+    model_config = {"from_attributes": True}
+
 class MarketPriceBase(BaseModel):
     price: float
     title: str
@@ -40,6 +42,8 @@ class MarketPriceBase(BaseModel):
 class MarketPriceOut(MarketPriceBase):
     id: int
     card_id: int
+
+    model_config = {"from_attributes": True}
 
 class CardBase(BaseModel):
     name: str
@@ -79,6 +83,8 @@ class CardOut(CardBase):
     last_sale_diff: Optional[float] = None    # @deprecated: use 'floor_delta'
     last_sale_treatment: Optional[str] = None # @deprecated: use 'last_treatment'
 
+    model_config = {"from_attributes": True}
+
 
 class CardListItem(BaseModel):
     """Lightweight card for list views - ~50% smaller payload than CardOut"""
@@ -100,6 +106,8 @@ class CardListItem(BaseModel):
     # Treatment for display
     last_treatment: Optional[str] = None
 
+    model_config = {"from_attributes": True}
+
 class CardWithMarket(CardOut):
     market_snapshot: Optional[MarketSnapshotOut] = None
 
@@ -114,10 +122,13 @@ class UserOut(UserBase):
     id: int
     is_active: bool
     is_superuser: bool
+    has_api_access: bool = False
     created_at: datetime
     username: Optional[str] = None
     discord_handle: Optional[str] = None
     bio: Optional[str] = None
+
+    model_config = {"from_attributes": True}
 
 class UserUpdate(BaseModel):
     username: Optional[str] = None
@@ -149,6 +160,8 @@ class PortfolioItemOut(PortfolioItemBase):
     current_value: Optional[float] = None
     gain_loss: Optional[float] = None
     gain_loss_percent: Optional[float] = None
+
+    model_config = {"from_attributes": True}
 
 
 # Portfolio Card Schemas (New - individual card tracking)
@@ -201,6 +214,8 @@ class PortfolioCardOut(PortfolioCardBase):
     profit_loss: Optional[float] = None  # market_price - purchase_price
     profit_loss_percent: Optional[float] = None  # (market_price / purchase_price - 1) * 100
 
+    model_config = {"from_attributes": True}
+
 
 class PortfolioSummary(BaseModel):
     """Summary of user's portfolio."""
@@ -214,3 +229,24 @@ class PortfolioSummary(BaseModel):
     by_treatment: Optional[dict] = None
     # Breakdown by source
     by_source: Optional[dict] = None
+
+
+# Meta Vote Schemas
+class MetaVoteSummary(BaseModel):
+    """Vote counts for a card's meta status."""
+    yes: int = 0
+    no: int = 0
+    unsure: int = 0
+    total: int = 0
+
+
+class MetaVoteCreate(BaseModel):
+    """Create or update a meta vote."""
+    vote: str  # 'yes', 'no', 'unsure'
+
+
+class MetaVoteResponse(BaseModel):
+    """Full meta vote response with summary and user's vote."""
+    summary: MetaVoteSummary
+    user_vote: Optional[str] = None  # User's current vote, null if not voted
+    consensus: Optional[str] = None  # Highest vote category, null if tie/no votes
