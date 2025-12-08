@@ -24,13 +24,18 @@ import {
   Tablet,
   Globe,
   ExternalLink,
+  Key,
+  Trash2,
+  Shield,
+  Zap,
 } from 'lucide-react'
+import { Tooltip } from '../components/ui/tooltip'
 import {
   BarChart,
   Bar,
   XAxis,
   YAxis,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts'
@@ -240,18 +245,19 @@ function AdminDashboard() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              refetchStats()
-              refetchScheduler()
-            }}
-            className="p-2 rounded-md hover:bg-muted transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw
-              className={`w-5 h-5 ${statsLoading ? 'animate-spin' : ''}`}
-            />
-          </button>
+          <Tooltip content="Refresh">
+            <button
+              onClick={() => {
+                refetchStats()
+                refetchScheduler()
+              }}
+              className="p-2 rounded-md hover:bg-muted transition-colors"
+            >
+              <RefreshCw
+                className={`w-5 h-5 ${statsLoading ? 'animate-spin' : ''}`}
+              />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -393,7 +399,7 @@ function AdminDashboard() {
                         }
                       />
                       <YAxis tick={{ fill: '#888', fontSize: 11 }} />
-                      <Tooltip
+                      <RechartsTooltip
                         contentStyle={{
                           backgroundColor: 'hsl(var(--card))',
                           border: '1px solid hsl(var(--border))',
@@ -638,7 +644,7 @@ function AdminDashboard() {
                       }
                     />
                     <YAxis tick={{ fill: '#888', fontSize: 12 }} />
-                    <Tooltip
+                    <RechartsTooltip
                       contentStyle={{
                         backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
@@ -771,8 +777,243 @@ function AdminDashboard() {
               </div>
             </div>
           </div>
+
+          {/* API Key Management */}
+          <APIKeyManagement />
         </div>
       )}
+    </div>
+  )
+}
+
+// API Key Management Component
+function APIKeyManagement() {
+  const queryClient = useQueryClient()
+
+  // Fetch API keys stats
+  const { data: keyStats, isLoading: statsLoading } = useQuery({
+    queryKey: ['admin-api-key-stats'],
+    queryFn: async () => {
+      const res = await api.get('admin/api-keys/stats').json()
+      return res as {
+        total_keys: number
+        active_keys: number
+        keys_used_today: number
+        total_requests_today: number
+        total_requests_all_time: number
+        top_users: Array<{ email: string; total_requests: number; key_count: number }>
+      }
+    },
+  })
+
+  // Fetch all API keys
+  const { data: apiKeys, isLoading: keysLoading } = useQuery({
+    queryKey: ['admin-api-keys'],
+    queryFn: async () => {
+      const res = await api.get('admin/api-keys').json()
+      return res as Array<{
+        id: number
+        user_id: number
+        user_email: string
+        key_prefix: string
+        name: string
+        is_active: boolean
+        rate_limit_per_minute: number
+        rate_limit_per_day: number
+        requests_today: number
+        requests_total: number
+        last_used_at: string | null
+        created_at: string | null
+      }>
+    },
+  })
+
+  // Toggle API key mutation
+  const toggleKeyMutation = useMutation({
+    mutationFn: async (keyId: number) => {
+      await api.put(`admin/api-keys/${keyId}/toggle`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-api-keys'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-api-key-stats'] })
+    },
+  })
+
+  // Delete API key mutation
+  const deleteKeyMutation = useMutation({
+    mutationFn: async (keyId: number) => {
+      await api.delete(`admin/api-keys/${keyId}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-api-keys'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-api-key-stats'] })
+    },
+  })
+
+  // Reset daily counts mutation
+  const resetDailyMutation = useMutation({
+    mutationFn: async () => {
+      await api.post('admin/api-keys/reset-daily')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-api-keys'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-api-key-stats'] })
+    },
+  })
+
+  return (
+    <div className="border rounded-lg p-4 bg-card">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <Key className="w-5 h-5" />
+          API Key Management
+        </h2>
+        <div className="flex gap-2">
+          <Link
+            to="/api"
+            className="text-xs bg-primary/20 text-primary px-3 py-1.5 rounded hover:bg-primary/30 transition-colors flex items-center gap-1"
+          >
+            <ExternalLink className="w-3 h-3" />
+            API Docs
+          </Link>
+          <button
+            onClick={() => {
+              if (confirm('Reset daily request counts for all API keys?')) {
+                resetDailyMutation.mutate()
+              }
+            }}
+            className="text-xs bg-amber-500/20 text-amber-400 px-3 py-1.5 rounded hover:bg-amber-500/30 transition-colors"
+          >
+            Reset Daily Counts
+          </button>
+        </div>
+      </div>
+
+      {/* Stats Grid */}
+      {statsLoading ? (
+        <div className="text-center py-4 text-muted-foreground">Loading stats...</div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+          <div className="bg-muted/30 rounded p-3">
+            <div className="text-xs text-muted-foreground">Total Keys</div>
+            <div className="text-xl font-bold">{keyStats?.total_keys ?? 0}</div>
+          </div>
+          <div className="bg-muted/30 rounded p-3">
+            <div className="text-xs text-muted-foreground">Active Keys</div>
+            <div className="text-xl font-bold text-emerald-500">{keyStats?.active_keys ?? 0}</div>
+          </div>
+          <div className="bg-muted/30 rounded p-3">
+            <div className="text-xs text-muted-foreground">Used Today</div>
+            <div className="text-xl font-bold text-blue-500">{keyStats?.keys_used_today ?? 0}</div>
+          </div>
+          <div className="bg-muted/30 rounded p-3">
+            <div className="text-xs text-muted-foreground">Requests Today</div>
+            <div className="text-xl font-bold">{keyStats?.total_requests_today?.toLocaleString() ?? 0}</div>
+          </div>
+          <div className="bg-muted/30 rounded p-3">
+            <div className="text-xs text-muted-foreground">Total Requests</div>
+            <div className="text-xl font-bold">{keyStats?.total_requests_all_time?.toLocaleString() ?? 0}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Top Users */}
+      {keyStats?.top_users && keyStats.top_users.length > 0 && (
+        <div className="mb-4">
+          <h3 className="text-xs font-bold uppercase text-muted-foreground mb-2">Top API Users</h3>
+          <div className="flex flex-wrap gap-2">
+            {keyStats.top_users.slice(0, 5).map((user) => (
+              <span key={user.email} className="text-xs bg-muted/50 px-2 py-1 rounded">
+                {user.email.split('@')[0]} ({user.total_requests.toLocaleString()} req)
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* API Keys Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left">
+              <th className="pb-2 font-medium text-muted-foreground">User</th>
+              <th className="pb-2 font-medium text-muted-foreground">Key</th>
+              <th className="pb-2 font-medium text-muted-foreground">Status</th>
+              <th className="pb-2 font-medium text-muted-foreground">Today</th>
+              <th className="pb-2 font-medium text-muted-foreground">Total</th>
+              <th className="pb-2 font-medium text-muted-foreground">Limits</th>
+              <th className="pb-2 font-medium text-muted-foreground">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {keysLoading ? (
+              <tr>
+                <td colSpan={7} className="py-4 text-center text-muted-foreground">
+                  Loading API keys...
+                </td>
+              </tr>
+            ) : !apiKeys?.length ? (
+              <tr>
+                <td colSpan={7} className="py-4 text-center text-muted-foreground">
+                  No API keys created yet
+                </td>
+              </tr>
+            ) : (
+              apiKeys.map((key) => (
+                <tr key={key.id} className="border-b border-border/50">
+                  <td className="py-2">
+                    <div className="font-medium">{key.user_email.split('@')[0]}</div>
+                    <div className="text-xs text-muted-foreground">{key.name}</div>
+                  </td>
+                  <td className="py-2 font-mono text-xs">{key.key_prefix}...</td>
+                  <td className="py-2">
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded ${
+                        key.is_active
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-red-500/20 text-red-400'
+                      }`}
+                    >
+                      {key.is_active ? 'Active' : 'Disabled'}
+                    </span>
+                  </td>
+                  <td className="py-2">{key.requests_today.toLocaleString()}</td>
+                  <td className="py-2">{key.requests_total.toLocaleString()}</td>
+                  <td className="py-2 text-xs text-muted-foreground">
+                    {key.rate_limit_per_minute}/min, {key.rate_limit_per_day}/day
+                  </td>
+                  <td className="py-2">
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => toggleKeyMutation.mutate(key.id)}
+                        className={`p-1.5 rounded transition-colors ${
+                          key.is_active
+                            ? 'text-amber-400 hover:bg-amber-500/20'
+                            : 'text-emerald-400 hover:bg-emerald-500/20'
+                        }`}
+                        title={key.is_active ? 'Disable' : 'Enable'}
+                      >
+                        <Shield className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete API key ${key.key_prefix}...?`)) {
+                            deleteKeyMutation.mutate(key.id)
+                          }
+                        }}
+                        className="p-1.5 text-red-400 hover:bg-red-500/20 rounded transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
