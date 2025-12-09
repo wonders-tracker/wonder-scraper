@@ -17,6 +17,128 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.scraper.ebay import _extract_seller_info
+from app.scraper.seller import normalize_seller_name, validate_seller_name, is_tracking_parameter
+
+
+class TestSellerNameNormalization:
+    """Tests for normalize_seller_name function in seller.py."""
+
+    def test_normalizes_clean_name(self):
+        """Clean names should pass through unchanged."""
+        assert normalize_seller_name("cardshop123") == "cardshop123"
+        assert normalize_seller_name("top_seller") == "top_seller"
+        assert normalize_seller_name("card.shop-99") == "card.shop-99"
+
+    def test_strips_whitespace(self):
+        """Should strip leading/trailing whitespace."""
+        assert normalize_seller_name("  seller123  ") == "seller123"
+        assert normalize_seller_name("\t\nseller\t\n") == "seller"
+
+    def test_returns_none_for_empty(self):
+        """Empty strings or None should return None."""
+        assert normalize_seller_name(None) is None
+        assert normalize_seller_name("") is None
+        assert normalize_seller_name("   ") is None
+
+    def test_removes_feedback_text(self):
+        """Should remove feedback percentage text."""
+        result = normalize_seller_name("rhomscards  100% positive (1K)Top Rated Plus")
+        assert result == "rhomscards"
+
+    def test_removes_top_rated_text(self):
+        """Should remove 'Top Rated Plus' and similar text."""
+        result = normalize_seller_name("seller123  100% positive (1K)Top Rated PlusSellers with highest")
+        assert result == "seller123"
+
+    def test_extracts_username_from_full_blob(self):
+        """Should extract just the username from full seller info blob."""
+        # These are actual corrupted values we've seen
+        bad_values = [
+            ("dadcandoit  99.8% positive (1.2K)Top Rated Plus", "dadcandoit"),
+            ("manchester91  100% positive (94.8K)Top Rated Plus", "manchester91"),
+            ("quickrick1  100% positive (1K)Top Rated PlusSellers", "quickrick1"),
+            ("rhomscards  100% positive (1K)Top Rated PlusSellers with highest buyer ratingsReturns", "rhomscards"),
+        ]
+        for bad_value, expected in bad_values:
+            result = normalize_seller_name(bad_value)
+            assert result == expected, f"Expected '{expected}', got '{result}' for input '{bad_value[:50]}...'"
+
+    def test_handles_special_characters(self):
+        """Should handle valid eBay username characters."""
+        assert normalize_seller_name("user_name") == "user_name"
+        assert normalize_seller_name("user-name") == "user-name"
+        assert normalize_seller_name("user.name") == "user.name"
+        assert normalize_seller_name("user123") == "user123"
+
+    def test_normalizes_to_lowercase(self):
+        """Should normalize seller names to lowercase."""
+        assert normalize_seller_name("CardShop123") == "cardshop123"
+        assert normalize_seller_name("TOP_SELLER") == "top_seller"
+        assert normalize_seller_name("Rhomscards") == "rhomscards"
+
+    def test_rejects_invalid_characters(self):
+        """Should extract valid part from names with invalid chars."""
+        # eBay usernames can't have spaces in the middle
+        assert normalize_seller_name("user name") == "user"
+        # Should extract valid prefix
+        assert normalize_seller_name("seller!@#") == "seller"
+
+    def test_rejects_tracking_parameters(self):
+        """Should reject eBay tracking parameter strings."""
+        # These look like usernames but are actually URL tracking parameters
+        assert normalize_seller_name("p4429486.m3561.l161211") is None
+        assert normalize_seller_name("p123.m456.l789") is None
+        assert normalize_seller_name("m1234.s5678.p9012") is None
+
+
+class TestTrackingParameterDetection:
+    """Tests for is_tracking_parameter function."""
+
+    def test_detects_tracking_patterns(self):
+        """Should detect eBay URL tracking parameters."""
+        assert is_tracking_parameter("p4429486.m3561.l161211") is True
+        assert is_tracking_parameter("p123.m456.l789") is True
+        assert is_tracking_parameter("m1234.s5678.p9012") is True
+
+    def test_accepts_valid_usernames(self):
+        """Should not flag valid usernames as tracking params."""
+        assert is_tracking_parameter("cardshop123") is False
+        assert is_tracking_parameter("top_seller") is False
+        assert is_tracking_parameter("card.shop-99") is False
+        assert is_tracking_parameter("p_seller") is False  # Just starts with p
+
+    def test_handles_none_and_empty(self):
+        """Should handle None and empty strings."""
+        assert is_tracking_parameter(None) is False
+        assert is_tracking_parameter("") is False
+
+
+class TestSellerNameValidation:
+    """Tests for validate_seller_name function."""
+
+    def test_valid_usernames(self):
+        """Should accept valid eBay usernames."""
+        assert validate_seller_name("cardshop123") is True
+        assert validate_seller_name("top_seller") is True
+        assert validate_seller_name("card.shop-99") is True
+        assert validate_seller_name("x") is True  # Single char is ok
+
+    def test_invalid_usernames(self):
+        """Should reject invalid usernames."""
+        assert validate_seller_name("") is False
+        assert validate_seller_name(None) is False
+        assert validate_seller_name("has space") is False
+        assert validate_seller_name("has@symbol") is False
+
+    def test_length_limits(self):
+        """Should enforce reasonable length limits."""
+        assert validate_seller_name("x" * 100) is True  # Max 100
+        assert validate_seller_name("x" * 101) is False  # Over limit
+
+    def test_rejects_tracking_parameters(self):
+        """Should reject eBay URL tracking parameters."""
+        assert validate_seller_name("p4429486.m3561.l161211") is False
+        assert validate_seller_name("p123.m456.l789") is False
 
 
 class TestSellerExtraction:
