@@ -12,7 +12,7 @@ from app.db import get_session
 from app.models.card import Card, Rarity
 from app.models.market import MarketSnapshot, MarketPrice
 from app.schemas import CardOut, CardListItem, MarketSnapshotOut, MarketPriceOut
-from app.services.pricing import FairMarketPriceService
+from app.services.pricing import FairMarketPriceService, FMP_AVAILABLE
 
 router = APIRouter()
 
@@ -756,7 +756,14 @@ def read_card_pricing(
     """
     Get FMP breakdown by treatment for a card.
     Returns FMP, floor, and price stats for each treatment variant.
+
+    Note: FMP pricing is only available in SaaS mode.
     """
+    if not FMP_AVAILABLE:
+        raise HTTPException(
+            status_code=403, detail="FMP pricing is not available in OSS mode. This feature requires SaaS access."
+        )
+
     card = get_card_by_id_or_slug(session, card_id)
 
     # Fetch rarity name
