@@ -1,7 +1,15 @@
 """
 Fair Market Price (FMP) Calculation Service
 
-FMP = BaseSetPrice × RarityMultiplier × TreatmentMultiplier × ConditionMultiplier × LiquidityAdjustment
+FMP Calculation (in order of preference):
+1. MAD-trimmed mean of recent sales (if card has >= 3 sales)
+   - Takes recent 8 sales
+   - Removes outliers using MAD (Median Absolute Deviation)
+   - Averages remaining sales
+   - Applies liquidity adjustment
+
+2. Formula fallback (if insufficient sales data):
+   FMP = BaseSetPrice × RarityMultiplier × TreatmentMultiplier × LiquidityAdjustment
 
 Floor Price = Average of last 4 lowest sales (30-day window)
 """
@@ -87,43 +95,96 @@ class FairMarketPriceService:
         self._base_price_cache[cache_key] = None
         return None
 
-    def _get_card_specific_multiplier(
-        self, card_id: int, base_price: Optional[float], days: int = 30, min_sales: int = 3
+    def _calculate_mad_trimmed_fmp(
+        self, card_id: int, treatment: str = 'Classic Paper', days: int = 90,
+        recent_sales: int = 8, min_sales: int = 3
     ) -> Optional[float]:
         """
-        Calculate card-specific multiplier from the card's own sales data.
-        Multiplier = card_median_price / base_set_price
+        Calculate FMP using MAD-trimmed mean of recent sales.
 
-        Returns None if card doesn't have enough sales data (caller should fall back to rarity multiplier).
+        Algorithm:
+        1. Get the most recent N sales (default 8)
+        2. Calculate median and MAD (Median Absolute Deviation)
+        3. Remove outliers: |price - median| > 2.5 × MAD
+        4. Return average of remaining sales
+
+        This approach:
+        - Captures current market trend (recent sales)
+        - Removes outliers (damaged cards, price manipulation)
+        - Works even with high variance cards
+
+        Returns None if insufficient sales data (caller should fall back to formula).
         """
-        if not base_price or base_price <= 0:
-            return None
-
         cutoff = datetime.utcnow() - timedelta(days=days)
 
-        # Get card's median price and sale count (Classic Paper/Foil only for base comparison)
+        # Get recent sales for this card and treatment
         query = text("""
+            WITH recent_sales AS (
+                SELECT price
+                FROM marketprice
+                WHERE card_id = :card_id
+                  AND treatment = :treatment
+                  AND listing_type = 'sold'
+                  AND COALESCE(sold_date, scraped_at) >= :cutoff
+                ORDER BY COALESCE(sold_date, scraped_at) DESC
+                LIMIT :recent_sales
+            ),
+            stats AS (
+                SELECT
+                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price,
+                    COUNT(*) as sale_count
+                FROM recent_sales
+            ),
+            mad_calc AS (
+                SELECT
+                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ABS(rs.price - s.median_price)) as mad
+                FROM recent_sales rs, stats s
+            )
             SELECT
-                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price,
-                COUNT(*) as sale_count
-            FROM marketprice
-            WHERE card_id = :card_id
-              AND treatment IN ('Classic Paper', 'Classic Foil')
-              AND listing_type = 'sold'
-              AND COALESCE(sold_date, scraped_at) >= :cutoff
+                s.median_price,
+                s.sale_count,
+                m.mad,
+                AVG(rs.price) FILTER (
+                    WHERE ABS(rs.price - s.median_price) <= 2.5 * GREATEST(m.mad, 1.0)
+                ) as trimmed_mean,
+                COUNT(*) FILTER (
+                    WHERE ABS(rs.price - s.median_price) <= 2.5 * GREATEST(m.mad, 1.0)
+                ) as kept_count
+            FROM recent_sales rs, stats s, mad_calc m
+            GROUP BY s.median_price, s.sale_count, m.mad
         """)
 
-        result = self.session.execute(query, {"card_id": card_id, "cutoff": cutoff}).fetchone()
+        result = self.session.execute(query, {
+            "card_id": card_id,
+            "treatment": treatment,
+            "cutoff": cutoff,
+            "recent_sales": recent_sales
+        }).fetchone()
 
         if not result or not result[0] or (result[1] or 0) < min_sales:
-            # Not enough sales in 30 days - try 90 days
-            if days == 30:
-                return self._get_card_specific_multiplier(card_id, base_price, days=90, min_sales=min_sales)
-            # Still not enough - return None to signal fallback
+            # Try Classic Foil if Classic Paper has no data
+            if treatment == 'Classic Paper':
+                foil_result = self._calculate_mad_trimmed_fmp(
+                    card_id, 'Classic Foil', days, recent_sales, min_sales
+                )
+                if foil_result:
+                    # Classic Foil is typically ~1.3x Classic Paper
+                    return round(foil_result / 1.3, 2)
             return None
 
-        card_median = float(result[0])
-        return card_median / base_price
+        median_price = float(result[0])
+        sale_count = result[1]
+        mad = float(result[2]) if result[2] else 0
+        trimmed_mean = float(result[3]) if result[3] else median_price
+        kept_count = result[4] or sale_count
+
+        logger.debug(
+            f"MAD FMP calc for card {card_id}: median=${median_price:.2f}, "
+            f"MAD=${mad:.2f}, trimmed_mean=${trimmed_mean:.2f}, "
+            f"kept {kept_count}/{sale_count} sales"
+        )
+
+        return round(trimmed_mean, 2)
 
     def get_rarity_multiplier(self, set_name: str, rarity_name: str, days: int = 30) -> float:
         """
@@ -380,7 +441,10 @@ class FairMarketPriceService:
         """
         Calculate Fair Market Price.
 
-        For Singles: FMP = BaseSetPrice × RarityMultiplier × TreatmentMultiplier × LiquidityAdjustment
+        For Singles (priority order):
+        1. MAD-trimmed mean of recent sales (if >= 3 sales)
+        2. Formula fallback: BaseSetPrice × RarityMultiplier × TreatmentMultiplier × LiquidityAdj
+
         For Boxes/Packs/Bundles/Proofs/Lots: FMP = Median price (formula doesn't apply)
 
         Returns dict with FMP value and breakdown.
@@ -403,27 +467,39 @@ class FairMarketPriceService:
                 }
             }
 
-        # For Singles: use the full FMP formula
+        # For Singles: Try MAD-trimmed mean first (most accurate)
+        mad_fmp = self._calculate_mad_trimmed_fmp(card_id, treatment, days=90)
+
+        if mad_fmp is not None:
+            # Apply liquidity adjustment to MAD-based FMP
+            liquidity_adj = self.get_liquidity_adjustment(card_id, days)
+            fmp = round(mad_fmp * liquidity_adj, 2)
+
+            return {
+                'fair_market_price': fmp,
+                'floor_price': floor_price,
+                'breakdown': {
+                    'mad_trimmed_mean': mad_fmp,
+                    'liquidity_adjustment': round(liquidity_adj, 2),
+                },
+                'product_type': product_type,
+                'calculation_method': 'mad_trimmed',  # MAD-based calculation
+                'data_quality': {
+                    'has_base_price': True,  # Has direct sales data
+                    'has_floor_price': floor_price is not None,
+                    'using_card_sales': True,
+                    'using_defaults': False,
+                }
+            }
+
+        # Fallback: use the formula-based calculation
         base_price = self.get_base_set_price(set_name, days)
-
-        # Try card-specific multiplier first (if card has enough sales data)
-        # This is more accurate than set-wide rarity average for cards with sales history
-        card_mult = self._get_card_specific_multiplier(card_id, base_price, days)
-
-        if card_mult is not None:
-            # Card has good sales data - use card-specific multiplier
-            rarity_mult = card_mult
-            using_card_specific = True
-        else:
-            # Fall back to set-wide rarity multiplier
-            rarity_mult = self.get_rarity_multiplier(set_name, rarity_name, days)
-            using_card_specific = False
-
+        rarity_mult = self.get_rarity_multiplier(set_name, rarity_name, days)
         treatment_mult = self.get_treatment_multiplier(card_id, treatment, days)
-        condition_mult = 1.0  # Default to Near Mint (future: parse from listings)
+        condition_mult = 1.0  # Default to Near Mint
         liquidity_adj = self.get_liquidity_adjustment(card_id, days)
 
-        # Calculate FMP
+        # Calculate FMP using formula
         fmp = None
         if base_price:
             fmp = base_price * rarity_mult * treatment_mult * condition_mult * liquidity_adj
@@ -434,17 +510,17 @@ class FairMarketPriceService:
             'floor_price': floor_price,
             'breakdown': {
                 'base_set_price': round(base_price, 2) if base_price else None,
-                'card_multiplier' if using_card_specific else 'rarity_multiplier': round(rarity_mult, 2),
+                'rarity_multiplier': round(rarity_mult, 2),
                 'treatment_multiplier': round(treatment_mult, 2),
                 'condition_multiplier': condition_mult,
                 'liquidity_adjustment': round(liquidity_adj, 2),
             },
             'product_type': product_type,
-            'calculation_method': 'card_sales' if using_card_specific else 'formula',
+            'calculation_method': 'formula',  # Formula fallback
             'data_quality': {
                 'has_base_price': base_price is not None,
                 'has_floor_price': floor_price is not None,
-                'using_card_specific': using_card_specific,
+                'using_card_sales': False,
                 'using_defaults': base_price is None,
             }
         }
