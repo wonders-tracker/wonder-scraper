@@ -82,6 +82,11 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
 
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/wonder_test
+        run: poetry run alembic upgrade head
+
       - name: Run tests
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/wonder_test
