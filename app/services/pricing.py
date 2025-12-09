@@ -87,10 +87,51 @@ class FairMarketPriceService:
         self._base_price_cache[cache_key] = None
         return None
 
+    def _get_card_specific_multiplier(
+        self, card_id: int, base_price: Optional[float], days: int = 30, min_sales: int = 3
+    ) -> Optional[float]:
+        """
+        Calculate card-specific multiplier from the card's own sales data.
+        Multiplier = card_median_price / base_set_price
+
+        Returns None if card doesn't have enough sales data (caller should fall back to rarity multiplier).
+        """
+        if not base_price or base_price <= 0:
+            return None
+
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        # Get card's median price and sale count (Classic Paper/Foil only for base comparison)
+        query = text("""
+            SELECT
+                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price,
+                COUNT(*) as sale_count
+            FROM marketprice
+            WHERE card_id = :card_id
+              AND treatment IN ('Classic Paper', 'Classic Foil')
+              AND listing_type = 'sold'
+              AND COALESCE(sold_date, scraped_at) >= :cutoff
+        """)
+
+        result = self.session.execute(query, {"card_id": card_id, "cutoff": cutoff}).fetchone()
+
+        if not result or not result[0] or (result[1] or 0) < min_sales:
+            # Not enough sales in 30 days - try 90 days
+            if days == 30:
+                return self._get_card_specific_multiplier(card_id, base_price, days=90, min_sales=min_sales)
+            # Still not enough - return None to signal fallback
+            return None
+
+        card_median = float(result[0])
+        return card_median / base_price
+
     def get_rarity_multiplier(self, set_name: str, rarity_name: str, days: int = 30) -> float:
         """
         Calculate rarity multiplier dynamically from sales data.
         Multiplier = median_price(rarity) / median_price(Common)
+
+        Note: This is a SET-WIDE fallback. For cards with sales history,
+        _get_card_specific_multiplier is preferred.
         """
         if rarity_name == 'Common':
             return 1.0
@@ -364,7 +405,20 @@ class FairMarketPriceService:
 
         # For Singles: use the full FMP formula
         base_price = self.get_base_set_price(set_name, days)
-        rarity_mult = self.get_rarity_multiplier(set_name, rarity_name, days)
+
+        # Try card-specific multiplier first (if card has enough sales data)
+        # This is more accurate than set-wide rarity average for cards with sales history
+        card_mult = self._get_card_specific_multiplier(card_id, base_price, days)
+
+        if card_mult is not None:
+            # Card has good sales data - use card-specific multiplier
+            rarity_mult = card_mult
+            using_card_specific = True
+        else:
+            # Fall back to set-wide rarity multiplier
+            rarity_mult = self.get_rarity_multiplier(set_name, rarity_name, days)
+            using_card_specific = False
+
         treatment_mult = self.get_treatment_multiplier(card_id, treatment, days)
         condition_mult = 1.0  # Default to Near Mint (future: parse from listings)
         liquidity_adj = self.get_liquidity_adjustment(card_id, days)
@@ -380,16 +434,17 @@ class FairMarketPriceService:
             'floor_price': floor_price,
             'breakdown': {
                 'base_set_price': round(base_price, 2) if base_price else None,
-                'rarity_multiplier': round(rarity_mult, 2),
+                'card_multiplier' if using_card_specific else 'rarity_multiplier': round(rarity_mult, 2),
                 'treatment_multiplier': round(treatment_mult, 2),
                 'condition_multiplier': condition_mult,
                 'liquidity_adjustment': round(liquidity_adj, 2),
             },
             'product_type': product_type,
-            'calculation_method': 'formula',
+            'calculation_method': 'card_sales' if using_card_specific else 'formula',
             'data_quality': {
                 'has_base_price': base_price is not None,
                 'has_floor_price': floor_price is not None,
+                'using_card_specific': using_card_specific,
                 'using_defaults': base_price is None,
             }
         }
