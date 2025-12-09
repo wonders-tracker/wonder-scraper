@@ -40,6 +40,20 @@ def update_user_me(
     return UserOut.model_validate(current_user)
 
 
+@router.post("/me/complete-onboarding")
+def complete_onboarding(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    Mark user's onboarding as complete.
+    """
+    current_user.onboarding_completed = True
+    session.add(current_user)
+    session.commit()
+    return {"message": "Onboarding completed", "onboarding_completed": True}
+
+
 # ============== API KEY MANAGEMENT ==============
 
 class APIKeyCreate(BaseModel):
