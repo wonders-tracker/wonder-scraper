@@ -19,67 +19,67 @@
   same card name + same treatment (e.g., 'Moonfire Crystal Mouse Formless
   Foil' vs other 'Moonfire Crystal Mouse Formless Foil' sales only).
 
-  NOTE: Sealed product (boxes, packs, bundles) excluded - too much variance
-  in quantity and contents to make fair comparisons.
+  NOTE: Sealed product (boxes, packs, bundles) and graded slabs (PSA, CGC, BGS)
+  are excluded - too much variance in quantity/contents/condition.
 
 ================================================================================
   DATA ANALYZED
 ================================================================================
-  Total eBay Sales:              1,983
-  Unique Cards Sold:             362
-  Sales with Treatment Data:     1,983 (100.0%)
+  Total eBay Sales:              1,925
+  Unique Cards Sold:             361
+  Sales with Treatment Data:     1,925 (100.0%)
 
 ================================================================================
   THE BOTTOM LINE
 ================================================================================
-  Items with 3+ sales analyzed:  251
-  Average price spread:          67%
+  Items with 3+ sales analyzed:  247
+  Average price spread:          57%
     (How much min/max prices differ for the same item)
 
-  Items with 100%+ spread:       54
+  Items with 100%+ spread:       45
     (Same item sold for DOUBLE or more in price range)
 
-  Items with 50%+ spread:        128
+  Items with 50%+ spread:        115
     (Significant pricing inconsistency)
 
-  Worst spread:                  476%
+  Worst spread:                  308%
 
 ================================================================================
   THE COST OF BAD PRICING
 ================================================================================
 
   SELLERS WHO UNDERPRICED (sold 30%+ below median):
-    Transactions:                138
-    Total left on table:         $3,364.74
-    Average underpriced by:      56%
+    Transactions:                119
+    Total left on table:         $3,046.56
+    Average underpriced by:      53%
 
   BUYERS WHO OVERPAID (paid 50%+ above median):
-    Transactions:                96
-    Total overpaid:              $5,557.43
-    Average overpaid by:         171%
+    Transactions:                74
+    Total overpaid:              $3,385.86
+    Average overpaid by:         90%
 
 ================================================================================
   HALL OF SHAME: WORST PRICING CONSISTENCY
 ================================================================================
   These cards had the wildest price swings (same card + same treatment):
 
-  Card                           Treatment        Sales       Low       High   Spread
-  ----------------------------------------------------------------------------------
-  Moonfire Crystal Mouse         Formless Foil       14    $22.50    $499.99     476%
-  Isaac Sparkpaw                 Classic Foil         4     $0.25     $60.00     381%
-  Pinkspore Dreamcap             Formless Foil       31    $18.75    $499.99     327%
-  The Prisoner                   Classic Paper        7     $0.99    $425.00     279%
-  Tyros Ironfist                 Classic Foil         4     $0.99      $7.99     250%
-  Autumn, Essence Animated       Classic Paper        3     $1.25     $15.00     236%
-  Catch                          Classic Foil         4     $0.01     $85.00     231%
-  Keeper of Drury Skulls         Formless Foil        5     $9.99    $177.50     217%
-  Ethereal Grove                 Classic Paper        7     $8.00     $49.99     209%
-  Pinkspore Dreamcap             Classic Paper        9     $1.26    $154.50     203%
-  Rigel "Lightbringer" Leonis    Classic Paper        3    $12.99     $95.00     203%
-  Power of Bloodlines            Formless Foil        8     $3.25     $19.99     189%
-  Sylira Shadowstalker           Classic Paper        5     $0.50      $3.90     181%
-  Ethereal Grove                 Formless Foil        3    $40.00    $200.00     171%
-  Deathsworn Gravesman           Formless Foil        4     $1.25     $15.00     169%
+  Card                       Treatment                Sales       Low       High   Spread
+  --------------------------------------------------------------------------------------
+  Pinkspore Dreamcap         Formless Foil Alt Art       29    $19.99    $499.99     308%
+  Tyros Ironfist             Classic Foil                 4     $0.99      $7.99     250%
+  Autumn, Essence Animated   Classic Paper                3     $1.25     $15.00     236%
+  Moonfire Crystal Mouse     Formless Foil Alt Art        4    $22.50    $499.99     183%
+  Sylira Shadowstalker       Classic Paper                5     $0.50      $3.90     181%
+  Deathsworn Gravesman       Formless Foil                4     $1.25     $15.00     169%
+  Cindermaw the Scalder      Classic Paper                5     $0.99      $7.99     165%
+  Purpuria the Mystic Flam   Classic Paper                7     $9.50     $44.99     164%
+  Emma "Fixem" Shockbite     Classic Paper               20     $4.50     $30.00     163%
+  Azure Vault                Classic Paper                4     $0.99      $7.00     150%
+  Selva Tropicwing           Classic Foil                 4     $0.99      $6.00     143%
+  Caroline Candole           Formless Foil Alt Art        5     $3.50     $22.95     143%
+  Sister Azura Silversong    Formless Foil                6     $0.99     $11.01     143%
+  Power of Bloodlines        Formless Foil                6     $4.76     $19.99     142%
+  Iron Citadel               Classic Paper                4     $0.99      $5.00     134%
 
 ================================================================================
   BIGGEST OUTLIERS: SOMEONE GOT BURNED
@@ -87,74 +87,82 @@
   Individual sales 50%+ away from the median for that item:
 
   BUYERS WHO OVERPAID:
-  Card                                      Paid     Median     Diff
-  --------------------------------------------------------------------
-  Isaac Sparkpaw (Classi)                 $60.00      $1.25   +4700%
-  Keeper of Drury Skulls (Formle)        $177.50     $11.50   +1443%
-  Keeper of Drury Skulls (Formle)        $177.50     $11.50   +1443%
-  Moonfire Crystal Mouse (Formle)        $499.99     $37.50   +1233%
-  Moonfire Crystal Mouse (Formle)        $499.99     $37.50   +1233%
-  Autumn, Essence Animated (Classi)       $15.00      $1.25   +1100%
-  The Prisoner (Classi)                  $425.00     $44.99    +845%
-  The Prisoner (Classi)                  $425.00     $44.99    +845%
+  Card                                                     Paid     Median     Diff
+  ----------------------------------------------------------------------------------
+  Autumn, Essence Animated (Classic Paper)               $15.00      $1.25   +1100%
+  Tyros Ironfist (Classic Foil)                           $7.99      $1.12    +613%
+  Sylira Shadowstalker (Classic Paper)                    $3.90      $0.55    +609%
+  Sylira Shadowstalker (Classic Paper)                    $3.90      $0.55    +609%
+  Pinkspore Dreamcap (Formless Foil Alt Art)            $499.99    $115.00    +335%
+  Pinkspore Dreamcap (Formless Foil Alt Art)            $499.99    $115.00    +335%
+  Pinkspore Dreamcap (Formless Foil Alt Art)            $349.99    $115.00    +204%
+  Pinkspore Dreamcap (Formless Foil Alt Art)            $349.99    $115.00    +204%
+
+  SELLERS WHO LEFT MONEY ON TABLE:
+  Card                                                     Sold     Median     Diff
+  ----------------------------------------------------------------------------------
+  Eye of the Maelstrom (Classic Paper)                    $0.99     $12.00     -92%
 
 ================================================================================
   REALITY CHECK: CURRENT LISTINGS VS ACTUAL SALES
 ================================================================================
   Comparing what sellers are ASKING now vs what actually SOLD (last 30 days):
 
-  Card                             Treatment       Sold@     Ask@      Gap
-  ------------------------------------------------------------------------
-  Cloudweaver Construct            Classic Fo      $0.99    $6.00    +506%
-  The Prisoner                     Classic Pa      $0.99    $3.00    +203%
-  Corruption Warp                  Classic Fo     $19.99   $55.00    +175%
-  Azure Vault                      Classic Pa      $0.99    $2.50    +153%
-  Pinkspore Dreamcap               Classic Pa    $136.79    $1.25     -99%
-  Sandura of Heliosynth            Classic Pa     $12.99   $25.00     +92%
-  Pastel Bloom Drake               Classic Fo      $7.12   $13.30     +87%
-  The Great Veridan                Classic Pa     $13.50   $25.00     +85%
-  Ethereal Grove                   Classic Pa     $44.50   $11.24     -75%
-  Ragnar Bloodbane                 Classic Pa     $12.99   $22.10     +70%
-  Dragon's Gold                    Classic Pa      $4.00    $1.29     -68%
-  Princess Aurora Waveheart        Classic Pa     $12.99   $19.99     +54%
+  Card                             Treatment           Sold@     Ask@      Gap
+  ----------------------------------------------------------------------------
+  Cloudweaver Construct            Classic Foil        $0.99    $6.00    +506%
+  Pinkspore Dreamcap               Formless Foil      $19.99   $62.50    +213%
+  Corruption Warp                  Classic Foil       $19.99   $55.00    +175%
+  Azure Vault                      Classic Paper       $0.99    $2.50    +153%
+  Sandura of Heliosynth            Classic Paper      $12.99   $25.00     +92%
+  Pastel Bloom Drake               Classic Foil        $7.12   $13.30     +87%
+  The Great Veridan                Classic Paper      $13.50   $25.00     +85%
+  Ragnar Bloodbane                 Classic Paper      $12.99   $22.10     +70%
+  Dragon's Gold                    Classic Paper       $4.00    $1.29     -68%
+  Cedarshade Ruins                 Classic Paper      $12.99   $19.99     +54%
+  Princess Aurora Waveheart        Classic Paper      $12.99   $19.99     +54%
+  Carnotitan Ravager               Formless Foil       $7.50   $11.50     +53%
 
 ================================================================================
   PRICING CONSISTENCY BY TREATMENT
 ================================================================================
   Which treatments have the most chaotic pricing?
 
-  Treatment           Cards   Sales   Avg Spread  100%+ Spread
-  ------------------------------------------------------------
-  Formless Foil         213     749          33%            19
-  Classic Paper         141     515          46%            28
-  OCM Serialized        101     291          14%             1
-  Classic Foil           74     231          39%            11
-  Prerelease             15      31           0%             0
-  Error/Errata            2       9          50%             0
-  Stonefoil               4       8           0%             0
-  Promo                   1       4          92%             0
-  OCM                     1       2         101%             1
-  Red Foil                1       2           1%             0
+  Treatment                 Cards   Sales   Avg Spread  100%+ Spread
+  ------------------------------------------------------------------
+  Formless Foil               209     681          25%            12
+  Classic Paper               139     495          39%            23
+  OCM Serialized               95     251          12%             1
+  Classic Foil                 72     224          31%             9
+  Formless Foil Alt Art        11      60          60%             3
+  OCM Serialized Alt Art       10      35          21%             0
+  Prerelease                    5      11           0%             0
+  Stonefoil                     4       8           0%             0
+  Classic Paper Alt Art         1       6         118%             1
+  Error/Errata                  1       6          50%             0
+  Promo                         1       4          92%             0
+  Classic Foil Alt Art          1       2           0%             0
+  OCM                           1       2         101%             1
 
 ================================================================================
   KEY TAKEAWAYS
 ================================================================================
 
   1. GUT PRICING IS WILDLY INCONSISTENT
-     The same item regularly sells for 67% different prices.
-     54 items had sales ranging from X to 2X or more.
+     The same item regularly sells for 57% different prices.
+     45 items had sales ranging from X to 2X or more.
 
   2. REAL MONEY IS BEING LEFT ON THE TABLE
-     138 sellers underpriced by 30%+ = $3,364.74 lost.
+     119 sellers underpriced by 30%+ = $3,046.56 lost.
 
   3. BUYERS ARE OVERPAYING
-     96 buyers paid 50%+ over median = $5,557.43 extra.
+     74 buyers paid 50%+ over median = $3,385.86 extra.
 
   4. DATA BEATS GUT FEELING
      Check recent sold prices before listing. Check median before buying.
      The spread between informed and uninformed pricing is enormous.
 
 --------------------------------------------------------------------------------
-  Generated: 2025-12-09 01:45:53 UTC
+  Generated: 2025-12-09 04:20:49 UTC
   Data Source: eBay sold listings via WondersTrader.com
 --------------------------------------------------------------------------------
