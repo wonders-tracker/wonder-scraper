@@ -231,10 +231,14 @@ def read_market_overview(
             avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
             avg_delta = max(-200, min(200, avg_delta))
                 
-        # Deal Rating Delta
+        # Deal Rating Delta - compare last sale to VWAP (more stable than snapshot avg)
         deal_delta = 0.0
-        if last_price and latest_snap and latest_snap.avg_price > 0:
-             deal_delta = ((last_price - latest_snap.avg_price) / latest_snap.avg_price) * 100
+        # Use VWAP for comparison as it's more accurate than snapshot avg_price
+        comparison_price = vwap if vwap and vwap > 0 else (latest_snap.avg_price if latest_snap and latest_snap.avg_price > 0 else 0)
+        if last_price and comparison_price > 0:
+            deal_delta = ((last_price - comparison_price) / comparison_price) * 100
+            # Cap at ±100% to avoid extreme outliers
+            deal_delta = max(-100, min(100, deal_delta))
 
         # Use actual sales count from MarketPrice (more accurate than snapshot volume)
         period_volume = sales_stats['count'] if sales_stats else 0
