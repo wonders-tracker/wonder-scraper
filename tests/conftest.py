@@ -21,6 +21,35 @@ from app.core import security
 TEST_DATABASE_URL = "sqlite:///:memory:"
 
 
+@pytest.fixture(autouse=True)
+def clear_rate_limiters():
+    """Clear rate limiters before each test to prevent 429 errors."""
+    from app.core.rate_limit import rate_limiter
+    from app.core.anti_scraping import AntiScrapingMiddleware
+
+    # Clear the global rate limiter
+    rate_limiter.clear()
+
+    # Get the app's middleware stack and find the AntiScrapingMiddleware instance
+    from app.main import app
+
+    # Build the middleware stack by accessing it (this creates the stack if not built)
+    # The middleware stack is created lazily
+    def find_and_clear_middleware(obj):
+        """Recursively find and clear AntiScrapingMiddleware in the middleware chain."""
+        if isinstance(obj, AntiScrapingMiddleware):
+            obj.clear()
+        # Check if this object wraps another app
+        if hasattr(obj, 'app'):
+            find_and_clear_middleware(obj.app)
+
+    # Access middleware_stack to trigger build, then clear
+    if hasattr(app, 'middleware_stack') and app.middleware_stack:
+        find_and_clear_middleware(app.middleware_stack)
+
+    yield
+
+
 @pytest.fixture(scope="function")
 def test_engine():
     """Create a test database engine with in-memory SQLite."""

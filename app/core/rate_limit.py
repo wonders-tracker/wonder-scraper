@@ -90,6 +90,12 @@ class RateLimiter:
         if ip in self._lockouts:
             del self._lockouts[ip]
 
+    def clear(self):
+        """Clear all rate limiting state. Used for testing."""
+        self._requests.clear()
+        self._lockouts.clear()
+        self._failed_attempts.clear()
+
 
 # Global rate limiter instance
 rate_limiter = RateLimiter()

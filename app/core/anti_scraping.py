@@ -235,6 +235,13 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
             return True
         return False
 
+    def clear(self):
+        """Clear all rate limiting state. Used for testing."""
+        self._requests.clear()
+        self._blocked_ips.clear()
+        self._fingerprints.clear()
+        self._suspicious_ips.clear()
+
     async def dispatch(self, request: Request, call_next):
         """Main middleware dispatch."""
         if not self.enabled:
