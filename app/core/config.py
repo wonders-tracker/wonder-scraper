@@ -22,9 +22,17 @@ class Settings(BaseSettings):
 
     # Resend Email
     RESEND_API_KEY: str = ""
-    FROM_EMAIL: str = "WondersTracker <noreply@wonderstrader.com>"
-    ADMIN_EMAIL: str = ""  # Admin notification email (falls back to FROM_EMAIL)
-    
+    FROM_EMAIL: str = "WondersTracker <noreply@wonderstracker.com>"
+    ADMIN_EMAIL: str = "digitalcody@gmail.com"  # Admin notification email
+
+    # Polar Billing
+    POLAR_ACCESS_TOKEN: str = ""
+    POLAR_WEBHOOK_SECRET: str = ""
+    POLAR_PRO_PRODUCT_ID: str = ""  # Product ID for Pro subscription ($49.95/mo)
+    POLAR_API_PRODUCT_ID: str = ""  # Product ID for API Access (pay-per-request)
+    POLAR_SUCCESS_URL: str = ""  # Redirect URL after successful checkout
+    POLAR_ENVIRONMENT: str = "production"  # "sandbox" or "production"
+
     model_config = ConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 
 settings = Settings()

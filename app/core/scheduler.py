@@ -278,6 +278,209 @@ async def job_update_blokpax_data():
     print(f"[{datetime.utcnow()}] Blokpax Update Complete. Duration: {duration:.1f}s")
 
 
+async def job_send_daily_digests():
+    """
+    Send daily market digest emails to users who have opted in.
+    Runs once daily at 9 AM UTC.
+    """
+    print(f"[{datetime.utcnow()}] Sending Daily Digest Emails...")
+
+    try:
+        from app.models.watchlist import EmailPreferences
+        from app.models.user import User
+        from app.services.email import send_daily_market_digest
+        from app.services.market_insights import get_insights_generator
+
+        with Session(engine) as session:
+            # Get users who want daily digests
+            prefs = session.exec(
+                select(EmailPreferences).where(EmailPreferences.daily_digest == True)
+            ).all()
+
+            if not prefs:
+                print("[Digest] No users subscribed to daily digest")
+                return
+
+            # Gather market data once for all users
+            generator = get_insights_generator()
+            data = generator.gather_market_data(days=1)
+
+            # Format for email
+            market_data = {
+                'total_sales': data.get('total_sales', 0),
+                'total_volume': data.get('total_volume', 0),
+                'market_sentiment': 'bullish' if data.get('volume_change', 0) > 10 else 'bearish' if data.get('volume_change', 0) < -10 else 'neutral',
+                'top_gainers': data.get('top_gainers', []),
+                'top_losers': data.get('top_losers', []),
+                'hot_deals': data.get('hot_deals', []),
+            }
+
+            sent_count = 0
+            for pref in prefs:
+                user = session.get(User, pref.user_id)
+                if user and user.email:
+                    try:
+                        name = user.username or user.email.split('@')[0]
+                        success = send_daily_market_digest(user.email, name, market_data)
+                        if success:
+                            sent_count += 1
+                    except Exception as e:
+                        print(f"[Digest] Failed to send to {user.email}: {e}")
+
+            print(f"[Digest] Sent daily digest to {sent_count} users")
+
+    except Exception as e:
+        print(f"[Digest] Error sending daily digests: {e}")
+
+
+async def job_send_weekly_reports():
+    """
+    Send weekly market report emails to users who have opted in.
+    Runs once weekly on Monday at 9 AM UTC.
+    """
+    print(f"[{datetime.utcnow()}] Sending Weekly Report Emails...")
+
+    try:
+        from app.models.watchlist import EmailPreferences
+        from app.models.user import User
+        from app.services.email import send_weekly_market_report
+        from app.services.market_insights import get_insights_generator
+
+        with Session(engine) as session:
+            # Get users who want weekly reports
+            prefs = session.exec(
+                select(EmailPreferences).where(EmailPreferences.weekly_report == True)
+            ).all()
+
+            if not prefs:
+                print("[Weekly] No users subscribed to weekly report")
+                return
+
+            # Gather market data for the week
+            generator = get_insights_generator()
+            data = generator.gather_market_data(days=7)
+
+            # Format for email
+            week_end = datetime.utcnow()
+            week_start = week_end - timedelta(days=7)
+
+            report_data = {
+                'week_start': week_start.strftime('%b %d'),
+                'week_end': week_end.strftime('%b %d'),
+                'total_sales': data.get('total_sales', 0),
+                'total_volume': data.get('total_volume', 0),
+                'volume_change': data.get('volume_change', 0),
+                'avg_sale_price': data.get('avg_price', 0),
+                'daily_breakdown': data.get('daily_breakdown', []),
+                'top_cards_by_volume': data.get('top_cards', []),
+                'price_movers': data.get('price_movers', []),
+                'market_health': {
+                    'unique_buyers': data.get('unique_buyers', 0),
+                    'unique_sellers': data.get('unique_sellers', 0),
+                    'liquidity_score': data.get('liquidity_score', 0),
+                },
+            }
+
+            sent_count = 0
+            for pref in prefs:
+                user = session.get(User, pref.user_id)
+                if user and user.email:
+                    try:
+                        name = user.username or user.email.split('@')[0]
+                        success = send_weekly_market_report(user.email, name, report_data)
+                        if success:
+                            sent_count += 1
+                    except Exception as e:
+                        print(f"[Weekly] Failed to send to {user.email}: {e}")
+
+            print(f"[Weekly] Sent weekly report to {sent_count} users")
+
+    except Exception as e:
+        print(f"[Weekly] Error sending weekly reports: {e}")
+
+
+async def job_check_price_alerts():
+    """
+    Check watchlist price alerts and send notifications.
+    Runs every 30 minutes.
+    """
+    print(f"[{datetime.utcnow()}] Checking Price Alerts...")
+
+    try:
+        from app.models.watchlist import Watchlist
+        from app.models.user import User
+        from app.models.card import Card
+        from app.services.email import send_price_alert
+
+        with Session(engine) as session:
+            # Get all active alerts with target prices
+            alerts = session.exec(
+                select(Watchlist).where(
+                    Watchlist.alert_enabled == True,
+                    Watchlist.target_price != None,
+                    Watchlist.notify_email == True
+                )
+            ).all()
+
+            if not alerts:
+                print("[Alerts] No active price alerts")
+                return
+
+            sent_count = 0
+            for alert in alerts:
+                card = session.get(Card, alert.card_id)
+                user = session.get(User, alert.user_id)
+
+                if not card or not user:
+                    continue
+
+                current_price = card.floor_price or card.latest_price or 0
+
+                # Skip if already alerted at this price
+                if alert.last_alerted_price and abs(current_price - alert.last_alerted_price) < 0.01:
+                    continue
+
+                # Check if alert should trigger
+                should_alert = False
+                if alert.alert_type == "below" and current_price <= alert.target_price:
+                    should_alert = True
+                elif alert.alert_type == "above" and current_price >= alert.target_price:
+                    should_alert = True
+                elif alert.alert_type == "any":
+                    should_alert = True
+
+                # Cooldown: don't alert more than once per hour per card
+                if alert.last_alerted_at:
+                    time_since_last = datetime.utcnow() - alert.last_alerted_at
+                    if time_since_last.total_seconds() < 3600:
+                        continue
+
+                if should_alert:
+                    name = user.username or user.email.split('@')[0]
+                    alert_data = {
+                        'card_name': card.name,
+                        'card_slug': card.slug,
+                        'alert_type': alert.alert_type,
+                        'target_price': alert.target_price,
+                        'current_price': current_price,
+                        'treatment': alert.treatment or 'Any Treatment',
+                    }
+
+                    success = send_price_alert(user.email, name, alert_data)
+                    if success:
+                        sent_count += 1
+                        # Update alert tracking
+                        alert.last_alerted_at = datetime.utcnow()
+                        alert.last_alerted_price = current_price
+                        session.add(alert)
+
+            session.commit()
+            print(f"[Alerts] Sent {sent_count} price alerts")
+
+    except Exception as e:
+        print(f"[Alerts] Error checking price alerts: {e}")
+
+
 async def job_market_insights():
     """
     Generate and post AI-powered market insights to Discord.
@@ -360,9 +563,45 @@ def start_scheduler():
         replace_existing=True
     )
 
+    # Daily digest emails at 9:15 AM UTC (after market insights)
+    scheduler.add_job(
+        job_send_daily_digests,
+        CronTrigger(hour=9, minute=15),
+        id="job_send_daily_digests",
+        max_instances=1,
+        misfire_grace_time=3600,  # 1 hour
+        coalesce=True,
+        replace_existing=True
+    )
+
+    # Weekly report emails on Monday at 9:30 AM UTC
+    scheduler.add_job(
+        job_send_weekly_reports,
+        CronTrigger(day_of_week='mon', hour=9, minute=30),
+        id="job_send_weekly_reports",
+        max_instances=1,
+        misfire_grace_time=7200,  # 2 hours
+        coalesce=True,
+        replace_existing=True
+    )
+
+    # Price alert checks every 30 minutes
+    scheduler.add_job(
+        job_check_price_alerts,
+        IntervalTrigger(minutes=30),
+        id="job_check_price_alerts",
+        max_instances=1,
+        misfire_grace_time=900,  # 15 minutes
+        coalesce=True,
+        replace_existing=True
+    )
+
     scheduler.start()
     print("Scheduler started (with misfire handling):")
     print("  - job_update_market_data (eBay): 45m interval, 30m grace")
     print("  - job_update_blokpax_data (Blokpax): 20m interval, 10m grace")
     print("  - job_market_insights (Discord AI): 9:00 & 18:00 UTC, 1h grace")
+    print("  - job_send_daily_digests (Email): 9:15 UTC daily, 1h grace")
+    print("  - job_send_weekly_reports (Email): Mon 9:30 UTC, 2h grace")
+    print("  - job_check_price_alerts (Email): 30m interval, 15m grace")
 

@@ -4,7 +4,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from app.core.config import settings
-from app.api import auth, cards, portfolio, users, market, admin, blokpax, analytics, meta
+from app.api import auth, cards, portfolio, users, market, admin, blokpax, analytics, meta, billing, webhooks, watchlist
 from contextlib import asynccontextmanager
 from app.core.scheduler import start_scheduler
 from app.core.anti_scraping import AntiScrapingMiddleware
@@ -67,6 +67,9 @@ app.include_router(market.router, prefix=f"{settings.API_V1_STR}/market", tags=[
 app.include_router(admin.router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 app.include_router(blokpax.router, prefix=f"{settings.API_V1_STR}/blokpax", tags=["blokpax"])
 app.include_router(analytics.router, prefix=f"{settings.API_V1_STR}/analytics", tags=["analytics"])
+app.include_router(billing.router, prefix=settings.API_V1_STR, tags=["billing"])
+app.include_router(webhooks.router, prefix=settings.API_V1_STR, tags=["webhooks"])
+app.include_router(watchlist.router, prefix=f"{settings.API_V1_STR}/watchlist", tags=["watchlist"])
 
 @app.get("/")
 def root():
