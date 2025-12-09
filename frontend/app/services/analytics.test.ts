@@ -290,6 +290,82 @@ describe('Analytics Service', () => {
     })
   })
 
+  describe('Onboarding Events', () => {
+    it('should track welcome page view', () => {
+      analytics.trackWelcomePageView()
+
+      expect(mockGtag).toHaveBeenCalledWith('event', 'welcome_page_view', {
+        event_category: 'engagement',
+        event_label: 'viewed_welcome_page',
+        send_to: 'G-28SPPTBF79',
+      })
+    })
+
+    it('should track profile completed with username and discord', () => {
+      analytics.trackProfileCompleted(true, true)
+
+      expect(mockGtag).toHaveBeenCalledWith('event', 'profile_completed', {
+        event_category: 'engagement',
+        event_label: 'completed_profile',
+        has_username: true,
+        has_discord: true,
+        send_to: 'G-28SPPTBF79',
+      })
+    })
+
+    it('should track profile completed without optional fields', () => {
+      analytics.trackProfileCompleted(false, false)
+
+      expect(mockGtag).toHaveBeenCalledWith('event', 'profile_completed', {
+        event_category: 'engagement',
+        event_label: 'completed_profile',
+        has_username: false,
+        has_discord: false,
+        send_to: 'G-28SPPTBF79',
+      })
+    })
+
+    it('should track profile skipped', () => {
+      analytics.trackProfileSkipped()
+
+      expect(mockGtag).toHaveBeenCalledWith('event', 'profile_skipped', {
+        event_category: 'engagement',
+        event_label: 'skipped_profile_completion',
+        send_to: 'G-28SPPTBF79',
+      })
+    })
+
+    it('should track upgrade page view', () => {
+      analytics.trackUpgradePageView()
+
+      expect(mockGtag).toHaveBeenCalledWith('event', 'upgrade_page_view', {
+        event_category: 'engagement',
+        event_label: 'viewed_upgrade_page',
+        send_to: 'G-28SPPTBF79',
+      })
+    })
+
+    it('should track upgrade initiated', () => {
+      analytics.trackUpgradeInitiated()
+
+      expect(mockGtag).toHaveBeenCalledWith('event', 'upgrade_initiated', {
+        event_category: 'conversion',
+        event_label: 'started_checkout',
+        send_to: 'G-28SPPTBF79',
+      })
+    })
+
+    it('should track upgrade skipped', () => {
+      analytics.trackUpgradeSkipped()
+
+      expect(mockGtag).toHaveBeenCalledWith('event', 'upgrade_skipped', {
+        event_category: 'engagement',
+        event_label: 'skipped_upgrade',
+        send_to: 'G-28SPPTBF79',
+      })
+    })
+  })
+
   describe('Custom Events', () => {
     it('should allow custom events via analytics.custom()', () => {
       analytics.custom('promo_clicked', { campaign: 'holiday_2025', position: 'header' })

@@ -1,13 +1,9 @@
-import { createRoute, Link, useSearch } from '@tanstack/react-router'
+import { createFileRoute, Link, useSearch } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api } from '~/utils/auth'
 import { KeyRound, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react'
 
-import { Route as rootRoute } from './__root'
-
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/reset-password',
+export const Route = createFileRoute('/reset-password')({
   component: ResetPassword,
   validateSearch: (search: Record<string, unknown>) => ({
     token: (search.token as string) || '',
@@ -15,7 +11,7 @@ export const Route = createRoute({
 })
 
 function ResetPassword() {
-  const { token } = useSearch({ from: '/reset-password' })
+  const { token } = useSearch({ from: Route.id })
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)

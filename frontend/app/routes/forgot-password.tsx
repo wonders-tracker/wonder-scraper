@@ -1,13 +1,9 @@
-import { createRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api } from '~/utils/auth'
 import { Mail, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react'
 
-import { Route as rootRoute } from './__root'
-
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/forgot-password',
+export const Route = createFileRoute('/forgot-password')({
   component: ForgotPassword,
 })
 

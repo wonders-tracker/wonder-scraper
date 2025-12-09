@@ -224,6 +224,74 @@ function trackMarketPageView() {
 }
 
 /**
+ * Event: Welcome Page View
+ * Triggered when a user views the welcome/profile completion page
+ */
+function trackWelcomePageView() {
+  track('welcome_page_view', {
+    event_category: 'engagement',
+    event_label: 'viewed_welcome_page',
+  })
+}
+
+/**
+ * Event: Profile Completed
+ * Triggered when a user completes their profile on the welcome page
+ */
+function trackProfileCompleted(hasUsername: boolean, hasDiscord: boolean) {
+  track('profile_completed', {
+    event_category: 'engagement',
+    event_label: 'completed_profile',
+    has_username: hasUsername,
+    has_discord: hasDiscord,
+  })
+}
+
+/**
+ * Event: Profile Skipped
+ * Triggered when a user skips profile completion on the welcome page
+ */
+function trackProfileSkipped() {
+  track('profile_skipped', {
+    event_category: 'engagement',
+    event_label: 'skipped_profile_completion',
+  })
+}
+
+/**
+ * Event: Upgrade Page View
+ * Triggered when a user views the upgrade/upsell page
+ */
+function trackUpgradePageView() {
+  track('upgrade_page_view', {
+    event_category: 'engagement',
+    event_label: 'viewed_upgrade_page',
+  })
+}
+
+/**
+ * Event: Upgrade Initiated
+ * Triggered when a user clicks the upgrade button
+ */
+function trackUpgradeInitiated() {
+  track('upgrade_initiated', {
+    event_category: 'conversion',
+    event_label: 'started_checkout',
+  })
+}
+
+/**
+ * Event: Upgrade Skipped
+ * Triggered when a user continues as free from the upgrade page
+ */
+function trackUpgradeSkipped() {
+  track('upgrade_skipped', {
+    event_category: 'engagement',
+    event_label: 'skipped_upgrade',
+  })
+}
+
+/**
  * Event: Discord Login Initiated
  * Triggered when a user starts the Discord OAuth flow
  */
@@ -304,6 +372,14 @@ export const analytics = {
   // User Events
   trackProfileAccess,
   trackPortfolioAccess,
+
+  // Onboarding Events
+  trackWelcomePageView,
+  trackProfileCompleted,
+  trackProfileSkipped,
+  trackUpgradePageView,
+  trackUpgradeInitiated,
+  trackUpgradeSkipped,
 
   // Card/Listing Events
   trackCardView,

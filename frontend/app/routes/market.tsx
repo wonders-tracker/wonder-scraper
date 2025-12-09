@@ -1,8 +1,7 @@
-import { createRoute, Link, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { analytics } from '~/services/analytics'
-import { Route as rootRoute } from './__root'
 import { ArrowLeft, TrendingUp, ArrowUp, ArrowDown, Activity, Zap, BarChart3, DollarSign } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from 'recharts'
 import { Tooltip } from '../components/ui/tooltip'
@@ -20,9 +19,7 @@ import {
   SelectValue,
 } from "../components/ui/select"
 
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/market',
+export const Route = createFileRoute('/market')({
   component: MarketAnalysis
 })
 

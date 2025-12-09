@@ -1,4 +1,4 @@
-import { createRoute, useNavigate, Link } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { api, auth } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -6,7 +6,6 @@ import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowMode
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { ArrowUpDown, Search, ArrowUp, ArrowDown, Calendar, TrendingUp, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Plus, Package, Layers, Gem, Archive } from 'lucide-react'
 import clsx from 'clsx'
-import { Route as rootRoute } from './__root'
 import { Tooltip } from '../components/ui/tooltip'
 import { SimpleDropdown } from '../components/ui/dropdown'
 import { useTimePeriod } from '../context/TimePeriodContext'
@@ -64,9 +63,7 @@ type UserProfile = {
     is_superuser: boolean
 }
 
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/',
+export const Route = createFileRoute('/')({
   component: Home,
 })
 

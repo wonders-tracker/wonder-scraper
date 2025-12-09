@@ -1,7 +1,6 @@
-import { createRoute, redirect, Link } from '@tanstack/react-router'
+import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
-import { Route as rootRoute } from './__root'
 import {
   Users,
   Database,
@@ -28,6 +27,9 @@ import {
   Trash2,
   Shield,
   Zap,
+  UserCheck,
+  UserX,
+  Code,
 } from 'lucide-react'
 import { Tooltip } from '../components/ui/tooltip'
 import {
@@ -40,9 +42,7 @@ import {
   CartesianGrid,
 } from 'recharts'
 
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/admin',
+export const Route = createFileRoute('/admin')({
   component: AdminDashboard,
   beforeLoad: () => {
     if (typeof window !== 'undefined' && !auth.isAuthenticated()) {
@@ -125,6 +125,15 @@ interface SchedulerStatus {
   }>
 }
 
+interface APIAccessRequest {
+  id: number
+  email: string
+  username: string | null
+  discord_handle: string | null
+  requested_at: string | null
+  created_at: string | null
+}
+
 function AdminDashboard() {
   const queryClient = useQueryClient()
 
@@ -153,6 +162,38 @@ function AdminDashboard() {
       return res
     },
     refetchInterval: 30000,
+  })
+
+  // API Access Requests
+  const {
+    data: apiAccessRequests,
+    isLoading: apiAccessLoading,
+    refetch: refetchApiAccess,
+  } = useQuery<APIAccessRequest[]>({
+    queryKey: ['api-access-requests'],
+    queryFn: async () => {
+      const res = await api.get('billing/api-access/requests').json<APIAccessRequest[]>()
+      return res
+    },
+    refetchInterval: 60000,
+  })
+
+  const approveApiAccessMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      await api.post(`billing/api-access/approve/${userId}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['api-access-requests'] })
+    },
+  })
+
+  const denyApiAccessMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      await api.post(`billing/api-access/deny/${userId}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['api-access-requests'] })
+    },
   })
 
   const triggerScrapeMutation = useMutation({
@@ -355,6 +396,60 @@ function AdminDashboard() {
               </table>
             </div>
           </div>
+
+          {/* API Access Requests */}
+          {apiAccessRequests && apiAccessRequests.length > 0 && (
+            <div className="border rounded-lg p-4 bg-card border-amber-500/50">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Code className="w-5 h-5 text-amber-500" />
+                <span className="text-amber-500">API Access Requests</span>
+                <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-500">
+                  {apiAccessRequests.length} pending
+                </span>
+              </h2>
+              <div className="space-y-3">
+                {apiAccessRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium">{request.username || request.email}</div>
+                      <div className="text-xs text-muted-foreground flex gap-3">
+                        <span>{request.email}</span>
+                        {request.discord_handle && (
+                          <span>Discord: {request.discord_handle}</span>
+                        )}
+                        <span>
+                          Requested: {request.requested_at
+                            ? new Date(request.requested_at).toLocaleDateString()
+                            : 'Unknown'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => approveApiAccessMutation.mutate(request.id)}
+                        disabled={approveApiAccessMutation.isPending}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => denyApiAccessMutation.mutate(request.id)}
+                        disabled={denyApiAccessMutation.isPending}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                      >
+                        <UserX className="w-3.5 h-3.5" />
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Traffic Analytics */}
           <div className="border rounded-lg p-4 bg-card">

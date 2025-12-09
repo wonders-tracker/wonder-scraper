@@ -1,8 +1,7 @@
-import { createRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { analytics } from '~/services/analytics'
-import { Route as rootRoute } from './__root'
 import { ArrowLeft, TrendingUp, Trash2, Search, Edit, X, TrendingDown, BarChart3, Plus, Filter, Package } from 'lucide-react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel } from '@tanstack/react-table'
 import { useMemo, useState, useEffect } from 'react'
@@ -48,9 +47,7 @@ type PortfolioSummary = {
     by_source: Record<string, { count: number; cost: number; value: number }> | null
 }
 
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/portfolio',
+export const Route = createFileRoute('/portfolio')({
   component: Portfolio,
 })
 

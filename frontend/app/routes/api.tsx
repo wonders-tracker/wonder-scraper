@@ -1,7 +1,6 @@
-import { createRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
-import { Route as rootRoute } from './__root'
 import {
   ArrowLeft,
   Key,
@@ -22,9 +21,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/api',
+export const Route = createFileRoute('/api')({
   component: ApiPage,
 })
 

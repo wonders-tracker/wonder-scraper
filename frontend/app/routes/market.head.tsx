@@ -4,7 +4,7 @@ const SITE_NAME = 'WondersTracker'
 const SITE_URL = 'https://wonderstracker.com'
 const TWITTER_HANDLE = '@WondersTracker'
 
-export const Route = createFileRoute('/market')({
+export const Route = createFileRoute('/market/head')({
   head: () => {
     const pageTitle = `Market Analysis & Trends | ${SITE_NAME}`
     const description = 'Comprehensive market analysis for Wonders of the First TCG. View real-time sales trends, trading volume, price movements, and discover undervalued cards with our deal rating system.'

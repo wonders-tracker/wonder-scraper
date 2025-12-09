@@ -4,7 +4,7 @@ const SITE_NAME = 'WondersTracker'
 const SITE_URL = 'https://wonderstracker.com'
 const TWITTER_HANDLE = '@WondersTracker'
 
-export const Route = createFileRoute('/')({
+export const Route = createFileRoute('/index/head')({
   head: () => {
     const pageTitle = `${SITE_NAME} - Real-Time Wonders of the First TCG Price Tracker`
     const description = 'Track live card prices, market trends, and eBay sales data for Wonders of the First TCG. Browse 500+ cards with real-time pricing, sales volume, and deal ratings. Find the best prices on singles, boxes, and sealed products.'

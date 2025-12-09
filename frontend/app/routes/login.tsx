@@ -1,13 +1,11 @@
-import { createRoute, redirect, useRouter, Link } from '@tanstack/react-router'
+import { createFileRoute, redirect, useRouter, Link } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { auth, api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
-import { Route as rootRoute } from './__root'
 import { Wallet, Bell, TrendingUp, BarChart3, Shield, Zap } from 'lucide-react'
+import { CardGridBackground } from '~/components/CardGridBackground'
 
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/login',
+export const Route = createFileRoute('/login')({
   component: Login,
   beforeLoad: () => {
     if (typeof window !== 'undefined' && auth.isAuthenticated()) {
@@ -33,7 +31,8 @@ function Login() {
     const success = await auth.login(email, password)
     if (success) {
       analytics.trackLogin('email')
-      router.navigate({ to: '/' })
+      // Redirect to welcome page for profile completion
+      window.location.href = '/welcome'
     } else {
       setError('Invalid credentials')
     }
@@ -83,8 +82,12 @@ function Login() {
   ]
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-4">
-      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-0 border rounded-lg overflow-hidden bg-card">
+    <div className="relative flex min-h-[calc(100vh-8rem)] items-center justify-center p-4">
+      {/* Animated card grid background */}
+      <CardGridBackground rows={10} cols={12} animationDuration={40} />
+
+      {/* Content - positioned above background */}
+      <div className="relative z-10 w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-0 border rounded-lg overflow-hidden bg-card/95 backdrop-blur-sm shadow-2xl">
         {/* Left Side - Login Form */}
         <div className="p-8 lg:p-12 flex flex-col justify-center">
           <div className="mb-8">

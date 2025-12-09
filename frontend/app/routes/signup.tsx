@@ -1,14 +1,10 @@
-import { createRoute, useNavigate, Link } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { api } from '~/utils/auth'
 import { analytics } from '~/services/analytics'
 import { LogIn, AlertCircle } from 'lucide-react'
 
-import { Route as rootRoute } from './__root'
-
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/signup',
+export const Route = createFileRoute('/signup')({
   component: Signup,
 })
 

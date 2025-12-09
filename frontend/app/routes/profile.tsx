@@ -1,9 +1,8 @@
-import { createRoute, Link, redirect } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { analytics } from '~/services/analytics'
-import { Route as rootRoute } from './__root'
-import { ArrowLeft, User, Save, Server, Shield } from 'lucide-react'
+import { ArrowLeft, User, Save, Server, Shield, Zap, ExternalLink } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 type UserProfile = {
@@ -13,12 +12,14 @@ type UserProfile = {
     discord_handle?: string
     bio?: string
     is_superuser: boolean
+    has_api_access: boolean
+    subscription_tier: string
+    subscription_status: string | null
+    subscription_current_period_end: string | null
     created_at: string
 }
 
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/profile',
+export const Route = createFileRoute('/profile')({
   component: Profile,
   beforeLoad: () => {
       if (typeof window !== 'undefined' && !auth.isAuthenticated()) {
@@ -110,16 +111,62 @@ function Profile() {
                         <h2 className="text-lg font-bold mb-1 text-center break-all px-2">{user?.email}</h2>
                         <div className="text-xs text-muted-foreground uppercase mb-4">Member since {new Date(user?.created_at || '').toLocaleDateString()}</div>
 
-                        <div className="flex flex-wrap gap-2 justify-center">
+                        <div className="flex flex-wrap gap-2 justify-center mb-4">
                             {user?.is_superuser && (
                                 <span className="bg-red-900/20 text-red-500 border border-red-900 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1">
                                     <Shield className="w-3 h-3" /> Admin
                                 </span>
                             )}
-                            <span className="bg-emerald-900/20 text-emerald-500 border border-emerald-900 px-2 py-1 rounded text-[10px] uppercase font-bold">
-                                Pro Tier
-                            </span>
+                            {user?.subscription_tier === 'pro' && user?.subscription_status === 'active' ? (
+                                <span className="bg-amber-900/20 text-amber-400 border border-amber-900 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1">
+                                    <Zap className="w-3 h-3" /> Pro
+                                </span>
+                            ) : (
+                                <span className="bg-zinc-800 text-zinc-400 border border-zinc-700 px-2 py-1 rounded text-[10px] uppercase font-bold">
+                                    Free Tier
+                                </span>
+                            )}
+                            {user?.has_api_access && (
+                                <span className="bg-emerald-900/20 text-emerald-500 border border-emerald-900 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1">
+                                    <Server className="w-3 h-3" /> API
+                                </span>
+                            )}
                         </div>
+
+                        {/* Subscription Actions */}
+                        {user?.subscription_tier === 'pro' ? (
+                            <div className="text-center">
+                                {user?.subscription_status === 'canceled' && (
+                                    <p className="text-xs text-amber-400 mb-2">
+                                        Subscription ends {user.subscription_current_period_end
+                                            ? new Date(user.subscription_current_period_end).toLocaleDateString()
+                                            : 'soon'}
+                                    </p>
+                                )}
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            const res = await api.get('billing/portal').json<{ portal_url: string }>()
+                                            window.location.href = res.portal_url
+                                        } catch (err) {
+                                            console.error('Failed to get portal', err)
+                                        }
+                                    }}
+                                    className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
+                                >
+                                    <ExternalLink className="w-3 h-3" />
+                                    Manage Subscription
+                                </button>
+                            </div>
+                        ) : (
+                            <Link
+                                to="/upgrade"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black text-xs font-bold uppercase rounded transition-all"
+                            >
+                                <Zap className="w-3 h-3" />
+                                Upgrade to Pro
+                            </Link>
+                        )}
                     </div>
 
                     {/* Right Column: Form */}

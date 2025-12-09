@@ -4,7 +4,7 @@ const SITE_NAME = 'WondersTracker'
 const SITE_URL = 'https://wonderstracker.com'
 const TWITTER_HANDLE = '@WondersTracker'
 
-export const Route = createFileRoute('/cards/$cardId')({
+export const Route = createFileRoute('/cards/$cardId/head')({
   head: ({ params, loaderData }: any) => {
     const card = loaderData?.card
     const cardName = card?.name || 'Card Details'
