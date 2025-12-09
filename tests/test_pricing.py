@@ -241,14 +241,18 @@ class TestFMPCalculation:
         assert "breakdown" in fmp_result
         assert "calculation_method" in fmp_result
 
-        # For Singles, should have formula method
-        assert fmp_result["calculation_method"] == "formula"
+        # For Singles, should use mad_trimmed (if enough data) or formula (fallback)
+        assert fmp_result["calculation_method"] in ("mad_trimmed", "formula")
 
-        if fmp_result["breakdown"]:
+        # Breakdown with formula fields only exists for "formula" method
+        if fmp_result["calculation_method"] == "formula" and fmp_result["breakdown"]:
             assert "base_set_price" in fmp_result["breakdown"]
             assert "rarity_multiplier" in fmp_result["breakdown"]
             assert "treatment_multiplier" in fmp_result["breakdown"]
             assert "liquidity_adjustment" in fmp_result["breakdown"]
+        elif fmp_result["calculation_method"] == "mad_trimmed" and fmp_result["breakdown"]:
+            # MAD method has different breakdown fields
+            assert "mad_trimmed_mean" in fmp_result["breakdown"]
 
     def test_fmp_non_single_uses_median(self, pricing_service, integration_session):
         """Test that non-Single products use median price instead of formula."""

@@ -213,19 +213,19 @@ def seed_market_prices(session: Session, cards: list) -> list:
             ))
 
     # Add some OpenSea listings for platform diversity
-    for card in [test_common, progo]:
-        if card:
-            prices.append(MarketPrice(
-                card_id=card.id,
-                price=25.00,
-                title=f"{card.name} - OpenSea NFT",
-                treatment="Digital",
-                listing_type="sold",
-                sold_date=now - timedelta(days=5),
-                scraped_at=now - timedelta(days=5),
-                platform="opensea",
-                url="https://opensea.io/assets/test/123",
-            ))
+    # Only add to sealed products, not Singles (Singles shouldn't have Digital treatment)
+    if box:
+        prices.append(MarketPrice(
+            card_id=box.id,
+            price=175.00,
+            title=f"{box.name} - OpenSea NFT",
+            treatment="Digital",
+            listing_type="sold",
+            sold_date=now - timedelta(days=5),
+            scraped_at=now - timedelta(days=5),
+            platform="opensea",
+            url="https://opensea.io/assets/test/123",
+        ))
 
     # Batch insert
     for p in prices:
