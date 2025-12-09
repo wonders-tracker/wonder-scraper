@@ -8,7 +8,7 @@
 # IMPORTANT: All terms should be lowercase. Matching is case-insensitive.
 # Use spaces around short terms to avoid false positives (e.g., ' ra ' not 'ra')
 
-version: "1.0.0"
+version: "1.1.0"
 
 # =============================================================================
 # MAGIC: THE GATHERING (MTG)
@@ -222,6 +222,11 @@ mtg:
 
   # Specific cards that might match WOTF names
   specific_cards:
+    - "awakening of the possessed"
+    - "black market connections"
+    - "treasure map // treasure cove"
+    - "treasure cove"
+    - "vrondiss"
     - "mind stone"
     - "sol ring"
     - "lightning bolt"
@@ -310,6 +315,7 @@ yugioh:
     - "pgl3-en"
     # Structure Decks
     - "sdaz-en"
+    - "sdcb-en"
     - "sdcs-en"
     - "sdsb-en"
     - "sdck-en"
@@ -317,6 +323,7 @@ yugioh:
     - "sdch-en"
     - "sdfc-en"
     # Starter/Starter Sets
+    - "stas-en"
     - "stax-en"
     - "ysyr-en"
     - "yskr-en"
