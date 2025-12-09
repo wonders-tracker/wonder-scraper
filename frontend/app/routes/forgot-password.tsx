@@ -35,8 +35,8 @@ function ForgotPassword() {
       <div className="min-h-screen bg-background flex items-center justify-center p-4 font-mono">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-500/20 rounded-full mb-4">
-              <CheckCircle className="w-8 h-8 text-emerald-500" />
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-brand-300/20 rounded-full mb-4">
+              <CheckCircle className="w-8 h-8 text-brand-300" />
             </div>
             <h1 className="text-2xl font-bold uppercase tracking-tight mb-2">Check Your Email</h1>
             <p className="text-muted-foreground text-sm">
