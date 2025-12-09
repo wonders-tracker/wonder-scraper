@@ -751,39 +751,75 @@ def _extract_seller_info(item) -> Tuple[Optional[str], Optional[int], Optional[f
     feedback_score = None
     feedback_percent = None
 
-    # Try to find seller info element
-    seller_elem = item.select_one(".s-item__seller-info, .s-item__seller-info-text, .s-item__itemAff498, [class*='seller']")
-    if seller_elem:
-        text = seller_elem.get_text(strip=True)
-        # Parse seller name - usually format: "seller_name (1234) 99.5%"
-        # Or sometimes: "Sold by seller_name"
-
-        # Try pattern: "seller_name (1234) 99.5%"
-        match = re.search(r'^([^\(]+)\s*\((\d+)\)\s*([\d.]+)%?', text)
+    # Best approach: extract from seller link URL which has clean username
+    seller_link = item.select_one("a[href*='/usr/']")
+    if seller_link:
+        href = seller_link.get('href', '')
+        # URL format: https://www.ebay.com/usr/seller_name or /usr/seller_name
+        match = re.search(r'/usr/([^/?]+)', href)
         if match:
             seller_name = match.group(1).strip()
-            feedback_score = int(match.group(2))
-            feedback_percent = float(match.group(3))
-        else:
-            # Just extract seller name if feedback isn't there
-            seller_name = text.replace("Sold by", "").strip()
 
-    # Alternative: look for seller link
+    # Alternative: look for seller link text (but clean it up)
     if not seller_name:
-        seller_link = item.select_one("a[href*='/usr/'], a[class*='seller']")
+        seller_link = item.select_one("a[class*='seller']")
         if seller_link:
-            seller_name = seller_link.get_text(strip=True)
+            text = seller_link.get_text(strip=True)
+            # Take just the first word/username before any spaces or special chars
+            seller_name = text.split()[0] if text else None
+
+    # Try to find seller info element
+    if not seller_name:
+        seller_elem = item.select_one(".s-item__seller-info, .s-item__seller-info-text")
+        if seller_elem:
+            text = seller_elem.get_text(strip=True)
+            # Parse seller name - format varies:
+            # "seller_name (1234) 99.5%"
+            # "seller_name  100% positive (1.2K)..."
+
+            # Try pattern: "seller_name (1234) 99.5%"
+            match = re.search(r'^([a-zA-Z0-9_\-\.]+)\s*\((\d+)\)\s*([\d.]+)%?', text)
+            if match:
+                seller_name = match.group(1).strip()
+                feedback_score = int(match.group(2))
+                feedback_percent = float(match.group(3))
+            else:
+                # Try pattern: "seller_name  100% positive (1.2K)"
+                match = re.search(r'^([a-zA-Z0-9_\-\.]+)\s+(\d+)%\s*positive\s*\(([\d.]+)K?\)', text, re.IGNORECASE)
+                if match:
+                    seller_name = match.group(1).strip()
+                    feedback_percent = float(match.group(2))
+                    score_str = match.group(3)
+                    # Handle "1.2K" format
+                    if 'K' in text[text.find(match.group(3)):text.find(match.group(3))+5].upper():
+                        feedback_score = int(float(score_str) * 1000)
+                    else:
+                        feedback_score = int(float(score_str))
+                else:
+                    # Last resort: take first word that looks like a username
+                    match = re.match(r'^([a-zA-Z0-9_\-\.]+)', text)
+                    if match:
+                        seller_name = match.group(1).strip()
 
     # Try to find feedback separately if not found
     if seller_name and not feedback_score:
         feedback_elem = item.select_one(".s-item__seller-info .s-item__feedback, [class*='feedback']")
         if feedback_elem:
             text = feedback_elem.get_text(strip=True)
-            # Parse "(1234) 99.5%" format
+            # Parse "(1234) 99.5%" or "100% positive (1.2K)" format
             match = re.search(r'\((\d+)\)\s*([\d.]+)%', text)
             if match:
                 feedback_score = int(match.group(1))
                 feedback_percent = float(match.group(2))
+            else:
+                match = re.search(r'([\d.]+)%\s*positive\s*\(([\d.]+)K?\)', text, re.IGNORECASE)
+                if match:
+                    feedback_percent = float(match.group(1))
+                    score_str = match.group(2)
+                    if 'K' in text.upper():
+                        feedback_score = int(float(score_str) * 1000)
+                    else:
+                        feedback_score = int(float(score_str))
 
     return seller_name, feedback_score, feedback_percent
 
