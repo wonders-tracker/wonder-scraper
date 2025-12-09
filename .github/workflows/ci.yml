@@ -37,7 +37,9 @@ jobs:
       # This requires SAAS_SUBMODULE_TOKEN secret to be set
       # For OSS contributors, this step is skipped and SaaS tests are auto-skipped
       - name: Checkout SaaS submodule
-        if: ${{ secrets.SAAS_SUBMODULE_TOKEN != '' }}
+        env:
+          SAAS_TOKEN: ${{ secrets.SAAS_SUBMODULE_TOKEN }}
+        if: env.SAAS_TOKEN != ''
         run: |
           git config --global url."https://${{ secrets.SAAS_SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
           git submodule update --init --recursive saas || echo "SaaS submodule not configured"
