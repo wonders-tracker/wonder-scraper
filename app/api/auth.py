@@ -142,6 +142,7 @@ def get_current_user_info(
         "username": current_user.username,
         "discord_handle": current_user.discord_handle,
         "is_active": current_user.is_active,
+        "onboarding_completed": current_user.onboarding_completed,
     }
 
 

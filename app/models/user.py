@@ -20,6 +20,7 @@ class User(SQLModel, table=True):
     discord_handle: Optional[str] = Field(default=None, nullable=True)
     discord_id: Optional[str] = Field(default=None, nullable=True, sa_column_kwargs={"unique": True})
     bio: Optional[str] = Field(default=None, nullable=True)
+    onboarding_completed: bool = Field(default=False)  # Track if user finished onboarding flow
 
     # Password Reset
     password_reset_token: Optional[str] = Field(default=None, nullable=True, index=True)

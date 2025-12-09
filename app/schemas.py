@@ -127,6 +127,7 @@ class UserOut(UserBase):
     username: Optional[str] = None
     discord_handle: Optional[str] = None
     bio: Optional[str] = None
+    onboarding_completed: bool = False
     # Subscription fields
     subscription_tier: str = "free"
     subscription_status: Optional[str] = None
