@@ -83,7 +83,7 @@ function RequestAccessForm() {
   if (submitted) {
     return (
       <div className="border rounded-lg p-8 text-center bg-card">
-        <Check className="w-12 h-12 mx-auto text-emerald-500 mb-4" />
+        <Check className="w-12 h-12 mx-auto text-brand-300 mb-4" />
         <h3 className="text-lg font-bold mb-2">Request Submitted</h3>
         <p className="text-muted-foreground">
           We've received your API access request. You'll hear back from us soon at <strong>{formData.email}</strong>.
@@ -341,7 +341,7 @@ function ApiPage() {
                 All API requests require authentication via an API key. Include your key in the <code className="bg-muted px-1 rounded">X-API-Key</code> header.
               </p>
               <div className="bg-zinc-900 rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                <pre className="text-emerald-400">
+                <pre className="text-brand-300">
 {`curl -H "X-API-Key: wt_your_api_key_here" \\
      https://api.wonderstrader.com/api/v1/cards`}
                 </pre>
@@ -359,7 +359,7 @@ function ApiPage() {
                 {/* Cards */}
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
                     <code className="text-sm">/api/v1/cards</code>
                   </div>
                   <div className="p-4">
@@ -373,7 +373,7 @@ function ApiPage() {
                 {/* Single Card */}
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
                     <code className="text-sm">/api/v1/cards/{'{card_id}'}</code>
                   </div>
                   <div className="p-4">
@@ -384,7 +384,7 @@ function ApiPage() {
                 {/* Sales History */}
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
                     <code className="text-sm">/api/v1/cards/{'{card_id}'}/history</code>
                   </div>
                   <div className="p-4">
@@ -398,7 +398,7 @@ function ApiPage() {
                 {/* Active Listings */}
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
                     <code className="text-sm">/api/v1/cards/{'{card_id}'}/active</code>
                   </div>
                   <div className="p-4">
@@ -409,7 +409,7 @@ function ApiPage() {
                 {/* Market Overview */}
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
                     <code className="text-sm">/api/v1/market/overview</code>
                   </div>
                   <div className="p-4">
@@ -423,7 +423,7 @@ function ApiPage() {
                 {/* Blokpax */}
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
                     <code className="text-sm">/api/v1/blokpax/summary</code>
                   </div>
                   <div className="p-4">
@@ -495,21 +495,21 @@ function ApiPage() {
               <>
                 {/* New Key Created Alert */}
                 {newlyCreatedKey && (
-                  <div className="border border-emerald-500 rounded-lg p-4 bg-emerald-500/10">
+                  <div className="border border-brand-300 rounded-lg p-4 bg-brand-300/10">
                     <div className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                      <Check className="w-5 h-5 text-brand-300 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <h4 className="font-bold text-emerald-400 mb-1">API Key Created!</h4>
+                        <h4 className="font-bold text-brand-300 mb-1">API Key Created!</h4>
                         <p className="text-sm text-muted-foreground mb-3">
                           Copy this key now - it won't be shown again!
                         </p>
                         <div className="flex items-center gap-2 bg-zinc-900 rounded p-3 font-mono text-sm">
-                          <code className="flex-1 break-all text-emerald-400">{newlyCreatedKey}</code>
+                          <code className="flex-1 break-all text-brand-300">{newlyCreatedKey}</code>
                           <button
                             onClick={() => copyToClipboard(newlyCreatedKey)}
                             className="flex-shrink-0 p-2 hover:bg-muted rounded transition-colors"
                           >
-                            {copiedKey ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                            {copiedKey ? <Check className="w-4 h-4 text-brand-300" /> : <Copy className="w-4 h-4" />}
                           </button>
                         </div>
                         <button
@@ -609,7 +609,7 @@ function ApiPage() {
                               className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition-colors ${
                                 key.is_active
                                   ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
-                                  : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                                  : 'bg-brand-300/20 text-brand-300 hover:bg-brand-300/30'
                               }`}
                             >
                               {key.is_active ? 'Disable' : 'Enable'}
