@@ -431,7 +431,7 @@ function AdminDashboard() {
                       <button
                         onClick={() => approveApiAccessMutation.mutate(request.id)}
                         disabled={approveApiAccessMutation.isPending}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded bg-brand-300/20 text-brand-300 hover:bg-brand-300/30 transition-colors disabled:opacity-50"
                       >
                         <UserCheck className="w-3.5 h-3.5" />
                         Approve
@@ -609,10 +609,10 @@ function AdminDashboard() {
                   </div>
                 </div>
               ) : (
-                <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-md">
+                <div className="mb-4 p-3 bg-brand-400/10 border border-brand-400/30 rounded-md">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    <span className="text-green-500">No jobs running</span>
+                    <CheckCircle className="w-4 h-4 text-brand-400" />
+                    <span className="text-brand-400">No jobs running</span>
                   </div>
                 </div>
               )}
@@ -674,7 +674,7 @@ function AdminDashboard() {
                   <div className="mb-4 flex items-center gap-2">
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        schedulerStatus?.running ? 'bg-green-500' : 'bg-red-500'
+                        schedulerStatus?.running ? 'bg-brand-400' : 'bg-red-500'
                       }`}
                     />
                     <span className="text-sm">
@@ -820,7 +820,7 @@ function AdminDashboard() {
                         <span
                           className={`text-xs px-2 py-1 rounded ${
                             job.status === 'completed'
-                              ? 'bg-green-500/20 text-green-500'
+                              ? 'bg-brand-400/20 text-brand-400'
                               : job.status === 'running'
                                 ? 'bg-blue-500/20 text-blue-500'
                                 : 'bg-red-500/20 text-red-500'
@@ -995,7 +995,7 @@ function APIKeyManagement() {
           </div>
           <div className="bg-muted/30 rounded p-3">
             <div className="text-xs text-muted-foreground">Active Keys</div>
-            <div className="text-xl font-bold text-emerald-500">{keyStats?.active_keys ?? 0}</div>
+            <div className="text-xl font-bold text-brand-300">{keyStats?.active_keys ?? 0}</div>
           </div>
           <div className="bg-muted/30 rounded p-3">
             <div className="text-xs text-muted-foreground">Used Today</div>
@@ -1065,7 +1065,7 @@ function APIKeyManagement() {
                     <span
                       className={`text-xs px-2 py-0.5 rounded ${
                         key.is_active
-                          ? 'bg-emerald-500/20 text-emerald-400'
+                          ? 'bg-brand-300/20 text-brand-300'
                           : 'bg-red-500/20 text-red-400'
                       }`}
                     >
@@ -1084,7 +1084,7 @@ function APIKeyManagement() {
                         className={`p-1.5 rounded transition-colors ${
                           key.is_active
                             ? 'text-amber-400 hover:bg-amber-500/20'
-                            : 'text-emerald-400 hover:bg-emerald-500/20'
+                            : 'text-brand-300 hover:bg-brand-300/20'
                         }`}
                         title={key.is_active ? 'Disable' : 'Enable'}
                       >

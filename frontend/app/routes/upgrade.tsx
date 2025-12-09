@@ -101,9 +101,9 @@ function Upgrade() {
     return (
       <div className="min-h-screen bg-zinc-950 py-12 px-4">
         <div className="max-w-2xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/30 mb-6">
-            <Check className="w-5 h-5 text-emerald-400" />
-            <span className="text-emerald-400 font-medium">You're on Pro!</span>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-300/10 border border-brand-300/30 mb-6">
+            <Check className="w-5 h-5 text-brand-300" />
+            <span className="text-brand-300 font-medium">You're on Pro!</span>
           </div>
 
           <h1 className="text-4xl font-bold text-white mb-4">
@@ -147,14 +147,14 @@ function Upgrade() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 mb-4">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <span className="text-amber-400 text-sm font-medium">Pro Plan</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-400/10 border border-brand-400/30 mb-4">
+            <Zap className="w-4 h-4 text-brand-300" />
+            <span className="text-brand-300 text-sm font-medium">Pro Plan</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
             Unlock the Full Power of<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">
+            <span className="text-brand-300">
               Wonders Tracker
             </span>
           </h1>
@@ -169,7 +169,7 @@ function Upgrade() {
         <div className="max-w-md mx-auto mb-16">
           <div className="relative bg-zinc-900 rounded-2xl border border-zinc-800 p-8 overflow-hidden">
             {/* Glow effect */}
-            <div className="absolute -top-24 -right-24 w-48 h-48 bg-amber-500/20 rounded-full blur-3xl" />
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-brand-400/20 rounded-full blur-3xl" />
 
             <div className="relative">
               <div className="flex items-baseline gap-2 mb-2">
@@ -191,7 +191,7 @@ function Upgrade() {
                   '$0.001/request for additional usage'
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-3 text-zinc-300">
-                    <Check className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                    <Check className="w-5 h-5 text-brand-300 flex-shrink-0" />
                     {item}
                   </li>
                 ))}
@@ -200,7 +200,7 @@ function Upgrade() {
               <button
                 onClick={handleUpgrade}
                 disabled={checkoutMutation.isPending || isRedirecting}
-                className="w-full py-4 px-6 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-semibold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-4 px-6 bg-brand-400 hover:bg-brand-300 text-gray-900 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {checkoutMutation.isPending || isRedirecting ? (
                   <>
@@ -241,7 +241,7 @@ function Upgrade() {
               key={feature.title}
               className="p-6 bg-zinc-900/50 border border-zinc-800 rounded-xl hover:border-zinc-700 transition-colors"
             >
-              <feature.icon className="w-10 h-10 text-amber-400 mb-4" />
+              <feature.icon className="w-10 h-10 text-brand-300 mb-4" />
               <h3 className="text-white font-semibold mb-2">{feature.title}</h3>
               <p className="text-zinc-400 text-sm">{feature.description}</p>
             </div>
