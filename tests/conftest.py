@@ -16,6 +16,35 @@ from app.models.user import User
 from app.core import security
 
 
+# Check if SaaS module is available
+try:
+    import saas
+    SAAS_AVAILABLE = True
+except ImportError:
+    SAAS_AVAILABLE = False
+
+
+def pytest_collection_modifyitems(config, items):
+    """
+    Auto-skip SaaS tests when saas/ module is not available.
+
+    This allows the OSS version to run tests without failing on
+    SaaS-specific functionality.
+    """
+    if SAAS_AVAILABLE:
+        return  # SaaS available, run all tests
+
+    skip_saas = pytest.mark.skip(reason="saas/ module not available (OSS mode)")
+
+    for item in items:
+        # Skip tests marked with @pytest.mark.saas
+        if "saas" in item.keywords:
+            item.add_marker(skip_saas)
+        # Skip tests in saas/tests/ directory
+        elif "saas/tests" in str(item.fspath) or "saas\\tests" in str(item.fspath):
+            item.add_marker(skip_saas)
+
+
 # Use in-memory SQLite for unit tests (fast, isolated)
 # For integration tests, we use the real PostgreSQL database
 TEST_DATABASE_URL = "sqlite:///:memory:"

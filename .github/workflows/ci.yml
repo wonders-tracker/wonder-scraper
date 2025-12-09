@@ -33,6 +33,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Optional: Checkout SaaS submodule if available
+      # This requires SAAS_SUBMODULE_TOKEN secret to be set
+      # For OSS contributors, this step is skipped and SaaS tests are auto-skipped
+      - name: Checkout SaaS submodule
+        if: ${{ secrets.SAAS_SUBMODULE_TOKEN != '' }}
+        run: |
+          git config --global url."https://${{ secrets.SAAS_SUBMODULE_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive saas || echo "SaaS submodule not configured"
+        continue-on-error: true
+
+      - name: Check SaaS availability
+        id: saas-check
+        run: |
+          if [ -f "saas/__init__.py" ]; then
+            echo "saas_available=true" >> $GITHUB_OUTPUT
+            echo "✅ SaaS module available - running full test suite"
+          else
+            echo "saas_available=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ SaaS module not available - running OSS tests only"
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -65,6 +86,8 @@ jobs:
           SECRET_KEY: test-secret-key-for-ci
           ALGORITHM: HS256
         run: |
+          echo "🧪 Running tests (SaaS: ${{ steps.saas-check.outputs.saas_available }})"
+          # Run tests - SaaS tests are auto-skipped when saas/ module not available
           poetry run pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage
