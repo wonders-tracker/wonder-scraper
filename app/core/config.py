@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Discord OAuth
-    DISCORD_CLIENT_ID: str
+    DISCORD_CLIENT_ID: str = ""  # Required in production, optional for tests
     DISCORD_CLIENT_SECRET: str = ""
     DISCORD_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/discord/callback"
 
