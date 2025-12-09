@@ -118,7 +118,7 @@ function Profile() {
                                 </span>
                             )}
                             {user?.subscription_tier === 'pro' && user?.subscription_status === 'active' ? (
-                                <span className="bg-amber-900/20 text-amber-400 border border-amber-900 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1">
+                                <span className="bg-brand-800/20 text-brand-300 border border-brand-800 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1">
                                     <Zap className="w-3 h-3" /> Pro
                                 </span>
                             ) : (
@@ -127,7 +127,7 @@ function Profile() {
                                 </span>
                             )}
                             {user?.has_api_access && (
-                                <span className="bg-emerald-900/20 text-emerald-500 border border-emerald-900 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1">
+                                <span className="bg-brand-800/20 text-brand-300 border border-brand-800 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1">
                                     <Server className="w-3 h-3" /> API
                                 </span>
                             )}
@@ -161,7 +161,7 @@ function Profile() {
                         ) : (
                             <Link
                                 to="/upgrade"
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black text-xs font-bold uppercase rounded transition-all"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-brand-400 hover:bg-brand-300 text-gray-900 text-xs font-bold uppercase rounded transition-all"
                             >
                                 <Zap className="w-3 h-3" />
                                 Upgrade to Pro

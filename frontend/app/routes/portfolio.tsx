@@ -62,14 +62,14 @@ const TREATMENTS = [
   'Preslab TAG', 'Preslab TAG 8', 'Preslab TAG 9', 'Preslab TAG 10'
 ]
 const SOURCES = ['eBay', 'Blokpax', 'TCGPlayer', 'LGS', 'Trade', 'Pack Pull', 'Other']
-const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
+const PIE_COLORS = ['#7dd3a8', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
 
 // Treatment colors matching TreatmentBadge
 const TREATMENT_COLORS: Record<string, string> = {
   'Classic Paper': '#71717a',     // zinc-500
   'Classic Foil': '#0ea5e9',      // sky-500
   'Full Art': '#6366f1',          // indigo-500
-  'Full Art Foil': '#10b981',     // emerald-500
+  'Full Art Foil': '#7dd3a8',     // brand-300
   'Formless': '#a855f7',          // purple-500
   'Formless Foil': '#d946ef',     // fuchsia-500
   'Serialized': '#eab308',        // yellow-500
@@ -79,7 +79,7 @@ const TREATMENT_COLORS: Record<string, string> = {
   'Prerelease': '#ec4899',        // pink-500
   'Preslab TAG': '#2dd4bf',       // teal-400
   'Preslab TAG 8': '#38bdf8',     // sky-400
-  'Preslab TAG 9': '#4ade80',     // green-400
+  'Preslab TAG 9': '#7dd3a8',     // brand-300
   'Preslab TAG 10': '#fcd34d',    // amber-300
 }
 
@@ -339,7 +339,7 @@ function Portfolio() {
               const val = row.original.profit_loss || 0
               const pct = row.original.profit_loss_percent || 0
               return (
-                  <div className={clsx("text-right font-mono text-xs", val >= 0 ? "text-emerald-500" : "text-red-500")}>
+                  <div className={clsx("text-right font-mono text-xs", val >= 0 ? "text-brand-300" : "text-red-500")}>
                       {val >= 0 ? '+' : ''}{val.toFixed(2)} ({pct.toFixed(1)}%)
                   </div>
               )
@@ -427,7 +427,7 @@ function Portfolio() {
             <div className="flex flex-wrap items-center gap-6 mb-6 text-sm">
                 <Tooltip content="Current market value of all cards">
                     <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                        <div className="w-1.5 h-1.5 rounded-full bg-brand-300"></div>
                         <span className="text-[10px] text-muted-foreground uppercase">Value</span>
                         <span className="font-mono font-bold text-lg">${stats.totalValue.toFixed(2)}</span>
                     </div>
@@ -441,12 +441,12 @@ function Portfolio() {
                 </Tooltip>
                 <Tooltip content="Unrealized profit/loss if sold at current market prices">
                     <div className="flex items-center gap-2">
-                        <div className={clsx("w-1.5 h-1.5 rounded-full", stats.totalGain >= 0 ? "bg-emerald-500" : "bg-red-500")}></div>
+                        <div className={clsx("w-1.5 h-1.5 rounded-full", stats.totalGain >= 0 ? "bg-brand-300" : "bg-red-500")}></div>
                         <span className="text-[10px] text-muted-foreground uppercase">Return</span>
-                        <span className={clsx("font-mono font-bold text-lg", stats.totalGain >= 0 ? "text-emerald-500" : "text-red-500")}>
+                        <span className={clsx("font-mono font-bold text-lg", stats.totalGain >= 0 ? "text-brand-300" : "text-red-500")}>
                             {stats.totalGain >= 0 ? '+' : ''}${Math.abs(stats.totalGain).toFixed(2)}
                         </span>
-                        <span className={clsx("text-xs", stats.totalGain >= 0 ? "text-emerald-500" : "text-red-500")}>
+                        <span className={clsx("text-xs", stats.totalGain >= 0 ? "text-brand-300" : "text-red-500")}>
                             ({stats.totalGain >= 0 ? '+' : ''}{stats.totalGainPercent.toFixed(1)}%)
                         </span>
                     </div>
@@ -573,7 +573,7 @@ function Portfolio() {
                                 <Line
                                     type="monotone"
                                     dataKey="value"
-                                    stroke="#10b981"
+                                    stroke="#7dd3a8"
                                     strokeWidth={2}
                                     dot={false}
                                     name="value"
@@ -583,7 +583,7 @@ function Portfolio() {
                     </div>
                     <div className="flex items-center justify-center gap-6 mt-4 text-xs">
                         <div className="flex items-center gap-2">
-                            <div className="w-4 h-0.5 bg-emerald-500" />
+                            <div className="w-4 h-0.5 bg-brand-300" />
                             <span className="text-muted-foreground">Market Value</span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -835,7 +835,7 @@ function Portfolio() {
                                     <span className="text-muted-foreground">Profit/Loss:</span>
                                     <span className={clsx(
                                         "font-mono font-bold",
-                                        (editingCard.profit_loss || 0) >= 0 ? "text-emerald-500" : "text-red-500"
+                                        (editingCard.profit_loss || 0) >= 0 ? "text-brand-300" : "text-red-500"
                                     )}>
                                         {(editingCard.profit_loss || 0) >= 0 ? '+' : ''}${(editingCard.profit_loss || 0).toFixed(2)}
                                     </span>
