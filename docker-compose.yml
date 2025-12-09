@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # Local PostgreSQL for development
+  postgres:
+    image: postgres:15-alpine
+    container_name: wonder-postgres
+    environment:
+      POSTGRES_USER: wonder
+      POSTGRES_PASSWORD: wonder
+      POSTGRES_DB: wonder_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wonder -d wonder_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching (optional, for future use)
+  redis:
+    image: redis:7-alpine
+    container_name: wonder-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+
+# Usage:
+# Start services:     docker-compose up -d
+# Stop services:      docker-compose down
+# View logs:          docker-compose logs -f postgres
+# Connect to psql:    docker-compose exec postgres psql -U wonder -d wonder_dev
+# Reset database:     docker-compose down -v && docker-compose up -d

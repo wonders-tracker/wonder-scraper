@@ -1,93 +1,158 @@
 # WondersTracker
 
-Real-time market tracker for Wonders of the First TCG cards.
+[![CI](https://github.com/codyrobertson/wonder-scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/codyrobertson/wonder-scraper/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Architecture
+Real-time market tracking and price analytics platform for the **Wonders of the First** trading card game. Aggregates sales data from eBay and Blokpax to provide pricing, market trends, and portfolio management.
 
-### Frontend (Vercel)
-- **Tech**: React + TanStack Router + TanStack Query + Tailwind CSS
-- **URL**: https://wonderstracker.com
-- **Features**:
-  - Real-time card price tracking
-  - Market analysis & trends
-  - Portfolio management
-  - SEO optimized with dynamic OG images
+**Live Site**: [wonderstracker.com](https://wonderstracker.com)
 
-### Backend (Railway)
-- **Tech**: FastAPI + SQLModel + PostgreSQL (Neon)
-- **URL**: https://wonder-scraper-production.up.railway.app
-- **Purpose**: 
-  - REST API for card and market data
-  - Scheduled jobs for scraping (every 30 minutes)
-  - Background data processing
+## Features
 
-### Database (Neon)
-- **Tech**: PostgreSQL with connection pooling
-- **Purpose**: Central data store accessed by both backend jobs and frontend API calls
+- **Real-time Market Data** - Hourly polling of eBay sales and listings
+- **Fair Market Price (FMP)** - MAD-trimmed pricing algorithm for accurate valuations
+- **Portfolio Tracking** - Track your collection's value over time
+- **Market Insights** - AI-generated daily market reports
+- **Treatment Variants** - Track Classic Paper, Foil, Serialized, and more
+- **Discord Integration** - Market alerts and new listing notifications
 
-## Data Flow
+## Tech Stack
 
-```
-eBay/OpenSea → Backend Scrapers → Neon DB ← Frontend (via REST API)
-                     ↑
-                Scheduled Jobs (30min intervals)
-```
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | React 19, TanStack Router/Query, Tailwind CSS |
+| **Backend** | FastAPI, SQLModel, APScheduler |
+| **Database** | PostgreSQL (Neon) |
+| **Scraping** | Playwright, BeautifulSoup |
+| **Hosting** | Railway (API), Vercel (Frontend) |
 
-## Development
+## Quick Start
 
-### Backend
+### Prerequisites
+
+- Python 3.11+
+- Node.js 20+
+- PostgreSQL 15+ (or [Neon](https://neon.tech) account)
+- [Poetry](https://python-poetry.org/) package manager
+
+### Backend Setup
+
 ```bash
-cd /path/to/wonder-scraper
+# Clone the repository
+git clone https://github.com/codyrobertson/wonder-scraper.git
+cd wonder-scraper
+
+# Install dependencies
 poetry install
+
+# Copy environment template
+cp .env.example .env
+# Edit .env with DATABASE_URL and SECRET_KEY
+
+# Start the development server
 poetry run uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend
+### Frontend Setup
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-### Distributed Backfill
-```bash
-# Run with 4 parallel workers
-python scripts/distributed_backfill.py 4
+Visit http://localhost:5173 (frontend) and http://localhost:8000/docs (API docs).
 
-# Force update all cards
-python scripts/distributed_backfill.py 4 --force
+## Project Structure
+
 ```
+wonder-scraper/
+├── app/                    # Backend application
+│   ├── api/               # API endpoints (cards, market, auth, etc.)
+│   ├── core/              # Config, security, scheduler
+│   ├── models/            # SQLModel database models
+│   ├── scraper/           # eBay & Blokpax scrapers
+│   ├── services/          # Business logic (pricing, insights)
+│   └── discord_bot/       # Discord webhook integrations
+├── frontend/              # React frontend
+│   ├── app/
+│   │   ├── components/    # Reusable UI components
+│   │   ├── routes/        # TanStack Router pages
+│   │   └── lib/           # Utilities & API client
+├── scripts/               # CLI utilities
+├── tests/                 # Test suite
+└── docs/                  # Documentation
+```
+
+## Development
+
+### Running Tests
+
+```bash
+# All tests
+poetry run pytest
+
+# With coverage
+poetry run pytest --cov=app --cov-report=html
+
+# Specific file
+poetry run pytest tests/test_pricing.py -v
+```
+
+### Code Quality
+
+```bash
+# Backend lint
+poetry run ruff check app/
+
+# Frontend typecheck
+cd frontend && npm run typecheck
+```
+
+## Branch Strategy
+
+| Branch | Purpose | Auto-Deploys To |
+|--------|---------|-----------------|
+| `main` | Production code | Production (Railway) |
+| `staging` | Pre-release testing | Staging environment |
+| `preview` | Feature previews | Preview environment |
+
+**Workflow**: `feature-branch` → PR → `staging` → PR → `main`
 
 ## Environment Variables
 
-### Backend (Railway)
-- `DATABASE_URL`: Neon PostgreSQL connection string
-- `SECRET_KEY`: JWT secret
-- `PORT`: Auto-set by Railway
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SECRET_KEY` | Yes | JWT signing key |
+| `DISCORD_UPDATES_WEBHOOK_URL` | No | Discord market updates |
+| `OPENROUTER_API_KEY` | No | AI insights generation |
+| `POLAR_ACCESS_TOKEN` | No | Billing integration |
 
-### Frontend (Vercel)
-- `VITE_API_URL`: Backend API URL (Railway)
+See [docs/configuration.md](docs/configuration.md) for complete reference.
 
-## Deployment
+## API Documentation
 
-### Frontend
-```bash
-vercel --prod
-```
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **Production API**: https://wonder-scraper-production.up.railway.app/docs
 
-### Backend
-```bash
-railway up
-```
+## Contributing
 
-## Key Features
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-- ✅ SEO optimized with meta tags and OG images
-- ✅ 5-minute API response caching for instant page loads
-- ✅ Distributed backfill with multiprocessing
-- ✅ Optimized polling system (30min intervals, batch processing)
-- ✅ User authentication (signup/login)
-- ✅ Product type tracking (Singles, Boxes, Packs, Proofs)
-- ✅ Multi-platform scraping (eBay, OpenSea)
-- ✅ ETH to USD conversion for OpenSea data
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Links
+
+- [Live Site](https://wonderstracker.com)
+- [API Docs](https://wonder-scraper-production.up.railway.app/docs)
+- [Wonders of the First](https://wondersofthefirst.com/)
