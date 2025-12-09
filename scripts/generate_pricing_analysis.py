@@ -63,6 +63,7 @@ def generate_pricing_analysis(days: int = 90) -> dict:
     Analyze seller pricing accuracy by examining price variance for identical items.
 
     METHODOLOGY:
+    - SINGLES ONLY - Packs, boxes, bundles have too much variance in quantity/contents
     - Compare sales of the SAME card + SAME treatment to each other
     - Calculate price spread, variance, and outliers within each group
     - Show how "gut feeling" pricing creates massive price disparities
@@ -79,17 +80,19 @@ def generate_pricing_analysis(days: int = 90) -> dict:
             "days": days,
         }
 
-        # Get data quality stats
+        # Get data quality stats - SINGLES ONLY
         quality_stats = session.execute(text("""
             SELECT
                 COUNT(*) as total_sold,
-                COUNT(CASE WHEN treatment IS NOT NULL AND treatment != '' THEN 1 END) as has_treatment,
-                COUNT(CASE WHEN seller_name IS NOT NULL AND seller_name != '' THEN 1 END) as has_seller,
-                COUNT(DISTINCT card_id) as unique_cards
-            FROM marketprice
-            WHERE listing_type = 'sold'
-            AND sold_date >= :start
-            AND platform = 'ebay'
+                COUNT(CASE WHEN mp.treatment IS NOT NULL AND mp.treatment != '' THEN 1 END) as has_treatment,
+                COUNT(CASE WHEN mp.seller_name IS NOT NULL AND mp.seller_name != '' THEN 1 END) as has_seller,
+                COUNT(DISTINCT mp.card_id) as unique_cards
+            FROM marketprice mp
+            JOIN card c ON mp.card_id = c.id
+            WHERE mp.listing_type = 'sold'
+            AND mp.sold_date >= :start
+            AND mp.platform = 'ebay'
+            AND c.product_type = 'Single'
         """), {"start": period_start}).first()
 
         data["data_quality"] = {
@@ -101,7 +104,7 @@ def generate_pricing_analysis(days: int = 90) -> dict:
             "unique_cards": quality_stats[3],
         }
 
-        # PRICE VARIANCE ANALYSIS - The core story
+        # PRICE VARIANCE ANALYSIS - The core story (SINGLES ONLY)
         # How much do prices vary for the SAME item?
         variance_stats = session.execute(text("""
             WITH sale_stats AS (
@@ -109,7 +112,6 @@ def generate_pricing_analysis(days: int = 90) -> dict:
                     mp.card_id,
                     mp.treatment,
                     c.name,
-                    c.product_type,
                     COUNT(*) as sales,
                     MIN(mp.price) as min_price,
                     MAX(mp.price) as max_price,
@@ -123,7 +125,8 @@ def generate_pricing_analysis(days: int = 90) -> dict:
                 AND mp.sold_date >= :start
                 AND mp.treatment IS NOT NULL
                 AND mp.treatment != ''
-                GROUP BY mp.card_id, mp.treatment, c.name, c.product_type
+                AND c.product_type = 'Single'
+                GROUP BY mp.card_id, mp.treatment, c.name
                 HAVING COUNT(*) >= 3
             )
             SELECT
@@ -143,14 +146,13 @@ def generate_pricing_analysis(days: int = 90) -> dict:
             "max_spread_pct": variance_stats[4] or 0,
         }
 
-        # WORST PRICING - Items with highest price variance (same card+treatment)
+        # WORST PRICING - Items with highest price variance (same card+treatment, SINGLES ONLY)
         worst_pricing = session.execute(text("""
             WITH sale_stats AS (
                 SELECT
                     mp.card_id,
                     mp.treatment,
                     c.name,
-                    c.product_type,
                     COUNT(*) as sales,
                     MIN(mp.price) as min_price,
                     MAX(mp.price) as max_price,
@@ -164,10 +166,11 @@ def generate_pricing_analysis(days: int = 90) -> dict:
                 AND mp.sold_date >= :start
                 AND mp.treatment IS NOT NULL
                 AND mp.treatment != ''
-                GROUP BY mp.card_id, mp.treatment, c.name, c.product_type
+                AND c.product_type = 'Single'
+                GROUP BY mp.card_id, mp.treatment, c.name
                 HAVING COUNT(*) >= 3
             )
-            SELECT name, treatment, product_type, sales, min_price, max_price, avg_price, median_price, spread_pct
+            SELECT name, treatment, sales, min_price, max_price, avg_price, median_price, spread_pct
             FROM sale_stats
             ORDER BY spread_pct DESC
             LIMIT 20
@@ -177,32 +180,33 @@ def generate_pricing_analysis(days: int = 90) -> dict:
             {
                 "name": row[0],
                 "treatment": row[1],
-                "product_type": row[2],
-                "sales": row[3],
-                "min_price": row[4],
-                "max_price": row[5],
-                "avg_price": row[6],
-                "median_price": float(row[7]) if row[7] else row[6],
-                "spread_pct": row[8],
+                "sales": row[2],
+                "min_price": row[3],
+                "max_price": row[4],
+                "avg_price": row[5],
+                "median_price": float(row[6]) if row[6] else row[5],
+                "spread_pct": row[7],
             }
             for row in worst_pricing
         ]
 
-        # OUTLIER SALES - Individual sales way above/below median for that item
+        # OUTLIER SALES - Individual sales way above/below median for that item (SINGLES ONLY)
         outliers = session.execute(text("""
             WITH item_medians AS (
                 SELECT
-                    card_id,
-                    treatment,
-                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price,
+                    mp.card_id,
+                    mp.treatment,
+                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY mp.price) as median_price,
                     COUNT(*) as sale_count
-                FROM marketprice
-                WHERE listing_type = 'sold'
-                AND platform = 'ebay'
-                AND sold_date >= :start
-                AND treatment IS NOT NULL
-                AND treatment != ''
-                GROUP BY card_id, treatment
+                FROM marketprice mp
+                JOIN card c ON mp.card_id = c.id
+                WHERE mp.listing_type = 'sold'
+                AND mp.platform = 'ebay'
+                AND mp.sold_date >= :start
+                AND mp.treatment IS NOT NULL
+                AND mp.treatment != ''
+                AND c.product_type = 'Single'
+                GROUP BY mp.card_id, mp.treatment
                 HAVING COUNT(*) >= 3
             )
             SELECT
@@ -225,6 +229,7 @@ def generate_pricing_analysis(days: int = 90) -> dict:
             AND mp.sold_date >= :start
             AND mp.treatment IS NOT NULL
             AND mp.treatment != ''
+            AND c.product_type = 'Single'
             AND im.median_price > 0
             AND ABS((mp.price - im.median_price) / im.median_price) >= 0.5
             ORDER BY ABS((mp.price - im.median_price) / im.median_price) DESC
@@ -246,37 +251,41 @@ def generate_pricing_analysis(days: int = 90) -> dict:
             for row in outliers
         ]
 
-        # CURRENT LISTINGS VS REALITY - Are today's sellers pricing accurately?
+        # CURRENT LISTINGS VS REALITY - Are today's sellers pricing accurately? (SINGLES ONLY)
         current_vs_reality = session.execute(text("""
             WITH recent_sales AS (
                 SELECT
-                    card_id,
-                    treatment,
-                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_sold,
-                    AVG(price) as avg_sold,
+                    mp.card_id,
+                    mp.treatment,
+                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY mp.price) as median_sold,
+                    AVG(mp.price) as avg_sold,
                     COUNT(*) as sale_count
-                FROM marketprice
-                WHERE listing_type = 'sold'
-                AND platform = 'ebay'
-                AND sold_date >= NOW() - INTERVAL '30 days'
-                AND treatment IS NOT NULL
-                AND treatment != ''
-                GROUP BY card_id, treatment
+                FROM marketprice mp
+                JOIN card c ON mp.card_id = c.id
+                WHERE mp.listing_type = 'sold'
+                AND mp.platform = 'ebay'
+                AND mp.sold_date >= NOW() - INTERVAL '30 days'
+                AND mp.treatment IS NOT NULL
+                AND mp.treatment != ''
+                AND c.product_type = 'Single'
+                GROUP BY mp.card_id, mp.treatment
                 HAVING COUNT(*) >= 2
             ),
             current_listings AS (
                 SELECT
-                    card_id,
-                    treatment,
-                    MIN(price) as floor_price,
-                    AVG(price) as avg_ask,
+                    mp.card_id,
+                    mp.treatment,
+                    MIN(mp.price) as floor_price,
+                    AVG(mp.price) as avg_ask,
                     COUNT(*) as listing_count
-                FROM marketprice
-                WHERE listing_type = 'active'
-                AND platform = 'ebay'
-                AND treatment IS NOT NULL
-                AND treatment != ''
-                GROUP BY card_id, treatment
+                FROM marketprice mp
+                JOIN card c ON mp.card_id = c.id
+                WHERE mp.listing_type = 'active'
+                AND mp.platform = 'ebay'
+                AND mp.treatment IS NOT NULL
+                AND mp.treatment != ''
+                AND c.product_type = 'Single'
+                GROUP BY mp.card_id, mp.treatment
             )
             SELECT
                 c.name,
@@ -313,7 +322,7 @@ def generate_pricing_analysis(days: int = 90) -> dict:
             for row in current_vs_reality
         ]
 
-        # VARIANCE BY TREATMENT TYPE
+        # VARIANCE BY TREATMENT TYPE (SINGLES ONLY)
         by_treatment = session.execute(text("""
             WITH sale_stats AS (
                 SELECT
@@ -324,11 +333,13 @@ def generate_pricing_analysis(days: int = 90) -> dict:
                     MAX(mp.price) as max_price,
                     AVG(mp.price) as avg_price
                 FROM marketprice mp
+                JOIN card c ON mp.card_id = c.id
                 WHERE mp.listing_type = 'sold'
                 AND mp.platform = 'ebay'
                 AND mp.sold_date >= :start
                 AND mp.treatment IS NOT NULL
                 AND mp.treatment != ''
+                AND c.product_type = 'Single'
                 GROUP BY mp.treatment, mp.card_id
                 HAVING COUNT(*) >= 2
             )
@@ -354,17 +365,14 @@ def generate_pricing_analysis(days: int = 90) -> dict:
             for row in by_treatment
         ]
 
-        # VARIANCE BY PRODUCT TYPE
-        by_type = session.execute(text("""
-            WITH sale_stats AS (
+        # MONEY LEFT ON TABLE - Sales significantly below median (seller underpriced) - SINGLES ONLY
+        money_left = session.execute(text("""
+            WITH item_medians AS (
                 SELECT
-                    c.product_type,
                     mp.card_id,
                     mp.treatment,
-                    COUNT(*) as sales,
-                    MIN(mp.price) as min_price,
-                    MAX(mp.price) as max_price,
-                    AVG(mp.price) as avg_price
+                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY mp.price) as median_price,
+                    COUNT(*) as sale_count
                 FROM marketprice mp
                 JOIN card c ON mp.card_id = c.id
                 WHERE mp.listing_type = 'sold'
@@ -372,46 +380,8 @@ def generate_pricing_analysis(days: int = 90) -> dict:
                 AND mp.sold_date >= :start
                 AND mp.treatment IS NOT NULL
                 AND mp.treatment != ''
-                GROUP BY c.product_type, mp.card_id, mp.treatment
-                HAVING COUNT(*) >= 2
-            )
-            SELECT
-                product_type,
-                COUNT(*) as unique_items,
-                SUM(sales) as total_sales,
-                AVG((max_price - min_price) / NULLIF(avg_price, 0) * 100) as avg_spread_pct,
-                COUNT(CASE WHEN (max_price - min_price) / NULLIF(avg_price, 0) >= 1.0 THEN 1 END) as items_100pct_spread
-            FROM sale_stats
-            GROUP BY product_type
-            ORDER BY SUM(sales) DESC
-        """), {"start": period_start}).all()
-
-        data["by_product_type"] = [
-            {
-                "type": row[0],
-                "unique_items": row[1],
-                "total_sales": row[2],
-                "avg_spread_pct": row[3] if row[3] else 0,
-                "items_100pct_spread": row[4] or 0,
-            }
-            for row in by_type
-        ]
-
-        # MONEY LEFT ON TABLE - Sales significantly below median (seller underpriced)
-        money_left = session.execute(text("""
-            WITH item_medians AS (
-                SELECT
-                    card_id,
-                    treatment,
-                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price,
-                    COUNT(*) as sale_count
-                FROM marketprice
-                WHERE listing_type = 'sold'
-                AND platform = 'ebay'
-                AND sold_date >= :start
-                AND treatment IS NOT NULL
-                AND treatment != ''
-                GROUP BY card_id, treatment
+                AND c.product_type = 'Single'
+                GROUP BY mp.card_id, mp.treatment
                 HAVING COUNT(*) >= 3
             )
             SELECT
@@ -419,11 +389,13 @@ def generate_pricing_analysis(days: int = 90) -> dict:
                 COUNT(*) as underprice_count,
                 AVG((im.median_price - mp.price) / NULLIF(im.median_price, 0) * 100) as avg_underprice_pct
             FROM marketprice mp
+            JOIN card c ON mp.card_id = c.id
             JOIN item_medians im ON mp.card_id = im.card_id AND mp.treatment = im.treatment
             WHERE mp.listing_type = 'sold'
             AND mp.sold_date >= :start
             AND mp.treatment IS NOT NULL
             AND mp.treatment != ''
+            AND c.product_type = 'Single'
             AND mp.price < im.median_price * 0.7
             AND im.median_price > 5
         """), {"start": period_start}).first()
@@ -434,21 +406,23 @@ def generate_pricing_analysis(days: int = 90) -> dict:
             "avg_underprice_pct": money_left[2] or 0,
         }
 
-        # OVERPAY ANALYSIS - Sales significantly above median (buyer overpaid)
+        # OVERPAY ANALYSIS - Sales significantly above median (buyer overpaid) - SINGLES ONLY
         overpay = session.execute(text("""
             WITH item_medians AS (
                 SELECT
-                    card_id,
-                    treatment,
-                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) as median_price,
+                    mp.card_id,
+                    mp.treatment,
+                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY mp.price) as median_price,
                     COUNT(*) as sale_count
-                FROM marketprice
-                WHERE listing_type = 'sold'
-                AND platform = 'ebay'
-                AND sold_date >= :start
-                AND treatment IS NOT NULL
-                AND treatment != ''
-                GROUP BY card_id, treatment
+                FROM marketprice mp
+                JOIN card c ON mp.card_id = c.id
+                WHERE mp.listing_type = 'sold'
+                AND mp.platform = 'ebay'
+                AND mp.sold_date >= :start
+                AND mp.treatment IS NOT NULL
+                AND mp.treatment != ''
+                AND c.product_type = 'Single'
+                GROUP BY mp.card_id, mp.treatment
                 HAVING COUNT(*) >= 3
             )
             SELECT
@@ -456,11 +430,13 @@ def generate_pricing_analysis(days: int = 90) -> dict:
                 COUNT(*) as overpay_count,
                 AVG((mp.price - im.median_price) / NULLIF(im.median_price, 0) * 100) as avg_overpay_pct
             FROM marketprice mp
+            JOIN card c ON mp.card_id = c.id
             JOIN item_medians im ON mp.card_id = im.card_id AND mp.treatment = im.treatment
             WHERE mp.listing_type = 'sold'
             AND mp.sold_date >= :start
             AND mp.treatment IS NOT NULL
             AND mp.treatment != ''
+            AND c.product_type = 'Single'
             AND mp.price > im.median_price * 1.5
             AND im.median_price > 5
         """), {"start": period_start}).first()
@@ -475,135 +451,176 @@ def generate_pricing_analysis(days: int = 90) -> dict:
 
 
 def generate_txt_report(data: dict) -> str:
-    """Generate plain text pricing analysis report."""
+    """Generate plain text pricing analysis report with narrative."""
     lines = []
 
     # Header
     lines.append("")
     lines.append("+" + "=" * 78 + "+")
-    lines.append("|" + "  WONDERS OF THE FIRST - EBAY PRICING ANALYSIS  ".center(78) + "|")
+    lines.append("|" + "  WONDERS OF THE FIRST - SELLER PRICING REALITY CHECK  ".center(78) + "|")
+    lines.append("|" + "  Single Cards Only (Treatment-Matched Analysis)  ".center(78) + "|")
     lines.append("|" + f"  {data['period_start'].strftime('%b %d')} - {data['period_end'].strftime('%b %d, %Y')} ({data['days']} days)  ".center(78) + "|")
     lines.append("+" + "=" * 78 + "+")
 
-    # Methodology
+    # The Story
     lines.append("")
     lines.append("=" * 80)
-    lines.append("  METHODOLOGY")
+    lines.append("  THE STORY")
     lines.append("=" * 80)
-    lines.append("  This analysis uses TREATMENT-MATCHED comparisons:")
-    lines.append("  - Floor Price = Minimum active eBay listing for SAME card + SAME treatment")
-    lines.append("  - Example: A 'Phoenix Quill (Formless Foil)' sale is compared ONLY to")
-    lines.append("    other 'Phoenix Quill (Formless Foil)' active listings, not Paper/OCM/etc.")
-    lines.append("  - Sales without treatment data are excluded from this analysis")
+    lines.append("  Most eBay sellers price by gut feeling. This report reveals just how wildly")
+    lines.append("  off those instincts often are.")
     lines.append("")
-    lines.append("  DEFINITIONS:")
-    lines.append("  - 'Below Floor' = Sold price < lowest active listing (same card+treatment)")
-    lines.append("  - 'X% below' = Sold for X% less than the floor price")
+    lines.append("  When the EXACT SAME CARD (same name, same treatment) sells for $20 one day")
+    lines.append("  and $200 the next, someone is badly mispricing. Either the $20 seller left")
+    lines.append("  $180 on the table, or the $200 buyer got fleeced.")
+    lines.append("")
+    lines.append("  This analysis compares sales of IDENTICAL single cards to each other -")
+    lines.append("  same card name + same treatment (e.g., 'Moonfire Crystal Mouse Formless")
+    lines.append("  Foil' vs other 'Moonfire Crystal Mouse Formless Foil' sales only).")
+    lines.append("")
+    lines.append("  NOTE: Sealed product (boxes, packs, bundles) excluded - too much variance")
+    lines.append("  in quantity and contents to make fair comparisons.")
 
     # Data Quality
     dq = data["data_quality"]
     lines.append("")
     lines.append("=" * 80)
-    lines.append("  DATA QUALITY")
+    lines.append("  DATA ANALYZED")
     lines.append("=" * 80)
-    lines.append(f"  Total eBay Sales (period):     {dq['total_sales']:,}")
-    lines.append(f"  Sales with Treatment Data:     {dq['with_treatment']:,} ({dq['treatment_coverage']:.1f}%)")
-    lines.append(f"  Sales with Seller Data:        {dq['with_seller']:,} ({dq['seller_coverage']:.1f}%)")
+    lines.append(f"  Total eBay Sales:              {dq['total_sales']:,}")
     lines.append(f"  Unique Cards Sold:             {dq['unique_cards']:,}")
-    if dq['treatment_coverage'] < 80:
-        lines.append("")
-        lines.append(f"  NOTE: {100-dq['treatment_coverage']:.0f}% of sales lack treatment data and are excluded.")
+    lines.append(f"  Sales with Treatment Data:     {dq['with_treatment']:,} ({dq['treatment_coverage']:.1f}%)")
 
-    # Main Treatment-Matched Analysis
-    tm = data["treatment_matched_analysis"]
+    # The Headline Numbers
+    vs = data["variance_summary"]
+    ml = data["money_left_on_table"]
+    op = data["overpay_analysis"]
     lines.append("")
     lines.append("=" * 80)
-    lines.append("  TREATMENT-MATCHED FLOOR ANALYSIS")
+    lines.append("  THE BOTTOM LINE")
     lines.append("=" * 80)
-    lines.append(f"  Sales Analyzed:              {tm['total_sales']:,}")
-    lines.append(f"  Sales Below Floor:           {tm['below_floor']:,} ({tm['below_floor_pct']:.1f}%)")
+    lines.append(f"  Items with 3+ sales analyzed:  {vs['items_analyzed']:,}")
+    lines.append(f"  Average price spread:          {vs['avg_spread_pct']:.0f}%")
+    lines.append(f"    (How much min/max prices differ for the same item)")
     lines.append("")
-    lines.append("  BY DISCOUNT DEPTH:")
-    lines.append(f"    Any amount below floor:    {tm['below_floor']:,} sales  ({tm['below_floor_pct']:.1f}%)")
-    lines.append(f"    10%+ below floor:          {tm['below_10pct']:,} sales  ({tm['below_10pct_rate']:.1f}%)")
-    lines.append(f"    20%+ below floor:          {tm['below_20pct']:,} sales  ({tm['below_20pct_rate']:.1f}%)")
-    lines.append(f"    30%+ below floor:          {tm['below_30pct']:,} sales  ({tm['below_30pct_rate']:.1f}%)")
-    lines.append(f"    50%+ below floor:          {tm['below_50pct']:,} sales  ({tm['below_50pct_rate']:.1f}%)")
+    lines.append(f"  Items with 100%+ spread:       {vs['items_100pct_spread']:,}")
+    lines.append(f"    (Same item sold for DOUBLE or more in price range)")
     lines.append("")
-    lines.append(f"  Average Sale Price:          {format_currency(tm['avg_sale_price'])}")
-    lines.append(f"  Average Floor Price:         {format_currency(tm['avg_floor_price'])}")
+    lines.append(f"  Items with 50%+ spread:        {vs['items_50pct_spread']:,}")
+    lines.append(f"    (Significant pricing inconsistency)")
+    lines.append("")
+    if vs['max_spread_pct']:
+        lines.append(f"  Worst spread:                  {vs['max_spread_pct']:.0f}%")
 
-    # Distribution chart
-    if data["floor_distribution"]:
+    # Money Impact
+    lines.append("")
+    lines.append("=" * 80)
+    lines.append("  THE COST OF BAD PRICING")
+    lines.append("=" * 80)
+    lines.append("")
+    lines.append("  SELLERS WHO UNDERPRICED (sold 30%+ below median):")
+    lines.append(f"    Transactions:                {ml['transaction_count']:,}")
+    lines.append(f"    Total left on table:         {format_currency(ml['total_amount'])}")
+    lines.append(f"    Average underpriced by:      {ml['avg_underprice_pct']:.0f}%")
+    lines.append("")
+    lines.append("  BUYERS WHO OVERPAID (paid 50%+ above median):")
+    lines.append(f"    Transactions:                {op['transaction_count']:,}")
+    lines.append(f"    Total overpaid:              {format_currency(op['total_amount'])}")
+    lines.append(f"    Average overpaid by:         {op['avg_overpay_pct']:.0f}%")
+
+    # Worst Pricing Examples
+    if data["worst_pricing"]:
         lines.append("")
         lines.append("=" * 80)
-        lines.append("  PRICE DISTRIBUTION (vs Treatment-Matched Floor)")
+        lines.append("  HALL OF SHAME: WORST PRICING CONSISTENCY")
         lines.append("=" * 80)
-        max_count = max(d["count"] for d in data["floor_distribution"]) if data["floor_distribution"] else 1
-        total = sum(d["count"] for d in data["floor_distribution"])
-        for d in data["floor_distribution"]:
-            pct = (d["count"] / total * 100) if total > 0 else 0
-            lines.append(f"  {d['bucket']:14} | {bar_txt(d['count'], max_count, 30)} | {d['count']:4} ({pct:5.1f}%)")
+        lines.append("  These cards had the wildest price swings (same card + same treatment):")
+        lines.append("")
+        lines.append(f"  {'Card':<30} {'Treatment':<16} {'Sales':>5} {'Low':>9} {'High':>10} {'Spread':>8}")
+        lines.append("  " + "-" * 82)
+        for i, w in enumerate(data["worst_pricing"][:15], 1):
+            name = w['name'][:28]
+            treat = w['treatment'][:14]
+            lines.append(f"  {name:<30} {treat:<16} {w['sales']:>5} {format_currency(w['min_price']):>9} {format_currency(w['max_price']):>10} {w['spread_pct']:>7.0f}%")
+
+    # Outlier Sales
+    if data["outliers"]:
+        lines.append("")
+        lines.append("=" * 80)
+        lines.append("  BIGGEST OUTLIERS: SOMEONE GOT BURNED")
+        lines.append("=" * 80)
+        lines.append("  Individual sales 50%+ away from the median for that item:")
+        lines.append("")
+
+        # Split into overpaid and underpaid
+        overpaid = [o for o in data["outliers"] if o["direction"] == "overpaid"][:8]
+        underpaid = [o for o in data["outliers"] if o["direction"] == "underpaid"][:8]
+
+        if overpaid:
+            lines.append("  BUYERS WHO OVERPAID:")
+            lines.append(f"  {'Card':<35} {'Paid':>10} {'Median':>10} {'Diff':>8}")
+            lines.append("  " + "-" * 68)
+            for o in overpaid:
+                name = f"{o['name'][:28]} ({o['treatment'][:6]})"
+                lines.append(f"  {name:<35} {format_currency(o['sold_price']):>10} {format_currency(o['median']):>10} {format_pct_change(o['deviation_pct']):>8}")
+
+        if underpaid:
+            lines.append("")
+            lines.append("  SELLERS WHO LEFT MONEY ON TABLE:")
+            lines.append(f"  {'Card':<35} {'Sold':>10} {'Median':>10} {'Diff':>8}")
+            lines.append("  " + "-" * 68)
+            for o in underpaid:
+                name = f"{o['name'][:28]} ({o['treatment'][:6]})"
+                lines.append(f"  {name:<35} {format_currency(o['sold_price']):>10} {format_currency(o['median']):>10} {format_pct_change(o['deviation_pct']):>8}")
+
+    # Current Listings vs Reality
+    if data["current_vs_reality"]:
+        lines.append("")
+        lines.append("=" * 80)
+        lines.append("  REALITY CHECK: CURRENT LISTINGS VS ACTUAL SALES")
+        lines.append("=" * 80)
+        lines.append("  Comparing what sellers are ASKING now vs what actually SOLD (last 30 days):")
+        lines.append("")
+        lines.append(f"  {'Card':<32} {'Treatment':<12} {'Sold@':>8} {'Ask@':>8} {'Gap':>8}")
+        lines.append("  " + "-" * 72)
+        for c in data["current_vs_reality"][:12]:
+            name = c['name'][:30]
+            treat = c['treatment'][:10]
+            gap = format_pct_change(c['floor_gap_pct'])
+            lines.append(f"  {name:<32} {treat:<12} {format_currency(c['median_sold']):>8} {format_currency(c['floor_price']):>8} {gap:>8}")
 
     # By Treatment
     if data["by_treatment"]:
         lines.append("")
         lines.append("=" * 80)
-        lines.append("  ANALYSIS BY TREATMENT (10+ sales minimum)")
+        lines.append("  PRICING CONSISTENCY BY TREATMENT")
         lines.append("=" * 80)
-        lines.append(f"  {'Treatment':<18} | {'Sales':>6} | {'<Floor':>6} | {'Rate':>7} | {'Avg Sale':>10} | {'Avg Floor':>10}")
-        lines.append("  " + "-" * 75)
-        for t in data["by_treatment"]:
-            lines.append(f"  {t['treatment'][:18]:<18} | {t['total']:>6} | {t['below_floor']:>6} | {t['below_floor_pct']:>6.1f}% | {format_currency(t['avg_sale']):>10} | {format_currency(t['avg_floor']):>10}")
-
-    # By product type
-    if data["by_product_type"]:
+        lines.append("  Which treatments have the most chaotic pricing?")
         lines.append("")
-        lines.append("=" * 80)
-        lines.append("  BY PRODUCT TYPE")
-        lines.append("=" * 80)
-        lines.append(f"  {'Type':<10} | {'Sales':>6} | {'<Floor':>6} | {'Rate':>7} | {'Avg Sale':>10} | {'Avg Floor':>10}")
+        lines.append(f"  {'Treatment':<18} {'Cards':>6} {'Sales':>7} {'Avg Spread':>12} {'100%+ Spread':>13}")
         lines.append("  " + "-" * 60)
-        for t in data["by_product_type"]:
-            lines.append(f"  {(t['type'] or 'Unknown'):<10} | {t['total']:>6} | {t['below_floor']:>6} | {t['below_floor_pct']:>6.1f}% | {format_currency(t['avg_sale']):>10} | {format_currency(t['avg_floor']):>10}")
+        for t in data["by_treatment"]:
+            lines.append(f"  {t['treatment'][:18]:<18} {t['unique_items']:>6} {t['total_sales']:>7} {t['avg_spread_pct']:>11.0f}% {t['items_100pct_spread']:>13}")
 
-    # Cards with repeat below-floor sales
-    if data["repeat_below_floor"]:
-        lines.append("")
-        lines.append("=" * 80)
-        lines.append("  CARDS WITH REPEAT BELOW-FLOOR SALES (2+ occurrences)")
-        lines.append("=" * 80)
-        for i, c in enumerate(data["repeat_below_floor"][:12], 1):
-            name_treat = f"{c['name'][:35]} ({c['treatment']})"
-            lines.append(f"  {i:2}. {name_treat}")
-            lines.append(f"      {c['below_floor']}x below floor out of {c['total_sales']} sales | Floor: {format_currency(c['floor'])} | Avg Sold: {format_currency(c['avg_sold'])} ({c['avg_discount']:.0f}% below)")
-
-    # Best individual deals
-    if data["best_deals"]:
-        lines.append("")
-        lines.append("=" * 80)
-        lines.append("  NOTABLE BELOW-FLOOR SALES (30%+ discount, 2+ active listings)")
-        lines.append("=" * 80)
-        lines.append("  [Date]  Card (Treatment)                                    Sold      Floor   Disc")
-        lines.append("  " + "-" * 78)
-        for d in data["best_deals"][:15]:
-            name_treat = f"{d['name'][:30]} ({d['treatment']})"
-            date_str = d["date"].strftime("%m/%d") if d["date"] else "N/A"
-            lines.append(f"  [{date_str}] {name_treat:<50} {format_currency(d['sold_price']):>8} {format_currency(d['floor']):>9} {d['discount']:>4.0f}%")
-
-    # Summary observations (factual only)
+    # Takeaway
     lines.append("")
     lines.append("=" * 80)
-    lines.append("  SUMMARY")
+    lines.append("  KEY TAKEAWAYS")
     lines.append("=" * 80)
-    tm = data["treatment_matched_analysis"]
-    lines.append(f"  - {tm['below_floor_pct']:.1f}% of treatment-matched sales occurred below the current floor")
-    lines.append(f"  - {tm['below_20pct_rate']:.1f}% sold at 20%+ below floor")
-    if data["by_treatment"]:
-        highest = max(data["by_treatment"], key=lambda x: x["below_floor_pct"])
-        lowest = min(data["by_treatment"], key=lambda x: x["below_floor_pct"])
-        lines.append(f"  - Highest below-floor rate: {highest['treatment']} ({highest['below_floor_pct']:.1f}%)")
-        lines.append(f"  - Lowest below-floor rate: {lowest['treatment']} ({lowest['below_floor_pct']:.1f}%)")
+    lines.append("")
+    lines.append("  1. GUT PRICING IS WILDLY INCONSISTENT")
+    lines.append(f"     The same item regularly sells for {vs['avg_spread_pct']:.0f}% different prices.")
+    lines.append(f"     {vs['items_100pct_spread']} items had sales ranging from X to 2X or more.")
+    lines.append("")
+    lines.append("  2. REAL MONEY IS BEING LEFT ON THE TABLE")
+    lines.append(f"     {ml['transaction_count']} sellers underpriced by 30%+ = {format_currency(ml['total_amount'])} lost.")
+    lines.append("")
+    lines.append("  3. BUYERS ARE OVERPAYING")
+    lines.append(f"     {op['transaction_count']} buyers paid 50%+ over median = {format_currency(op['total_amount'])} extra.")
+    lines.append("")
+    lines.append("  4. DATA BEATS GUT FEELING")
+    lines.append("     Check recent sold prices before listing. Check median before buying.")
+    lines.append("     The spread between informed and uninformed pricing is enormous.")
 
     # Footer
     lines.append("")
@@ -645,11 +662,15 @@ def main():
         print(report)
 
     # Print summary
-    tm = data["treatment_matched_analysis"]
-    print(f"\nSummary (Treatment-Matched):")
-    print(f"  Total Sales: {tm['total_sales']:,}")
-    print(f"  Below Floor: {tm['below_floor']:,} ({tm['below_floor_pct']:.1f}%)")
-    print(f"  20%+ Below:  {tm['below_20pct']:,} ({tm['below_20pct_rate']:.1f}%)")
+    vs = data["variance_summary"]
+    ml = data["money_left_on_table"]
+    op = data["overpay_analysis"]
+    print(f"\nSummary:")
+    print(f"  Items analyzed (3+ sales): {vs['items_analyzed']:,}")
+    print(f"  Avg price spread: {vs['avg_spread_pct']:.0f}%")
+    print(f"  Items with 100%+ spread: {vs['items_100pct_spread']:,}")
+    print(f"  Money left on table: ${ml['total_amount']:,.2f} ({ml['transaction_count']} transactions)")
+    print(f"  Buyer overpay: ${op['total_amount']:,.2f} ({op['transaction_count']} transactions)")
 
 
 if __name__ == "__main__":

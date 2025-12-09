@@ -1,137 +1,160 @@
 
 +==============================================================================+
-|                 WONDERS OF THE FIRST - EBAY PRICING ANALYSIS                 |
+|             WONDERS OF THE FIRST - SELLER PRICING REALITY CHECK              |
+|                Single Cards Only (Treatment-Matched Analysis)                |
 |                       Sep 10 - Dec 09, 2025 (90 days)                        |
 +==============================================================================+
 
 ================================================================================
-  METHODOLOGY
+  THE STORY
 ================================================================================
-  This analysis uses TREATMENT-MATCHED comparisons:
-  - Floor Price = Minimum active eBay listing for SAME card + SAME treatment
-  - Example: A 'Phoenix Quill (Formless Foil)' sale is compared ONLY to
-    other 'Phoenix Quill (Formless Foil)' active listings, not Paper/OCM/etc.
-  - Sales without treatment data are excluded from this analysis
+  Most eBay sellers price by gut feeling. This report reveals just how wildly
+  off those instincts often are.
 
-  DEFINITIONS:
-  - 'Below Floor' = Sold price < lowest active listing (same card+treatment)
-  - 'X% below' = Sold for X% less than the floor price
+  When the EXACT SAME CARD (same name, same treatment) sells for $20 one day
+  and $200 the next, someone is badly mispricing. Either the $20 seller left
+  $180 on the table, or the $200 buyer got fleeced.
 
-================================================================================
-  DATA QUALITY
-================================================================================
-  Total eBay Sales (period):     2,255
-  Sales with Treatment Data:     2,255 (100.0%)
-  Sales with Seller Data:        164 (7.3%)
-  Unique Cards Sold:             371
+  This analysis compares sales of IDENTICAL single cards to each other -
+  same card name + same treatment (e.g., 'Moonfire Crystal Mouse Formless
+  Foil' vs other 'Moonfire Crystal Mouse Formless Foil' sales only).
+
+  NOTE: Sealed product (boxes, packs, bundles) excluded - too much variance
+  in quantity and contents to make fair comparisons.
 
 ================================================================================
-  TREATMENT-MATCHED FLOOR ANALYSIS
+  DATA ANALYZED
 ================================================================================
-  Sales Analyzed:              1,624
-  Sales Below Floor:           866 (53.3%)
-
-  BY DISCOUNT DEPTH:
-    Any amount below floor:    866 sales  (53.3%)
-    10%+ below floor:          719 sales  (44.3%)
-    20%+ below floor:          601 sales  (37.0%)
-    30%+ below floor:          465 sales  (28.6%)
-    50%+ below floor:          225 sales  (13.9%)
-
-  Average Sale Price:          $43.02
-  Average Floor Price:         $20.57
+  Total eBay Sales:              1,983
+  Unique Cards Sold:             362
+  Sales with Treatment Data:     1,983 (100.0%)
 
 ================================================================================
-  PRICE DISTRIBUTION (vs Treatment-Matched Floor)
+  THE BOTTOM LINE
 ================================================================================
-  50%+ below     | █████████████░░░░░░░░░░░░░░░░░ |  234 ( 14.4%)
-  30-50% below   | ██████████████░░░░░░░░░░░░░░░░ |  237 ( 14.6%)
-  20-30% below   | ████████░░░░░░░░░░░░░░░░░░░░░░ |  135 (  8.3%)
-  10-20% below   | ███████░░░░░░░░░░░░░░░░░░░░░░░ |  122 (  7.5%)
-  0-10% below    | ███████████░░░░░░░░░░░░░░░░░░░ |  190 ( 11.7%)
-  0-10% above    | █████░░░░░░░░░░░░░░░░░░░░░░░░░ |   89 (  5.5%)
-  10-25% above   | ██████░░░░░░░░░░░░░░░░░░░░░░░░ |  115 (  7.1%)
-  25%+ above     | ██████████████████████████████ |  502 ( 30.9%)
+  Items with 3+ sales analyzed:  251
+  Average price spread:          67%
+    (How much min/max prices differ for the same item)
+
+  Items with 100%+ spread:       54
+    (Same item sold for DOUBLE or more in price range)
+
+  Items with 50%+ spread:        128
+    (Significant pricing inconsistency)
+
+  Worst spread:                  476%
 
 ================================================================================
-  ANALYSIS BY TREATMENT (10+ sales minimum)
+  THE COST OF BAD PRICING
 ================================================================================
-  Treatment          |  Sales | <Floor |    Rate |   Avg Sale |  Avg Floor
-  ---------------------------------------------------------------------------
-  Formless Foil      |    609 |    404 |   66.3% |     $22.47 |     $16.95
-  Classic Paper      |    495 |    236 |   47.7% |     $15.05 |     $11.67
-  Classic Foil       |    223 |    138 |   61.9% |     $12.46 |     $14.61
-  Sealed             |    211 |     21 |   10.0% |    $175.73 |     $21.37
-  OCM Serialized     |     78 |     64 |   82.1% |     $82.22 |    $108.88
+
+  SELLERS WHO UNDERPRICED (sold 30%+ below median):
+    Transactions:                138
+    Total left on table:         $3,364.74
+    Average underpriced by:      56%
+
+  BUYERS WHO OVERPAID (paid 50%+ above median):
+    Transactions:                96
+    Total overpaid:              $5,557.43
+    Average overpaid by:         171%
 
 ================================================================================
-  BY PRODUCT TYPE
+  HALL OF SHAME: WORST PRICING CONSISTENCY
 ================================================================================
-  Type       |  Sales | <Floor |    Rate |   Avg Sale |  Avg Floor
+  These cards had the wildest price swings (same card + same treatment):
+
+  Card                           Treatment        Sales       Low       High   Spread
+  ----------------------------------------------------------------------------------
+  Moonfire Crystal Mouse         Formless Foil       14    $22.50    $499.99     476%
+  Isaac Sparkpaw                 Classic Foil         4     $0.25     $60.00     381%
+  Pinkspore Dreamcap             Formless Foil       31    $18.75    $499.99     327%
+  The Prisoner                   Classic Paper        7     $0.99    $425.00     279%
+  Tyros Ironfist                 Classic Foil         4     $0.99      $7.99     250%
+  Autumn, Essence Animated       Classic Paper        3     $1.25     $15.00     236%
+  Catch                          Classic Foil         4     $0.01     $85.00     231%
+  Keeper of Drury Skulls         Formless Foil        5     $9.99    $177.50     217%
+  Ethereal Grove                 Classic Paper        7     $8.00     $49.99     209%
+  Pinkspore Dreamcap             Classic Paper        9     $1.26    $154.50     203%
+  Rigel "Lightbringer" Leonis    Classic Paper        3    $12.99     $95.00     203%
+  Power of Bloodlines            Formless Foil        8     $3.25     $19.99     189%
+  Sylira Shadowstalker           Classic Paper        5     $0.50      $3.90     181%
+  Ethereal Grove                 Formless Foil        3    $40.00    $200.00     171%
+  Deathsworn Gravesman           Formless Foil        4     $1.25     $15.00     169%
+
+================================================================================
+  BIGGEST OUTLIERS: SOMEONE GOT BURNED
+================================================================================
+  Individual sales 50%+ away from the median for that item:
+
+  BUYERS WHO OVERPAID:
+  Card                                      Paid     Median     Diff
+  --------------------------------------------------------------------
+  Isaac Sparkpaw (Classi)                 $60.00      $1.25   +4700%
+  Keeper of Drury Skulls (Formle)        $177.50     $11.50   +1443%
+  Keeper of Drury Skulls (Formle)        $177.50     $11.50   +1443%
+  Moonfire Crystal Mouse (Formle)        $499.99     $37.50   +1233%
+  Moonfire Crystal Mouse (Formle)        $499.99     $37.50   +1233%
+  Autumn, Essence Animated (Classi)       $15.00      $1.25   +1100%
+  The Prisoner (Classi)                  $425.00     $44.99    +845%
+  The Prisoner (Classi)                  $425.00     $44.99    +845%
+
+================================================================================
+  REALITY CHECK: CURRENT LISTINGS VS ACTUAL SALES
+================================================================================
+  Comparing what sellers are ASKING now vs what actually SOLD (last 30 days):
+
+  Card                             Treatment       Sold@     Ask@      Gap
+  ------------------------------------------------------------------------
+  Cloudweaver Construct            Classic Fo      $0.99    $6.00    +506%
+  The Prisoner                     Classic Pa      $0.99    $3.00    +203%
+  Corruption Warp                  Classic Fo     $19.99   $55.00    +175%
+  Azure Vault                      Classic Pa      $0.99    $2.50    +153%
+  Pinkspore Dreamcap               Classic Pa    $136.79    $1.25     -99%
+  Sandura of Heliosynth            Classic Pa     $12.99   $25.00     +92%
+  Pastel Bloom Drake               Classic Fo      $7.12   $13.30     +87%
+  The Great Veridan                Classic Pa     $13.50   $25.00     +85%
+  Ethereal Grove                   Classic Pa     $44.50   $11.24     -75%
+  Ragnar Bloodbane                 Classic Pa     $12.99   $22.10     +70%
+  Dragon's Gold                    Classic Pa      $4.00    $1.29     -68%
+  Princess Aurora Waveheart        Classic Pa     $12.99   $19.99     +54%
+
+================================================================================
+  PRICING CONSISTENCY BY TREATMENT
+================================================================================
+  Which treatments have the most chaotic pricing?
+
+  Treatment           Cards   Sales   Avg Spread  100%+ Spread
   ------------------------------------------------------------
-  Single     |   1408 |    844 |   59.9% |     $21.66 |     $20.09
-  Pack       |     91 |      5 |    5.5% |     $44.03 |     $10.94
-  Box        |     81 |      8 |    9.9% |    $312.13 |     $31.42
-  Bundle     |     44 |      9 |   20.5% |    $229.28 |     $35.85
+  Formless Foil         213     749          33%            19
+  Classic Paper         141     515          46%            28
+  OCM Serialized        101     291          14%             1
+  Classic Foil           74     231          39%            11
+  Prerelease             15      31           0%             0
+  Error/Errata            2       9          50%             0
+  Stonefoil               4       8           0%             0
+  Promo                   1       4          92%             0
+  OCM                     1       2         101%             1
+  Red Foil                1       2           1%             0
 
 ================================================================================
-  CARDS WITH REPEAT BELOW-FLOOR SALES (2+ occurrences)
+  KEY TAKEAWAYS
 ================================================================================
-   1. Moonfire Crystal Mouse (Formless Foil)
-      10x below floor out of 14 sales | Floor: $42.50 | Avg Sold: $100.36 (28% below)
-   2. Emma "Fixem" Shockbite (Classic Paper)
-      10x below floor out of 20 sales | Floor: $14.99 | Avg Sold: $15.61 (16% below)
-   3. Arcane Grasp (Formless Foil)
-      9x below floor out of 9 sales | Floor: $25.00 | Avg Sold: $8.30 (67% below)
-   4. Lo Lynn (Classic Paper)
-      9x below floor out of 9 sales | Floor: $20.00 | Avg Sold: $9.73 (51% below)
-   5. Sylira Shadowstalker (Formless Foil)
-      9x below floor out of 9 sales | Floor: $17.50 | Avg Sold: $13.46 (23% below)
-   6. Aetherion of Boundless (Classic Foil)
-      8x below floor out of 8 sales | Floor: $38.00 | Avg Sold: $19.48 (49% below)
-   7. John Breakbang (Classic Paper)
-      8x below floor out of 8 sales | Floor: $34.50 | Avg Sold: $21.00 (39% below)
-   8. Redstooling Hunter (OCM Serialized)
-      8x below floor out of 8 sales | Floor: $99.99 | Avg Sold: $63.72 (36% below)
-   9. Wonders of the First Booster Box (Sealed)
-      8x below floor out of 51 sales | Floor: $34.99 | Avg Sold: $286.55 (14% below)
-  10. Existence Play Booster Bundle (Sealed)
-      8x below floor out of 40 sales | Floor: $34.99 | Avg Sold: $245.29 (13% below)
-  11. Cairnvox Soulforger (OCM Serialized)
-      7x below floor out of 7 sales | Floor: $160.96 | Avg Sold: $90.71 (44% below)
-  12. Darkiron City (Formless Foil)
-      7x below floor out of 9 sales | Floor: $14.50 | Avg Sold: $12.00 (33% below)
 
-================================================================================
-  NOTABLE BELOW-FLOOR SALES (30%+ discount, 2+ active listings)
-================================================================================
-  [Date]  Card (Treatment)                                    Sold      Floor   Disc
-  ------------------------------------------------------------------------------
-  [10/28] Wave Whisperer Bay (Classic Foil)                     $0.01     $2.99  100%
-  [11/02] Catch (Classic Foil)                                  $0.01     $2.99  100%
-  [10/28] Ranidae Hopmaster (Classic Foil)                      $0.01     $1.99   99%
-  [11/02] Patch Squibbler (Classic Foil)                        $0.01     $0.99   99%
-  [10/28] Circuitious Q-7 (Classic Foil)                        $0.01     $0.99   99%
-  [11/03] Sir Reynard (Classic Foil)                            $0.25     $8.00   97%
-  [11/07] Sequestering Presence (Classic Foil)                  $0.25     $5.00   95%
-  [10/04] Autumn, Essence Animated (Classic Paper)              $1.25    $25.00   95%
-  [11/07] Sequestering Presence (Classic Foil)                  $0.25     $5.00   95%
-  [10/29] Sister Azura Silversong (Classic Foil)                $0.25     $5.00   95%
-  [10/04] Autumn, Essence Animated (Classic Paper)              $1.25    $25.00   95%
-  [10/29] Life Engine Heart (Classic Foil)                      $0.25     $5.00   95%
-  [11/02] Static Shock (Classic Foil)                           $0.25     $4.00   94%
-  [11/03] Isaac Sparkpaw (Classic Foil)                         $0.25     $3.87   94%
-  [11/02] Floki, Born in Fire (Classic Foil)                    $0.25     $3.75   93%
+  1. GUT PRICING IS WILDLY INCONSISTENT
+     The same item regularly sells for 67% different prices.
+     54 items had sales ranging from X to 2X or more.
 
-================================================================================
-  SUMMARY
-================================================================================
-  - 53.3% of treatment-matched sales occurred below the current floor
-  - 37.0% sold at 20%+ below floor
-  - Highest below-floor rate: OCM Serialized (82.1%)
-  - Lowest below-floor rate: Sealed (10.0%)
+  2. REAL MONEY IS BEING LEFT ON THE TABLE
+     138 sellers underpriced by 30%+ = $3,364.74 lost.
+
+  3. BUYERS ARE OVERPAYING
+     96 buyers paid 50%+ over median = $5,557.43 extra.
+
+  4. DATA BEATS GUT FEELING
+     Check recent sold prices before listing. Check median before buying.
+     The spread between informed and uninformed pricing is enormous.
 
 --------------------------------------------------------------------------------
-  Generated: 2025-12-09 00:36:52 UTC
+  Generated: 2025-12-09 01:45:53 UTC
   Data Source: eBay sold listings via WondersTrader.com
 --------------------------------------------------------------------------------
