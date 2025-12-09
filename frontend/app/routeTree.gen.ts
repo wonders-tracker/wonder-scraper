@@ -18,11 +18,25 @@ import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as MarketRouteImport } from './routes/market'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as DocsRouteImport } from './routes/docs'
 import { Route as ApiRouteImport } from './routes/api'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as MarketHeadRouteImport } from './routes/market.head'
 import { Route as IndexHeadRouteImport } from './routes/index.head'
+import { Route as DocsMarketTreatmentsRouteImport } from './routes/docs.market-treatments'
+import { Route as DocsMarketOverviewRouteImport } from './routes/docs.market-overview'
+import { Route as DocsMarketActivityRouteImport } from './routes/docs.market-activity'
+import { Route as DocsCardsHistoryRouteImport } from './routes/docs.cards-history'
+import { Route as DocsCardsDetailRouteImport } from './routes/docs.cards-detail'
+import { Route as DocsCardsActiveRouteImport } from './routes/docs.cards-active'
+import { Route as DocsCardsRouteImport } from './routes/docs.cards'
+import { Route as DocsBlokpaxSummaryRouteImport } from './routes/docs.blokpax-summary'
+import { Route as DocsBlokpaxStorefrontsRouteImport } from './routes/docs.blokpax-storefronts'
+import { Route as DocsBlokpaxSalesRouteImport } from './routes/docs.blokpax-sales'
+import { Route as DocsBlokpaxOffersRouteImport } from './routes/docs.blokpax-offers'
+import { Route as DocsAuthenticationRouteImport } from './routes/docs.authentication'
 import { Route as CardsCardIdRouteImport } from './routes/cards.$cardId'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as CardsCardIdHeadRouteImport } from './routes/cards.$cardId.head'
@@ -72,6 +86,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiRoute = ApiRouteImport.update({
   id: '/api',
   path: '/api',
@@ -87,6 +106,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsIndexRoute = DocsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DocsRoute,
+} as any)
 const MarketHeadRoute = MarketHeadRouteImport.update({
   id: '/head',
   path: '/head',
@@ -96,6 +120,66 @@ const IndexHeadRoute = IndexHeadRouteImport.update({
   id: '/index/head',
   path: '/index/head',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DocsMarketTreatmentsRoute = DocsMarketTreatmentsRouteImport.update({
+  id: '/market-treatments',
+  path: '/market-treatments',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsMarketOverviewRoute = DocsMarketOverviewRouteImport.update({
+  id: '/market-overview',
+  path: '/market-overview',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsMarketActivityRoute = DocsMarketActivityRouteImport.update({
+  id: '/market-activity',
+  path: '/market-activity',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsCardsHistoryRoute = DocsCardsHistoryRouteImport.update({
+  id: '/cards-history',
+  path: '/cards-history',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsCardsDetailRoute = DocsCardsDetailRouteImport.update({
+  id: '/cards-detail',
+  path: '/cards-detail',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsCardsActiveRoute = DocsCardsActiveRouteImport.update({
+  id: '/cards-active',
+  path: '/cards-active',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsCardsRoute = DocsCardsRouteImport.update({
+  id: '/cards',
+  path: '/cards',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsBlokpaxSummaryRoute = DocsBlokpaxSummaryRouteImport.update({
+  id: '/blokpax-summary',
+  path: '/blokpax-summary',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsBlokpaxStorefrontsRoute = DocsBlokpaxStorefrontsRouteImport.update({
+  id: '/blokpax-storefronts',
+  path: '/blokpax-storefronts',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsBlokpaxSalesRoute = DocsBlokpaxSalesRouteImport.update({
+  id: '/blokpax-sales',
+  path: '/blokpax-sales',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsBlokpaxOffersRoute = DocsBlokpaxOffersRouteImport.update({
+  id: '/blokpax-offers',
+  path: '/blokpax-offers',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsAuthenticationRoute = DocsAuthenticationRouteImport.update({
+  id: '/authentication',
+  path: '/authentication',
+  getParentRoute: () => DocsRoute,
 } as any)
 const CardsCardIdRoute = CardsCardIdRouteImport.update({
   id: '/cards/$cardId',
@@ -117,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/api': typeof ApiRoute
+  '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/market': typeof MarketRouteWithChildren
@@ -128,8 +213,21 @@ export interface FileRoutesByFullPath {
   '/welcome': typeof WelcomeRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
+  '/docs/authentication': typeof DocsAuthenticationRoute
+  '/docs/blokpax-offers': typeof DocsBlokpaxOffersRoute
+  '/docs/blokpax-sales': typeof DocsBlokpaxSalesRoute
+  '/docs/blokpax-storefronts': typeof DocsBlokpaxStorefrontsRoute
+  '/docs/blokpax-summary': typeof DocsBlokpaxSummaryRoute
+  '/docs/cards': typeof DocsCardsRoute
+  '/docs/cards-active': typeof DocsCardsActiveRoute
+  '/docs/cards-detail': typeof DocsCardsDetailRoute
+  '/docs/cards-history': typeof DocsCardsHistoryRoute
+  '/docs/market-activity': typeof DocsMarketActivityRoute
+  '/docs/market-overview': typeof DocsMarketOverviewRoute
+  '/docs/market-treatments': typeof DocsMarketTreatmentsRoute
   '/index/head': typeof IndexHeadRoute
   '/market/head': typeof MarketHeadRoute
+  '/docs/': typeof DocsIndexRoute
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
 }
 export interface FileRoutesByTo {
@@ -147,8 +245,21 @@ export interface FileRoutesByTo {
   '/welcome': typeof WelcomeRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
+  '/docs/authentication': typeof DocsAuthenticationRoute
+  '/docs/blokpax-offers': typeof DocsBlokpaxOffersRoute
+  '/docs/blokpax-sales': typeof DocsBlokpaxSalesRoute
+  '/docs/blokpax-storefronts': typeof DocsBlokpaxStorefrontsRoute
+  '/docs/blokpax-summary': typeof DocsBlokpaxSummaryRoute
+  '/docs/cards': typeof DocsCardsRoute
+  '/docs/cards-active': typeof DocsCardsActiveRoute
+  '/docs/cards-detail': typeof DocsCardsDetailRoute
+  '/docs/cards-history': typeof DocsCardsHistoryRoute
+  '/docs/market-activity': typeof DocsMarketActivityRoute
+  '/docs/market-overview': typeof DocsMarketOverviewRoute
+  '/docs/market-treatments': typeof DocsMarketTreatmentsRoute
   '/index/head': typeof IndexHeadRoute
   '/market/head': typeof MarketHeadRoute
+  '/docs': typeof DocsIndexRoute
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
 }
 export interface FileRoutesById {
@@ -156,6 +267,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/api': typeof ApiRoute
+  '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/market': typeof MarketRouteWithChildren
@@ -167,8 +279,21 @@ export interface FileRoutesById {
   '/welcome': typeof WelcomeRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
+  '/docs/authentication': typeof DocsAuthenticationRoute
+  '/docs/blokpax-offers': typeof DocsBlokpaxOffersRoute
+  '/docs/blokpax-sales': typeof DocsBlokpaxSalesRoute
+  '/docs/blokpax-storefronts': typeof DocsBlokpaxStorefrontsRoute
+  '/docs/blokpax-summary': typeof DocsBlokpaxSummaryRoute
+  '/docs/cards': typeof DocsCardsRoute
+  '/docs/cards-active': typeof DocsCardsActiveRoute
+  '/docs/cards-detail': typeof DocsCardsDetailRoute
+  '/docs/cards-history': typeof DocsCardsHistoryRoute
+  '/docs/market-activity': typeof DocsMarketActivityRoute
+  '/docs/market-overview': typeof DocsMarketOverviewRoute
+  '/docs/market-treatments': typeof DocsMarketTreatmentsRoute
   '/index/head': typeof IndexHeadRoute
   '/market/head': typeof MarketHeadRoute
+  '/docs/': typeof DocsIndexRoute
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
 }
 export interface FileRouteTypes {
@@ -177,6 +302,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/api'
+    | '/docs'
     | '/forgot-password'
     | '/login'
     | '/market'
@@ -188,8 +314,21 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/auth/callback'
     | '/cards/$cardId'
+    | '/docs/authentication'
+    | '/docs/blokpax-offers'
+    | '/docs/blokpax-sales'
+    | '/docs/blokpax-storefronts'
+    | '/docs/blokpax-summary'
+    | '/docs/cards'
+    | '/docs/cards-active'
+    | '/docs/cards-detail'
+    | '/docs/cards-history'
+    | '/docs/market-activity'
+    | '/docs/market-overview'
+    | '/docs/market-treatments'
     | '/index/head'
     | '/market/head'
+    | '/docs/'
     | '/cards/$cardId/head'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -207,14 +346,28 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/auth/callback'
     | '/cards/$cardId'
+    | '/docs/authentication'
+    | '/docs/blokpax-offers'
+    | '/docs/blokpax-sales'
+    | '/docs/blokpax-storefronts'
+    | '/docs/blokpax-summary'
+    | '/docs/cards'
+    | '/docs/cards-active'
+    | '/docs/cards-detail'
+    | '/docs/cards-history'
+    | '/docs/market-activity'
+    | '/docs/market-overview'
+    | '/docs/market-treatments'
     | '/index/head'
     | '/market/head'
+    | '/docs'
     | '/cards/$cardId/head'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/api'
+    | '/docs'
     | '/forgot-password'
     | '/login'
     | '/market'
@@ -226,8 +379,21 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/auth/callback'
     | '/cards/$cardId'
+    | '/docs/authentication'
+    | '/docs/blokpax-offers'
+    | '/docs/blokpax-sales'
+    | '/docs/blokpax-storefronts'
+    | '/docs/blokpax-summary'
+    | '/docs/cards'
+    | '/docs/cards-active'
+    | '/docs/cards-detail'
+    | '/docs/cards-history'
+    | '/docs/market-activity'
+    | '/docs/market-overview'
+    | '/docs/market-treatments'
     | '/index/head'
     | '/market/head'
+    | '/docs/'
     | '/cards/$cardId/head'
   fileRoutesById: FileRoutesById
 }
@@ -235,6 +401,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   ApiRoute: typeof ApiRoute
+  DocsRoute: typeof DocsRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   MarketRoute: typeof MarketRouteWithChildren
@@ -251,18 +418,18 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/upgrade': {
-      id: '/upgrade'
-      path: '/upgrade'
-      fullPath: '/upgrade'
-      preLoaderRoute: typeof UpgradeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/welcome': {
       id: '/welcome'
       path: '/welcome'
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/upgrade': {
+      id: '/upgrade'
+      path: '/upgrade'
+      fullPath: '/upgrade'
+      preLoaderRoute: typeof UpgradeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -314,6 +481,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api': {
       id: '/api'
       path: '/api'
@@ -335,6 +509,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs/': {
+      id: '/docs/'
+      path: '/'
+      fullPath: '/docs/'
+      preLoaderRoute: typeof DocsIndexRouteImport
+      parentRoute: typeof DocsRoute
+    }
     '/market/head': {
       id: '/market/head'
       path: '/head'
@@ -348,6 +529,90 @@ declare module '@tanstack/react-router' {
       fullPath: '/index/head'
       preLoaderRoute: typeof IndexHeadRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/docs/market-treatments': {
+      id: '/docs/market-treatments'
+      path: '/market-treatments'
+      fullPath: '/docs/market-treatments'
+      preLoaderRoute: typeof DocsMarketTreatmentsRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/market-overview': {
+      id: '/docs/market-overview'
+      path: '/market-overview'
+      fullPath: '/docs/market-overview'
+      preLoaderRoute: typeof DocsMarketOverviewRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/market-activity': {
+      id: '/docs/market-activity'
+      path: '/market-activity'
+      fullPath: '/docs/market-activity'
+      preLoaderRoute: typeof DocsMarketActivityRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/cards-history': {
+      id: '/docs/cards-history'
+      path: '/cards-history'
+      fullPath: '/docs/cards-history'
+      preLoaderRoute: typeof DocsCardsHistoryRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/cards-detail': {
+      id: '/docs/cards-detail'
+      path: '/cards-detail'
+      fullPath: '/docs/cards-detail'
+      preLoaderRoute: typeof DocsCardsDetailRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/cards-active': {
+      id: '/docs/cards-active'
+      path: '/cards-active'
+      fullPath: '/docs/cards-active'
+      preLoaderRoute: typeof DocsCardsActiveRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/cards': {
+      id: '/docs/cards'
+      path: '/cards'
+      fullPath: '/docs/cards'
+      preLoaderRoute: typeof DocsCardsRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/blokpax-summary': {
+      id: '/docs/blokpax-summary'
+      path: '/blokpax-summary'
+      fullPath: '/docs/blokpax-summary'
+      preLoaderRoute: typeof DocsBlokpaxSummaryRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/blokpax-storefronts': {
+      id: '/docs/blokpax-storefronts'
+      path: '/blokpax-storefronts'
+      fullPath: '/docs/blokpax-storefronts'
+      preLoaderRoute: typeof DocsBlokpaxStorefrontsRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/blokpax-sales': {
+      id: '/docs/blokpax-sales'
+      path: '/blokpax-sales'
+      fullPath: '/docs/blokpax-sales'
+      preLoaderRoute: typeof DocsBlokpaxSalesRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/blokpax-offers': {
+      id: '/docs/blokpax-offers'
+      path: '/blokpax-offers'
+      fullPath: '/docs/blokpax-offers'
+      preLoaderRoute: typeof DocsBlokpaxOffersRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/authentication': {
+      id: '/docs/authentication'
+      path: '/authentication'
+      fullPath: '/docs/authentication'
+      preLoaderRoute: typeof DocsAuthenticationRouteImport
+      parentRoute: typeof DocsRoute
     }
     '/cards/$cardId': {
       id: '/cards/$cardId'
@@ -372,6 +637,40 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface DocsRouteChildren {
+  DocsAuthenticationRoute: typeof DocsAuthenticationRoute
+  DocsBlokpaxOffersRoute: typeof DocsBlokpaxOffersRoute
+  DocsBlokpaxSalesRoute: typeof DocsBlokpaxSalesRoute
+  DocsBlokpaxStorefrontsRoute: typeof DocsBlokpaxStorefrontsRoute
+  DocsBlokpaxSummaryRoute: typeof DocsBlokpaxSummaryRoute
+  DocsCardsRoute: typeof DocsCardsRoute
+  DocsCardsActiveRoute: typeof DocsCardsActiveRoute
+  DocsCardsDetailRoute: typeof DocsCardsDetailRoute
+  DocsCardsHistoryRoute: typeof DocsCardsHistoryRoute
+  DocsMarketActivityRoute: typeof DocsMarketActivityRoute
+  DocsMarketOverviewRoute: typeof DocsMarketOverviewRoute
+  DocsMarketTreatmentsRoute: typeof DocsMarketTreatmentsRoute
+  DocsIndexRoute: typeof DocsIndexRoute
+}
+
+const DocsRouteChildren: DocsRouteChildren = {
+  DocsAuthenticationRoute: DocsAuthenticationRoute,
+  DocsBlokpaxOffersRoute: DocsBlokpaxOffersRoute,
+  DocsBlokpaxSalesRoute: DocsBlokpaxSalesRoute,
+  DocsBlokpaxStorefrontsRoute: DocsBlokpaxStorefrontsRoute,
+  DocsBlokpaxSummaryRoute: DocsBlokpaxSummaryRoute,
+  DocsCardsRoute: DocsCardsRoute,
+  DocsCardsActiveRoute: DocsCardsActiveRoute,
+  DocsCardsDetailRoute: DocsCardsDetailRoute,
+  DocsCardsHistoryRoute: DocsCardsHistoryRoute,
+  DocsMarketActivityRoute: DocsMarketActivityRoute,
+  DocsMarketOverviewRoute: DocsMarketOverviewRoute,
+  DocsMarketTreatmentsRoute: DocsMarketTreatmentsRoute,
+  DocsIndexRoute: DocsIndexRoute,
+}
+
+const DocsRouteWithChildren = DocsRoute._addFileChildren(DocsRouteChildren)
 
 interface MarketRouteChildren {
   MarketHeadRoute: typeof MarketHeadRoute
@@ -400,6 +699,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   ApiRoute: ApiRoute,
+  DocsRoute: DocsRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   MarketRoute: MarketRouteWithChildren,

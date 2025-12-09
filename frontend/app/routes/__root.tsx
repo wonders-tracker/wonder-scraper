@@ -1,4 +1,4 @@
-import { Outlet, createRootRoute, Link, useNavigate, redirect } from '@tanstack/react-router'
+import { Outlet, createRootRoute, Link, useNavigate, redirect, useLocation } from '@tanstack/react-router'
 import { LayoutDashboard, LineChart, Wallet, User, Server, LogOut, Menu, X, Shield, ChevronDown, Settings, Sparkles } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
@@ -159,6 +159,10 @@ function RootComponent() {
 
 function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate: any, mobileMenuOpen: boolean, setMobileMenuOpen: (v: boolean) => void }) {
   const { timePeriod } = useTimePeriod()
+  const location = useLocation()
+
+  // Check if we're on a docs page - these have their own layout
+  const isDocsPage = location.pathname.startsWith('/docs')
 
   // Track page views for internal analytics
   usePageTracking()
@@ -209,6 +213,18 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
       const avgVelocity = cards.length > 0 ? totalVolume / cards.length : 0
       return { totalVolume, avgVelocity }
   }, [cards])
+
+  // For docs pages, render just the outlet with minimal wrapper
+  if (isDocsPage) {
+    return (
+      <>
+        <Analytics />
+        <div className="min-h-screen bg-background text-foreground antialiased font-mono">
+          <Outlet />
+        </div>
+      </>
+    )
+  }
 
   return (
     <>
