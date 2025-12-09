@@ -381,12 +381,12 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                                     className={clsx(
                                         "w-full pl-10 pr-4 py-2 bg-background border rounded font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary",
                                         openSeaUrl && !openSeaParsed.valid ? "border-red-500" : "border-border",
-                                        openSeaParsed.valid ? "border-emerald-500" : ""
+                                        openSeaParsed.valid ? "border-brand-300" : ""
                                     )}
                                 />
                             </div>
                             {openSeaParsed.valid && (
-                                <div className="text-[10px] text-emerald-500 mt-1 flex items-center gap-1">
+                                <div className="text-[10px] text-brand-300 mt-1 flex items-center gap-1">
                                     <span>Token #{openSeaParsed.tokenId}</span>
                                     <span className="text-muted-foreground">on {openSeaParsed.chain}</span>
                                 </div>

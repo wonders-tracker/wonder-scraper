@@ -126,7 +126,7 @@ export function CardActionSplitButton({
           transition-all duration-200
           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900
           ${isWatching
-            ? 'bg-amber-600 hover:bg-amber-500 text-white focus:ring-amber-500'
+            ? 'bg-brand-400 hover:bg-brand-300 text-gray-900 focus:ring-brand-400'
             : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white focus:ring-zinc-500'
           }
           ${alertAnimation ? 'scale-95' : 'scale-100'}
@@ -263,7 +263,7 @@ export function CardActionSplitButtonCompact({
           p-1.5 rounded
           transition-all duration-150
           ${isWatching
-            ? 'bg-amber-600/80 hover:bg-amber-500 text-white'
+            ? 'bg-brand-400/80 hover:bg-brand-300 text-gray-900'
             : 'bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 hover:text-white'
           }
           ${showRipple === 'alert' ? 'scale-90' : ''}

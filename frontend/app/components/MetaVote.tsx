@@ -70,7 +70,7 @@ export function MetaVote({ cardId }: MetaVoteProps) {
       {/* Vote counts */}
       <div className="flex items-center gap-3 mb-2">
         <span className="text-sm font-mono">
-          <span className="text-emerald-500">{summary.yes}</span>
+          <span className="text-brand-300">{summary.yes}</span>
           <span className="text-muted-foreground mx-1">Y</span>
         </span>
         <span className="text-sm font-mono">
@@ -91,8 +91,8 @@ export function MetaVote({ cardId }: MetaVoteProps) {
             disabled={voteMutation.isPending || removeMutation.isPending}
             className={`px-2 py-1 rounded text-[10px] uppercase font-bold transition-colors ${
               userVote === 'yes'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-muted hover:bg-emerald-600/20 text-muted-foreground hover:text-emerald-400'
+                ? 'bg-brand-400 text-white'
+                : 'bg-muted hover:bg-brand-400/20 text-muted-foreground hover:text-brand-300'
             }`}
           >
             <ThumbsUp className="w-3 h-3 inline mr-1" />
