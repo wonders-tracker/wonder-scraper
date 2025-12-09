@@ -168,7 +168,7 @@ function Home() {
                         rarity === 'Legendary' ? 'text-orange-900 bg-orange-400' :
                         rarity === 'Epic' ? 'text-purple-900 bg-purple-400' :
                         rarity === 'Rare' ? 'text-blue-900 bg-blue-400' :
-                        rarity === 'Uncommon' ? 'text-emerald-900 bg-emerald-400' :
+                        rarity === 'Uncommon' ? 'text-brand-800 bg-brand-300' :
                         'text-zinc-900 bg-zinc-400'
                       )}>
                         {rarity}
@@ -215,7 +215,7 @@ function Home() {
                 {hasFloor && delta !== 0 && (
                     <span className={clsx(
                         "text-[10px] font-mono px-1 py-0.5 rounded",
-                        delta > 0 ? "text-emerald-400 bg-emerald-500/10" :
+                        delta > 0 ? "text-brand-300 bg-brand-300/10" :
                         "text-red-400 bg-red-500/10"
                     )}>
                         {delta > 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%
@@ -247,11 +247,11 @@ function Home() {
             let chevronTooltip = ''
             if (vol >= 30) {
                 chevrons = '▲▲'
-                colorClass = 'text-emerald-500'
+                colorClass = 'text-brand-300'
                 chevronTooltip = 'High volume (30+ sales)'
             } else if (vol >= 10) {
                 chevrons = '▲'
-                colorClass = 'text-emerald-400'
+                colorClass = 'text-brand-300'
                 chevronTooltip = 'Good volume (10-29 sales)'
             } else if (vol > 0 && vol < 3) {
                 chevrons = '▼'
@@ -323,7 +323,7 @@ function Home() {
         ),
         cell: ({ row }) => {
             const high = row.original.max_price || 0
-            return <div className="hidden md:block text-right font-mono text-sm text-emerald-500">{high > 0 ? `$${high.toFixed(2)}` : '---'}</div>
+            return <div className="hidden md:block text-right font-mono text-sm text-brand-300">{high > 0 ? `$${high.toFixed(2)}` : '---'}</div>
         }
     },
     {
@@ -369,7 +369,7 @@ function Home() {
                 : '—'
             // Color code: fast sell = green, slow = red
             const daysClass = daysToSell !== null
-                ? daysToSell < 3 ? 'text-emerald-500'
+                ? daysToSell < 3 ? 'text-brand-300'
                 : daysToSell > 14 ? 'text-red-400'
                 : 'text-muted-foreground'
                 : 'text-muted-foreground'
