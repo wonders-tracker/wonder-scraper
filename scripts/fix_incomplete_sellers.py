@@ -56,15 +56,29 @@ async def fix_incomplete_sellers_async(dry_run: bool = True, limit: Optional[int
         placeholders = ', '.join([f':seller_{i}' for i in range(len(INCOMPLETE_SELLERS))])
         params = {f'seller_{i}': seller for i, seller in enumerate(INCOMPLETE_SELLERS)}
 
-        query = text(f"""
-            SELECT id, external_id, url, title, seller_name
-            FROM marketprice
-            WHERE listing_type = 'sold'
-            AND platform = 'ebay'
-            AND seller_name IN ({placeholders})
-            AND (url IS NOT NULL OR external_id IS NOT NULL)
-            ORDER BY sold_date DESC
-        """ + (f" LIMIT {limit}" if limit else ""))
+        # Use parameterized LIMIT to prevent SQL injection
+        if limit:
+            query = text(f"""
+                SELECT id, external_id, url, title, seller_name
+                FROM marketprice
+                WHERE listing_type = 'sold'
+                AND platform = 'ebay'
+                AND seller_name IN ({placeholders})
+                AND (url IS NOT NULL OR external_id IS NOT NULL)
+                ORDER BY sold_date DESC
+                LIMIT :limit
+            """)
+            params["limit"] = limit
+        else:
+            query = text(f"""
+                SELECT id, external_id, url, title, seller_name
+                FROM marketprice
+                WHERE listing_type = 'sold'
+                AND platform = 'ebay'
+                AND seller_name IN ({placeholders})
+                AND (url IS NOT NULL OR external_id IS NOT NULL)
+                ORDER BY sold_date DESC
+            """)
 
         results = session.execute(query, params).all()
         print(f"Found {len(results)} listings with potentially incomplete seller names")

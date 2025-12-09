@@ -163,6 +163,7 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
     total_failed = 0
     blocked_count = 0
     timeout_count = 0
+    consecutive_failed_batches = 0
     start_time = time.time()
 
     try:
@@ -263,6 +264,25 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
             print(f"  Batch {batch_num}/{total_batches}: +{batch_updated} | "
                   f"Total: {total_updated}/{len(work_items)} | {rate:.1f}/sec")
 
+            # If entire batch failed (0 updates, 0 skips), browser is likely stuck - restart immediately
+            if batch_updated == 0 and batch_skipped == 0 and len(batch) > 0:
+                consecutive_failed_batches += 1
+                if consecutive_failed_batches >= 2:
+                    print("\n⚠️  Multiple failed batches - browser stuck, force restarting...")
+                    try:
+                        await asyncio.wait_for(browser.stop(), timeout=5)
+                    except:
+                        print("    (force killing browser)")
+                    await asyncio.sleep(3)
+                    browser = Chrome(options=options)
+                    await browser.start()
+                    timeout_count = 0
+                    blocked_count = 0
+                    consecutive_failed_batches = 0
+                    print("Browser restarted!")
+            else:
+                consecutive_failed_batches = 0
+
             # Delay between batches
             if batch_start + batch_size < len(work_items):
                 await asyncio.sleep(2)
@@ -294,23 +314,37 @@ def backfill_seller_data(dry_run: bool = True, limit: Optional[int] = None, batc
             print(f"Fixed {fix_result.rowcount} empty seller_name -> NULL")
 
         # Find listings with NULL seller_name
+        # Build type filter - uses allowlist pattern for safety
         type_filter = ""
         if listing_type == "sold":
             type_filter = "AND listing_type = 'sold'"
         elif listing_type == "active":
             type_filter = "AND listing_type = 'active'"
 
-        query = text(f"""
-            SELECT id, external_id, url, title
-            FROM marketprice
-            WHERE seller_name IS NULL
-            AND platform = 'ebay'
-            AND (url IS NOT NULL OR external_id IS NOT NULL)
-            {type_filter}
-            ORDER BY COALESCE(sold_date, scraped_at) DESC NULLS LAST
-        """ + (f" LIMIT {limit}" if limit else ""))
-
-        results = session.execute(query).all()
+        # Use parameterized LIMIT to prevent SQL injection
+        if limit:
+            query = text(f"""
+                SELECT id, external_id, url, title
+                FROM marketprice
+                WHERE seller_name IS NULL
+                AND platform = 'ebay'
+                AND (url IS NOT NULL OR external_id IS NOT NULL)
+                {type_filter}
+                ORDER BY COALESCE(sold_date, scraped_at) DESC NULLS LAST
+                LIMIT :limit
+            """)
+            results = session.execute(query, {"limit": limit}).all()
+        else:
+            query = text(f"""
+                SELECT id, external_id, url, title
+                FROM marketprice
+                WHERE seller_name IS NULL
+                AND platform = 'ebay'
+                AND (url IS NOT NULL OR external_id IS NOT NULL)
+                {type_filter}
+                ORDER BY COALESCE(sold_date, scraped_at) DESC NULLS LAST
+            """)
+            results = session.execute(query).all()
         print(f"Found {len(results)} listings missing seller data (type: {listing_type})")
 
         if not results:
