@@ -336,6 +336,31 @@ class TestGradingDetection:
         result = _detect_grading(title)
         assert result is None, f"Expected None for '{title}', got {result}"
 
+    # === TAG SLAB (ungraded slabs) ===
+    @pytest.mark.parametrize("title,expected", [
+        ("Wonders of the First Gorrash TAG SLAB Prerelease", "TAG SLAB"),
+        ("TAG SLAB Wonders of the First Mythic", "TAG SLAB"),
+        ("WOTF Prerelease TAG-SLAB", "TAG SLAB"),
+        ("Wonders TAG SLAB Card", "TAG SLAB"),
+    ])
+    def test_tag_slab_detection(self, title, expected):
+        """Test that TAG SLAB (ungraded slabs) are correctly identified."""
+        result = _detect_grading(title)
+        assert result == expected, f"Expected {expected} for '{title}', got {result}"
+
+    # === GENERIC GRADED/SLAB ===
+    @pytest.mark.parametrize("title,expected", [
+        ("Wonders of the First Gorrash GRADED Card", "GRADED"),
+        ("GRADED Wonders of the First Mythic", "GRADED"),
+        ("Wonders of the First SLAB", "GRADED"),
+        ("SLABBED Wonders of the First Card", "GRADED"),
+        ("Professional Graded Wonders Card", "GRADED"),
+    ])
+    def test_generic_graded_detection(self, title, expected):
+        """Test that generic GRADED/SLAB mentions are detected."""
+        result = _detect_grading(title)
+        assert result == expected, f"Expected {expected} for '{title}', got {result}"
+
     # === EDGE CASES ===
     def test_stag_not_detected_as_tag(self):
         """Test that 'STAG' in title doesn't trigger TAG detection."""
@@ -351,7 +376,7 @@ class TestQuantityDetection:
     @pytest.mark.parametrize("title,expected", [
         ("Wonders of the First Gorrash Mythic", 1),
         ("2x Wonders of the First Common Card", 2),
-        ("3 Wonders of the First Epic Cards", 3),
+        ("3x Wonders of the First Epic Cards", 3),  # Need the "x" to be explicit
         ("Lot of 5 Wonders of the First Cards", 5),
         ("5 card lot WOTF", 5),
         ("WOTF Card x4", 4),
@@ -401,6 +426,38 @@ class TestQuantityDetection:
     def test_year_not_detected_as_quantity(self, title, expected):
         """Test that years (2020-2030) are not detected as quantities."""
         result = _detect_quantity(title, product_type="Box")
+        assert result == expected, f"Expected {expected} for '{title}', got {result}"
+
+    # === CARD NAME EXCLUSIONS ===
+    @pytest.mark.parametrize("title,expected", [
+        # Carbon-X7 is a card name, not 7 copies
+        ("Wonders of the First Carbon-X7 Synthforge Mythic", 1),
+        ("Carbon-X7 Synthforge Foil Card", 1),
+        ("WOTF Carbon-X7 Classic Paper", 1),
+        # X7v1 variant naming
+        ("Wonders of the First X7v1 Variant", 1),
+        # Experiment X series
+        ("Experiment X Wonders of the First", 1),
+    ])
+    def test_card_names_with_x_not_detected_as_quantity(self, title, expected):
+        """Test that card names containing X (Carbon-X7, X7v1) are not detected as quantities."""
+        result = _detect_quantity(title, product_type="Single")
+        assert result == expected, f"Expected {expected} for '{title}', got {result}"
+
+    # === X PREFIX PATTERNS ===
+    @pytest.mark.parametrize("title,expected", [
+        # "X3" at start of title
+        ("X3 Wonders of the First Common Cards", 3),
+        ("x2 WOTF Mythic Card Lot", 2),
+        # "3x" at start
+        ("3x Wonders of the First Epic Card", 3),
+        # Quantity at end
+        ("Wonders of the First Common x4", 4),
+        ("WOTF Epic Card x3", 3),
+    ])
+    def test_x_prefix_quantity_patterns(self, title, expected):
+        """Test various X prefix/suffix quantity patterns."""
+        result = _detect_quantity(title, product_type="Single")
         assert result == expected, f"Expected {expected} for '{title}', got {result}"
 
 
@@ -555,3 +612,157 @@ class TestDataQualityIntegration:
         if with_subtype < len(packs):
             import warnings
             warnings.warn(f"{len(packs) - with_subtype} packs missing product_subtype")
+
+    def test_grading_detected_correctly(self, integration_session):
+        """Test that graded listings have grading field populated."""
+        from sqlmodel import select
+        from app.models.market import MarketPrice
+
+        # Find listings that mention grading keywords but don't have grading field set
+        grading_keywords = ['PSA', 'BGS', 'CGC', 'SGC', 'TAG ', 'SLAB', 'GRADED']
+
+        listings = integration_session.exec(
+            select(MarketPrice)
+            .where(MarketPrice.platform == "ebay")
+            .where(MarketPrice.grading.is_(None))
+            .limit(500)
+        ).all()
+
+        issues = []
+        for listing in listings:
+            title_upper = (listing.title or "").upper()
+            for keyword in grading_keywords:
+                # Check for keyword but exclude STAG (not TAG)
+                if keyword in title_upper:
+                    if keyword == 'TAG ' and 'STAG' in title_upper:
+                        continue
+                    issues.append(f"ID {listing.id}: '{listing.title[:50]}...' has '{keyword}' but no grading")
+                    break
+
+        if issues:
+            print(f"\n{len(issues)} listings with grading keywords but no grading field:")
+            for issue in issues[:10]:
+                print(f"  - {issue}")
+
+        # Allow up to 5% of listings to slip through (edge cases)
+        assert len(issues) < len(listings) * 0.05, \
+            f"{len(issues)} listings have grading keywords but no grading field set"
+
+    def test_quantity_detected_correctly(self, integration_session):
+        """Test that multi-quantity listings have quantity > 1."""
+        from sqlmodel import select
+        from app.models.market import MarketPrice
+        import re
+
+        # Find listings that look like multi-quantity but have quantity = 1
+        qty_patterns = [
+            r'^\d+x\s+',           # "2x " at start
+            r'^x\d+\s+',           # "x2 " at start
+            r'lot\s+of\s+\d+',     # "lot of 5"
+            r'\d+\s+card\s+lot',   # "5 card lot"
+        ]
+
+        listings = integration_session.exec(
+            select(MarketPrice)
+            .where(MarketPrice.platform == "ebay")
+            .where(MarketPrice.quantity == 1)
+            .limit(500)
+        ).all()
+
+        issues = []
+        for listing in listings:
+            title_lower = (listing.title or "").lower()
+            for pattern in qty_patterns:
+                if re.search(pattern, title_lower):
+                    issues.append(f"ID {listing.id}: '{listing.title[:50]}...' matches '{pattern}' but qty=1")
+                    break
+
+        if issues:
+            print(f"\n{len(issues)} listings that may have incorrect quantity=1:")
+            for issue in issues[:10]:
+                print(f"  - {issue}")
+
+        # Allow some false positives
+        assert len(issues) < len(listings) * 0.02, \
+            f"{len(issues)} listings may have incorrect quantity"
+
+    def test_no_wrong_game_cards(self, integration_session):
+        """Test that no non-WOTF cards are in the database."""
+        from sqlmodel import select
+        from app.models.market import MarketPrice
+        import re
+
+        # Keywords that indicate wrong game
+        wrong_game_keywords = [
+            r'\byu-?gi-?oh\b',
+            r'\bpokemon\b',
+            r'\bmagic\s+the\s+gathering\b',
+            r'\bmtg\b',
+            r'\blorcana\b',
+            r'\bweiss\s+schwarz\b',
+            r'\bdragon\s+ball\b',
+            r'\bnaruto\b',
+            r'\bone\s+piece\s+tcg\b',
+        ]
+
+        listings = integration_session.exec(
+            select(MarketPrice)
+            .where(MarketPrice.platform == "ebay")
+            .limit(500)
+        ).all()
+
+        issues = []
+        for listing in listings:
+            title_lower = (listing.title or "").lower()
+            for pattern in wrong_game_keywords:
+                if re.search(pattern, title_lower):
+                    issues.append(f"ID {listing.id}: '{listing.title[:50]}...' may be wrong game")
+                    break
+
+        if issues:
+            print(f"\n{len(issues)} listings may be from wrong games:")
+            for issue in issues[:10]:
+                print(f"  - {issue}")
+
+        # Should be 0 wrong game cards
+        assert len(issues) == 0, f"{len(issues)} listings appear to be from other TCGs"
+
+
+class TestCardNameNormalization:
+    """Tests for card name normalization used in matching."""
+
+    @pytest.mark.parametrize("input_name,expected", [
+        # Apostrophe styles
+        ("Bathr'al the Cursed", "bathr'al the cursed"),
+        ("Bathr'al the Cursed", "bathr'al the cursed"),
+        ("Bathr'al the Cursed", "bathr'al the cursed"),
+        # Quote styles
+        ('"Lightbringer" Leonis', '"lightbringer" leonis'),
+        ('"Lightbringer" Leonis', '"lightbringer" leonis'),
+        # Commas removed
+        ("Gorrash, the Destroyer", "gorrash the destroyer"),
+        # Hyphens to spaces
+        ("Cave-Dwelling Rootling", "cave dwelling rootling"),
+        # "of the" -> "of"
+        ("Keeper of the Skulls", "keeper of skulls"),
+        # Leading "the" removed
+        ("The Prisoner", "prisoner"),
+    ])
+    def test_normalize_card_name(self, input_name, expected):
+        """Test card name normalization for fuzzy matching."""
+        from scripts.cleanup_listing_data import normalize_card_name
+        result = normalize_card_name(input_name)
+        assert result == expected, f"Expected '{expected}' for '{input_name}', got '{result}'"
+
+    @pytest.mark.parametrize("typo,correction", [
+        ("Issac Sparkpaw", "Isaac Sparkpaw"),
+        ("Mutaded Dragon", "Mutated Dragon"),
+        ("Deathsworm Gravesman", "Deathsworn Gravesman"),
+        ("Ceacean Warrior", "Cetacean Warrior"),
+        ("Lyonnaisa", "Lyonnisia"),
+    ])
+    def test_spelling_corrections(self, typo, correction):
+        """Test that common typos can be corrected."""
+        from scripts.cleanup_listing_data import SPELLING_CORRECTIONS, apply_spelling_corrections
+        result = apply_spelling_corrections(typo)
+        assert correction.lower() in result.lower(), f"Expected '{correction}' for '{typo}', got '{result}'"

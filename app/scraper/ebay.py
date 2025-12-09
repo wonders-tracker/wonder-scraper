@@ -316,7 +316,11 @@ def _detect_grading(title: str) -> Optional[str]:
     - CGC (Certified Guaranty Company) - scores 1-10, with .5 increments
     - SGC (Sportscard Guaranty Corporation) - scores 1-10
 
-    Returns: Grade string (e.g., "PSA 10", "BGS 9.5") or None for raw cards.
+    Also detects:
+    - TAG SLAB (common for WOTF prerelease cards)
+    - Generic "GRADED" or "SLAB" mentions without specific service
+
+    Returns: Grade string (e.g., "PSA 10", "BGS 9.5", "TAG SLAB", "GRADED") or None for raw cards.
     """
     import re
     title_upper = title.upper()
@@ -348,7 +352,7 @@ def _detect_grading(title: str) -> Optional[str]:
             return f"BGS {grade}"
 
     # TAG (Texas Authentication & Grading) patterns
-    # "TAG 10", "TAG-10", "TAG PERFECT 10"
+    # "TAG 10", "TAG-10", "TAG PERFECT 10", "TAG SLAB"
     tag_patterns = [
         r'(?<!S)TAG\s*[-]?\s*(\d+(?:\.\d)?)',  # TAG 10 (exclude STAG)
         r'TAG\s+PERFECT\s*(\d+)',  # TAG PERFECT 10
@@ -358,6 +362,10 @@ def _detect_grading(title: str) -> Optional[str]:
         if match:
             grade = match.group(1)
             return f"TAG {grade}"
+
+    # TAG SLAB without grade (common for WOTF prerelease)
+    if re.search(r'(?<!S)TAG\s+SLAB', title_upper) or re.search(r'(?<!S)TAG\s*[-]?\s*SLAB', title_upper):
+        return "TAG SLAB"
 
     # CGC grading patterns
     # "CGC 9.8", "CGC-9.8"
@@ -381,6 +389,13 @@ def _detect_grading(title: str) -> Optional[str]:
             grade = match.group(1)
             return f"SGC {grade}"
 
+    # Generic graded/slab mentions (without specific service or grade)
+    # "GRADED", "SLAB", "SLABBED" - indicates professional grading but unclear which service
+    if re.search(r'\bGRADED\b', title_upper):
+        return "GRADED"
+    if re.search(r'\bSLAB(?:BED)?\b', title_upper):
+        return "GRADED"
+
     return None
 
 
@@ -394,6 +409,7 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
     - "Lot of 5 packs" -> 5
     - "Bundle Box 6 Booster Packs" -> 1 (this is a single bundle containing 6 packs)
     - "2025 Wonders of the First" -> 1 (NOT 2025 - that's the year!)
+    - "Carbon-X7 Synthforge" -> 1 (NOT 7 - that's the card name!)
 
     Returns 1 if no quantity detected.
     """
@@ -403,14 +419,29 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
     def is_likely_year(num: int) -> bool:
         return 2020 <= num <= 2030
 
+    # Skip titles containing card names with X in them (Carbon-X7, X7v1, etc.)
+    # These are card names, not quantities
+    skip_patterns = [
+        r'carbon-x\d',      # Carbon-X7 card name
+        r'x\d+v\d',         # X7v1 variant naming
+        r'experiment\s*x',  # Experiment X series
+    ]
+    for pattern in skip_patterns:
+        if re.search(pattern, title_lower):
+            return 1
+
     # For singles, quantity is usually 1 unless explicitly stated
     if product_type == "Single":
-        # Look for explicit quantity patterns
+        # Look for explicit quantity patterns at start of title or after separator
         patterns = [
-            r'^(\d+)x?\s+',          # "2x Card Name" or "2 Card Name"
-            r'lot\s+of\s+(\d+)',     # "lot of 5"
-            r'(\d+)\s*card\s*lot',   # "5 card lot"
-            r'x\s*(\d+)\b',          # "x4" at word boundary
+            r'^(\d+)\s*x\s+',              # "2x Card Name" at start
+            r'^(\d+)\s+-\s+',              # "2 - Card Name" at start
+            r'^x\s*(\d+)\s+',              # "X3 Card Name" at start
+            r'(?:^|\s)(\d+)\s*x\s*(?:-|wonders|foil)',  # "3x -" or "2x Wonders"
+            r'lot\s+of\s+(\d+)',           # "lot of 5"
+            r'(\d+)\s*card\s*lot',         # "5 card lot"
+            r'(\d+)\s*ct\b',               # "3ct"
+            r'\sx\s*(\d+)\s*$',            # "x4" at end of title
         ]
         for pattern in patterns:
             match = re.search(pattern, title_lower)
