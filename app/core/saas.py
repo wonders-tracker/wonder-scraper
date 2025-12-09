@@ -24,7 +24,8 @@ def _detect_saas_mode() -> bool:
     Returns True if the saas/ submodule is present and importable.
     """
     try:
-        import saas
+        import saas  # noqa: F401 - intentional import to check availability
+
         return True
     except ImportError:
         return False
@@ -52,25 +53,28 @@ def get_mode_info() -> dict:
             "billing": False,
             "metering": False,
             "webhooks": False,
-        }
+        },
     }
 
     if SAAS_ENABLED:
         # Check individual feature availability
         try:
             from app.api.billing import BILLING_AVAILABLE
+
             info["features"]["billing"] = BILLING_AVAILABLE
         except ImportError:
             pass
 
         try:
             from app.middleware.metering import METERING_AVAILABLE
+
             info["features"]["metering"] = METERING_AVAILABLE
         except ImportError:
             pass
 
         try:
             from app.api.webhooks import WEBHOOKS_AVAILABLE
+
             info["features"]["webhooks"] = WEBHOOKS_AVAILABLE
         except ImportError:
             pass

@@ -23,33 +23,35 @@ from app.scraper.blokpax import (
 )
 from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error, log_market_insights
 from datetime import datetime, timedelta
-import concurrent.futures
 
 scheduler = AsyncIOScheduler()
+
 
 async def scrape_single_card(card: Card):
     """Scrape a single card with full data (sold + active)."""
     try:
         search_term = f"{card.name} {card.set_name}"
         print(f"[Polling] Updating: {search_term}")
-        
+
         # Scrape sold data (creates snapshot)
         await scrape_sold_data(
             card_name=card.name,
             card_id=card.id,
             search_term=search_term,
             set_name=card.set_name,
-            product_type=card.product_type if hasattr(card, 'product_type') else 'Single'
+            product_type=card.product_type if hasattr(card, "product_type") else "Single",
         )
-        
+
         # Get active data
         low_ask, inventory, high_bid = await scrape_active_data(card.name, card.id, search_term=search_term)
-        
+
         # Update snapshot with active data
         with Session(engine) as session:
-            statement = select(MarketSnapshot).where(
-                MarketSnapshot.card_id == card.id
-            ).order_by(MarketSnapshot.timestamp.desc())
+            statement = (
+                select(MarketSnapshot)
+                .where(MarketSnapshot.card_id == card.id)
+                .order_by(MarketSnapshot.timestamp.desc())
+            )
             snapshot = session.exec(statement).first()
             if snapshot:
                 snapshot.lowest_ask = low_ask
@@ -58,11 +60,12 @@ async def scrape_single_card(card: Card):
                 session.add(snapshot)
                 session.commit()
                 print(f"[Polling] Updated {card.name}: Ask=${low_ask}, Inv={inventory}")
-        
+
         return True
     except Exception as e:
         print(f"[Polling] Error updating {card.name}: {e}")
         return False
+
 
 async def job_update_market_data():
     """
@@ -78,10 +81,7 @@ async def job_update_market_data():
 
         # Subquery for latest snapshot per card
         latest_snapshots = (
-            select(
-                MarketSnapshot.card_id,
-                func.max(MarketSnapshot.timestamp).label('latest_timestamp')
-            )
+            select(MarketSnapshot.card_id, func.max(MarketSnapshot.timestamp).label("latest_timestamp"))
             .group_by(MarketSnapshot.card_id)
             .subquery()
         )
@@ -90,10 +90,7 @@ async def job_update_market_data():
         cards_query = (
             select(Card)
             .outerjoin(latest_snapshots, Card.id == latest_snapshots.c.card_id)
-            .where(
-                (latest_snapshots.c.latest_timestamp < cutoff_time) |
-                (latest_snapshots.c.latest_timestamp == None)
-            )
+            .where((latest_snapshots.c.latest_timestamp < cutoff_time) | (latest_snapshots.c.latest_timestamp is None))
         )
 
         cards_to_update = session.exec(cards_query).all()
@@ -143,7 +140,7 @@ async def job_update_market_data():
         failed = 0
 
         for i in range(0, len(cards_to_update), batch_size):
-            batch = cards_to_update[i:i+batch_size]
+            batch = cards_to_update[i : i + batch_size]
 
             # Process batch concurrently
             tasks = [scrape_single_card(card) for card in batch]
@@ -171,7 +168,7 @@ async def job_update_market_data():
             new_listings=0,  # Scheduled scrapes don't track new listings separately
             new_sales=0,
             duration_seconds=duration,
-            errors=failed
+            errors=failed,
         )
 
     except Exception as e:
@@ -211,7 +208,11 @@ async def job_update_blokpax_data():
                 listed = floor_data.get("listed_count", 0)
                 total = floor_data.get("total_tokens", 0)
 
-                print(f"[Blokpax] {slug}: Floor={floor_bpx:,.0f} BPX (${floor_usd:.2f})" if floor_bpx else f"[Blokpax] {slug}: No listings")
+                print(
+                    f"[Blokpax] {slug}: Floor={floor_bpx:,.0f} BPX (${floor_usd:.2f})"
+                    if floor_bpx
+                    else f"[Blokpax] {slug}: No listings"
+                )
 
                 # Save snapshot
                 with Session(engine) as session:
@@ -226,9 +227,7 @@ async def job_update_blokpax_data():
                     session.add(snapshot)
 
                     # Update storefront record
-                    storefront = session.exec(
-                        select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)
-                    ).first()
+                    storefront = session.exec(select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)).first()
                     if storefront:
                         storefront.floor_price_bpx = floor_bpx
                         storefront.floor_price_usd = floor_usd
@@ -272,7 +271,7 @@ async def job_update_blokpax_data():
         new_listings=0,
         new_sales=total_sales,
         duration_seconds=duration,
-        errors=errors
+        errors=errors,
     )
 
     print(f"[{datetime.utcnow()}] Blokpax Update Complete. Duration: {duration:.1f}s")
@@ -293,9 +292,7 @@ async def job_send_daily_digests():
 
         with Session(engine) as session:
             # Get users who want daily digests
-            prefs = session.exec(
-                select(EmailPreferences).where(EmailPreferences.daily_digest == True)
-            ).all()
+            prefs = session.exec(select(EmailPreferences).where(EmailPreferences.daily_digest is True)).all()
 
             if not prefs:
                 print("[Digest] No users subscribed to daily digest")
@@ -307,12 +304,16 @@ async def job_send_daily_digests():
 
             # Format for email
             market_data = {
-                'total_sales': data.get('total_sales', 0),
-                'total_volume': data.get('total_volume', 0),
-                'market_sentiment': 'bullish' if data.get('volume_change', 0) > 10 else 'bearish' if data.get('volume_change', 0) < -10 else 'neutral',
-                'top_gainers': data.get('top_gainers', []),
-                'top_losers': data.get('top_losers', []),
-                'hot_deals': data.get('hot_deals', []),
+                "total_sales": data.get("total_sales", 0),
+                "total_volume": data.get("total_volume", 0),
+                "market_sentiment": "bullish"
+                if data.get("volume_change", 0) > 10
+                else "bearish"
+                if data.get("volume_change", 0) < -10
+                else "neutral",
+                "top_gainers": data.get("top_gainers", []),
+                "top_losers": data.get("top_losers", []),
+                "hot_deals": data.get("hot_deals", []),
             }
 
             sent_count = 0
@@ -320,7 +321,7 @@ async def job_send_daily_digests():
                 user = session.get(User, pref.user_id)
                 if user and user.email:
                     try:
-                        name = user.username or user.email.split('@')[0]
+                        name = user.username or user.email.split("@")[0]
                         success = send_daily_market_digest(user.email, name, market_data)
                         if success:
                             sent_count += 1
@@ -348,9 +349,7 @@ async def job_send_weekly_reports():
 
         with Session(engine) as session:
             # Get users who want weekly reports
-            prefs = session.exec(
-                select(EmailPreferences).where(EmailPreferences.weekly_report == True)
-            ).all()
+            prefs = session.exec(select(EmailPreferences).where(EmailPreferences.weekly_report is True)).all()
 
             if not prefs:
                 print("[Weekly] No users subscribed to weekly report")
@@ -365,19 +364,19 @@ async def job_send_weekly_reports():
             week_start = week_end - timedelta(days=7)
 
             report_data = {
-                'week_start': week_start.strftime('%b %d'),
-                'week_end': week_end.strftime('%b %d'),
-                'total_sales': data.get('total_sales', 0),
-                'total_volume': data.get('total_volume', 0),
-                'volume_change': data.get('volume_change', 0),
-                'avg_sale_price': data.get('avg_price', 0),
-                'daily_breakdown': data.get('daily_breakdown', []),
-                'top_cards_by_volume': data.get('top_cards', []),
-                'price_movers': data.get('price_movers', []),
-                'market_health': {
-                    'unique_buyers': data.get('unique_buyers', 0),
-                    'unique_sellers': data.get('unique_sellers', 0),
-                    'liquidity_score': data.get('liquidity_score', 0),
+                "week_start": week_start.strftime("%b %d"),
+                "week_end": week_end.strftime("%b %d"),
+                "total_sales": data.get("total_sales", 0),
+                "total_volume": data.get("total_volume", 0),
+                "volume_change": data.get("volume_change", 0),
+                "avg_sale_price": data.get("avg_price", 0),
+                "daily_breakdown": data.get("daily_breakdown", []),
+                "top_cards_by_volume": data.get("top_cards", []),
+                "price_movers": data.get("price_movers", []),
+                "market_health": {
+                    "unique_buyers": data.get("unique_buyers", 0),
+                    "unique_sellers": data.get("unique_sellers", 0),
+                    "liquidity_score": data.get("liquidity_score", 0),
                 },
             }
 
@@ -386,7 +385,7 @@ async def job_send_weekly_reports():
                 user = session.get(User, pref.user_id)
                 if user and user.email:
                     try:
-                        name = user.username or user.email.split('@')[0]
+                        name = user.username or user.email.split("@")[0]
                         success = send_weekly_market_report(user.email, name, report_data)
                         if success:
                             sent_count += 1
@@ -416,9 +415,7 @@ async def job_check_price_alerts():
             # Get all active alerts with target prices
             alerts = session.exec(
                 select(Watchlist).where(
-                    Watchlist.alert_enabled == True,
-                    Watchlist.target_price != None,
-                    Watchlist.notify_email == True
+                    Watchlist.alert_enabled is True, Watchlist.target_price is not None, Watchlist.notify_email is True
                 )
             ).all()
 
@@ -456,14 +453,14 @@ async def job_check_price_alerts():
                         continue
 
                 if should_alert:
-                    name = user.username or user.email.split('@')[0]
+                    name = user.username or user.email.split("@")[0]
                     alert_data = {
-                        'card_name': card.name,
-                        'card_slug': card.slug,
-                        'alert_type': alert.alert_type,
-                        'target_price': alert.target_price,
-                        'current_price': current_price,
-                        'treatment': alert.treatment or 'Any Treatment',
+                        "card_name": card.name,
+                        "card_slug": card.slug,
+                        "alert_type": alert.alert_type,
+                        "target_price": alert.target_price,
+                        "current_price": current_price,
+                        "treatment": alert.treatment or "Any Treatment",
                     }
 
                     success = send_price_alert(user.email, name, alert_data)
@@ -498,9 +495,9 @@ async def job_backfill_seller_data():
         # Setup browser
         options = ChromiumOptions()
         options.headless = True
-        options.add_argument('--disable-gpu')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
 
         browser = Chrome(options=options)
         await browser.start()
@@ -509,6 +506,7 @@ async def job_backfill_seller_data():
         with Session(engine) as session:
             # Get listings missing seller data (prioritize recent sold items)
             from sqlalchemy import text
+
             query = text("""
                 SELECT id, external_id, url, title
                 FROM marketprice
@@ -530,7 +528,7 @@ async def job_backfill_seller_data():
                 # Extract item ID
                 item_id = external_id
                 if not item_id and url:
-                    match = re.search(r'/itm/(?:[^/]+/)?(\d+)', url)
+                    match = re.search(r"/itm/(?:[^/]+/)?(\d+)", url)
                     if match:
                         item_id = match.group(1)
 
@@ -546,15 +544,14 @@ async def job_backfill_seller_data():
                     await asyncio.sleep(2)
 
                     result = await tab.execute_script(
-                        "return document.documentElement.outerHTML;",
-                        return_by_value=True
+                        "return document.documentElement.outerHTML;", return_by_value=True
                     )
 
                     html = None
                     if isinstance(result, dict):
-                        inner = result.get('result', {})
+                        inner = result.get("result", {})
                         if isinstance(inner, dict):
-                            html = inner.get('result', {}).get('value')
+                            html = inner.get("result", {}).get("value")
 
                     await tab.close()
 
@@ -571,18 +568,16 @@ async def job_backfill_seller_data():
                     seller_name, feedback_score, feedback_percent = extract_seller_from_html(html)
 
                     if seller_name:
-                        session.execute(text("""
+                        session.execute(
+                            text("""
                             UPDATE marketprice
                             SET seller_name = :seller,
                                 seller_feedback_score = :score,
                                 seller_feedback_percent = :pct
                             WHERE id = :id
-                        """), {
-                            "seller": seller_name,
-                            "score": feedback_score,
-                            "pct": feedback_percent,
-                            "id": mp_id
-                        })
+                        """),
+                            {"seller": seller_name, "score": feedback_score, "pct": feedback_percent, "id": mp_id},
+                        )
                         session.commit()
                         updated += 1
                     else:
@@ -653,7 +648,7 @@ def start_scheduler():
         max_instances=1,
         misfire_grace_time=1800,  # 30 minutes
         coalesce=True,
-        replace_existing=True
+        replace_existing=True,
     )
 
     # Blokpax scraping: 20 min interval (API-based, faster)
@@ -665,7 +660,7 @@ def start_scheduler():
         max_instances=1,
         misfire_grace_time=600,  # 10 minutes
         coalesce=True,
-        replace_existing=True
+        replace_existing=True,
     )
 
     # AI market insights 2x daily (9 AM and 6 PM UTC)
@@ -677,7 +672,7 @@ def start_scheduler():
         max_instances=1,
         misfire_grace_time=3600,  # 1 hour
         coalesce=True,
-        replace_existing=True
+        replace_existing=True,
     )
     scheduler.add_job(
         job_market_insights,
@@ -686,7 +681,7 @@ def start_scheduler():
         max_instances=1,
         misfire_grace_time=3600,  # 1 hour
         coalesce=True,
-        replace_existing=True
+        replace_existing=True,
     )
 
     # Daily digest emails at 9:15 AM UTC (after market insights)
@@ -697,18 +692,18 @@ def start_scheduler():
         max_instances=1,
         misfire_grace_time=3600,  # 1 hour
         coalesce=True,
-        replace_existing=True
+        replace_existing=True,
     )
 
     # Weekly report emails on Monday at 9:30 AM UTC
     scheduler.add_job(
         job_send_weekly_reports,
-        CronTrigger(day_of_week='mon', hour=9, minute=30),
+        CronTrigger(day_of_week="mon", hour=9, minute=30),
         id="job_send_weekly_reports",
         max_instances=1,
         misfire_grace_time=7200,  # 2 hours
         coalesce=True,
-        replace_existing=True
+        replace_existing=True,
     )
 
     # Price alert checks every 30 minutes
@@ -719,7 +714,7 @@ def start_scheduler():
         max_instances=1,
         misfire_grace_time=900,  # 15 minutes
         coalesce=True,
-        replace_existing=True
+        replace_existing=True,
     )
 
     # Seller data backfill daily at 3 AM UTC (off-peak hours)
@@ -731,7 +726,7 @@ def start_scheduler():
         max_instances=1,
         misfire_grace_time=7200,  # 2 hours
         coalesce=True,
-        replace_existing=True
+        replace_existing=True,
     )
 
     scheduler.start()
@@ -743,4 +738,3 @@ def start_scheduler():
     print("  - job_send_weekly_reports (Email): Mon 9:30 UTC, 2h grace")
     print("  - job_check_price_alerts (Email): 30m interval, 15m grace")
     print("  - job_backfill_seller_data (Seller): 3:00 UTC daily, 2h grace")
-

@@ -19,6 +19,7 @@ router = APIRouter()
 
 # ============== SCHEMAS ==============
 
+
 class WatchlistCreate(BaseModel):
     card_id: int
     alert_enabled: bool = True
@@ -82,15 +83,14 @@ class EmailPreferencesOut(BaseModel):
 
 # ============== WATCHLIST ENDPOINTS ==============
 
+
 @router.get("", response_model=List[WatchlistOut])
 def get_watchlist(
     session: Session = Depends(get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """Get user's watchlist with card details."""
-    items = session.exec(
-        select(Watchlist).where(Watchlist.user_id == current_user.id)
-    ).all()
+    items = session.exec(select(Watchlist).where(Watchlist.user_id == current_user.id)).all()
 
     result = []
     for item in items:
@@ -120,20 +120,14 @@ def add_to_watchlist(
 
     # Check if already watching
     existing = session.exec(
-        select(Watchlist).where(
-            Watchlist.user_id == current_user.id,
-            Watchlist.card_id == item_in.card_id
-        )
+        select(Watchlist).where(Watchlist.user_id == current_user.id, Watchlist.card_id == item_in.card_id)
     ).first()
 
     if existing:
         raise HTTPException(status_code=400, detail="Card already in watchlist")
 
     # Create watchlist entry
-    db_item = Watchlist(
-        user_id=current_user.id,
-        **item_in.model_dump()
-    )
+    db_item = Watchlist(user_id=current_user.id, **item_in.model_dump())
     session.add(db_item)
     session.commit()
     session.refresh(db_item)
@@ -155,10 +149,7 @@ def get_watchlist_item(
 ) -> Any:
     """Check if user is watching a specific card."""
     item = session.exec(
-        select(Watchlist).where(
-            Watchlist.user_id == current_user.id,
-            Watchlist.card_id == card_id
-        )
+        select(Watchlist).where(Watchlist.user_id == current_user.id, Watchlist.card_id == card_id)
     ).first()
 
     if not item:
@@ -184,10 +175,7 @@ def update_watchlist_item(
 ) -> Any:
     """Update watchlist settings for a card."""
     item = session.exec(
-        select(Watchlist).where(
-            Watchlist.user_id == current_user.id,
-            Watchlist.card_id == card_id
-        )
+        select(Watchlist).where(Watchlist.user_id == current_user.id, Watchlist.card_id == card_id)
     ).first()
 
     if not item:
@@ -221,10 +209,7 @@ def remove_from_watchlist(
 ) -> Any:
     """Remove a card from watchlist."""
     item = session.exec(
-        select(Watchlist).where(
-            Watchlist.user_id == current_user.id,
-            Watchlist.card_id == card_id
-        )
+        select(Watchlist).where(Watchlist.user_id == current_user.id, Watchlist.card_id == card_id)
     ).first()
 
     if not item:
@@ -238,15 +223,14 @@ def remove_from_watchlist(
 
 # ============== EMAIL PREFERENCES ==============
 
+
 @router.get("/preferences/email", response_model=EmailPreferencesOut)
 def get_email_preferences(
     session: Session = Depends(get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """Get user's email notification preferences."""
-    prefs = session.exec(
-        select(EmailPreferences).where(EmailPreferences.user_id == current_user.id)
-    ).first()
+    prefs = session.exec(select(EmailPreferences).where(EmailPreferences.user_id == current_user.id)).first()
 
     if not prefs:
         # Return defaults
@@ -257,7 +241,7 @@ def get_email_preferences(
             price_alerts=True,
             new_listings=False,
             digest_hour=9,
-            digest_day=0
+            digest_day=0,
         )
 
     return EmailPreferencesOut.model_validate(prefs)
@@ -270,9 +254,7 @@ def update_email_preferences(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """Update user's email notification preferences."""
-    prefs = session.exec(
-        select(EmailPreferences).where(EmailPreferences.user_id == current_user.id)
-    ).first()
+    prefs = session.exec(select(EmailPreferences).where(EmailPreferences.user_id == current_user.id)).first()
 
     if not prefs:
         # Create new preferences
@@ -292,6 +274,7 @@ def update_email_preferences(
 
 # ============== QUICK TOGGLE (for split button) ==============
 
+
 @router.post("/{card_id}/toggle")
 def toggle_watchlist(
     card_id: int,
@@ -306,10 +289,7 @@ def toggle_watchlist(
 
     # Check if already watching
     existing = session.exec(
-        select(Watchlist).where(
-            Watchlist.user_id == current_user.id,
-            Watchlist.card_id == card_id
-        )
+        select(Watchlist).where(Watchlist.user_id == current_user.id, Watchlist.card_id == card_id)
     ).first()
 
     if existing:
@@ -320,11 +300,7 @@ def toggle_watchlist(
     else:
         # Add to watchlist with defaults
         db_item = Watchlist(
-            user_id=current_user.id,
-            card_id=card_id,
-            alert_enabled=True,
-            alert_type="below",
-            notify_email=True
+            user_id=current_user.id, card_id=card_id, alert_enabled=True, alert_type="below", notify_email=True
         )
         session.add(db_item)
         session.commit()

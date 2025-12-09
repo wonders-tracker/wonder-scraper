@@ -1,6 +1,7 @@
 """
 API Key model for tracking and rate limiting API access.
 """
+
 from typing import Optional
 from sqlmodel import Field, SQLModel
 from datetime import datetime
@@ -9,6 +10,7 @@ import secrets
 
 class APIKey(SQLModel, table=True):
     """API keys for authenticated API access."""
+
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
 
@@ -43,6 +45,7 @@ class APIKey(SQLModel, table=True):
     def hash_key(key: str) -> str:
         """Hash an API key for storage."""
         import hashlib
+
         return hashlib.sha256(key.encode()).hexdigest()
 
     @staticmethod

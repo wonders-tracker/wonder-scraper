@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from saas.api.webhooks import router, verify_polar_signature
+
     WEBHOOKS_AVAILABLE = True
     logger.info("SaaS webhooks module loaded")
 except ImportError:
@@ -28,10 +29,7 @@ except ImportError:
     @router.post("/webhooks/polar")
     async def polar_webhook(request: Request):
         """Polar webhooks not available in OSS version."""
-        raise HTTPException(
-            status_code=501,
-            detail="Webhook handling requires the saas/ module"
-        )
+        raise HTTPException(status_code=501, detail="Webhook handling requires the saas/ module")
 
 
 # Re-export for backwards compatibility with existing code

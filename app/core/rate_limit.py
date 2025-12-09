@@ -2,6 +2,8 @@
 Simple in-memory rate limiter for authentication endpoints.
 Protects against brute force and credential stuffing attacks.
 """
+
+import asyncio
 import time
 from collections import defaultdict
 from functools import wraps
@@ -26,17 +28,9 @@ class RateLimiter:
     def _cleanup_old_requests(self, ip: str, window_seconds: int):
         """Remove requests older than the window."""
         cutoff = time.time() - window_seconds
-        self._requests[ip] = [
-            (ts, count) for ts, count in self._requests[ip]
-            if ts > cutoff
-        ]
+        self._requests[ip] = [(ts, count) for ts, count in self._requests[ip] if ts > cutoff]
 
-    def is_rate_limited(
-        self,
-        ip: str,
-        max_requests: int = 10,
-        window_seconds: int = 60
-    ) -> Tuple[bool, int]:
+    def is_rate_limited(self, ip: str, max_requests: int = 10, window_seconds: int = 60) -> Tuple[bool, int]:
         """
         Check if IP is rate limited.
         Returns (is_limited, retry_after_seconds)
@@ -122,9 +116,7 @@ def get_client_ip(request: Request) -> str:
 
 
 def rate_limit(
-    max_requests: int = 10,
-    window_seconds: int = 60,
-    error_message: str = "Too many requests. Please try again later."
+    max_requests: int = 10, window_seconds: int = 60, error_message: str = "Too many requests. Please try again later."
 ):
     """
     Rate limiting decorator for FastAPI endpoints.
@@ -134,6 +126,7 @@ def rate_limit(
         window_seconds: Time window in seconds
         error_message: Error message to return when rate limited
     """
+
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, request: Request = None, **kwargs):
@@ -149,23 +142,21 @@ def rate_limit(
                 return await func(*args, **kwargs) if asyncio.iscoroutinefunction(func) else func(*args, **kwargs)
 
             ip = get_client_ip(request)
-            is_limited, retry_after = rate_limiter.is_rate_limited(
-                ip, max_requests, window_seconds
-            )
+            is_limited, retry_after = rate_limiter.is_rate_limited(ip, max_requests, window_seconds)
 
             if is_limited:
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail=error_message,
-                    headers={"Retry-After": str(retry_after)}
+                    headers={"Retry-After": str(retry_after)},
                 )
 
             rate_limiter.record_request(ip)
 
-            import asyncio
             if asyncio.iscoroutinefunction(func):
                 return await func(*args, **kwargs)
             return func(*args, **kwargs)
 
         return wrapper
+
     return decorator

@@ -14,7 +14,7 @@ Marketing/digest emails:
 """
 
 import resend
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from app.core.config import settings
 
 # Initialize Resend
@@ -33,11 +33,12 @@ def send_welcome_email(to_email: str, user_name: Optional[str] = None) -> bool:
     name = user_name or to_email.split("@")[0]
 
     try:
-        resend.Emails.send({
-            "from": settings.FROM_EMAIL,
-            "to": [to_email],
-            "subject": "Welcome to WondersTracker!",
-            "html": f"""
+        resend.Emails.send(
+            {
+                "from": settings.FROM_EMAIL,
+                "to": [to_email],
+                "subject": "Welcome to WondersTracker!",
+                "html": f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -89,7 +90,8 @@ def send_welcome_email(to_email: str, user_name: Optional[str] = None) -> bool:
 </body>
 </html>
             """,
-        })
+            }
+        )
         print(f"[Email] Welcome email sent to {to_email}")
         return True
     except Exception as e:
@@ -109,11 +111,12 @@ def send_password_reset_email(to_email: str, reset_token: str) -> bool:
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
 
     try:
-        resend.Emails.send({
-            "from": settings.FROM_EMAIL,
-            "to": [to_email],
-            "subject": "Reset Your Password - WondersTracker",
-            "html": f"""
+        resend.Emails.send(
+            {
+                "from": settings.FROM_EMAIL,
+                "to": [to_email],
+                "subject": "Reset Your Password - WondersTracker",
+                "html": f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -162,7 +165,8 @@ def send_password_reset_email(to_email: str, reset_token: str) -> bool:
 </body>
 </html>
             """,
-        })
+            }
+        )
         print(f"[Email] Password reset email sent to {to_email}")
         return True
     except Exception as e:
@@ -171,10 +175,7 @@ def send_password_reset_email(to_email: str, reset_token: str) -> bool:
 
 
 def send_api_access_request_email(
-    requester_email: str,
-    requester_name: str,
-    use_case: str,
-    company: Optional[str] = None
+    requester_email: str, requester_name: str, use_case: str, company: Optional[str] = None
 ) -> bool:
     """
     Send API access request notification to admin.
@@ -187,12 +188,13 @@ def send_api_access_request_email(
     admin_email = settings.ADMIN_EMAIL or settings.FROM_EMAIL
 
     try:
-        resend.Emails.send({
-            "from": settings.FROM_EMAIL,
-            "to": [admin_email],
-            "reply_to": requester_email,
-            "subject": f"API Access Request - {requester_name}",
-            "html": f"""
+        resend.Emails.send(
+            {
+                "from": settings.FROM_EMAIL,
+                "to": [admin_email],
+                "reply_to": requester_email,
+                "subject": f"API Access Request - {requester_name}",
+                "html": f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -245,7 +247,8 @@ def send_api_access_request_email(
 </body>
 </html>
             """,
-        })
+            }
+        )
         print(f"[Email] API access request email sent for {requester_email}")
         return True
     except Exception as e:
@@ -266,11 +269,12 @@ async def send_api_access_approved_email(to_email: str, user_name: str) -> bool:
     checkout_url = f"{settings.FRONTEND_URL}/upgrade?product=api"
 
     try:
-        resend.Emails.send({
-            "from": settings.FROM_EMAIL,
-            "to": [to_email],
-            "subject": "Your API Access Request Has Been Approved! - WondersTracker",
-            "html": f"""
+        resend.Emails.send(
+            {
+                "from": settings.FROM_EMAIL,
+                "to": [to_email],
+                "subject": "Your API Access Request Has Been Approved! - WondersTracker",
+                "html": f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -327,7 +331,8 @@ async def send_api_access_approved_email(to_email: str, user_name: str) -> bool:
 </body>
 </html>
             """,
-        })
+            }
+        )
         print(f"[Email] API access approved email sent to {to_email}")
         return True
     except Exception as e:
@@ -345,11 +350,12 @@ def send_api_key_approved_email(to_email: str, user_name: str, api_key: str) -> 
         return False
 
     try:
-        resend.Emails.send({
-            "from": settings.FROM_EMAIL,
-            "to": [to_email],
-            "subject": "Your API Access Has Been Approved - WondersTracker",
-            "html": f"""
+        resend.Emails.send(
+            {
+                "from": settings.FROM_EMAIL,
+                "to": [to_email],
+                "subject": "Your API Access Has Been Approved - WondersTracker",
+                "html": f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -405,7 +411,8 @@ def send_api_key_approved_email(to_email: str, user_name: str, api_key: str) -> 
 </body>
 </html>
             """,
-        })
+            }
+        )
         print(f"[Email] API key approved email sent to {to_email}")
         return True
     except Exception as e:
@@ -415,11 +422,8 @@ def send_api_key_approved_email(to_email: str, user_name: str, api_key: str) -> 
 
 # ============== MARKETING / DIGEST EMAILS ==============
 
-def send_daily_market_digest(
-    to_email: str,
-    user_name: str,
-    market_data: Dict[str, Any]
-) -> bool:
+
+def send_daily_market_digest(to_email: str, user_name: str, market_data: Dict[str, Any]) -> bool:
     """
     Send daily market digest email with key market stats.
 
@@ -461,7 +465,11 @@ def send_daily_market_digest(
     # Hot deals section
     deals_html = ""
     for deal in market_data.get("hot_deals", [])[:3]:
-        discount = ((deal.get('floor_price', 0) - deal.get('price', 0)) / deal.get('floor_price', 1)) * 100 if deal.get('floor_price') else 0
+        discount = (
+            ((deal.get("floor_price", 0) - deal.get("price", 0)) / deal.get("floor_price", 1)) * 100
+            if deal.get("floor_price")
+            else 0
+        )
         deals_html += f"""
         <div style="background-color: #1e3a1e; border: 1px solid #166534; border-radius: 4px; padding: 12px; margin-bottom: 8px;">
             <div style="color: #fafafa; font-size: 14px; font-weight: 500;">{deal.get('name', 'Unknown')}</div>
@@ -477,11 +485,12 @@ def send_daily_market_digest(
     sentiment_icon = "📈" if sentiment == "bullish" else "📉" if sentiment == "bearish" else "➡️"
 
     try:
-        resend.Emails.send({
-            "from": settings.FROM_EMAIL,
-            "to": [to_email],
-            "subject": f"Daily Market Digest - {market_data.get('total_sales', 0)} Sales Today",
-            "html": f"""
+        resend.Emails.send(
+            {
+                "from": settings.FROM_EMAIL,
+                "to": [to_email],
+                "subject": f"Daily Market Digest - {market_data.get('total_sales', 0)} Sales Today",
+                "html": f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -578,7 +587,8 @@ def send_daily_market_digest(
 </body>
 </html>
             """,
-        })
+            }
+        )
         print(f"[Email] Daily digest sent to {to_email}")
         return True
     except Exception as e:
@@ -586,11 +596,7 @@ def send_daily_market_digest(
         return False
 
 
-def send_weekly_market_report(
-    to_email: str,
-    user_name: str,
-    report_data: Dict[str, Any]
-) -> bool:
+def send_weekly_market_report(to_email: str, user_name: str, report_data: Dict[str, Any]) -> bool:
     """
     Send weekly market report email with comprehensive stats.
 
@@ -612,9 +618,9 @@ def send_weekly_market_report(
 
     # Daily breakdown chart (ASCII bars in email)
     daily_html = ""
-    max_sales = max([d.get('sales', 0) for d in report_data.get('daily_breakdown', [])] or [1])
+    max_sales = max([d.get("sales", 0) for d in report_data.get("daily_breakdown", [])] or [1])
     for day in report_data.get("daily_breakdown", []):
-        bar_width = int((day.get('sales', 0) / max_sales) * 100)
+        bar_width = int((day.get("sales", 0) / max_sales) * 100)
         daily_html += f"""
         <div style="display: flex; align-items: center; margin-bottom: 8px;">
             <div style="width: 60px; color: #71717a; font-size: 12px;">{day.get('date', '')}</div>
@@ -657,11 +663,12 @@ def send_weekly_market_report(
     vol_arrow = "↑" if volume_change > 0 else "↓" if volume_change < 0 else ""
 
     try:
-        resend.Emails.send({
-            "from": settings.FROM_EMAIL,
-            "to": [to_email],
-            "subject": f"Weekly Market Report - ${report_data.get('total_volume', 0):,.0f} Volume",
-            "html": f"""
+        resend.Emails.send(
+            {
+                "from": settings.FROM_EMAIL,
+                "to": [to_email],
+                "subject": f"Weekly Market Report - ${report_data.get('total_volume', 0):,.0f} Volume",
+                "html": f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -765,7 +772,8 @@ def send_weekly_market_report(
 </body>
 </html>
             """,
-        })
+            }
+        )
         print(f"[Email] Weekly report sent to {to_email}")
         return True
     except Exception as e:
@@ -773,11 +781,7 @@ def send_weekly_market_report(
         return False
 
 
-def send_price_alert(
-    to_email: str,
-    user_name: str,
-    alert_data: Dict[str, Any]
-) -> bool:
+def send_price_alert(to_email: str, user_name: str, alert_data: Dict[str, Any]) -> bool:
     """
     Send price alert email when a watched card hits target price.
 
@@ -804,18 +808,19 @@ def send_price_alert(
         alert_color = "#f87171"
         alert_icon = "📉"
     else:
-        alert_message = f"has a new price"
+        alert_message = "has a new price"
         alert_color = "#fbbf24"
         alert_icon = "🔔"
 
     card_url = f"{settings.FRONTEND_URL}/cards/{alert_data.get('card_slug', '')}"
 
     try:
-        resend.Emails.send({
-            "from": settings.FROM_EMAIL,
-            "to": [to_email],
-            "subject": f"🔔 Price Alert: {alert_data.get('card_name', 'Card')} - ${alert_data.get('current_price', 0):.2f}",
-            "html": f"""
+        resend.Emails.send(
+            {
+                "from": settings.FROM_EMAIL,
+                "to": [to_email],
+                "subject": f"🔔 Price Alert: {alert_data.get('card_name', 'Card')} - ${alert_data.get('current_price', 0):.2f}",
+                "html": f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -869,7 +874,8 @@ def send_price_alert(
 </body>
 </html>
             """,
-        })
+            }
+        )
         print(f"[Email] Price alert sent to {to_email}")
         return True
     except Exception as e:
@@ -877,11 +883,7 @@ def send_price_alert(
         return False
 
 
-def send_portfolio_summary(
-    to_email: str,
-    user_name: str,
-    portfolio_data: Dict[str, Any]
-) -> bool:
+def send_portfolio_summary(to_email: str, user_name: str, portfolio_data: Dict[str, Any]) -> bool:
     """
     Send portfolio summary email with P&L and holdings.
 
@@ -931,11 +933,12 @@ def send_portfolio_summary(
         """
 
     try:
-        resend.Emails.send({
-            "from": settings.FROM_EMAIL,
-            "to": [to_email],
-            "subject": f"Portfolio Update: {'📈' if pnl >= 0 else '📉'} {'+' if pnl >= 0 else ''}${pnl:.2f} ({'+' if pnl_percent >= 0 else ''}{pnl_percent:.1f}%)",
-            "html": f"""
+        resend.Emails.send(
+            {
+                "from": settings.FROM_EMAIL,
+                "to": [to_email],
+                "subject": f"Portfolio Update: {'📈' if pnl >= 0 else '📉'} {'+' if pnl >= 0 else ''}${pnl:.2f} ({'+' if pnl_percent >= 0 else ''}{pnl_percent:.1f}%)",
+                "html": f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -1022,7 +1025,8 @@ def send_portfolio_summary(
 </body>
 </html>
             """,
-        })
+            }
+        )
         print(f"[Email] Portfolio summary sent to {to_email}")
         return True
     except Exception as e:

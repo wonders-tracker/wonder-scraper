@@ -17,9 +17,10 @@ To find active listings, we must:
 
 This is slow but necessary - there's no API to filter by "listed only".
 """
+
 import httpx
 from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime
 from dataclasses import dataclass
 import asyncio
 
@@ -38,16 +39,16 @@ BPX_DECIMALS = 9
 # WOTF storefronts to track
 WOTF_STOREFRONTS = [
     "wotf-existence-collector-boxes",  # Serialized Booster Boxes
-    "wotf-art-proofs",                  # Art Proofs
-    "wotf-existence-preslabs",          # Existence Preslabs
-    "reward-room",                      # Orbital Redemption Tokens (mixed, filter by WOTF)
+    "wotf-art-proofs",  # Art Proofs
+    "wotf-existence-preslabs",  # Existence Preslabs
+    "reward-room",  # Orbital Redemption Tokens (mixed, filter by WOTF)
 ]
 
 # Cache for BPX price (avoid hammering API)
 _bpx_price_cache: Dict[str, Any] = {
     "price": None,
     "timestamp": None,
-    "ttl_seconds": 300  # 5 min cache
+    "ttl_seconds": 300,  # 5 min cache
 }
 _bpx_cache_lock = asyncio.Lock()
 
@@ -55,6 +56,7 @@ _bpx_cache_lock = asyncio.Lock()
 @dataclass
 class BlokpaxListing:
     """Represents an active listing on Blokpax."""
+
     listing_id: str
     asset_id: str
     price_bpx: float
@@ -67,6 +69,7 @@ class BlokpaxListing:
 @dataclass
 class BlokpaxOffer:
     """Represents an offer on a Blokpax asset."""
+
     offer_id: str
     asset_id: str
     price_bpx: float
@@ -80,6 +83,7 @@ class BlokpaxOffer:
 @dataclass
 class BlokpaxSale:
     """Represents a completed sale (filled listing)."""
+
     listing_id: str
     asset_id: str
     asset_name: str
@@ -94,6 +98,7 @@ class BlokpaxSale:
 @dataclass
 class BlokpaxAsset:
     """Represents an asset/NFT on Blokpax."""
+
     asset_id: str
     name: str
     description: Optional[str]
@@ -161,7 +166,7 @@ def bpx_to_float(raw_price: int) -> float:
     Converts raw BPX price (with 12 decimals) to float.
     Example: 500000000000000 -> 500,000 BPX
     """
-    return raw_price / (10 ** BPX_DECIMALS)
+    return raw_price / (10**BPX_DECIMALS)
 
 
 def bpx_to_usd(raw_price: int, bpx_price_usd: float) -> float:
@@ -185,10 +190,7 @@ async def fetch_storefront(slug: str) -> Dict[str, Any]:
 
 
 async def fetch_storefront_assets(
-    slug: str,
-    page: int = 1,
-    per_page: int = 24,
-    sort_by: str = "price_asc"
+    slug: str, page: int = 1, per_page: int = 24, sort_by: str = "price_asc"
 ) -> Dict[str, Any]:
     """
     Fetches assets from a storefront with pagination.
@@ -201,12 +203,7 @@ async def fetch_storefront_assets(
     """
     url = f"{BLOKPAX_API_BASE}/storefront/{slug}/assets"
     # Use website's param names: pg, perPage, sort
-    params = {
-        "query": "",
-        "pg": page,
-        "perPage": per_page,
-        "sort": sort_by
-    }
+    params = {"query": "", "pg": page, "perPage": per_page, "sort": sort_by}
 
     async with httpx.AsyncClient() as client:
         response = await client.get(url, params=params, timeout=15.0)
@@ -231,17 +228,13 @@ async def fetch_storefront_activity(
     slug: str,
     page: int = 1,
     per_page: int = 50,
-    activity_type: str = "sales"  # 'sales', 'listings', 'offers'
+    activity_type: str = "sales",  # 'sales', 'listings', 'offers'
 ) -> Dict[str, Any]:
     """
     Fetches activity/sales history for a storefront.
     """
     url = f"{BLOKPAX_API_BASE}/storefront/{slug}/activity"
-    params = {
-        "page": page,
-        "per_page": per_page,
-        "type": activity_type
-    }
+    params = {"page": page, "per_page": per_page, "type": activity_type}
 
     async with httpx.AsyncClient() as client:
         response = await client.get(url, params=params, timeout=15.0)
@@ -259,10 +252,7 @@ def parse_asset(data: Dict[str, Any], slug: str, bpx_price_usd: float) -> Blokpa
     # Parse traits
     traits = []
     for attr in asset_data.get("attributes", []):
-        traits.append({
-            "trait_type": attr.get("trait_type", ""),
-            "value": attr.get("value", "")
-        })
+        traits.append({"trait_type": attr.get("trait_type", ""), "value": attr.get("value", "")})
 
     # Parse floor listing if present
     floor_price_bpx = None
@@ -277,30 +267,34 @@ def parse_asset(data: Dict[str, Any], slug: str, bpx_price_usd: float) -> Blokpa
     listings = []
     for listing in asset_info.get("listings", []):
         raw_price = listing.get("price", 0)
-        listings.append(BlokpaxListing(
-            listing_id=str(listing.get("id", "")),
-            asset_id=str(asset_data.get("id", "")),
-            price_bpx=bpx_to_float(raw_price),
-            price_usd=bpx_to_usd(raw_price, bpx_price_usd),
-            quantity=listing.get("quantity", 1),
-            seller_address=listing.get("seller", {}).get("address", ""),
-            created_at=_parse_datetime(listing.get("created_at"))
-        ))
+        listings.append(
+            BlokpaxListing(
+                listing_id=str(listing.get("id", "")),
+                asset_id=str(asset_data.get("id", "")),
+                price_bpx=bpx_to_float(raw_price),
+                price_usd=bpx_to_usd(raw_price, bpx_price_usd),
+                quantity=listing.get("quantity", 1),
+                seller_address=listing.get("seller", {}).get("address", ""),
+                created_at=_parse_datetime(listing.get("created_at")),
+            )
+        )
 
     # Parse offers
     offers = []
     for offer in asset_info.get("offers", []):
         raw_price = offer.get("offer_bpx_per_token", 0)
-        offers.append(BlokpaxOffer(
-            offer_id=str(offer.get("id", "")),
-            asset_id=str(asset_data.get("id", "")),
-            price_bpx=bpx_to_float(raw_price),
-            price_usd=bpx_to_usd(raw_price, bpx_price_usd),
-            quantity=offer.get("quantity", 1),
-            buyer_address=offer.get("offerer", {}).get("address", ""),
-            status=offer.get("offer_status", "open"),
-            created_at=_parse_datetime(offer.get("created_at"))
-        ))
+        offers.append(
+            BlokpaxOffer(
+                offer_id=str(offer.get("id", "")),
+                asset_id=str(asset_data.get("id", "")),
+                price_bpx=bpx_to_float(raw_price),
+                price_usd=bpx_to_usd(raw_price, bpx_price_usd),
+                quantity=offer.get("quantity", 1),
+                buyer_address=offer.get("offerer", {}).get("address", ""),
+                status=offer.get("offer_status", "open"),
+                created_at=_parse_datetime(offer.get("created_at")),
+            )
+        )
 
     return BlokpaxAsset(
         asset_id=str(asset_data.get("id", "")),
@@ -317,7 +311,7 @@ def parse_asset(data: Dict[str, Any], slug: str, bpx_price_usd: float) -> Blokpa
         floor_price_bpx=floor_price_bpx,
         floor_price_usd=floor_price_usd,
         listings=listings,
-        offers=offers
+        offers=offers,
     )
 
 
@@ -343,7 +337,7 @@ def parse_sale(activity: Dict[str, Any], bpx_price_usd: float) -> Optional[Blokp
         quantity=listing.get("quantity", 1),
         seller_address=listing.get("seller", {}).get("address", ""),
         buyer_address=listing.get("buyer", {}).get("address", ""),
-        filled_at=_parse_datetime(listing.get("filled_at")) or datetime.now()
+        filled_at=_parse_datetime(listing.get("filled_at")) or datetime.now(),
     )
 
 
@@ -430,7 +424,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
         per_page = 5 if use_small_pages else 100
 
         if use_small_pages:
-            print(f"  Using small page mode (perPage=5) - API quirk requires this for floor_listing")
+            print("  Using small page mode (perPage=5) - API quirk requires this for floor_listing")
             # With small pages, we need more pages but can early-exit when listings stop appearing
             effective_max_pages = max_pages * 20  # Allow up to 4000 pages for small page mode
         else:
@@ -474,16 +468,20 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
                                 listing_id = str(floor_listing.get("id", ""))
                                 if listing_id and listing_id not in seen_listing_ids:
                                     seen_listing_ids.add(listing_id)
-                                    asset_name = a.get("name", "Unknown")
-                                    all_listings.append(BlokpaxListing(
-                                        listing_id=listing_id,
-                                        asset_id=str(aid),
-                                        price_bpx=bpx_to_float(raw_price),
-                                        price_usd=bpx_to_usd(raw_price, bpx_price),
-                                        quantity=floor_listing.get("quantity", 1),
-                                        seller_address=floor_listing.get("seller", {}).get("address", "") if isinstance(floor_listing.get("seller"), dict) else "",
-                                        created_at=_parse_datetime(floor_listing.get("created_at"))
-                                    ))
+                                    a.get("name", "Unknown")
+                                    all_listings.append(
+                                        BlokpaxListing(
+                                            listing_id=listing_id,
+                                            asset_id=str(aid),
+                                            price_bpx=bpx_to_float(raw_price),
+                                            price_usd=bpx_to_usd(raw_price, bpx_price),
+                                            quantity=floor_listing.get("quantity", 1),
+                                            seller_address=floor_listing.get("seller", {}).get("address", "")
+                                            if isinstance(floor_listing.get("seller"), dict)
+                                            else "",
+                                            created_at=_parse_datetime(floor_listing.get("created_at")),
+                                        )
+                                    )
 
                     # For small page mode: early exit if we've passed all listings
                     # Since sorted by price_asc, listed items come first
@@ -505,7 +503,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
                 break
 
         if not all_asset_ids:
-            print(f"  No assets found in bulk endpoint")
+            print("  No assets found in bulk endpoint")
             return []
 
         # If bulk endpoint already gave us listings, we're done!
@@ -554,15 +552,17 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
                             raw_price = listing.get("price", 0)
                             if raw_price > 0:
                                 listing_id = str(listing.get("id", ""))
-                                found_listings.append(BlokpaxListing(
-                                    listing_id=listing_id,
-                                    asset_id=str(asset_id),
-                                    price_bpx=bpx_to_float(raw_price),
-                                    price_usd=bpx_to_usd(raw_price, bpx_price),
-                                    quantity=listing.get("quantity", 1),
-                                    seller_address=listing.get("owner", {}).get("username", ""),
-                                    created_at=_parse_datetime(listing.get("created_at"))
-                                ))
+                                found_listings.append(
+                                    BlokpaxListing(
+                                        listing_id=listing_id,
+                                        asset_id=str(asset_id),
+                                        price_bpx=bpx_to_float(raw_price),
+                                        price_usd=bpx_to_usd(raw_price, bpx_price),
+                                        quantity=listing.get("quantity", 1),
+                                        seller_address=listing.get("owner", {}).get("username", ""),
+                                        created_at=_parse_datetime(listing.get("created_at")),
+                                    )
+                                )
 
                     if found_listings:
                         price = found_listings[0].price_bpx
@@ -577,7 +577,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
         if is_sequential:
             # SEQUENTIAL IDs: Bulk endpoint hides listed assets
             # Probe "missing" IDs in the range that aren't in bulk response
-            print(f"  Strategy: Missing ID probe (sequential IDs detected)")
+            print("  Strategy: Missing ID probe (sequential IDs detected)")
 
             known_ids_set = set(int_ids)
             missing_ids = []
@@ -590,7 +590,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
         else:
             # NON-SEQUENTIAL IDs: Bulk endpoint shows ALL assets, just probe each one
             # This is slower but necessary for storefronts with large scattered IDs
-            print(f"  Strategy: Full scan (non-sequential IDs detected)")
+            print("  Strategy: Full scan (non-sequential IDs detected)")
             ids_to_check = all_asset_ids
 
         # Step 4: Probe assets in concurrent batches
@@ -598,7 +598,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
         total_to_check = len(ids_to_check)
 
         for i in range(0, total_to_check, concurrency):
-            batch = ids_to_check[i:i + concurrency]
+            batch = ids_to_check[i : i + concurrency]
             tasks = [check_asset_v2(aid) for aid in batch]
             results = await asyncio.gather(*tasks)
 
@@ -676,7 +676,7 @@ async def scrape_storefront_floor(slug: str, deep_scan: bool = True) -> Dict[str
         "bpx_price_usd": bpx_price,
         "listed_count": listed_count,
         "total_tokens": total_tokens,
-        "listings": all_listings  # Include all found listings
+        "listings": all_listings,  # Include all found listings
     }
 
 
@@ -833,7 +833,7 @@ async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 
 
                 return offers
 
-        except Exception as e:
+        except Exception:
             return []
 
     # Fetch in concurrent batches
@@ -864,6 +864,7 @@ async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 
 @dataclass
 class BlokpaxRedemptionData:
     """Parsed redemption activity from Blokpax."""
+
     asset_id: str
     asset_name: str
     box_art: Optional[str]
@@ -895,11 +896,7 @@ async def fetch_redemptions(slug: str, max_pages: int = 50) -> List[BlokpaxRedem
         for page in range(1, max_pages + 1):
             try:
                 url = f"https://api.blokpax.com/api/v4/storefront/{slug}/activity"
-                response = await client.get(
-                    url,
-                    params={"page": page, "query": ""},
-                    timeout=15.0
-                )
+                response = await client.get(url, params={"page": page, "query": ""}, timeout=15.0)
                 response.raise_for_status()
                 data = response.json()
 
@@ -929,13 +926,15 @@ async def fetch_redemptions(slug: str, max_pages: int = 50) -> List[BlokpaxRedem
                     timestamp_str = item.get("timestamp")
                     redeemed_at = _parse_datetime(timestamp_str) or datetime.utcnow()
 
-                    redemptions.append(BlokpaxRedemptionData(
-                        asset_id=asset_id,
-                        asset_name=asset_name,
-                        box_art=box_art,
-                        serial_number=serial_number,
-                        redeemed_at=redeemed_at
-                    ))
+                    redemptions.append(
+                        BlokpaxRedemptionData(
+                            asset_id=asset_id,
+                            asset_name=asset_name,
+                            box_art=box_art,
+                            serial_number=serial_number,
+                            redeemed_at=redeemed_at,
+                        )
+                    )
 
                 # Check if we've reached the last page
                 meta = data.get("meta", {})
@@ -988,15 +987,11 @@ async def scrape_redemption_stats(slug: str = "wotf-existence-collector-boxes") 
         "remaining": remaining,
         "redeemed_pct": redeemed_pct,
         "by_box_art": by_box_art,
-        "redemptions": redemptions
+        "redemptions": redemptions,
     }
 
 
-async def scrape_preslab_sales(
-    session: Session,
-    max_pages: int = 10,
-    save_to_db: bool = True
-) -> Tuple[int, int, int]:
+async def scrape_preslab_sales(session: Session, max_pages: int = 10, save_to_db: bool = True) -> Tuple[int, int, int]:
     """
     Scrape preslab sales from Blokpax and create MarketPrice records linked to cards.
 
@@ -1065,10 +1060,7 @@ async def scrape_preslab_sales(
                 # Check if we already have this sale (by external_id)
                 listing_id = str(listing.get("id", ""))
                 existing = session.exec(
-                    select(MarketPrice).where(
-                        MarketPrice.external_id == listing_id,
-                        MarketPrice.platform == "blokpax"
-                    )
+                    select(MarketPrice).where(MarketPrice.external_id == listing_id, MarketPrice.platform == "blokpax")
                 ).first()
 
                 if existing:
@@ -1082,10 +1074,7 @@ async def scrape_preslab_sales(
                 # Extract traits from asset attributes
                 traits = []
                 for attr in asset.get("attributes", []):
-                    traits.append({
-                        "trait_type": attr.get("trait_type", ""),
-                        "value": attr.get("value", "")
-                    })
+                    traits.append({"trait_type": attr.get("trait_type", ""), "value": attr.get("value", "")})
 
                 # Create MarketPrice record
                 mp = MarketPrice(
@@ -1100,7 +1089,7 @@ async def scrape_preslab_sales(
                     platform="blokpax",
                     traits=traits if traits else None,
                     seller_name=listing.get("seller", {}).get("address", "")[:20] if listing.get("seller") else None,
-                    scraped_at=datetime.now()
+                    scraped_at=datetime.now(),
                 )
 
                 session.add(mp)
@@ -1126,10 +1115,7 @@ async def scrape_preslab_sales(
     return sales_processed, sales_matched, sales_saved
 
 
-async def scrape_preslab_listings(
-    session: Session,
-    save_to_db: bool = True
-) -> Tuple[int, int, int]:
+async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> Tuple[int, int, int]:
     """
     Scrape active preslab listings from Blokpax and create MarketPrice records.
 
@@ -1153,7 +1139,7 @@ async def scrape_preslab_listings(
     listings_matched = 0
     listings_saved = 0
 
-    print(f"[Blokpax] Scraping preslab listings...")
+    print("[Blokpax] Scraping preslab listings...")
 
     # Use existing scrape_all_listings function
     all_listings = await scrape_all_listings(slug)
@@ -1196,7 +1182,7 @@ async def scrape_preslab_listings(
                     select(MarketPrice).where(
                         MarketPrice.external_id == listing.listing_id,
                         MarketPrice.platform == "blokpax",
-                        MarketPrice.listing_type == "active"
+                        MarketPrice.listing_type == "active",
                     )
                 ).first()
 
@@ -1211,10 +1197,7 @@ async def scrape_preslab_listings(
                 # Extract traits
                 traits = []
                 for attr in asset_data.get("attributes", []):
-                    traits.append({
-                        "trait_type": attr.get("trait_type", ""),
-                        "value": attr.get("value", "")
-                    })
+                    traits.append({"trait_type": attr.get("trait_type", ""), "value": attr.get("value", "")})
 
                 # Create MarketPrice record for active listing
                 mp = MarketPrice(
@@ -1229,7 +1212,7 @@ async def scrape_preslab_listings(
                     traits=traits if traits else None,
                     seller_name=listing.seller_address[:20] if listing.seller_address else None,
                     listed_at=listing.created_at,
-                    scraped_at=datetime.now()
+                    scraped_at=datetime.now(),
                 )
 
                 session.add(mp)
@@ -1244,5 +1227,7 @@ async def scrape_preslab_listings(
     if save_to_db:
         session.commit()
 
-    print(f"[Blokpax] Preslab listings: {listings_processed} processed, {listings_matched} matched, {listings_saved} saved")
+    print(
+        f"[Blokpax] Preslab listings: {listings_processed} processed, {listings_matched} matched, {listings_saved} saved"
+    )
     return listings_processed, listings_matched, listings_saved

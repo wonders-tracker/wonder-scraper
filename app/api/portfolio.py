@@ -10,9 +10,14 @@ from app.models.card import Card, Rarity
 from app.models.market import MarketSnapshot, MarketPrice
 from app.models.user import User
 from app.schemas import (
-    PortfolioItemCreate, PortfolioItemOut, PortfolioItemUpdate,
-    PortfolioCardCreate, PortfolioCardBatchCreate, PortfolioCardUpdate,
-    PortfolioCardOut, PortfolioSummary
+    PortfolioItemCreate,
+    PortfolioItemOut,
+    PortfolioItemUpdate,
+    PortfolioCardCreate,
+    PortfolioCardBatchCreate,
+    PortfolioCardUpdate,
+    PortfolioCardOut,
+    PortfolioSummary,
 )
 
 
@@ -50,7 +55,9 @@ def get_live_market_price(session: Session, card_id: int) -> float:
     ).first()
     return snapshot.avg_price if snapshot and snapshot.avg_price else 0.0
 
+
 router = APIRouter()
+
 
 @router.post("/", response_model=PortfolioItemOut)
 def create_portfolio_item(
@@ -70,12 +77,12 @@ def create_portfolio_item(
         user_id=current_user.id,
         card_id=item_in.card_id,
         quantity=item_in.quantity,
-        purchase_price=item_in.purchase_price
+        purchase_price=item_in.purchase_price,
     )
     session.add(item)
     session.commit()
     session.refresh(item)
-    
+
     # Return with card details (basic)
     return PortfolioItemOut(
         id=item.id,
@@ -85,8 +92,9 @@ def create_portfolio_item(
         purchase_price=item.purchase_price,
         acquired_at=item.acquired_at,
         card_name=card.name,
-        card_set=card.set_name
+        card_set=card.set_name,
     )
+
 
 @router.get("/", response_model=List[PortfolioItemOut])
 def read_portfolio(
@@ -98,7 +106,7 @@ def read_portfolio(
     """
     stmt = select(PortfolioItem).where(PortfolioItem.user_id == current_user.id)
     items = session.exec(stmt).all()
-    
+
     results = []
     for item in items:
         # Fetch Card Info
@@ -111,7 +119,7 @@ def read_portfolio(
         cost_basis = item.purchase_price * item.quantity
         gain_loss = current_value - cost_basis
         gain_loss_percent = (gain_loss / cost_basis * 100) if cost_basis > 0 else 0.0
-        
+
         out = PortfolioItemOut(
             id=item.id,
             user_id=item.user_id,
@@ -124,11 +132,12 @@ def read_portfolio(
             current_market_price=current_price,
             current_value=current_value,
             gain_loss=gain_loss,
-            gain_loss_percent=gain_loss_percent
+            gain_loss_percent=gain_loss_percent,
         )
         results.append(out)
-        
+
     return results
+
 
 @router.put("/{item_id}", response_model=PortfolioItemOut)
 def update_portfolio_item(
@@ -181,8 +190,9 @@ def update_portfolio_item(
         current_market_price=current_price,
         current_value=current_value,
         gain_loss=gain_loss,
-        gain_loss_percent=gain_loss_percent
+        gain_loss_percent=gain_loss_percent,
     )
+
 
 @router.delete("/{item_id}", response_model=PortfolioItemOut)
 def delete_portfolio_item(
@@ -212,13 +222,14 @@ def delete_portfolio_item(
         card_id=item.card_id,
         quantity=item.quantity,
         purchase_price=item.purchase_price,
-        acquired_at=item.acquired_at
+        acquired_at=item.acquired_at,
     )
 
 
 # =============================================================================
 # NEW PORTFOLIO CARD ENDPOINTS (Individual card tracking)
 # =============================================================================
+
 
 def get_treatment_market_price(session: Session, card_id: int, treatment: str) -> float:
     """
@@ -263,9 +274,7 @@ def build_portfolio_card_out(
     market_price = get_treatment_market_price(session, card.card_id, card.treatment)
     profit_loss = market_price - card.purchase_price if market_price else None
     profit_loss_pct = (
-        (profit_loss / card.purchase_price * 100)
-        if profit_loss is not None and card.purchase_price > 0
-        else None
+        (profit_loss / card.purchase_price * 100) if profit_loss is not None and card.purchase_price > 0 else None
     )
 
     return PortfolioCardOut(
@@ -398,9 +407,7 @@ def read_portfolio_cards(
     Get all portfolio cards for the current user with optional filters.
     """
     query = (
-        select(PortfolioCard)
-        .where(PortfolioCard.user_id == current_user.id)
-        .where(PortfolioCard.deleted_at.is_(None))
+        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(PortfolioCard.deleted_at.is_(None))
     )
 
     if treatment:
@@ -424,7 +431,9 @@ def read_portfolio_cards(
 
     # Batch fetch rarities
     rarity_ids = set(c.rarity_id for c in db_cards.values() if c.rarity_id)
-    rarities = {r.id: r for r in session.exec(select(Rarity).where(Rarity.id.in_(rarity_ids))).all()} if rarity_ids else {}
+    rarities = (
+        {r.id: r for r in session.exec(select(Rarity).where(Rarity.id.in_(rarity_ids))).all()} if rarity_ids else {}
+    )
 
     results = []
     for card in cards:
@@ -444,9 +453,7 @@ def read_portfolio_summary(
     Get portfolio summary statistics.
     """
     cards = session.exec(
-        select(PortfolioCard)
-        .where(PortfolioCard.user_id == current_user.id)
-        .where(PortfolioCard.deleted_at.is_(None))
+        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(PortfolioCard.deleted_at.is_(None))
     ).all()
 
     total_cards = len(cards)
@@ -476,9 +483,7 @@ def read_portfolio_summary(
         by_source[card.source]["value"] += market_price
 
     total_profit_loss = total_market_value - total_cost_basis
-    total_profit_loss_percent = (
-        (total_profit_loss / total_cost_basis * 100) if total_cost_basis > 0 else 0.0
-    )
+    total_profit_loss_percent = (total_profit_loss / total_cost_basis * 100) if total_cost_basis > 0 else 0.0
 
     return PortfolioSummary(
         total_cards=total_cards,
@@ -587,12 +592,15 @@ def get_available_treatments(
     Get list of all treatments found in market data.
     """
     from sqlalchemy import text
-    result = session.execute(text("""
+
+    result = session.execute(
+        text("""
         SELECT DISTINCT treatment
         FROM marketprice
         WHERE treatment IS NOT NULL
         ORDER BY treatment
-    """))
+    """)
+    )
     return [row[0] for row in result]
 
 
@@ -618,9 +626,7 @@ def get_portfolio_value_history(
 
     # Get all user's portfolio cards (including purchase dates)
     cards = session.exec(
-        select(PortfolioCard)
-        .where(PortfolioCard.user_id == current_user.id)
-        .where(PortfolioCard.deleted_at.is_(None))
+        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(PortfolioCard.deleted_at.is_(None))
     ).all()
 
     if not cards:
@@ -648,10 +654,7 @@ def get_portfolio_value_history(
         ORDER BY card_id, sale_date
     """)
 
-    price_results = session.execute(
-        price_query,
-        {"card_ids": card_ids, "start_date": start_date}
-    ).all()
+    price_results = session.execute(price_query, {"card_ids": card_ids, "start_date": start_date}).all()
 
     # Build price lookup: {card_id: {date: price}}
     price_by_card_date = {}
@@ -664,9 +667,7 @@ def get_portfolio_value_history(
     # Get current prices as fallback
     current_prices = {}
     for card in cards:
-        current_prices[card.card_id] = get_treatment_market_price(
-            session, card.card_id, card.treatment
-        )
+        current_prices[card.card_id] = get_treatment_market_price(session, card.card_id, card.treatment)
 
     # Calculate daily portfolio value
     history = []
@@ -702,19 +703,9 @@ def get_portfolio_value_history(
 
             daily_value += price
 
-        history.append({
-            "date": current_date.isoformat(),
-            "value": round(daily_value, 2)
-        })
-        cost_basis_history.append({
-            "date": current_date.isoformat(),
-            "value": round(daily_cost, 2)
-        })
+        history.append({"date": current_date.isoformat(), "value": round(daily_value, 2)})
+        cost_basis_history.append({"date": current_date.isoformat(), "value": round(daily_cost, 2)})
 
         current_date += timedelta(days=1)
 
-    return {
-        "history": history,
-        "cost_basis_history": cost_basis_history
-    }
-
+    return {"history": history, "cost_basis_history": cost_basis_history}

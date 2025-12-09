@@ -2,9 +2,9 @@
 Blokpax API endpoints for frontend integration.
 Provides access to WOTF storefront data, floor prices, and sales history.
 """
+
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
 from sqlmodel import Session, select, desc
 from datetime import datetime, timedelta
 from pydantic import BaseModel
@@ -106,9 +106,7 @@ def list_storefronts(
     """
     List all WOTF storefronts with current floor prices.
     """
-    storefronts = session.exec(
-        select(BlokpaxStorefront).order_by(BlokpaxStorefront.name)
-    ).all()
+    storefronts = session.exec(select(BlokpaxStorefront).order_by(BlokpaxStorefront.name)).all()
     return [BlokpaxStorefrontOut.model_validate(s) for s in storefronts]
 
 
@@ -120,9 +118,7 @@ def get_storefront(
     """
     Get detailed data for a specific storefront.
     """
-    storefront = session.exec(
-        select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)
-    ).first()
+    storefront = session.exec(select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)).first()
 
     if not storefront:
         raise HTTPException(status_code=404, detail="Storefront not found")
@@ -141,9 +137,7 @@ def get_storefront_snapshots(
     Get price history snapshots for a storefront (for charts).
     """
     # Verify storefront exists
-    storefront = session.exec(
-        select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)
-    ).first()
+    storefront = session.exec(select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)).first()
 
     if not storefront:
         raise HTTPException(status_code=404, detail="Storefront not found")
@@ -183,10 +177,7 @@ def get_storefront_sales(
     # For now, get all WOTF sales and let frontend filter by storefront if needed
     # This is a simplification - ideally we'd add storefront_slug to BlokpaxSale
     sales = session.exec(
-        select(BlokpaxSale)
-        .where(BlokpaxSale.filled_at >= cutoff)
-        .order_by(desc(BlokpaxSale.filled_at))
-        .limit(limit)
+        select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff).order_by(desc(BlokpaxSale.filled_at)).limit(limit)
     ).all()
 
     return [BlokpaxSaleOut.model_validate(s) for s in sales]
@@ -204,10 +195,7 @@ def list_all_sales(
     cutoff = datetime.utcnow() - timedelta(days=days)
 
     sales = session.exec(
-        select(BlokpaxSale)
-        .where(BlokpaxSale.filled_at >= cutoff)
-        .order_by(desc(BlokpaxSale.filled_at))
-        .limit(limit)
+        select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff).order_by(desc(BlokpaxSale.filled_at)).limit(limit)
     ).all()
 
     return [BlokpaxSaleOut.model_validate(s) for s in sales]
@@ -252,15 +240,11 @@ def get_blokpax_summary(
 
     # Get recent sales count (last 24h)
     cutoff_24h = datetime.utcnow() - timedelta(hours=24)
-    recent_sales = len(session.exec(
-        select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_24h)
-    ).all())
+    recent_sales = len(session.exec(select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_24h)).all())
 
     # Get total sales volume (last 7d)
     cutoff_7d = datetime.utcnow() - timedelta(days=7)
-    week_sales = session.exec(
-        select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_7d)
-    ).all()
+    week_sales = session.exec(select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_7d)).all()
     volume_7d_usd = sum(s.price_usd * s.quantity for s in week_sales)
 
     return {
@@ -281,7 +265,7 @@ def get_blokpax_summary(
             "lowest_floor_usd": lowest_floor,
             "recent_sales_24h": recent_sales,
             "volume_7d_usd": volume_7d_usd,
-        }
+        },
     }
 
 

@@ -8,6 +8,7 @@ class CardMetaVote(SQLModel, table=True):
     User votes on whether a card is 'meta' (competitively viable).
     Only applies to single cards, not sealed products.
     """
+
     __tablename__ = "card_meta_vote"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -17,9 +18,7 @@ class CardMetaVote(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    __table_args__ = (
-        UniqueConstraint('card_id', 'user_id', name='unique_card_user_meta_vote'),
-    )
+    __table_args__ = (UniqueConstraint("card_id", "user_id", name="unique_card_user_meta_vote"),)
 
 
 class CardMetaVoteReaction(SQLModel, table=True):
@@ -27,6 +26,7 @@ class CardMetaVoteReaction(SQLModel, table=True):
     Thumbs up/down reactions on meta votes.
     Future enhancement - not implemented in initial version.
     """
+
     __tablename__ = "card_meta_vote_reaction"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -35,6 +35,4 @@ class CardMetaVoteReaction(SQLModel, table=True):
     reaction: str  # 'up' or 'down'
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    __table_args__ = (
-        UniqueConstraint('vote_id', 'user_id', name='unique_vote_user_reaction'),
-    )
+    __table_args__ = (UniqueConstraint("vote_id", "user_id", name="unique_vote_user_reaction"),)

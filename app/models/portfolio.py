@@ -6,6 +6,7 @@ from datetime import datetime, date
 
 class PurchaseSource(str, Enum):
     """Where the card was purchased from."""
+
     EBAY = "eBay"
     BLOKPAX = "Blokpax"
     TCGPLAYER = "TCGPlayer"
@@ -20,6 +21,7 @@ class PortfolioCard(SQLModel, table=True):
     Individual card tracking in user's portfolio.
     Each row represents ONE physical card with its specific details.
     """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
     card_id: int = Field(foreign_key="card.id", index=True)
@@ -38,9 +40,9 @@ class PortfolioCard(SQLModel, table=True):
     deleted_at: Optional[datetime] = Field(default=None, index=True)  # Soft delete
 
     __table_args__ = (
-        Index('ix_portfoliocard_user_card', 'user_id', 'card_id'),
-        Index('ix_portfoliocard_user_treatment', 'user_id', 'treatment'),
-        Index('ix_portfoliocard_user_source', 'user_id', 'source'),
+        Index("ix_portfoliocard_user_card", "user_id", "card_id"),
+        Index("ix_portfoliocard_user_treatment", "user_id", "treatment"),
+        Index("ix_portfoliocard_user_source", "user_id", "source"),
     )
 
 
@@ -50,6 +52,7 @@ class PortfolioItem(SQLModel, table=True):
     Legacy quantity-based portfolio tracking.
     @deprecated: Use PortfolioCard for new implementations.
     """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
     card_id: int = Field(foreign_key="card.id", index=True)

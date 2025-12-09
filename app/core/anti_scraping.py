@@ -2,12 +2,13 @@
 Anti-scraping middleware and utilities.
 Detects bots, headless browsers, and enforces rate limits.
 """
+
 import time
 import re
 import hashlib
 from collections import defaultdict
-from typing import Optional, Tuple, Dict, Set
-from fastapi import Request, HTTPException, status
+from typing import Tuple, Dict, Set
+from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -36,11 +37,11 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
     ALLOWED_PATHS = [
         "/api/v1/auth",
         "/api/v1/portfolio",  # Already requires auth
-        "/api/v1/admin",      # Already requires superuser
-        "/api/v1/users",      # User management
+        "/api/v1/admin",  # Already requires superuser
+        "/api/v1/users",  # User management
         "/api/v1/analytics",  # Analytics tracking
-        "/api/v1/billing",    # Billing endpoints
-        "/api/v1/webhooks",   # Webhook endpoints
+        "/api/v1/billing",  # Billing endpoints
+        "/api/v1/webhooks",  # Webhook endpoints
         "/",
         "/docs",
         "/openapi.json",
@@ -83,7 +84,7 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
         r"gptbot",
         r"ccbot",
         r"facebookexternalhit",  # Allow if needed for sharing
-        r"twitterbot",          # Allow if needed for sharing
+        r"twitterbot",  # Allow if needed for sharing
     ]
 
     # Headless browser indicators
@@ -295,7 +296,7 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
         if ip in self._blocked_ips and time.time() < self._blocked_ips[ip]:
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
-                content={"detail": "Access temporarily blocked due to suspicious activity."}
+                content={"detail": "Access temporarily blocked due to suspicious activity."},
             )
 
         # 2. Check rate limits
@@ -304,7 +305,7 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 content={"detail": "Rate limit exceeded. Please slow down."},
-                headers={"Retry-After": str(retry_after)}
+                headers={"Retry-After": str(retry_after)},
             )
 
         # 3. Detect bots
@@ -323,7 +324,7 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
             if blocked:
                 return JSONResponse(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    content={"detail": "Automated browser access is not permitted."}
+                    content={"detail": "Automated browser access is not permitted."},
                 )
             # First couple violations: allow but warn
             response = await call_next(request)
@@ -352,12 +353,7 @@ class APIKeyRateLimiter:
         self._day_requests: Dict[str, int] = defaultdict(int)  # {key_hash: count}
         self._day_reset: Dict[str, float] = {}  # {key_hash: reset_timestamp}
 
-    def check_limit(
-        self,
-        key_hash: str,
-        per_minute: int = 60,
-        per_day: int = 10000
-    ) -> Tuple[bool, str]:
+    def check_limit(self, key_hash: str, per_minute: int = 60, per_day: int = 10000) -> Tuple[bool, str]:
         """
         Check if API key is within rate limits.
         Returns (allowed, reason).
@@ -377,10 +373,7 @@ class APIKeyRateLimiter:
             return False, "daily_limit"
 
         # Clean minute requests
-        self._minute_requests[key_hash] = [
-            ts for ts in self._minute_requests[key_hash]
-            if now - ts < 60
-        ]
+        self._minute_requests[key_hash] = [ts for ts in self._minute_requests[key_hash] if now - ts < 60]
 
         # Check per-minute limit
         if len(self._minute_requests[key_hash]) >= per_minute:

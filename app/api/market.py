@@ -1,16 +1,13 @@
-from typing import Any, List, Optional
-import json
-import hashlib
+from typing import Any, Optional
 import threading
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from sqlmodel import Session, select, func, desc
+from sqlmodel import Session, select, desc
 from datetime import datetime, timedelta
 from cachetools import TTLCache
 
-from app.api import deps
 from app.db import get_session
-from app.models.card import Card, Rarity
+from app.models.card import Card
 from app.models.market import MarketSnapshot, MarketPrice
 
 router = APIRouter()
@@ -19,13 +16,16 @@ router = APIRouter()
 _market_cache = TTLCache(maxsize=50, ttl=120)
 _market_cache_lock = threading.Lock()
 
+
 def get_market_cache(key: str) -> Optional[Any]:
     with _market_cache_lock:
         return _market_cache.get(key)
 
+
 def set_market_cache(key: str, value: Any):
     with _market_cache_lock:
         _market_cache[key] = value
+
 
 @router.get("/treatments")
 def read_treatments(
@@ -42,6 +42,7 @@ def read_treatments(
         return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
 
     from sqlalchemy import text
+
     query = text("""
         SELECT
             treatment,
@@ -59,6 +60,7 @@ def read_treatments(
     set_market_cache(cache_key, data)
 
     return JSONResponse(content=data, headers={"X-Cache": "MISS"})
+
 
 @router.get("/overview")
 def read_market_overview(
@@ -82,40 +84,40 @@ def read_market_overview(
         "7d": timedelta(days=7),
         "30d": timedelta(days=30),
         "90d": timedelta(days=90),
-        "all": None
+        "all": None,
     }
     cutoff_delta = time_cutoffs.get(time_period)
     cutoff_time = datetime.utcnow() - cutoff_delta if cutoff_delta else None
-    
+
     # Fetch all cards
     cards = session.exec(select(Card)).all()
     if not cards:
         return []
-    
+
     card_ids = [c.id for c in cards]
-    
+
     # Batch fetch snapshots
     snapshot_query = select(MarketSnapshot).where(MarketSnapshot.card_id.in_(card_ids))
     if cutoff_time:
         snapshot_query = snapshot_query.where(MarketSnapshot.timestamp >= cutoff_time)
     snapshot_query = snapshot_query.order_by(MarketSnapshot.card_id, desc(MarketSnapshot.timestamp))
     all_snapshots = session.exec(snapshot_query).all()
-    
+
     snapshots_by_card = {}
     for snap in all_snapshots:
         if snap.card_id not in snapshots_by_card:
             snapshots_by_card[snap.card_id] = []
         snapshots_by_card[snap.card_id].append(snap)
-        
+
     # Batch fetch actual LAST SALE price (Postgres DISTINCT ON)
     last_sale_map = {}
     vwap_map = {}
-    oldest_sale_map = {}
     sales_count_map = {}
     floor_price_map = {}
     if card_ids:
         try:
             from sqlalchemy import text
+
             period_start = cutoff_time if cutoff_time else datetime.utcnow() - timedelta(hours=24)
 
             # Use parameterized queries to prevent SQL injection
@@ -127,7 +129,7 @@ def read_market_overview(
                 ORDER BY card_id, COALESCE(sold_date, scraped_at) DESC
             """)
             results = session.execute(query, {"card_ids": card_ids}).all()
-            last_sale_map = {row[0]: {'price': row[1], 'treatment': row[2], 'date': row[3]} for row in results}
+            last_sale_map = {row[0]: {"price": row[1], "treatment": row[2], "date": row[3]} for row in results}
 
             # Calculate VWAP with proper parameter binding
             # Use COALESCE(sold_date, scraped_at) as fallback when sold_date is NULL
@@ -161,8 +163,10 @@ def read_market_overview(
                 AND COALESCE(sold_date, scraped_at) >= :period_start
                 ORDER BY card_id, COALESCE(sold_date, scraped_at) ASC
             """)
-            oldest_results = session.execute(oldest_sale_query, {"card_ids": card_ids, "period_start": period_start}).all()
-            oldest_sale_map = {row[0]: {'price': row[1], 'date': row[2]} for row in oldest_results}
+            oldest_results = session.execute(
+                oldest_sale_query, {"card_ids": card_ids, "period_start": period_start}
+            ).all()
+            {row[0]: {"price": row[1], "date": row[2]} for row in oldest_results}
 
             # Count sales in period for each card
             sales_count_query = text("""
@@ -172,8 +176,10 @@ def read_market_overview(
                 AND COALESCE(sold_date, scraped_at) >= :period_start
                 GROUP BY card_id
             """)
-            sales_count_results = session.execute(sales_count_query, {"card_ids": card_ids, "period_start": period_start}).all()
-            sales_count_map = {row[0]: {'count': row[1], 'unique_days': row[2]} for row in sales_count_results}
+            sales_count_results = session.execute(
+                sales_count_query, {"card_ids": card_ids, "period_start": period_start}
+            ).all()
+            sales_count_map = {row[0]: {"count": row[1], "unique_days": row[2]} for row in sales_count_results}
 
             # Calculate floor prices (avg of 4 lowest sales per card in period)
             floor_query = text("""
@@ -200,17 +206,17 @@ def read_market_overview(
         card_snaps = snapshots_by_card.get(card.id, [])
         latest_snap = card_snaps[0] if card_snaps else None
         oldest_snap = card_snaps[-1] if card_snaps else None
-        
+
         last_sale_data = last_sale_map.get(card.id)
-        last_price = last_sale_data['price'] if last_sale_data else None
-        
+        last_price = last_sale_data["price"] if last_sale_data else None
+
         if last_price is None and latest_snap:
             last_price = latest_snap.avg_price
-            
+
         # Get VWAP
         vwap = vwap_map.get(card.id)
         effective_price = vwap if vwap else (latest_snap.avg_price if latest_snap else 0.0)
-            
+
         # Market Trend Delta - Compare last sale to VWAP (more stable than oldest vs newest)
         # This shows if the most recent sale was above or below the period average
         avg_delta = 0.0
@@ -218,7 +224,7 @@ def read_market_overview(
         floor_price = floor_price_map.get(card.id)
 
         # Primary method: Compare last sale to floor price (shows premium/discount to floor)
-        if last_price and floor_price and floor_price > 0 and sales_stats and sales_stats['count'] >= 2:
+        if last_price and floor_price and floor_price > 0 and sales_stats and sales_stats["count"] >= 2:
             avg_delta = ((last_price - floor_price) / floor_price) * 100
             # Cap extreme values at ±200% to filter outliers
             avg_delta = max(-200, min(200, avg_delta))
@@ -230,40 +236,45 @@ def read_market_overview(
         elif latest_snap and oldest_snap and oldest_snap.avg_price > 0 and latest_snap.id != oldest_snap.id:
             avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
             avg_delta = max(-200, min(200, avg_delta))
-                
+
         # Deal Rating Delta - compare last sale to VWAP (more stable than snapshot avg)
         deal_delta = 0.0
         # Use VWAP for comparison as it's more accurate than snapshot avg_price
-        comparison_price = vwap if vwap and vwap > 0 else (latest_snap.avg_price if latest_snap and latest_snap.avg_price > 0 else 0)
+        comparison_price = (
+            vwap if vwap and vwap > 0 else (latest_snap.avg_price if latest_snap and latest_snap.avg_price > 0 else 0)
+        )
         if last_price and comparison_price > 0:
             deal_delta = ((last_price - comparison_price) / comparison_price) * 100
             # Cap at ±100% to avoid extreme outliers
             deal_delta = max(-100, min(100, deal_delta))
 
         # Use actual sales count from MarketPrice (more accurate than snapshot volume)
-        period_volume = sales_stats['count'] if sales_stats else 0
+        period_volume = sales_stats["count"] if sales_stats else 0
 
-        overview_data.append({
-            "id": card.id,
-            "slug": card.slug if hasattr(card, 'slug') else None,
-            "name": card.name,
-            "set_name": card.set_name,
-            "rarity_id": card.rarity_id,
-            "latest_price": last_price or 0.0,
-            "avg_price": latest_snap.avg_price if latest_snap else 0.0,
-            "vwap": effective_price,
-            "floor_price": floor_price_map.get(card.id),  # Avg of 4 lowest sales
-            "volume_period": period_volume,
-            "volume_change": 0,  # TODO: Calculate from previous period if needed
-            "price_delta_period": avg_delta,
-            "deal_rating": deal_delta,
-            "market_cap": (last_price or 0) * period_volume
-        })
+        overview_data.append(
+            {
+                "id": card.id,
+                "slug": card.slug if hasattr(card, "slug") else None,
+                "name": card.name,
+                "set_name": card.set_name,
+                "rarity_id": card.rarity_id,
+                "latest_price": last_price or 0.0,
+                "avg_price": latest_snap.avg_price if latest_snap else 0.0,
+                "vwap": effective_price,
+                "floor_price": floor_price_map.get(card.id),  # Avg of 4 lowest sales
+                "volume_period": period_volume,
+                "volume_change": 0,  # TODO: Calculate from previous period if needed
+                "price_delta_period": avg_delta,
+                "deal_rating": deal_delta,
+                "market_cap": (last_price or 0) * period_volume,
+            }
+        )
 
     # Cache the result
     set_market_cache(cache_key, overview_data)
 
     return JSONResponse(content=overview_data, headers={"X-Cache": "MISS"})
+
 
 @router.get("/activity")
 def read_market_activity(
@@ -274,28 +285,37 @@ def read_market_activity(
     Get recent market activity (sales) across all cards.
     """
     from app.models.market import MarketPrice
-    
+
     # Join with Card to get card details
-    query = select(MarketPrice, Card.name, Card.id).join(Card).where(MarketPrice.listing_type == "sold").order_by(desc(MarketPrice.sold_date)).limit(limit)
+    query = (
+        select(MarketPrice, Card.name, Card.id)
+        .join(Card)
+        .where(MarketPrice.listing_type == "sold")
+        .order_by(desc(MarketPrice.sold_date))
+        .limit(limit)
+    )
     results = session.exec(query).all()
-    
+
     activity_data = []
     for sale, card_name, card_id in results:
-        activity_data.append({
-            "card_id": card_id,
-            "card_name": card_name,
-            "price": sale.price,
-            "date": sale.sold_date,
-            "treatment": sale.treatment,
-            "platform": sale.platform
-        })
-        
+        activity_data.append(
+            {
+                "card_id": card_id,
+                "card_name": card_name,
+                "price": sale.price,
+                "date": sale.sold_date,
+                "treatment": sale.treatment,
+                "platform": sale.platform,
+            }
+        )
+
     return activity_data
 
 
 # ============== LISTING REPORTS ==============
 
 from pydantic import BaseModel
+
 
 class ListingReportCreate(BaseModel):
     listing_id: int
@@ -321,6 +341,7 @@ def create_listing_report(
     listing = session.get(MarketPrice, report.listing_id)
     if not listing:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="Listing not found")
 
     # Create the report
@@ -343,7 +364,7 @@ def create_listing_report(
         "reason": db_report.reason,
         "status": db_report.status,
         "created_at": db_report.created_at,
-        "message": "Report submitted successfully"
+        "message": "Report submitted successfully",
     }
 
 

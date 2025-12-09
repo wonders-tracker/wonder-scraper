@@ -24,6 +24,7 @@ from app.models.card import Card, Rarity
 @dataclass
 class PreslabInfo:
     """Parsed preslab information."""
+
     card_name: str
     grade: Optional[str]  # e.g., "9 MINT", "8 NM MT"
     grade_number: Optional[int]  # Just the number: 9, 8, etc.
@@ -73,9 +74,7 @@ def parse_preslab_name(asset_name: str) -> Optional[PreslabInfo]:
 
     # Try to match grade pattern: number followed by grade text
     grade_match = re.match(
-        r"^(\d+)\s+(MINT|NM MT|GEM MINT|NM|MT|EX|VG|GOOD|POOR)(?:\s+(.+))?$",
-        remainder,
-        re.IGNORECASE
+        r"^(\d+)\s+(MINT|NM MT|GEM MINT|NM|MT|EX|VG|GOOD|POOR)(?:\s+(.+))?$", remainder, re.IGNORECASE
     )
 
     if grade_match:
@@ -102,7 +101,7 @@ def parse_preslab_name(asset_name: str) -> Optional[PreslabInfo]:
         cert_id=cert_id,
         treatment=treatment,
         grading=grading,
-        raw_name=asset_name
+        raw_name=asset_name,
     )
 
 
@@ -126,21 +125,12 @@ def _load_cards_cache(session: Session) -> None:
     if _cards_loaded:
         return
 
-    stmt = (
-        select(Card, Rarity.name)
-        .join(Rarity, Card.rarity_id == Rarity.id)
-        .where(Rarity.name != "SEALED")
-    )
+    stmt = select(Card, Rarity.name).join(Rarity, Card.rarity_id == Rarity.id).where(Rarity.name != "SEALED")
     results = session.exec(stmt).all()
 
     for card, rarity_name in results:
         normalized = normalize_card_name(card.name)
-        _card_cache[normalized] = {
-            "id": card.id,
-            "name": card.name,
-            "set_name": card.set_name,
-            "rarity": rarity_name
-        }
+        _card_cache[normalized] = {"id": card.id, "name": card.name, "set_name": card.set_name, "rarity": rarity_name}
 
     _cards_loaded = True
     print(f"[Preslab] Loaded {len(_card_cache)} cards into cache")

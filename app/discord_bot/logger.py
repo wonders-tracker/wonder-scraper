@@ -1,12 +1,14 @@
 """
 Discord webhook logger for scrape activity and system events.
 """
+
 import os
 import requests
 from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -23,7 +25,7 @@ def _send_log(
     color: int,
     fields: list = None,
     webhook_url: str = None,
-    username: str = "Wonders Logs"
+    username: str = "Wonders Logs",
 ) -> bool:
     """Send a log message to Discord webhook."""
     url = webhook_url or LOGS_WEBHOOK_URL
@@ -35,21 +37,14 @@ def _send_log(
         "description": description,
         "color": color,
         "timestamp": datetime.utcnow().isoformat(),
-        "footer": {"text": "WondersTracker"}
+        "footer": {"text": "WondersTracker"},
     }
 
     if fields:
         embed["fields"] = fields
 
     try:
-        response = requests.post(
-            url,
-            json={
-                "username": username,
-                "embeds": [embed]
-            },
-            timeout=5
-        )
+        response = requests.post(url, json={"username": username, "embeds": [embed]}, timeout=5)
         return response.status_code in (200, 204)
     except Exception as e:
         print(f"Discord log failed: {e}")
@@ -58,13 +53,9 @@ def _send_log(
 
 def log_scrape_start(card_count: int, scrape_type: str = "full") -> bool:
     """Log when a scrape job starts."""
-    type_emoji = {
-        "full": "🔄",
-        "scheduled": "⏰",
-        "blokpax": "🎯",
-        "active": "📋",
-        "sold": "💰"
-    }.get(scrape_type.lower(), "🔄")
+    type_emoji = {"full": "🔄", "scheduled": "⏰", "blokpax": "🎯", "active": "📋", "sold": "💰"}.get(
+        scrape_type.lower(), "🔄"
+    )
 
     return _send_log(
         title=f"{type_emoji} Scrape Started",
@@ -73,17 +64,13 @@ def log_scrape_start(card_count: int, scrape_type: str = "full") -> bool:
         fields=[
             {"name": "📦 Cards", "value": f"`{card_count:,}`", "inline": True},
             {"name": "📋 Type", "value": scrape_type.title(), "inline": True},
-            {"name": "🕐 Time", "value": datetime.utcnow().strftime("%H:%M UTC"), "inline": True}
-        ]
+            {"name": "🕐 Time", "value": datetime.utcnow().strftime("%H:%M UTC"), "inline": True},
+        ],
     )
 
 
 def log_scrape_complete(
-    cards_processed: int,
-    new_listings: int,
-    new_sales: int,
-    duration_seconds: float,
-    errors: int = 0
+    cards_processed: int, new_listings: int, new_sales: int, duration_seconds: float, errors: int = 0
 ) -> bool:
     """Log when a scrape job completes."""
     if errors > 0:
@@ -106,8 +93,8 @@ def log_scrape_complete(
             {"name": "📋 Listings", "value": f"`{new_listings:,}`", "inline": True},
             {"name": "💰 Sales", "value": f"`{new_sales:,}`", "inline": True},
             {"name": "⏱️ Duration", "value": f"`{duration_str}`", "inline": True},
-            {"name": "❌ Errors", "value": f"`{errors}`", "inline": True}
-        ]
+            {"name": "❌ Errors", "value": f"`{errors}`", "inline": True},
+        ],
     )
 
 
@@ -117,9 +104,7 @@ def log_scrape_error(card_name: str, error: str) -> bool:
         title="🚨 Scrape Error",
         description=f"Error scraping **{card_name}**",
         color=0xEF4444,  # Red
-        fields=[
-            {"name": "❌ Error Details", "value": f"```{error[:900]}```", "inline": False}
-        ]
+        fields=[{"name": "❌ Error Details", "value": f"```{error[:900]}```", "inline": False}],
     )
 
 
@@ -131,8 +116,8 @@ def log_snapshot_update(cards_updated: int) -> bool:
         color=0x8B5CF6,  # Purple
         fields=[
             {"name": "📦 Cards", "value": f"`{cards_updated:,}`", "inline": True},
-            {"name": "🕐 Time", "value": datetime.utcnow().strftime("%H:%M UTC"), "inline": True}
-        ]
+            {"name": "🕐 Time", "value": datetime.utcnow().strftime("%H:%M UTC"), "inline": True},
+        ],
     )
 
 
@@ -141,7 +126,7 @@ def log_info(title: str, message: str) -> bool:
     return _send_log(
         title=f"ℹ️ {title}",
         description=message,
-        color=0x6B7280  # Gray
+        color=0x6B7280,  # Gray
     )
 
 
@@ -150,7 +135,7 @@ def log_warning(title: str, message: str) -> bool:
     return _send_log(
         title=f"⚠️ Warning: {title}",
         description=message,
-        color=0xF59E0B  # Yellow
+        color=0xF59E0B,  # Yellow
     )
 
 
@@ -159,7 +144,7 @@ def log_error(title: str, message: str) -> bool:
     return _send_log(
         title=f"🚨 Error: {title}",
         description=message,
-        color=0xEF4444  # Red
+        color=0xEF4444,  # Red
     )
 
 
@@ -169,7 +154,7 @@ def log_new_sale(
     treatment: Optional[str] = None,
     url: Optional[str] = None,
     sold_date: Optional[str] = None,
-    floor_price: Optional[float] = None
+    floor_price: Optional[float] = None,
 ) -> bool:
     """Log a new sale discovery to the new-sales channel."""
     description = f"**{card_name}** sold for **${price:.2f}**"
@@ -185,7 +170,7 @@ def log_new_sale(
         elif delta < 0:
             description += f"\n📉 **-${abs(delta):.2f}** (-{abs(delta_pct):.1f}%) below floor"
         else:
-            description += f"\n➡️ At floor price"
+            description += "\n➡️ At floor price"
 
     fields = []
     if floor_price and floor_price > 0:
@@ -207,7 +192,7 @@ def log_new_sale(
         color=color,
         fields=fields if fields else None,
         webhook_url=NEW_SALES_WEBHOOK_URL,
-        username="Wonders Sales"
+        username="Wonders Sales",
     )
 
 
@@ -217,7 +202,7 @@ def log_new_listing(
     treatment: Optional[str] = None,
     url: Optional[str] = None,
     is_auction: bool = False,
-    floor_price: Optional[float] = None
+    floor_price: Optional[float] = None,
 ) -> bool:
     """Log a new active listing discovery to the new-listings channel."""
     listing_type = "Auction" if is_auction else "Buy It Now"
@@ -234,7 +219,7 @@ def log_new_listing(
         elif delta > 0:
             description += f"\n📊 +${delta:.2f} (+{delta_pct:.1f}%) above floor"
         else:
-            description += f"\n➡️ At floor price"
+            description += "\n➡️ At floor price"
 
     fields = []
     if floor_price and floor_price > 0:
@@ -254,7 +239,7 @@ def log_new_listing(
         color=color,
         fields=fields if fields else None,
         webhook_url=NEW_LISTINGS_WEBHOOK_URL,
-        username="Wonders Listings"
+        username="Wonders Listings",
     )
 
 
@@ -276,7 +261,7 @@ def log_market_insights(insights_text: str) -> bool:
                 "avatar_url": "https://wonders.codyc.xyz/android-chrome-192x192.png",
                 "content": insights_text[:2000],  # Discord message limit
             },
-            timeout=10
+            timeout=10,
         )
         return response.status_code in (200, 204)
     except Exception as e:

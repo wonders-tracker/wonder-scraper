@@ -49,6 +49,7 @@ def find_chrome_binary() -> Optional[str]:
         if "*" in path:
             # Use glob for wildcard paths
             import glob
+
             matches = glob.glob(path)
             if matches:
                 print(f"[Browser] Found Chrome via glob: {matches[0]}")
@@ -74,7 +75,9 @@ def find_chrome_binary() -> Optional[str]:
     try:
         result = subprocess.run(
             ["find", "/nix/store", "-name", "chromium", "-type", "f", "-executable"],
-            capture_output=True, text=True, timeout=10
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
             path = result.stdout.strip().split("\n")[0]
@@ -157,10 +160,7 @@ class BrowserManager:
                 # Start with timeout
                 try:
                     print(f"[Browser] Starting browser with {cls._startup_timeout}s timeout...")
-                    await asyncio.wait_for(
-                        cls._browser.start(),
-                        timeout=cls._startup_timeout
-                    )
+                    await asyncio.wait_for(cls._browser.start(), timeout=cls._startup_timeout)
                     print("[Browser] Pydoll browser started successfully!")
                 except asyncio.TimeoutError:
                     print(f"[Browser] ERROR: Browser startup timed out after {cls._startup_timeout}s")

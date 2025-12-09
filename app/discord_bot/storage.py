@@ -1,6 +1,7 @@
 """
 Storage for CSV reports using Postgres (text column).
 """
+
 from datetime import datetime
 from typing import Optional, List, Dict
 from sqlmodel import Session, select, desc
@@ -15,7 +16,7 @@ def upload_csv(filename: str, content: bytes) -> str:
 
     Returns the report ID as a string (for compatibility with blob storage API).
     """
-    csv_text = content.decode('utf-8')
+    csv_text = content.decode("utf-8")
 
     # Determine report type from filename
     report_type = "daily"
@@ -25,11 +26,7 @@ def upload_csv(filename: str, content: bytes) -> str:
         report_type = "monthly"
 
     with Session(engine) as session:
-        report = Report(
-            filename=filename,
-            report_type=report_type,
-            content=csv_text
-        )
+        report = Report(filename=filename, report_type=report_type, content=csv_text)
         session.add(report)
         session.commit()
         session.refresh(report)
@@ -65,7 +62,7 @@ def list_reports(report_type: Optional[str] = None, limit: int = 20) -> List[Dic
                 "filename": r.filename,
                 "report_type": r.report_type,
                 "created_at": r.created_at.isoformat(),
-                "size": len(r.content)
+                "size": len(r.content),
             }
             for r in reports
         ]
@@ -89,9 +86,7 @@ def cleanup_old_reports(days: int = 30) -> int:
     cutoff = datetime.utcnow() - timedelta(days=days)
 
     with Session(engine) as session:
-        old_reports = session.exec(
-            select(Report).where(Report.created_at < cutoff)
-        ).all()
+        old_reports = session.exec(select(Report).where(Report.created_at < cutoff)).all()
 
         count = len(old_reports)
         for report in old_reports:

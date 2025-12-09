@@ -8,9 +8,26 @@ from sqlmodel import Session, select
 from app.models.market import MarketPrice
 from app.services.ai_extractor import get_ai_extractor
 from app.db import engine
-from app.scraper.blocklist import load_blocklist, get_blocklist_version
+from app.scraper.blocklist import load_blocklist
 
-STOPWORDS = {"the", "of", "a", "an", "in", "on", "at", "for", "to", "with", "by", "and", "or", "wonders", "first", "existence"}
+STOPWORDS = {
+    "the",
+    "of",
+    "a",
+    "an",
+    "in",
+    "on",
+    "at",
+    "for",
+    "to",
+    "with",
+    "by",
+    "and",
+    "or",
+    "wonders",
+    "first",
+    "existence",
+}
 
 
 def score_sealed_match(title: str, card_name: str, product_type: str) -> int:
@@ -112,7 +129,7 @@ def score_sealed_match(title: str, card_name: str, product_type: str) -> int:
         "existence sealed pack",
         "wonders of the first booster",
         "booster box",
-        "booster pack"
+        "booster pack",
     ]
     for generic in generic_names:
         if generic in card_lower:
@@ -135,7 +152,7 @@ def _bulk_check_indexed(
     listings_data: List[dict],
     check_global: bool = True,
     card_name: str = "",
-    product_type: str = "Single"
+    product_type: str = "Single",
 ) -> set:
     """
     Bulk check if listings already exist in database (avoids N+1 query problem).
@@ -164,18 +181,15 @@ def _bulk_check_indexed(
 
     with Session(engine) as session:
         # Check by external_ids in bulk (most reliable)
-        external_ids = [
-            listing["external_id"]
-            for listing in listings_data
-            if listing.get("external_id")
-        ]
+        external_ids = [listing["external_id"] for listing in listings_data if listing.get("external_id")]
 
         if external_ids:
             if check_global:
                 # Check if external_id exists for ANY card
                 all_existing = session.exec(
-                    select(MarketPrice.external_id, MarketPrice.card_id, MarketPrice.id)
-                    .where(MarketPrice.external_id.in_(external_ids))
+                    select(MarketPrice.external_id, MarketPrice.card_id, MarketPrice.id).where(
+                        MarketPrice.external_id.in_(external_ids)
+                    )
                 ).all()
 
                 # Build maps for existing records
@@ -201,9 +215,7 @@ def _bulk_check_indexed(
                             title = listing.get("title", "")
 
                             # Get the other card's details
-                            other_card = session.exec(
-                                select(Card).where(Card.id == other_card_id)
-                            ).first()
+                            other_card = session.exec(select(Card).where(Card.id == other_card_id)).first()
 
                             if other_card:
                                 # Score current card vs the existing card
@@ -214,7 +226,7 @@ def _bulk_check_indexed(
                                     # Current card is a better match - update the existing record
                                     session.execute(
                                         text("UPDATE marketprice SET card_id = :card_id WHERE id = :id"),
-                                        {"card_id": card_id, "id": market_price_id}
+                                        {"card_id": card_id, "id": market_price_id},
                                     )
                                     session.commit()
                                     # Mark as indexed since we just updated it
@@ -231,10 +243,8 @@ def _bulk_check_indexed(
             else:
                 # Original behavior: only check this card_id
                 existing_ids = session.exec(
-                    select(MarketPrice.external_id)
-                    .where(
-                        MarketPrice.external_id.in_(external_ids),
-                        MarketPrice.card_id == card_id
+                    select(MarketPrice.external_id).where(
+                        MarketPrice.external_id.in_(external_ids), MarketPrice.card_id == card_id
                     )
                 ).all()
                 existing_ids_set = set(existing_ids)
@@ -257,7 +267,7 @@ def _bulk_check_indexed(
                     MarketPrice.card_id == card_id,
                     MarketPrice.title == listing["title"],
                     MarketPrice.price == listing["price"],
-                    MarketPrice.sold_date == listing["sold_date"]
+                    MarketPrice.sold_date == listing["sold_date"],
                 )
                 composite_conditions.append(condition)
                 composite_index_map[len(composite_conditions) - 1] = i
@@ -265,11 +275,7 @@ def _bulk_check_indexed(
         if composite_conditions:
             # Query with OR of all composite conditions
             existing_composites = session.exec(
-                select(
-                    MarketPrice.title,
-                    MarketPrice.price,
-                    MarketPrice.sold_date
-                )
+                select(MarketPrice.title, MarketPrice.price, MarketPrice.sold_date)
                 .where(or_(*composite_conditions))
                 .distinct()
             ).all()
@@ -287,7 +293,15 @@ def _bulk_check_indexed(
 
     return indexed_indices
 
-def parse_search_results(html_content: str, card_id: int = 0, card_name: str = "", target_rarity: str = "", return_all: bool = False, product_type: str = "Single") -> List[MarketPrice]:
+
+def parse_search_results(
+    html_content: str,
+    card_id: int = 0,
+    card_name: str = "",
+    target_rarity: str = "",
+    return_all: bool = False,
+    product_type: str = "Single",
+) -> List[MarketPrice]:
     """
     Parses eBay HTML search results and extracts market prices (Sold listings).
 
@@ -296,18 +310,35 @@ def parse_search_results(html_content: str, card_id: int = 0, card_name: str = "
                    If False, returns only new listings not in DB (for saving).
         product_type: Type of product (Single, Box, Pack, Lot) - affects treatment detection.
     """
-    return _parse_generic_results(html_content, card_id, listing_type="sold",
-                                 card_name=card_name, target_rarity=target_rarity,
-                                 return_all=return_all, product_type=product_type)
+    return _parse_generic_results(
+        html_content,
+        card_id,
+        listing_type="sold",
+        card_name=card_name,
+        target_rarity=target_rarity,
+        return_all=return_all,
+        product_type=product_type,
+    )
 
-def parse_active_results(html_content: str, card_id: int = 0, card_name: str = "", target_rarity: str = "", product_type: str = "Single") -> List[MarketPrice]:
+
+def parse_active_results(
+    html_content: str, card_id: int = 0, card_name: str = "", target_rarity: str = "", product_type: str = "Single"
+) -> List[MarketPrice]:
     """
     Parses eBay HTML search results for ACTIVE listings.
 
     Args:
         product_type: Type of product (Single, Box, Pack, Lot) - affects treatment detection.
     """
-    return _parse_generic_results(html_content, card_id, listing_type="active", card_name=card_name, target_rarity=target_rarity, product_type=product_type)
+    return _parse_generic_results(
+        html_content,
+        card_id,
+        listing_type="active",
+        card_name=card_name,
+        target_rarity=target_rarity,
+        product_type=product_type,
+    )
+
 
 def _extract_item_details(item) -> Tuple[Optional[str], Optional[str]]:
     """
@@ -316,18 +347,19 @@ def _extract_item_details(item) -> Tuple[Optional[str], Optional[str]]:
     link_elem = item.select_one("a.s-item__link, a.s-card__link")
     if not link_elem:
         return None, None
-        
+
     url = link_elem.get("href", "")
     # Extract ID from URL: .../itm/1234567890...
     # eBay URLs often look like: https://www.ebay.com/itm/1234567890?hash=...
     match = re.search(r"/itm/(\d+)", url)
     item_id = match.group(1) if match else None
-    
+
     # Clean URL (remove query params)
     if url and "?" in url:
         url = url.split("?")[0]
-        
+
     return item_id, url
+
 
 def parse_total_results(html_content: str) -> int:
     """
@@ -338,10 +370,11 @@ def parse_total_results(html_content: str) -> int:
     if result_count_elem:
         text = result_count_elem.get_text(strip=True)
         # Handle "1,200+ results" format (with optional plus sign)
-        match = re.search(r'([\d,]+)\+?\s*results', text)
+        match = re.search(r"([\d,]+)\+?\s*results", text)
         if match:
-            return int(match.group(1).replace(',', ''))
+            return int(match.group(1).replace(",", ""))
     return 0
+
 
 def _is_alt_art(title: str) -> bool:
     """Check if title indicates an Alt Art variant."""
@@ -352,7 +385,7 @@ def _is_alt_art(title: str) -> bool:
         return True
 
     # A1-A8 numbering pattern (e.g., "#A2-361/401", "A5-361/401")
-    if re.search(r'[#\s]a[1-8]-\d+/\d+', title_lower):
+    if re.search(r"[#\s]a[1-8]-\d+/\d+", title_lower):
         return True
 
     return False
@@ -370,7 +403,9 @@ def _detect_treatment(title: str, product_type: str = "Single") -> str:
     # Simplified to: Sealed, Open Box
     if product_type in ("Box", "Pack", "Lot", "Bundle"):
         # Check for sealed indicators first (unopened before opened check!)
-        if any(kw in title_lower for kw in ["sealed", "factory sealed", "factory-sealed", "new", "unopened", "nib", "mint"]):
+        if any(
+            kw in title_lower for kw in ["sealed", "factory sealed", "factory-sealed", "new", "unopened", "nib", "mint"]
+        ):
             return "Sealed"
         # Check for opened/used indicators
         if "open box" in title_lower or "opened" in title_lower or "used" in title_lower:
@@ -385,7 +420,15 @@ def _detect_treatment(title: str, product_type: str = "Single") -> str:
     base_treatment = None
 
     # 1. Serialized / OCM (Highest Priority)
-    if "serialized" in title_lower or "/10" in title_lower or "/25" in title_lower or "/50" in title_lower or "/75" in title_lower or "/99" in title_lower or "ocm" in title_lower:
+    if (
+        "serialized" in title_lower
+        or "/10" in title_lower
+        or "/25" in title_lower
+        or "/50" in title_lower
+        or "/75" in title_lower
+        or "/99" in title_lower
+        or "ocm" in title_lower
+    ):
         base_treatment = "OCM Serialized"
 
     # 2. Special Foils
@@ -519,14 +562,15 @@ def _detect_grading(title: str) -> Optional[str]:
     Returns: Grade string (e.g., "PSA 10", "BGS 9.5", "TAG SLAB", "GRADED") or None for raw cards.
     """
     import re
+
     title_upper = title.upper()
 
     # PSA grading patterns
     # "PSA 10", "PSA10", "PSA-10", "PSA GEM MINT 10"
     psa_patterns = [
-        r'PSA\s*[-]?\s*(\d+(?:\.\d)?)',  # PSA 10, PSA-10, PSA10
-        r'PSA\s+GEM\s*(?:MINT|MT)?\s*(\d+)',  # PSA GEM MINT 10
-        r'PSA\s+MINT\s*(\d+)',  # PSA MINT 9
+        r"PSA\s*[-]?\s*(\d+(?:\.\d)?)",  # PSA 10, PSA-10, PSA10
+        r"PSA\s+GEM\s*(?:MINT|MT)?\s*(\d+)",  # PSA GEM MINT 10
+        r"PSA\s+MINT\s*(\d+)",  # PSA MINT 9
     ]
     for pattern in psa_patterns:
         match = re.search(pattern, title_upper)
@@ -537,9 +581,9 @@ def _detect_grading(title: str) -> Optional[str]:
     # BGS (Beckett) grading patterns
     # "BGS 9.5", "BGS9.5", "BGS 10 BLACK LABEL", "BECKETT 9.5"
     bgs_patterns = [
-        r'BGS\s*[-]?\s*(\d+(?:\.\d)?)',  # BGS 9.5, BGS-9.5
-        r'BECKETT\s*[-]?\s*(\d+(?:\.\d)?)',  # BECKETT 9.5
-        r'BGS\s+(\d+)\s*(?:BLACK\s*LABEL|PRISTINE)',  # BGS 10 BLACK LABEL
+        r"BGS\s*[-]?\s*(\d+(?:\.\d)?)",  # BGS 9.5, BGS-9.5
+        r"BECKETT\s*[-]?\s*(\d+(?:\.\d)?)",  # BECKETT 9.5
+        r"BGS\s+(\d+)\s*(?:BLACK\s*LABEL|PRISTINE)",  # BGS 10 BLACK LABEL
     ]
     for pattern in bgs_patterns:
         match = re.search(pattern, title_upper)
@@ -550,8 +594,8 @@ def _detect_grading(title: str) -> Optional[str]:
     # TAG (Texas Authentication & Grading) patterns
     # "TAG 10", "TAG-10", "TAG PERFECT 10", "TAG SLAB"
     tag_patterns = [
-        r'(?<!S)TAG\s*[-]?\s*(\d+(?:\.\d)?)',  # TAG 10 (exclude STAG)
-        r'TAG\s+PERFECT\s*(\d+)',  # TAG PERFECT 10
+        r"(?<!S)TAG\s*[-]?\s*(\d+(?:\.\d)?)",  # TAG 10 (exclude STAG)
+        r"TAG\s+PERFECT\s*(\d+)",  # TAG PERFECT 10
     ]
     for pattern in tag_patterns:
         match = re.search(pattern, title_upper)
@@ -560,13 +604,13 @@ def _detect_grading(title: str) -> Optional[str]:
             return f"TAG {grade}"
 
     # TAG SLAB without grade (common for WOTF prerelease)
-    if re.search(r'(?<!S)TAG\s+SLAB', title_upper) or re.search(r'(?<!S)TAG\s*[-]?\s*SLAB', title_upper):
+    if re.search(r"(?<!S)TAG\s+SLAB", title_upper) or re.search(r"(?<!S)TAG\s*[-]?\s*SLAB", title_upper):
         return "TAG SLAB"
 
     # CGC grading patterns
     # "CGC 9.8", "CGC-9.8"
     cgc_patterns = [
-        r'CGC\s*[-]?\s*(\d+(?:\.\d)?)',  # CGC 9.8
+        r"CGC\s*[-]?\s*(\d+(?:\.\d)?)",  # CGC 9.8
     ]
     for pattern in cgc_patterns:
         match = re.search(pattern, title_upper)
@@ -577,7 +621,7 @@ def _detect_grading(title: str) -> Optional[str]:
     # SGC grading patterns
     # "SGC 10", "SGC-10"
     sgc_patterns = [
-        r'SGC\s*[-]?\s*(\d+(?:\.\d)?)',  # SGC 10
+        r"SGC\s*[-]?\s*(\d+(?:\.\d)?)",  # SGC 10
     ]
     for pattern in sgc_patterns:
         match = re.search(pattern, title_upper)
@@ -587,9 +631,9 @@ def _detect_grading(title: str) -> Optional[str]:
 
     # Generic graded/slab mentions (without specific service or grade)
     # "GRADED", "SLAB", "SLABBED" - indicates professional grading but unclear which service
-    if re.search(r'\bGRADED\b', title_upper):
+    if re.search(r"\bGRADED\b", title_upper):
         return "GRADED"
-    if re.search(r'\bSLAB(?:BED)?\b', title_upper):
+    if re.search(r"\bSLAB(?:BED)?\b", title_upper):
         return "GRADED"
 
     return None
@@ -618,9 +662,9 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
     # Skip titles containing card names with X in them (Carbon-X7, X7v1, etc.)
     # These are card names, not quantities
     skip_patterns = [
-        r'carbon-x\d',      # Carbon-X7 card name
-        r'x\d+v\d',         # X7v1 variant naming
-        r'experiment\s*x',  # Experiment X series
+        r"carbon-x\d",  # Carbon-X7 card name
+        r"x\d+v\d",  # X7v1 variant naming
+        r"experiment\s*x",  # Experiment X series
     ]
     for pattern in skip_patterns:
         if re.search(pattern, title_lower):
@@ -630,14 +674,14 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
     if product_type == "Single":
         # Look for explicit quantity patterns at start of title or after separator
         patterns = [
-            r'^(\d+)\s*x\s+',              # "2x Card Name" at start
-            r'^(\d+)\s+-\s+',              # "2 - Card Name" at start
-            r'^x\s*(\d+)\s+',              # "X3 Card Name" at start
-            r'(?:^|\s)(\d+)\s*x\s*(?:-|wonders|foil)',  # "3x -" or "2x Wonders"
-            r'lot\s+of\s+(\d+)',           # "lot of 5"
-            r'(\d+)\s*card\s*lot',         # "5 card lot"
-            r'(\d+)\s*ct\b',               # "3ct"
-            r'\sx\s*(\d+)\s*$',            # "x4" at end of title
+            r"^(\d+)\s*x\s+",  # "2x Card Name" at start
+            r"^(\d+)\s+-\s+",  # "2 - Card Name" at start
+            r"^x\s*(\d+)\s+",  # "X3 Card Name" at start
+            r"(?:^|\s)(\d+)\s*x\s*(?:-|wonders|foil)",  # "3x -" or "2x Wonders"
+            r"lot\s+of\s+(\d+)",  # "lot of 5"
+            r"(\d+)\s*card\s*lot",  # "5 card lot"
+            r"(\d+)\s*ct\b",  # "3ct"
+            r"\sx\s*(\d+)\s*$",  # "x4" at end of title
         ]
         for pattern in patterns:
             match = re.search(pattern, title_lower)
@@ -653,10 +697,10 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
 
     # First check if this is describing contents (not quantity being sold)
     content_patterns = [
-        r'(\d+)\s*booster\s*packs?\s*(inside|included|contains|per|each)',
-        r'contains\s*(\d+)',
-        r'includes\s*(\d+)',
-        r'with\s*(\d+)\s*(booster|pack)',
+        r"(\d+)\s*booster\s*packs?\s*(inside|included|contains|per|each)",
+        r"contains\s*(\d+)",
+        r"includes\s*(\d+)",
+        r"with\s*(\d+)\s*(booster|pack)",
     ]
     for pattern in content_patterns:
         if re.search(pattern, title_lower):
@@ -665,12 +709,12 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
 
     # Now look for actual quantity being sold
     quantity_patterns = [
-        r'^(\d+)\s*x\s*(wonders|existence|booster|play|collector|bundle|box|pack)',  # "2x Bundle" (requires x)
-        r'^(\d{1,2})\s+(wonders|existence|booster|play|collector|bundle|box|pack)',  # "2 Wonders..." (max 2 digits to exclude years)
-        r'(\d+)\s*(?:ct|count)\b',            # "5ct" or "5 count"
-        r'lot\s+of\s+(\d+)',                  # "lot of 3"
-        r'set\s+of\s+(\d+)',                  # "set of 2"
-        r'x(\d+)\b',                          # "x4" at end
+        r"^(\d+)\s*x\s*(wonders|existence|booster|play|collector|bundle|box|pack)",  # "2x Bundle" (requires x)
+        r"^(\d{1,2})\s+(wonders|existence|booster|play|collector|bundle|box|pack)",  # "2 Wonders..." (max 2 digits to exclude years)
+        r"(\d+)\s*(?:ct|count)\b",  # "5ct" or "5 count"
+        r"lot\s+of\s+(\d+)",  # "lot of 3"
+        r"set\s+of\s+(\d+)",  # "set of 2"
+        r"x(\d+)\b",  # "x4" at end
     ]
 
     for pattern in quantity_patterns:
@@ -713,8 +757,8 @@ def _detect_bundle_pack_count(title: str) -> int:
     # Try to extract pack count from title patterns
     # Be careful not to match single pack listings like "pack + 12 bonus cards"
     patterns = [
-        r'box\s*(?:of\s*)?(\d+)\s*(?:booster\s*)?packs?',  # "box of 6 packs"
-        r'(\d+)\s*pack\s*box',                              # "6 pack box"
+        r"box\s*(?:of\s*)?(\d+)\s*(?:booster\s*)?packs?",  # "box of 6 packs"
+        r"(\d+)\s*pack\s*box",  # "6 pack box"
     ]
 
     for pattern in patterns:
@@ -746,7 +790,7 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
 
     # FIRST: Check for positive WOTF identifiers
     # If present, we trust this is a WOTF listing and skip most blocklist checks
-    wonders_identifiers = ['wonders of the first', 'wotf']
+    wonders_identifiers = ["wonders of the first", "wotf"]
     has_wonders_identifier = any(ident in title_lower for ident in wonders_identifiers)
 
     # CRITICAL: Reject non-Wonders TCG products that might match on keywords
@@ -763,20 +807,36 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
                 return False
 
     # Detect product types - use more lenient matching for sealed products
-    product_type_keywords = ['box', 'pack', 'case', 'lot', 'bundle', 'collection', 'bulk', 'sealed']
+    product_type_keywords = ["box", "pack", "case", "lot", "bundle", "collection", "bulk", "sealed"]
     is_product = any(keyword in name_lower for keyword in product_type_keywords)
 
     # CRITICAL: Distinguish between individual packs vs bundles/boxes
     # When searching for "Booster Pack", reject listings that are clearly bundles
-    is_searching_for_pack = 'pack' in name_lower and 'bundle' not in name_lower and 'box' not in name_lower
-    is_listing_bundle = any(kw in title_lower for kw in [
-        'bundle', 'blaster box', 'play bundle', 'collector box',
-        'serialized advantage', '6 pack', '12 pack', '30 pack',
-        # Multi-unit indicators
-        '2x ', '3x ', '4x ', '5x ', '2 wonders', '3 wonders', '4 wonders', '5 wonders',
-    ])
+    is_searching_for_pack = "pack" in name_lower and "bundle" not in name_lower and "box" not in name_lower
+    is_listing_bundle = any(
+        kw in title_lower
+        for kw in [
+            "bundle",
+            "blaster box",
+            "play bundle",
+            "collector box",
+            "serialized advantage",
+            "6 pack",
+            "12 pack",
+            "30 pack",
+            # Multi-unit indicators
+            "2x ",
+            "3x ",
+            "4x ",
+            "5x ",
+            "2 wonders",
+            "3 wonders",
+            "4 wonders",
+            "5 wonders",
+        ]
+    )
     # Also check for quantity patterns at start of title
-    if re.match(r'^\d+\s+(wonders|existence|play|collector|booster)', title_lower):
+    if re.match(r"^\d+\s+(wonders|existence|play|collector|booster)", title_lower):
         is_listing_bundle = True
 
     if is_searching_for_pack and is_listing_bundle:
@@ -815,8 +875,21 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
         if clean_title.strip() and ("the first" in clean_title or clean_title.strip() == "first"):
             # Extra validation: shouldn't have other card names
             # Reject if it contains other character names like "voice of", "zeltona", etc
-            reject_phrases = ['voice of', 'zeltona', 'cura', 'captain', 'king', 'queen',
-                            'lord', 'lady', 'sir', 'baron', 'duke', 'emperor', 'empress']
+            reject_phrases = [
+                "voice of",
+                "zeltona",
+                "cura",
+                "captain",
+                "king",
+                "queen",
+                "lord",
+                "lady",
+                "sir",
+                "baron",
+                "duke",
+                "emperor",
+                "empress",
+            ]
             for phrase in reject_phrases:
                 if phrase in title_lower:
                     return False
@@ -926,14 +999,14 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
         # For single cards, validate rarity if specified
         # Look for exact rarity name or common abbreviations
         rarity_keywords = {
-            'common': ['common', 'c'],
-            'uncommon': ['uncommon', 'uc', 'u'],
-            'rare': ['rare', 'r'],
-            'epic': ['epic', 'e'],
-            'legendary': ['legendary', 'leg', 'l'],
-            'mythic': ['mythic', 'myth', 'm'],
-            'secret': ['secret'],
-            'promo': ['promo', 'promotional'],
+            "common": ["common", "c"],
+            "uncommon": ["uncommon", "uc", "u"],
+            "rare": ["rare", "r"],
+            "epic": ["epic", "e"],
+            "legendary": ["legendary", "leg", "l"],
+            "mythic": ["mythic", "myth", "m"],
+            "secret": ["secret"],
+            "promo": ["promo", "promotional"],
         }
 
         # Find which category our target rarity falls into
@@ -955,6 +1028,7 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
 
     return True
 
+
 def _extract_bid_count(item) -> int:
     """
     Extracts the bid count from an item element.
@@ -963,11 +1037,12 @@ def _extract_bid_count(item) -> int:
     bid_elem = item.select_one(".s-item__bidCount, .s-item__bids, .s-item__details .s-item__bidCount")
     if bid_elem:
         text = bid_elem.get_text(strip=True)
-        match = re.search(r'(\d+)\s*bids?', text, re.IGNORECASE)
+        match = re.search(r"(\d+)\s*bids?", text, re.IGNORECASE)
         if match:
             return int(match.group(1))
 
     return 0
+
 
 def _extract_seller_info(item) -> Tuple[Optional[str], Optional[int], Optional[float]]:
     """
@@ -981,9 +1056,9 @@ def _extract_seller_info(item) -> Tuple[Optional[str], Optional[int], Optional[f
     # Best approach: extract from seller link URL which has clean username
     seller_link = item.select_one("a[href*='/usr/']")
     if seller_link:
-        href = seller_link.get('href', '')
+        href = seller_link.get("href", "")
         # URL format: https://www.ebay.com/usr/seller_name or /usr/seller_name
-        match = re.search(r'/usr/([^/?]+)', href)
+        match = re.search(r"/usr/([^/?]+)", href)
         if match:
             seller_name = match.group(1).strip()
 
@@ -1005,26 +1080,26 @@ def _extract_seller_info(item) -> Tuple[Optional[str], Optional[int], Optional[f
             # "seller_name  100% positive (1.2K)..."
 
             # Try pattern: "seller_name (1234) 99.5%"
-            match = re.search(r'^([a-zA-Z0-9_\-\.]+)\s*\((\d+)\)\s*([\d.]+)%?', text)
+            match = re.search(r"^([a-zA-Z0-9_\-\.]+)\s*\((\d+)\)\s*([\d.]+)%?", text)
             if match:
                 seller_name = match.group(1).strip()
                 feedback_score = int(match.group(2))
                 feedback_percent = float(match.group(3))
             else:
                 # Try pattern: "seller_name  100% positive (1.2K)"
-                match = re.search(r'^([a-zA-Z0-9_\-\.]+)\s+(\d+)%\s*positive\s*\(([\d.]+)K?\)', text, re.IGNORECASE)
+                match = re.search(r"^([a-zA-Z0-9_\-\.]+)\s+(\d+)%\s*positive\s*\(([\d.]+)K?\)", text, re.IGNORECASE)
                 if match:
                     seller_name = match.group(1).strip()
                     feedback_percent = float(match.group(2))
                     score_str = match.group(3)
                     # Handle "1.2K" format
-                    if 'K' in text[text.find(match.group(3)):text.find(match.group(3))+5].upper():
+                    if "K" in text[text.find(match.group(3)) : text.find(match.group(3)) + 5].upper():
                         feedback_score = int(float(score_str) * 1000)
                     else:
                         feedback_score = int(float(score_str))
                 else:
                     # Last resort: take first word that looks like a username
-                    match = re.match(r'^([a-zA-Z0-9_\-\.]+)', text)
+                    match = re.match(r"^([a-zA-Z0-9_\-\.]+)", text)
                     if match:
                         seller_name = match.group(1).strip()
 
@@ -1034,21 +1109,22 @@ def _extract_seller_info(item) -> Tuple[Optional[str], Optional[int], Optional[f
         if feedback_elem:
             text = feedback_elem.get_text(strip=True)
             # Parse "(1234) 99.5%" or "100% positive (1.2K)" format
-            match = re.search(r'\((\d+)\)\s*([\d.]+)%', text)
+            match = re.search(r"\((\d+)\)\s*([\d.]+)%", text)
             if match:
                 feedback_score = int(match.group(1))
                 feedback_percent = float(match.group(2))
             else:
-                match = re.search(r'([\d.]+)%\s*positive\s*\(([\d.]+)K?\)', text, re.IGNORECASE)
+                match = re.search(r"([\d.]+)%\s*positive\s*\(([\d.]+)K?\)", text, re.IGNORECASE)
                 if match:
                     feedback_percent = float(match.group(1))
                     score_str = match.group(2)
-                    if 'K' in text.upper():
+                    if "K" in text.upper():
                         feedback_score = int(float(score_str) * 1000)
                     else:
                         feedback_score = int(float(score_str))
 
     return seller_name, feedback_score, feedback_percent
+
 
 def _extract_condition(item) -> Optional[str]:
     """
@@ -1068,12 +1144,15 @@ def _extract_condition(item) -> Optional[str]:
             return text
     return None
 
+
 def _extract_shipping_cost(item) -> Optional[float]:
     """
     Extracts shipping cost from listing.
     Returns: shipping cost in dollars (0.0 for free shipping, None if not found)
     """
-    shipping_elem = item.select_one(".s-item__shipping, .s-item__freeXDays, .s-item__logisticsCost, [class*='shipping']")
+    shipping_elem = item.select_one(
+        ".s-item__shipping, .s-item__freeXDays, .s-item__logisticsCost, [class*='shipping']"
+    )
     if shipping_elem:
         text = shipping_elem.get_text(strip=True).lower()
 
@@ -1082,35 +1161,40 @@ def _extract_shipping_cost(item) -> Optional[float]:
             return 0.0
 
         # Parse shipping cost: "+$5.99 shipping" or "$5.99 shipping"
-        match = re.search(r'\+?\$?([\d,.]+)\s*shipping', text, re.IGNORECASE)
+        match = re.search(r"\+?\$?([\d,.]+)\s*shipping", text, re.IGNORECASE)
         if match:
             try:
-                return float(match.group(1).replace(',', ''))
+                return float(match.group(1).replace(",", ""))
             except ValueError:
                 pass
 
     return None
 
+
 def _clean_title_text(title: str) -> str:
     """
     Removes junk text like 'Opens in a new window or tab' from the title.
     """
-    junk_phrases = [
-        "opens in a new window or tab",
-        "opens in a new window",
-        "opens in a new tab",
-        "new listing"
-    ]
+    junk_phrases = ["opens in a new window or tab", "opens in a new window", "opens in a new tab", "new listing"]
     title_lower = title.lower()
     for phrase in junk_phrases:
         if phrase in title_lower:
             # Case insensitive replace is tricky, do a regex replace
             pattern = re.compile(re.escape(phrase), re.IGNORECASE)
             title = pattern.sub("", title)
-            
+
     return title.strip()
 
-def _parse_generic_results(html_content: str, card_id: int, listing_type: str, card_name: str = "", target_rarity: str = "", return_all: bool = False, product_type: str = "Single") -> List[MarketPrice]:
+
+def _parse_generic_results(
+    html_content: str,
+    card_id: int,
+    listing_type: str,
+    card_name: str = "",
+    target_rarity: str = "",
+    return_all: bool = False,
+    product_type: str = "Single",
+) -> List[MarketPrice]:
     soup = BeautifulSoup(html_content, "lxml")
     items = soup.select("li.s-item, li.s-card")
 
@@ -1187,20 +1271,22 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
                 image_url = image_elem.get("data-src")
 
         # Store all listing data for bulk dedup check
-        all_listings_data.append({
-            "external_id": item_id,
-            "title": title,
-            "price": price,
-            "sold_date": sold_date,
-            "url": url,
-            "bid_count": bid_count,
-            "image_url": image_url,
-            "seller_name": seller_name,
-            "seller_feedback_score": seller_feedback_score,
-            "seller_feedback_percent": seller_feedback_percent,
-            "condition": condition,
-            "shipping_cost": shipping_cost
-        })
+        all_listings_data.append(
+            {
+                "external_id": item_id,
+                "title": title,
+                "price": price,
+                "sold_date": sold_date,
+                "url": url,
+                "bid_count": bid_count,
+                "image_url": image_url,
+                "seller_name": seller_name,
+                "seller_feedback_score": seller_feedback_score,
+                "seller_feedback_percent": seller_feedback_percent,
+                "condition": condition,
+                "shipping_cost": shipping_cost,
+            }
+        )
 
     if not all_listings_data:
         return []
@@ -1211,10 +1297,11 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
     if listing_type == "active":
         indexed_indices = set()  # No dedup for active listings
     else:
-        indexed_indices = _bulk_check_indexed(
-            card_id, all_listings_data,
-            card_name=card_name, product_type=product_type
-        ) if not return_all else set()
+        indexed_indices = (
+            _bulk_check_indexed(card_id, all_listings_data, card_name=card_name, product_type=product_type)
+            if not return_all
+            else set()
+        )
 
     # Phase 1c: Filter out already-indexed listings (unless return_all=True for stats)
     listings_to_extract = []
@@ -1223,11 +1310,9 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
     for i, listing_data in enumerate(all_listings_data):
         if return_all or i not in indexed_indices:
             # Include for AI extraction if: return_all=True OR not indexed yet
-            listings_to_extract.append({
-                "title": listing_data["title"],
-                "description": None,
-                "price": listing_data["price"]
-            })
+            listings_to_extract.append(
+                {"title": listing_data["title"], "description": None, "price": listing_data["price"]}
+            )
             listing_metadata.append(listing_data)
 
     if not listings_to_extract:
@@ -1299,26 +1384,28 @@ def _parse_generic_results(html_content: str, card_id: int, listing_type: str, c
             condition=metadata.get("condition"),
             shipping_cost=metadata.get("shipping_cost"),
             grading=grading,
-            scraped_at=datetime.utcnow()
+            scraped_at=datetime.utcnow(),
         )
 
         results.append(mp)
 
     return results
 
+
 def _clean_price(price_str: str) -> Optional[float]:
     try:
-        match = re.search(r'[\d,]+\.\d{2}', price_str)
+        match = re.search(r"[\d,]+\.\d{2}", price_str)
         if match:
-            num_str = match.group(0).replace(',', '')
+            num_str = match.group(0).replace(",", "")
             return float(num_str)
-        match = re.search(r'[\d,]+', price_str)
+        match = re.search(r"[\d,]+", price_str)
         if match:
-             num_str = match.group(0).replace(',', '')
-             return float(num_str)
+            num_str = match.group(0).replace(",", "")
+            return float(num_str)
         return None
     except (ValueError, AttributeError):
         return None
+
 
 def _parse_date(date_str: str) -> Optional[datetime]:
     """
@@ -1335,29 +1422,29 @@ def _parse_date(date_str: str) -> Optional[datetime]:
     clean_str = date_str.lower().replace("sold", "").strip()
 
     # Handle relative dates like "3 days ago", "1 week ago"
-    relative_match = re.search(r'(\d+)\s*(day|week|month|hour|minute)s?\s*ago', clean_str)
+    relative_match = re.search(r"(\d+)\s*(day|week|month|hour|minute)s?\s*ago", clean_str)
     if relative_match:
         quantity = int(relative_match.group(1))
         unit = relative_match.group(2)
 
         now = datetime.utcnow()
-        if unit == 'day':
+        if unit == "day":
             return now - timedelta(days=quantity)
-        elif unit == 'week':
+        elif unit == "week":
             return now - timedelta(weeks=quantity)
-        elif unit == 'month':
+        elif unit == "month":
             return now - timedelta(days=quantity * 30)
-        elif unit == 'hour':
+        elif unit == "hour":
             return now - timedelta(hours=quantity)
-        elif unit == 'minute':
+        elif unit == "minute":
             return now - timedelta(minutes=quantity)
 
     # Handle special relative terms
-    if 'just now' in clean_str or 'just ended' in clean_str:
+    if "just now" in clean_str or "just ended" in clean_str:
         return datetime.utcnow()
-    if 'yesterday' in clean_str:
+    if "yesterday" in clean_str:
         return datetime.utcnow() - timedelta(days=1)
-    if 'today' in clean_str:
+    if "today" in clean_str:
         return datetime.utcnow()
 
     # Try standard date parsing for absolute dates like "Oct 4, 2025" or "Dec 1"

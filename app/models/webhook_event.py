@@ -1,6 +1,7 @@
 """
 Model for tracking processed webhook events to ensure idempotency.
 """
+
 from typing import Optional
 from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel
@@ -18,6 +19,7 @@ class WebhookEvent(SQLModel, table=True):
     Polar (and most webhook providers) may retry failed webhooks,
     so we need to ensure each event is only processed once.
     """
+
     __tablename__ = "webhook_event"
 
     id: Optional[int] = Field(default=None, primary_key=True)

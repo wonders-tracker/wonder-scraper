@@ -1,6 +1,7 @@
 """
 Blokpax-specific database models for tracking NFT assets, listings, and sales.
 """
+
 from typing import Optional, List
 from sqlmodel import Field, SQLModel, JSON, Column
 from datetime import datetime
@@ -10,6 +11,7 @@ class BlokpaxStorefront(SQLModel, table=True):
     """
     Represents a Blokpax storefront/collection.
     """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     slug: str = Field(index=True, unique=True)
     name: str
@@ -33,6 +35,7 @@ class BlokpaxAssetDB(SQLModel, table=True):
     Represents an individual NFT asset on Blokpax.
     Links to our Card model for WOTF items.
     """
+
     __tablename__ = "blokpax_asset"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -69,6 +72,7 @@ class BlokpaxListing(SQLModel, table=True):
     """
     Represents an active listing on Blokpax.
     """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     external_id: str = Field(index=True, unique=True)  # Blokpax listing ID
     asset_id: str = Field(index=True)  # Blokpax asset ID
@@ -89,6 +93,7 @@ class BlokpaxOffer(SQLModel, table=True):
     """
     Represents an offer on a Blokpax asset.
     """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     external_id: str = Field(index=True, unique=True)  # Blokpax offer ID
     asset_id: str = Field(index=True)  # Blokpax asset ID
@@ -108,6 +113,7 @@ class BlokpaxSale(SQLModel, table=True):
     """
     Represents a completed sale on Blokpax.
     """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     listing_id: str = Field(index=True)  # Original listing ID
     asset_id: str = Field(index=True)
@@ -131,6 +137,7 @@ class BlokpaxSnapshot(SQLModel, table=True):
     """
     Point-in-time snapshot of storefront stats (like MarketSnapshot for eBay).
     """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     storefront_slug: str = Field(index=True)
 
@@ -157,6 +164,7 @@ class BlokpaxRedemption(SQLModel, table=True):
     """
     Tracks individual redemption events from Blokpax activity feed.
     """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     storefront_slug: str = Field(index=True)
     asset_id: str = Field(index=True)

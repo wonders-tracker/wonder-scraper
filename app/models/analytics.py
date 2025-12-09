@@ -1,6 +1,7 @@
 """
 Analytics models for tracking page views and user activity.
 """
+
 from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel, Field
@@ -8,6 +9,7 @@ from sqlmodel import SQLModel, Field
 
 class PageView(SQLModel, table=True):
     """Track page views for analytics."""
+
     id: Optional[int] = Field(default=None, primary_key=True)
     path: str = Field(index=True)
     user_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)

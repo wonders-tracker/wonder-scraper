@@ -22,28 +22,28 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Treatment categories for base price calculation
-BASE_TREATMENTS = ['Classic Paper', 'Classic Foil']
+BASE_TREATMENTS = ["Classic Paper", "Classic Foil"]
 
 # Default multipliers when no data available
 DEFAULT_RARITY_MULTIPLIERS = {
-    'Common': 1.0,
-    'Uncommon': 1.5,
-    'Rare': 3.0,
-    'Legendary': 8.0,
-    'Mythic': 20.0,
-    'Sealed': 1.0,  # For sealed products
+    "Common": 1.0,
+    "Uncommon": 1.5,
+    "Rare": 3.0,
+    "Legendary": 8.0,
+    "Mythic": 20.0,
+    "Sealed": 1.0,  # For sealed products
 }
 
 DEFAULT_TREATMENT_MULTIPLIERS = {
-    'Classic Paper': 1.0,
-    'Classic Foil': 1.3,
-    'Stonefoil': 2.0,
-    'Formless Foil': 3.5,
-    'Prerelease': 2.0,
-    'Promo': 2.0,
-    'OCM Serialized': 10.0,
-    'Sealed': 1.0,
-    'Factory Sealed': 1.0,
+    "Classic Paper": 1.0,
+    "Classic Foil": 1.3,
+    "Stonefoil": 2.0,
+    "Formless Foil": 3.5,
+    "Prerelease": 2.0,
+    "Promo": 2.0,
+    "OCM Serialized": 10.0,
+    "Sealed": 1.0,
+    "Factory Sealed": 1.0,
 }
 
 
@@ -96,8 +96,7 @@ class FairMarketPriceService:
         return None
 
     def _calculate_mad_trimmed_fmp(
-        self, card_id: int, treatment: str = 'Classic Paper', days: int = 90,
-        recent_sales: int = 8, min_sales: int = 3
+        self, card_id: int, treatment: str = "Classic Paper", days: int = 90, recent_sales: int = 8, min_sales: int = 3
     ) -> Optional[float]:
         """
         Calculate FMP using MAD-trimmed mean of recent sales.
@@ -154,19 +153,14 @@ class FairMarketPriceService:
             GROUP BY s.median_price, s.sale_count, m.mad
         """)
 
-        result = self.session.execute(query, {
-            "card_id": card_id,
-            "treatment": treatment,
-            "cutoff": cutoff,
-            "recent_sales": recent_sales
-        }).fetchone()
+        result = self.session.execute(
+            query, {"card_id": card_id, "treatment": treatment, "cutoff": cutoff, "recent_sales": recent_sales}
+        ).fetchone()
 
         if not result or not result[0] or (result[1] or 0) < min_sales:
             # Try Classic Foil if Classic Paper has no data
-            if treatment == 'Classic Paper':
-                foil_result = self._calculate_mad_trimmed_fmp(
-                    card_id, 'Classic Foil', days, recent_sales, min_sales
-                )
+            if treatment == "Classic Paper":
+                foil_result = self._calculate_mad_trimmed_fmp(card_id, "Classic Foil", days, recent_sales, min_sales)
                 if foil_result:
                     # Classic Foil is typically ~1.3x Classic Paper
                     return round(foil_result / 1.3, 2)
@@ -194,7 +188,7 @@ class FairMarketPriceService:
         Note: This is a SET-WIDE fallback. For cards with sales history,
         _get_card_specific_multiplier is preferred.
         """
-        if rarity_name == 'Common':
+        if rarity_name == "Common":
             return 1.0
 
         cache_key = f"{set_name}:{rarity_name}:{days}"
@@ -238,8 +232,7 @@ class FairMarketPriceService:
         """)
 
         rarity_result = self.session.execute(
-            rarity_query,
-            {"set_name": set_name, "rarity_name": rarity_name, "cutoff": cutoff}
+            rarity_query, {"set_name": set_name, "rarity_name": rarity_name, "cutoff": cutoff}
         ).fetchone()
 
         if rarity_result and rarity_result[0]:
@@ -256,7 +249,7 @@ class FairMarketPriceService:
         Calculate treatment multiplier from card-specific sales data.
         Multiplier = median_price(treatment) / median_price(Classic Paper)
         """
-        if treatment in ('Classic Paper', None):
+        if treatment in ("Classic Paper", None):
             return 1.0
 
         cutoff = datetime.utcnow() - timedelta(days=days)
@@ -290,8 +283,7 @@ class FairMarketPriceService:
         """)
 
         treatment_result = self.session.execute(
-            treatment_query,
-            {"card_id": card_id, "treatment": treatment, "cutoff": cutoff}
+            treatment_query, {"card_id": card_id, "treatment": treatment, "cutoff": cutoff}
         ).fetchone()
 
         if treatment_result and treatment_result[0]:
@@ -327,7 +319,7 @@ class FairMarketPriceService:
         liquidity = volume / (inventory + 1)  # +1 to avoid division by zero
 
         if liquidity > 1.0:
-            return 1.0   # High demand
+            return 1.0  # High demand
         elif liquidity > 0.5:
             return 0.95  # Normal
         elif liquidity > 0.2:
@@ -365,8 +357,7 @@ class FairMarketPriceService:
         """)
 
         result = self.session.execute(
-            base_query,
-            {"card_id": card_id, "cutoff": cutoff, "num_sales": num_sales}
+            base_query, {"card_id": card_id, "cutoff": cutoff, "num_sales": num_sales}
         ).fetchone()
 
         if result and result[0]:
@@ -391,8 +382,7 @@ class FairMarketPriceService:
         """)
 
         cheapest_result = self.session.execute(
-            cheapest_treatment_query,
-            {"card_id": card_id, "cutoff": cutoff, "num_sales": num_sales}
+            cheapest_treatment_query, {"card_id": card_id, "cutoff": cutoff, "num_sales": num_sales}
         ).fetchone()
 
         if cheapest_result and cheapest_result[1]:
@@ -434,9 +424,9 @@ class FairMarketPriceService:
         card_id: int,
         set_name: str,
         rarity_name: str,
-        treatment: str = 'Classic Paper',
+        treatment: str = "Classic Paper",
         days: int = 30,
-        product_type: str = 'Single'
+        product_type: str = "Single",
     ) -> Dict[str, Any]:
         """
         Calculate Fair Market Price.
@@ -452,19 +442,19 @@ class FairMarketPriceService:
         floor_price = self.calculate_floor_price(card_id, num_sales=4, days=days)
 
         # For non-Single products, just use median price - formula doesn't apply
-        if product_type and product_type not in ['Single', None, '']:
+        if product_type and product_type not in ["Single", None, ""]:
             median_price = self.get_median_price(card_id, days)
             return {
-                'fair_market_price': median_price,
-                'floor_price': floor_price,
-                'breakdown': None,  # No formula breakdown for non-Singles
-                'product_type': product_type,
-                'calculation_method': 'median',  # Indicates simple median was used
-                'data_quality': {
-                    'has_base_price': False,
-                    'has_floor_price': floor_price is not None,
-                    'using_defaults': False,
-                }
+                "fair_market_price": median_price,
+                "floor_price": floor_price,
+                "breakdown": None,  # No formula breakdown for non-Singles
+                "product_type": product_type,
+                "calculation_method": "median",  # Indicates simple median was used
+                "data_quality": {
+                    "has_base_price": False,
+                    "has_floor_price": floor_price is not None,
+                    "using_defaults": False,
+                },
             }
 
         # For Singles: Try MAD-trimmed mean first (most accurate)
@@ -476,20 +466,20 @@ class FairMarketPriceService:
             fmp = round(mad_fmp * liquidity_adj, 2)
 
             return {
-                'fair_market_price': fmp,
-                'floor_price': floor_price,
-                'breakdown': {
-                    'mad_trimmed_mean': mad_fmp,
-                    'liquidity_adjustment': round(liquidity_adj, 2),
+                "fair_market_price": fmp,
+                "floor_price": floor_price,
+                "breakdown": {
+                    "mad_trimmed_mean": mad_fmp,
+                    "liquidity_adjustment": round(liquidity_adj, 2),
                 },
-                'product_type': product_type,
-                'calculation_method': 'mad_trimmed',  # MAD-based calculation
-                'data_quality': {
-                    'has_base_price': True,  # Has direct sales data
-                    'has_floor_price': floor_price is not None,
-                    'using_card_sales': True,
-                    'using_defaults': False,
-                }
+                "product_type": product_type,
+                "calculation_method": "mad_trimmed",  # MAD-based calculation
+                "data_quality": {
+                    "has_base_price": True,  # Has direct sales data
+                    "has_floor_price": floor_price is not None,
+                    "using_card_sales": True,
+                    "using_defaults": False,
+                },
             }
 
         # Fallback: use the formula-based calculation
@@ -506,41 +496,38 @@ class FairMarketPriceService:
             fmp = round(fmp, 2)
 
         return {
-            'fair_market_price': fmp,
-            'floor_price': floor_price,
-            'breakdown': {
-                'base_set_price': round(base_price, 2) if base_price else None,
-                'rarity_multiplier': round(rarity_mult, 2),
-                'treatment_multiplier': round(treatment_mult, 2),
-                'condition_multiplier': condition_mult,
-                'liquidity_adjustment': round(liquidity_adj, 2),
+            "fair_market_price": fmp,
+            "floor_price": floor_price,
+            "breakdown": {
+                "base_set_price": round(base_price, 2) if base_price else None,
+                "rarity_multiplier": round(rarity_mult, 2),
+                "treatment_multiplier": round(treatment_mult, 2),
+                "condition_multiplier": condition_mult,
+                "liquidity_adjustment": round(liquidity_adj, 2),
             },
-            'product_type': product_type,
-            'calculation_method': 'formula',  # Formula fallback
-            'data_quality': {
-                'has_base_price': base_price is not None,
-                'has_floor_price': floor_price is not None,
-                'using_card_sales': False,
-                'using_defaults': base_price is None,
-            }
+            "product_type": product_type,
+            "calculation_method": "formula",  # Formula fallback
+            "data_quality": {
+                "has_base_price": base_price is not None,
+                "has_floor_price": floor_price is not None,
+                "using_card_sales": False,
+                "using_defaults": base_price is None,
+            },
         }
 
     def calculate_fmp_simple(
-        self,
-        card_id: int,
-        set_name: str,
-        rarity_name: str,
-        days: int = 30
+        self, card_id: int, set_name: str, rarity_name: str, days: int = 30
     ) -> tuple[Optional[float], Optional[float]]:
         """
         Simplified FMP calculation returning just (fmp, floor_price).
         Uses Classic Paper treatment as default for base FMP.
         """
-        result = self.calculate_fmp(card_id, set_name, rarity_name, 'Classic Paper', days)
-        return result['fair_market_price'], result['floor_price']
+        result = self.calculate_fmp(card_id, set_name, rarity_name, "Classic Paper", days)
+        return result["fair_market_price"], result["floor_price"]
 
-
-    def get_fmp_by_treatment(self, card_id: int, set_name: str, rarity_name: str, days: int = 30, product_type: str = 'Single') -> List[Dict[str, Any]]:
+    def get_fmp_by_treatment(
+        self, card_id: int, set_name: str, rarity_name: str, days: int = 30, product_type: str = "Single"
+    ) -> List[Dict[str, Any]]:
         """
         Calculate FMP for all treatments/variants available for this card.
         Returns list of treatment FMPs sorted by price.
@@ -577,7 +564,7 @@ class FairMarketPriceService:
             return []
 
         # Default treatment label for NULL values based on product type
-        default_treatment = 'Sealed' if product_type in ['Box', 'Pack', 'Bundle'] else 'Classic Paper'
+        default_treatment = "Sealed" if product_type in ["Box", "Pack", "Bundle"] else "Classic Paper"
 
         treatment_fmps = []
         for row in results:
@@ -595,17 +582,19 @@ class FairMarketPriceService:
             # Use median price as the FMP for this treatment
             fmp = median_price
 
-            treatment_fmps.append({
-                'treatment': treatment,
-                'fmp': round(fmp, 2) if fmp else None,
-                'median_price': round(median_price, 2) if median_price else None,
-                'min_price': round(min_price, 2) if min_price else None,
-                'max_price': round(max_price, 2) if max_price else None,
-                'avg_price': round(avg_price, 2) if avg_price else None,
-                'sales_count': sales_count,
-                'treatment_multiplier': round(treatment_mult, 2),
-                'liquidity_adjustment': round(liquidity_adj, 2),
-            })
+            treatment_fmps.append(
+                {
+                    "treatment": treatment,
+                    "fmp": round(fmp, 2) if fmp else None,
+                    "median_price": round(median_price, 2) if median_price else None,
+                    "min_price": round(min_price, 2) if min_price else None,
+                    "max_price": round(max_price, 2) if max_price else None,
+                    "avg_price": round(avg_price, 2) if avg_price else None,
+                    "sales_count": sales_count,
+                    "treatment_multiplier": round(treatment_mult, 2),
+                    "liquidity_adjustment": round(liquidity_adj, 2),
+                }
+            )
 
         return treatment_fmps
 

@@ -11,8 +11,8 @@ Scheduled Reports:
   - Daily report at 9 AM UTC
   - Weekly report on Monday at 9 AM UTC
 """
+
 import os
-import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -46,7 +46,7 @@ class WondersBot(commands.Bot):
 
         # Sync slash commands
         await self.tree.sync()
-        print(f"Synced slash commands")
+        print("Synced slash commands")
 
     async def on_ready(self):
         print(f"Wonders Bot logged in as {self.user}")
@@ -59,12 +59,10 @@ bot = WondersBot()
 
 # ===== Slash Commands =====
 
+
 @bot.tree.command(name="stats", description="Get market statistics")
 @app_commands.describe(period="Time period for stats")
-async def stats_command(
-    interaction: discord.Interaction,
-    period: Literal["daily", "weekly", "monthly"] = "daily"
-):
+async def stats_command(interaction: discord.Interaction, period: Literal["daily", "weekly", "monthly"] = "daily"):
     """Get market statistics for a given period."""
     await interaction.response.defer(thinking=True)
 
@@ -76,15 +74,11 @@ async def stats_command(
             title=embed_data["title"],
             description=embed_data["description"],
             color=embed_data["color"],
-            timestamp=datetime.fromisoformat(embed_data["timestamp"])
+            timestamp=datetime.fromisoformat(embed_data["timestamp"]),
         )
 
         for field in embed_data["fields"]:
-            embed.add_field(
-                name=field["name"],
-                value=field["value"],
-                inline=field.get("inline", False)
-            )
+            embed.add_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
 
         embed.set_footer(text=embed_data["footer"]["text"])
 
@@ -96,10 +90,7 @@ async def stats_command(
 
 @bot.tree.command(name="report", description="Generate and download a CSV market report")
 @app_commands.describe(period="Time period for report")
-async def report_command(
-    interaction: discord.Interaction,
-    period: Literal["daily", "weekly", "monthly"] = "daily"
-):
+async def report_command(interaction: discord.Interaction, period: Literal["daily", "weekly", "monthly"] = "daily"):
     """Generate a CSV report and upload to blob storage."""
     await interaction.response.defer(thinking=True)
 
@@ -112,9 +103,9 @@ async def report_command(
             download_url = upload_csv(filename, csv_content)
 
             embed = discord.Embed(
-                title=f"Market Report Generated",
+                title="Market Report Generated",
                 description=f"**{period.capitalize()}** report is ready for download.",
-                color=0x10B981
+                color=0x10B981,
             )
             embed.add_field(name="Filename", value=filename, inline=False)
             embed.add_field(name="Size", value=f"{len(csv_content):,} bytes", inline=True)
@@ -122,11 +113,7 @@ async def report_command(
 
             # Add download button
             view = discord.ui.View()
-            view.add_item(discord.ui.Button(
-                label="Download CSV",
-                url=download_url,
-                style=discord.ButtonStyle.link
-            ))
+            view.add_item(discord.ui.Button(label="Download CSV", url=download_url, style=discord.ButtonStyle.link))
 
             await interaction.followup.send(embed=embed, view=view)
 
@@ -134,15 +121,12 @@ async def report_command(
             # Fallback: Send as Discord attachment
             print(f"Storage upload failed, sending as attachment: {storage_error}")
 
-            file = discord.File(
-                fp=__import__('io').BytesIO(csv_content),
-                filename=filename
-            )
+            file = discord.File(fp=__import__("io").BytesIO(csv_content), filename=filename)
 
             embed = discord.Embed(
-                title=f"Market Report Generated",
+                title="Market Report Generated",
                 description=f"**{period.capitalize()}** report attached below.\n*(Cloud storage unavailable)*",
-                color=0xFCD34D  # Warning yellow
+                color=0xFCD34D,  # Warning yellow
             )
 
             await interaction.followup.send(embed=embed, file=file)
@@ -165,9 +149,7 @@ async def price_command(interaction: discord.Interaction, card_name: str):
 
         with Session(engine) as session:
             # Find card (case-insensitive search)
-            card = session.exec(
-                select(Card).where(Card.name.ilike(f"%{card_name}%"))
-            ).first()
+            card = session.exec(select(Card).where(Card.name.ilike(f"%{card_name}%"))).first()
 
             if not card:
                 await interaction.followup.send(f"Card '{card_name}' not found.", ephemeral=True)
@@ -196,12 +178,14 @@ async def price_command(interaction: discord.Interaction, card_name: str):
             embed = discord.Embed(
                 title=card.name,
                 description=f"{card.set_name} - {rarity.name if rarity else 'Unknown Rarity'}",
-                color=0x10B981
+                color=0x10B981,
             )
 
             if snapshot:
                 embed.add_field(name="Avg Price", value=f"${snapshot.avg_price:.2f}", inline=True)
-                embed.add_field(name="Min/Max", value=f"${snapshot.min_price:.2f} - ${snapshot.max_price:.2f}", inline=True)
+                embed.add_field(
+                    name="Min/Max", value=f"${snapshot.min_price:.2f} - ${snapshot.max_price:.2f}", inline=True
+                )
                 embed.add_field(name="Volume", value=f"{snapshot.volume} sales", inline=True)
 
                 if snapshot.lowest_ask:
@@ -215,7 +199,7 @@ async def price_command(interaction: discord.Interaction, card_name: str):
                 embed.add_field(
                     name="Last Sale",
                     value=f"${last_sale.price:.2f} on {last_sale.sold_date.strftime('%Y-%m-%d') if last_sale.sold_date else 'Unknown'}",
-                    inline=False
+                    inline=False,
                 )
 
             embed.set_footer(text=f"wonderstracker.com/cards/{card.id}")
@@ -227,6 +211,7 @@ async def price_command(interaction: discord.Interaction, card_name: str):
 
 
 # ===== Scheduled Tasks =====
+
 
 @tasks.loop(time=time(hour=9, minute=0))  # 9 AM UTC daily
 async def daily_report_task():
@@ -248,15 +233,11 @@ async def daily_report_task():
             title=embed_data["title"],
             description=embed_data["description"],
             color=embed_data["color"],
-            timestamp=datetime.fromisoformat(embed_data["timestamp"])
+            timestamp=datetime.fromisoformat(embed_data["timestamp"]),
         )
 
         for field in embed_data["fields"]:
-            embed.add_field(
-                name=field["name"],
-                value=field["value"],
-                inline=field.get("inline", False)
-            )
+            embed.add_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
 
         embed.set_footer(text=embed_data["footer"]["text"])
 
@@ -267,20 +248,15 @@ async def daily_report_task():
             download_url = upload_csv(filename, csv_content)
 
             view = discord.ui.View()
-            view.add_item(discord.ui.Button(
-                label="Download CSV Report",
-                url=download_url,
-                style=discord.ButtonStyle.link
-            ))
+            view.add_item(
+                discord.ui.Button(label="Download CSV Report", url=download_url, style=discord.ButtonStyle.link)
+            )
 
             await channel.send(embed=embed, view=view)
 
-        except Exception as storage_error:
+        except Exception:
             # Send with attachment fallback
-            file = discord.File(
-                fp=__import__('io').BytesIO(csv_content),
-                filename=filename
-            )
+            file = discord.File(fp=__import__("io").BytesIO(csv_content), filename=filename)
             await channel.send(embed=embed, file=file)
 
         print(f"Daily report sent to channel {REPORT_CHANNEL_ID}")
@@ -312,15 +288,11 @@ async def weekly_report_task():
             title=embed_data["title"],
             description=embed_data["description"],
             color=embed_data["color"],
-            timestamp=datetime.fromisoformat(embed_data["timestamp"])
+            timestamp=datetime.fromisoformat(embed_data["timestamp"]),
         )
 
         for field in embed_data["fields"]:
-            embed.add_field(
-                name=field["name"],
-                value=field["value"],
-                inline=field.get("inline", False)
-            )
+            embed.add_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
 
         embed.set_footer(text=embed_data["footer"]["text"])
 
@@ -331,20 +303,15 @@ async def weekly_report_task():
             download_url = upload_csv(filename, csv_content)
 
             view = discord.ui.View()
-            view.add_item(discord.ui.Button(
-                label="Download CSV Report",
-                url=download_url,
-                style=discord.ButtonStyle.link
-            ))
+            view.add_item(
+                discord.ui.Button(label="Download CSV Report", url=download_url, style=discord.ButtonStyle.link)
+            )
 
             await channel.send(embed=embed, view=view)
 
-        except Exception as storage_error:
+        except Exception:
             # Send with attachment fallback
-            file = discord.File(
-                fp=__import__('io').BytesIO(csv_content),
-                filename=filename
-            )
+            file = discord.File(fp=__import__("io").BytesIO(csv_content), filename=filename)
             await channel.send(embed=embed, file=file)
 
         print(f"Weekly report sent to channel {REPORT_CHANNEL_ID}")
@@ -364,6 +331,7 @@ async def before_weekly_report():
 
 
 # ===== Run Bot =====
+
 
 def run_bot():
     """Run the Discord bot."""

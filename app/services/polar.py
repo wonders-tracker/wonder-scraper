@@ -17,6 +17,7 @@ try:
         get_customer_portal_url,
         ingest_usage_event,
     )
+
     POLAR_AVAILABLE = True
 except ImportError:
     POLAR_AVAILABLE = False
@@ -27,10 +28,7 @@ except ImportError:
         raise NotImplementedError("Polar integration requires saas/ module")
 
     async def create_checkout_session(
-        product_id: str,
-        customer_email: str,
-        success_url: str,
-        metadata: Optional[dict] = None
+        product_id: str, customer_email: str, success_url: str, metadata: Optional[dict] = None
     ) -> str:
         """Stub: Checkout not available in OSS version."""
         raise NotImplementedError("Billing requires saas/ module")
@@ -39,11 +37,7 @@ except ImportError:
         """Stub: Customer portal not available in OSS version."""
         raise NotImplementedError("Billing requires saas/ module")
 
-    async def ingest_usage_event(
-        customer_id: str,
-        event_name: str,
-        metadata: Optional[dict] = None
-    ) -> None:
+    async def ingest_usage_event(customer_id: str, event_name: str, metadata: Optional[dict] = None) -> None:
         """Stub: Usage metering not available - silent no-op."""
         pass  # Silent no-op for metering
 

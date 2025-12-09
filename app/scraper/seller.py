@@ -9,7 +9,6 @@ This module handles:
 
 import re
 from typing import Optional, Tuple
-from bs4 import BeautifulSoup
 
 
 def normalize_seller_name(raw_seller: Optional[str]) -> Optional[str]:
@@ -36,29 +35,29 @@ def normalize_seller_name(raw_seller: Optional[str]) -> Optional[str]:
     # Pattern: "username  100% positive (1K)..."
     if "positive" in name.lower() or "feedback" in name.lower():
         # Username is the first word before any numbers or special chars
-        match = re.match(r'^([a-zA-Z0-9_\-\.]+)', name)
+        match = re.match(r"^([a-zA-Z0-9_\-\.]+)", name)
         if match:
             name = match.group(1)
 
     # Remove common suffixes that shouldn't be part of username
     patterns_to_remove = [
-        r'\s+\d+%.*$',           # "100% positive..."
-        r'\s+\(\d+[K]?\).*$',    # "(1K)..."
-        r'\s+Top\s+Rated.*$',    # "Top Rated Plus..."
-        r'\s+Sellers\s+with.*$', # "Sellers with highest..."
-        r'\s+Returns,.*$',       # "Returns, money back"
+        r"\s+\d+%.*$",  # "100% positive..."
+        r"\s+\(\d+[K]?\).*$",  # "(1K)..."
+        r"\s+Top\s+Rated.*$",  # "Top Rated Plus..."
+        r"\s+Sellers\s+with.*$",  # "Sellers with highest..."
+        r"\s+Returns,.*$",  # "Returns, money back"
     ]
 
     for pattern in patterns_to_remove:
-        name = re.sub(pattern, '', name, flags=re.IGNORECASE)
+        name = re.sub(pattern, "", name, flags=re.IGNORECASE)
 
     name = name.strip()
 
     # Validate: eBay usernames can only contain letters, numbers, underscores, hyphens, periods
     # and are 6-64 characters (though we'll be lenient on length for edge cases)
-    if not re.match(r'^[a-zA-Z0-9_\-\.]+$', name):
+    if not re.match(r"^[a-zA-Z0-9_\-\.]+$", name):
         # If there are invalid chars, try to extract just the valid part
-        match = re.match(r'^([a-zA-Z0-9_\-\.]+)', name)
+        match = re.match(r"^([a-zA-Z0-9_\-\.]+)", name)
         if match:
             name = match.group(1)
         else:
@@ -69,7 +68,7 @@ def normalize_seller_name(raw_seller: Optional[str]) -> Optional[str]:
         return None
 
     # Reject tracking parameters that look like usernames
-    if re.match(r'^[pmls]\d+\.[pmls]\d+\.', name):
+    if re.match(r"^[pmls]\d+\.[pmls]\d+\.", name):
         return None
 
     # Normalize to lowercase for consistency
@@ -93,14 +92,14 @@ def extract_seller_from_html(html: str) -> Tuple[Optional[str], Optional[int], O
     if username_match:
         candidate = username_match.group(1).strip()
         # Validate it's not a placeholder or tracking param
-        if candidate and candidate != '@@' and not re.match(r'^[pmls]\d+\.', candidate):
+        if candidate and candidate != "@@" and not re.match(r"^[pmls]\d+\.", candidate):
             seller_name = candidate
 
     # Method 2: Look for /usr/ link in href (older pages)
     if not seller_name:
         usr_matches = re.findall(r'/usr/([^/?"\s]+)', html)
         for candidate in usr_matches:
-            if candidate and candidate != '@@' and not re.match(r'^[pmls]\d+\.', candidate):
+            if candidate and candidate != "@@" and not re.match(r"^[pmls]\d+\.", candidate):
                 seller_name = candidate
                 break
 
@@ -108,10 +107,10 @@ def extract_seller_from_html(html: str) -> Tuple[Optional[str], Optional[int], O
     # Real seller sids look like: sid=seller_name (alphanumeric with underscores/dashes)
     # Tracking params look like: sid=p4429486.m3561.l161211
     if not seller_name:
-        sid_matches = re.findall(r'[?&]sid=([a-zA-Z][a-zA-Z0-9_\-]+)', html)
+        sid_matches = re.findall(r"[?&]sid=([a-zA-Z][a-zA-Z0-9_\-]+)", html)
         for candidate in sid_matches:
             # Skip tracking parameters (start with p/m/l/s followed by digits and dots)
-            if not re.match(r'^[pmls]\d+\.', candidate):
+            if not re.match(r"^[pmls]\d+\.", candidate):
                 seller_name = candidate
                 break
 
@@ -136,7 +135,7 @@ def extract_seller_from_html(html: str) -> Tuple[Optional[str], Optional[int], O
     # Extract feedback if we found seller
     if seller_name:
         # Look for feedback percentage
-        feedback_match = re.search(r'([\d.]+)%\s*positive', html, re.IGNORECASE)
+        feedback_match = re.search(r"([\d.]+)%\s*positive", html, re.IGNORECASE)
         if feedback_match:
             try:
                 feedback_percent = float(feedback_match.group(1))
@@ -144,10 +143,10 @@ def extract_seller_from_html(html: str) -> Tuple[Optional[str], Optional[int], O
                 pass
 
         # Look for feedback score
-        score_match = re.search(r'\((\d[\d,]*)\)', html)
+        score_match = re.search(r"\((\d[\d,]*)\)", html)
         if score_match:
             try:
-                feedback_score = int(score_match.group(1).replace(',', ''))
+                feedback_score = int(score_match.group(1).replace(",", ""))
             except ValueError:
                 pass
 
@@ -167,7 +166,7 @@ def validate_seller_name(name: str) -> bool:
         return False
 
     # Check pattern
-    if not re.match(r'^[a-zA-Z0-9_\-\.]+$', name):
+    if not re.match(r"^[a-zA-Z0-9_\-\.]+$", name):
         return False
 
     # Check length (being lenient, allowing 1-100)
@@ -175,7 +174,7 @@ def validate_seller_name(name: str) -> bool:
         return False
 
     # Reject tracking parameter patterns (e.g., p4429486.m3561.l161211)
-    if re.match(r'^[pmls]\d+\.[pmls]\d+\.', name):
+    if re.match(r"^[pmls]\d+\.[pmls]\d+\.", name):
         return False
 
     return True
@@ -194,4 +193,4 @@ def is_tracking_parameter(name: str) -> bool:
 
     # Pattern: letter + digits + dot + letter + digits + dot...
     # e.g., p4429486.m3561.l161211
-    return bool(re.match(r'^[pmls]\d+\.[pmls]\d+\.', name))
+    return bool(re.match(r"^[pmls]\d+\.[pmls]\d+\.", name))

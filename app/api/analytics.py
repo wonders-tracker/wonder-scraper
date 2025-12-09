@@ -1,6 +1,7 @@
 """
 Analytics API endpoints for tracking page views.
 """
+
 import hashlib
 from typing import Optional
 from fastapi import APIRouter, Request, Depends

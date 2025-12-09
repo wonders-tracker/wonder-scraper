@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from saas.middleware.metering import APIMeteringMiddleware, METERED_PREFIXES, EXCLUDED_PATHS
+
     METERING_AVAILABLE = True
     logger.info("SaaS metering module loaded")
 except ImportError:

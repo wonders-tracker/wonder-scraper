@@ -32,165 +32,294 @@ load_dotenv()
 # Strong WOTF indicators - if ANY present, it's definitely WOTF
 WOTF_INDICATORS = [
     # Brand names
-    'wonders of the first', 'wotf', 'wonders first', 'wonder of the first',
-
+    "wonders of the first",
+    "wotf",
+    "wonders first",
+    "wonder of the first",
     # Set names
-    'existence set', 'existence booster', 'existence collector',
-    'existence 1st', 'existence classic', 'existence formless',
-    'genesis set', 'genesis booster', 'genesis collector',
-
+    "existence set",
+    "existence booster",
+    "existence collector",
+    "existence 1st",
+    "existence classic",
+    "existence formless",
+    "genesis set",
+    "genesis booster",
+    "genesis collector",
     # WOTF-specific treatments (unique to this TCG)
-    'formless foil', 'stonefoil', 'stone foil', 'stone-foil',
-    'classic paper', 'classic foil',
-    'ocm serialized', 'ocm /10', 'ocm /25', 'ocm /50', 'ocm /75', 'ocm /99',
-
+    "formless foil",
+    "stonefoil",
+    "stone foil",
+    "stone-foil",
+    "classic paper",
+    "classic foil",
+    "ocm serialized",
+    "ocm /10",
+    "ocm /25",
+    "ocm /50",
+    "ocm /75",
+    "ocm /99",
     # Serialized patterns
-    'serialized /10', 'serialized /25', 'serialized /50',
-    'serialized /75', 'serialized /99',
-
+    "serialized /10",
+    "serialized /25",
+    "serialized /50",
+    "serialized /75",
+    "serialized /99",
     # WOTF product types
-    'play bundle', 'serialized advantage', '2-player starter',
-    'collector booster box', 'play booster pack',
-
+    "play bundle",
+    "serialized advantage",
+    "2-player starter",
+    "collector booster box",
+    "play booster pack",
     # Card number formats (Existence has 401 cards)
-    '/401', '#/401', '001/401', '/301', '/201',
+    "/401",
+    "#/401",
+    "001/401",
+    "/301",
+    "/201",
 ]
 
 # Non-WOTF indicators by TCG - if ANY present, reject the listing
 NON_WOTF_INDICATORS = {
     "Yu-Gi-Oh": [
         # Card set codes (most reliable)
-        r'mp\d{2}-en', r'mged-en', r'mago-en', r'maze-en',
-        r'lcyw-en', r'lckc-en', r'dude-en', r'dupo-en',
-        r'led\d-en', r'blhr-en', r'toch-en', r'inch-en',
-        'tin of the', "pharaoh's gods", 'pharaohs gods',
-
+        r"mp\d{2}-en",
+        r"mged-en",
+        r"mago-en",
+        r"maze-en",
+        r"lcyw-en",
+        r"lckc-en",
+        r"dude-en",
+        r"dupo-en",
+        r"led\d-en",
+        r"blhr-en",
+        r"toch-en",
+        r"inch-en",
+        "tin of the",
+        "pharaoh's gods",
+        "pharaohs gods",
         # Brand/game identifiers
-        'konami', 'yugioh', 'yu-gi-oh', 'yu gi oh',
-
+        "konami",
+        "yugioh",
+        "yu-gi-oh",
+        "yu gi oh",
         # Iconic cards/archetypes
-        'dark magician', 'blue-eyes', 'red-eyes', 'exodia',
-        'ruddy rose dragon', 'roxrose dragon', 'albion the branded',
-        'trishula', 'ice barrier', 'stardust dragon',
-        'armed dragon', 'thunder lv', 'deep-eyes white',
-
+        "dark magician",
+        "blue-eyes",
+        "red-eyes",
+        "exodia",
+        "ruddy rose dragon",
+        "roxrose dragon",
+        "albion the branded",
+        "trishula",
+        "ice barrier",
+        "stardust dragon",
+        "armed dragon",
+        "thunder lv",
+        "deep-eyes white",
         # Yu-Gi-Oh specific terms
-        'duelist', '1st edition gold rare', 'gold rare lp',
-        'gold rare nm', 'secret rare', 'ultra rare', 'super rare',
-        'starlight rare', 'collector rare', 'ghost rare',
-        'prismatic secret', 'ultimate rare',
+        "duelist",
+        "1st edition gold rare",
+        "gold rare lp",
+        "gold rare nm",
+        "secret rare",
+        "ultra rare",
+        "super rare",
+        "starlight rare",
+        "collector rare",
+        "ghost rare",
+        "prismatic secret",
+        "ultimate rare",
     ],
     "Dragon Ball Z": [
         # Game identifiers
-        'dragonball', 'dragon ball', 'dbz ccg', 'dbz tcg',
-        ' dbz ', 'dbz card',
-
+        "dragonball",
+        "dragon ball",
+        "dbz ccg",
+        "dbz tcg",
+        " dbz ",
+        "dbz card",
         # Card codes
-        r'wa-\d{3}', 'wa-066', 'wa-079', 'gold stamp',
-
+        r"wa-\d{3}",
+        "wa-066",
+        "wa-079",
+        "gold stamp",
         # Characters (unique to DBZ)
-        'goku', 'vegeta', 'frieza', 'gohan', 'piccolo',
-        'android 17', 'android 18', 'android 20',
-        'hercule', 'buu', 'cell saga', 'trunks', 'krillin',
-        'kamehameha', 'saiyan', 'namekian',
+        "goku",
+        "vegeta",
+        "frieza",
+        "gohan",
+        "piccolo",
+        "android 17",
+        "android 18",
+        "android 20",
+        "hercule",
+        "buu",
+        "cell saga",
+        "trunks",
+        "krillin",
+        "kamehameha",
+        "saiyan",
+        "namekian",
     ],
     "Pokemon": [
         # Game identifiers
-        'pokemon', 'pokémon', 'pkmn',
-
+        "pokemon",
+        "pokémon",
+        "pkmn",
         # Popular Pokemon (avoid overlap with WOTF card names)
-        'pikachu', 'charizard', 'mewtwo', 'eevee', 'mew ',
-        'blastoise', 'venusaur', 'gyarados', 'dragonite',
-
+        "pikachu",
+        "charizard",
+        "mewtwo",
+        "eevee",
+        "mew ",
+        "blastoise",
+        "venusaur",
+        "gyarados",
+        "dragonite",
         # Set names
-        'evolving skies', 'scarlet violet', 'shining fates',
-        'celebrations', 'brilliant stars', 'fusion strike',
-        'crown zenith', 'paldea evolved', 'obsidian flames',
-        '151 ', 'temporal forces', 'twilight masquerade',
-
+        "evolving skies",
+        "scarlet violet",
+        "shining fates",
+        "celebrations",
+        "brilliant stars",
+        "fusion strike",
+        "crown zenith",
+        "paldea evolved",
+        "obsidian flames",
+        "151 ",
+        "temporal forces",
+        "twilight masquerade",
         # Pokemon-specific terms
-        'vmax', 'vstar', ' ex ', ' gx ', 'full art trainer',
-        'rainbow rare', 'alternate art', 'special art rare',
-        'illustration rare', 'hyper rare',
+        "vmax",
+        "vstar",
+        " ex ",
+        " gx ",
+        "full art trainer",
+        "rainbow rare",
+        "alternate art",
+        "special art rare",
+        "illustration rare",
+        "hyper rare",
     ],
     "One Piece": [
         # Game identifiers
-        'one piece tcg', 'one piece card',
-
+        "one piece tcg",
+        "one piece card",
         # Set codes
-        r'op0\d-', 'op01', 'op02', 'op03', 'op04', 'op05',
-        'op06', 'op07', 'op08',
-
+        r"op0\d-",
+        "op01",
+        "op02",
+        "op03",
+        "op04",
+        "op05",
+        "op06",
+        "op07",
+        "op08",
         # Characters/terms
-        'luffy', 'zoro', 'straw hat', 'nami', 'sanji',
-        'romance dawn', 'paramount war', 'pillars of strength',
-        'kingdoms of intrigue',
+        "luffy",
+        "zoro",
+        "straw hat",
+        "nami",
+        "sanji",
+        "romance dawn",
+        "paramount war",
+        "pillars of strength",
+        "kingdoms of intrigue",
     ],
     "MTG": [
         # Game identifiers
-        'magic the gathering', 'mtg ', ' mtg',
-        'wizards of the coast', 'wotc',
-
+        "magic the gathering",
+        "mtg ",
+        " mtg",
+        "wizards of the coast",
+        "wotc",
         # MTG-specific terms
-        'planeswalker', 'mana', 'commander', 'edh',
-        'modern horizons', 'dominaria', 'innistrad',
-        'phyrexia', 'ravnica', 'zendikar',
-        'mythic rare', 'borderless', 'showcase',
-        'retro frame', 'etched foil',
+        "planeswalker",
+        "mana",
+        "commander",
+        "edh",
+        "modern horizons",
+        "dominaria",
+        "innistrad",
+        "phyrexia",
+        "ravnica",
+        "zendikar",
+        "mythic rare",
+        "borderless",
+        "showcase",
+        "retro frame",
+        "etched foil",
     ],
     "Sports Cards": [
         # Brands
-        'topps', 'panini', 'upper deck', 'bowman', 'prizm',
-        'donruss', 'fleer', 'score', 'leaf',
-
+        "topps",
+        "panini",
+        "upper deck",
+        "bowman",
+        "prizm",
+        "donruss",
+        "fleer",
+        "score",
+        "leaf",
         # Leagues
-        'nba', 'nfl', 'mlb', 'nhl', 'ufc', 'wwe',
-
+        "nba",
+        "nfl",
+        "mlb",
+        "nhl",
+        "ufc",
+        "wwe",
         # Sports terms
-        'rookie card', 'auto ', 'autograph', 'game-used',
-        'jersey card', 'patch card', 'numbered /99',
+        "rookie card",
+        "auto ",
+        "autograph",
+        "game-used",
+        "jersey card",
+        "patch card",
+        "numbered /99",
     ],
     "Other TCGs": [
         # Flesh and Blood
-        'flesh and blood', 'fab tcg', 'welcome to rathe',
-
+        "flesh and blood",
+        "fab tcg",
+        "welcome to rathe",
         # Digimon
-        'digimon tcg', 'digimon card',
-
+        "digimon tcg",
+        "digimon card",
         # Weiss Schwarz
-        'weiss schwarz', 'bushiroad',
-
+        "weiss schwarz",
+        "bushiroad",
         # Cardfight Vanguard
-        'vanguard', 'cardfight',
-
+        "vanguard",
+        "cardfight",
         # Lorcana
-        'disney lorcana', 'lorcana',
-
+        "disney lorcana",
+        "lorcana",
         # Union Arena
-        'union arena',
+        "union arena",
     ],
 }
 
 # Grading services - not indicators of non-WOTF, but useful to extract
-GRADING_SERVICES = ['psa', 'cgc', 'bgs', 'sgc', 'ace']
+GRADING_SERVICES = ["psa", "cgc", "bgs", "sgc", "ace"]
 
 # Condition keywords for extraction
 CONDITION_KEYWORDS = {
-    'mint': 'Mint',
-    'near mint': 'Near Mint',
-    'nm': 'Near Mint',
-    'excellent': 'Excellent',
-    'ex': 'Excellent',
-    'good': 'Good',
-    'gd': 'Good',
-    'light play': 'Light Play',
-    'lp': 'Light Play',
-    'moderate play': 'Moderate Play',
-    'mp': 'Moderate Play',
-    'heavy play': 'Heavy Play',
-    'hp': 'Heavy Play',
-    'damaged': 'Damaged',
-    'dmg': 'Damaged',
+    "mint": "Mint",
+    "near mint": "Near Mint",
+    "nm": "Near Mint",
+    "excellent": "Excellent",
+    "ex": "Excellent",
+    "good": "Good",
+    "gd": "Good",
+    "light play": "Light Play",
+    "lp": "Light Play",
+    "moderate play": "Moderate Play",
+    "mp": "Moderate Play",
+    "heavy play": "Heavy Play",
+    "hp": "Heavy Play",
+    "damaged": "Damaged",
+    "dmg": "Damaged",
 }
 
 
@@ -240,10 +369,7 @@ class AIListingExtractor:
             self.client = None
             self.model = None
         else:
-            self.client = OpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=api_key
-            )
+            self.client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
             # Using gpt-4o-mini for reliable, fast extraction
             self.model = "openai/gpt-4o-mini"
 
@@ -255,10 +381,7 @@ class AIListingExtractor:
     def _evict_expired_cache_entries(self):
         """Remove expired entries based on TTL."""
         now = datetime.utcnow().timestamp()
-        expired_keys = [
-            key for key, ts in self._cache_timestamps.items()
-            if now - ts > self.CACHE_TTL_SECONDS
-        ]
+        expired_keys = [key for key, ts in self._cache_timestamps.items() if now - ts > self.CACHE_TTL_SECONDS]
 
         for key in expired_keys:
             del self._title_cache[key]
@@ -314,7 +437,7 @@ class AIListingExtractor:
                 self._metrics["cache_hits"] / (self._metrics["cache_hits"] + self._metrics["cache_misses"])
                 if (self._metrics["cache_hits"] + self._metrics["cache_misses"]) > 0
                 else 0.0
-            )
+            ),
         }
 
     def reset_metrics(self):
@@ -341,7 +464,7 @@ class AIListingExtractor:
         title: str,
         card_name: str,
         decision: Dict[str, Any],
-        method: str  # "rule_based" or "ai"
+        method: str,  # "rule_based" or "ai"
     ):
         """Log a validation decision for review."""
         entry = {
@@ -355,7 +478,7 @@ class AIListingExtractor:
 
         # Rotate if too large
         if len(self._feedback_log) > self.MAX_FEEDBACK_LOG_SIZE:
-            self._feedback_log = self._feedback_log[-self.MAX_FEEDBACK_LOG_SIZE // 2:]
+            self._feedback_log = self._feedback_log[-self.MAX_FEEDBACK_LOG_SIZE // 2 :]
 
     def get_feedback_log(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get recent feedback log entries for review."""
@@ -363,18 +486,12 @@ class AIListingExtractor:
 
     def get_rejection_log(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get recent rejections for review (potential false positives)."""
-        rejections = [
-            entry for entry in self._feedback_log
-            if not entry["decision"].get("is_wotf", True)
-        ]
+        rejections = [entry for entry in self._feedback_log if not entry["decision"].get("is_wotf", True)]
         return rejections[-limit:]
 
     def get_low_confidence_decisions(self, threshold: float = 0.7) -> List[Dict[str, Any]]:
         """Get decisions with low confidence for manual review."""
-        return [
-            entry for entry in self._feedback_log
-            if entry["decision"].get("confidence", 1.0) < threshold
-        ]
+        return [entry for entry in self._feedback_log if entry["decision"].get("confidence", 1.0) < threshold]
 
     def export_feedback_log(self, filepath: Optional[str] = None) -> str:
         """Export feedback log to JSON file for analysis."""
@@ -382,7 +499,7 @@ class AIListingExtractor:
             self.FEEDBACK_LOG_DIR.mkdir(parents=True, exist_ok=True)
             filepath = str(self.FEEDBACK_LOG_DIR / f"decisions_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json")
 
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(self._feedback_log, f, indent=2)
 
         return filepath
@@ -418,59 +535,46 @@ class AIListingExtractor:
 
         # HIGH TIER: Clear indicators
         if has_wotf_indicator:
-            return {
-                "confidence": 0.95,
-                "tier": "HIGH",
-                "reason": "Strong WOTF indicator present"
-            }
+            return {"confidence": 0.95, "tier": "HIGH", "reason": "Strong WOTF indicator present"}
 
         if has_non_wotf_indicator:
-            return {
-                "confidence": 0.95,
-                "tier": "HIGH",
-                "reason": "Strong non-WOTF indicator present"
-            }
+            return {"confidence": 0.95, "tier": "HIGH", "reason": "Strong non-WOTF indicator present"}
 
         # Check for exact card name match
         exact_match = card_name_lower in title_lower
 
         # Check for card number pattern
-        card_number_match = bool(re.search(r'\d{1,3}/\d{3}', title_lower))
+        card_number_match = bool(re.search(r"\d{1,3}/\d{3}", title_lower))
 
         # MEDIUM TIER: Card name match with supporting evidence
         if exact_match and card_number_match:
-            return {
-                "confidence": 0.85,
-                "tier": "MEDIUM-HIGH",
-                "reason": "Card name + number format match"
-            }
+            return {"confidence": 0.85, "tier": "MEDIUM-HIGH", "reason": "Card name + number format match"}
 
         if exact_match:
             # Check for any WOTF-adjacent terms
-            wotf_adjacent = any(term in title_lower for term in [
-                'foil', 'paper', 'existence', 'genesis', 'booster',
-                'collector', 'play', 'bundle', 'pack', 'box'
-            ])
+            wotf_adjacent = any(
+                term in title_lower
+                for term in [
+                    "foil",
+                    "paper",
+                    "existence",
+                    "genesis",
+                    "booster",
+                    "collector",
+                    "play",
+                    "bundle",
+                    "pack",
+                    "box",
+                ]
+            )
 
             if wotf_adjacent:
-                return {
-                    "confidence": 0.75,
-                    "tier": "MEDIUM",
-                    "reason": "Card name match with TCG context"
-                }
+                return {"confidence": 0.75, "tier": "MEDIUM", "reason": "Card name match with TCG context"}
 
-            return {
-                "confidence": 0.65,
-                "tier": "MEDIUM-LOW",
-                "reason": "Card name match only, no TCG context"
-            }
+            return {"confidence": 0.65, "tier": "MEDIUM-LOW", "reason": "Card name match only, no TCG context"}
 
         # LOW TIER: Ambiguous - needs AI
-        return {
-            "confidence": 0.5,
-            "tier": "LOW",
-            "reason": "Ambiguous listing, AI validation recommended"
-        }
+        return {"confidence": 0.5, "tier": "LOW", "reason": "Ambiguous listing, AI validation recommended"}
 
     def clear_cache(self):
         """Clear all cache entries (useful for testing)."""
@@ -521,10 +625,7 @@ class AIListingExtractor:
         return batches
 
     def extract_listing_data(
-        self,
-        title: str,
-        description: Optional[str] = None,
-        price: Optional[float] = None
+        self, title: str, description: Optional[str] = None, price: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Extract structured data from a listing using AI.
@@ -566,16 +667,13 @@ class AIListingExtractor:
                         "role": "system",
                         "content": """You are an expert at parsing TCG/CCG marketplace listings.
 Extract structured data from listings for 'Wonders of the First' trading card game.
-Always return valid JSON matching the schema exactly."""
+Always return valid JSON matching the schema exactly.""",
                     },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.1,  # Low temp for consistent extraction
-                max_tokens=200
+                max_tokens=200,
             )
 
             # Parse JSON response
@@ -587,7 +685,7 @@ Always return valid JSON matching the schema exactly."""
                 "product_type": extracted.get("product_type", "Single"),
                 "condition": extracted.get("condition"),
                 "treatment": extracted.get("treatment", "Classic Paper"),
-                "confidence": extracted.get("confidence", 0.8)
+                "confidence": extracted.get("confidence", 0.8),
             }
 
             # Cache the result before returning
@@ -602,10 +700,7 @@ Always return valid JSON matching the schema exactly."""
             self._cache_set(title_hash, fallback_result)
             return fallback_result
 
-    def extract_batch(
-        self,
-        listings: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def extract_batch(self, listings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Extract data for multiple listings efficiently.
 
@@ -643,10 +738,7 @@ Always return valid JSON matching the schema exactly."""
         if not self.client:
             self._metrics["fallback_calls"] += len(uncached_listings)
             for i, listing in zip(uncached_indices, uncached_listings):
-                fallback = self._fallback_extraction(
-                    listing.get("title", ""),
-                    listing.get("description")
-                )
+                fallback = self._fallback_extraction(listing.get("title", ""), listing.get("description"))
                 results[i] = fallback
                 title_hash = self._hash_title(listing.get("title", ""))
                 self._cache_set(title_hash, fallback)
@@ -674,10 +766,7 @@ Always return valid JSON matching the schema exactly."""
                     # Fallback if extraction returned None
                     self._metrics["fallback_calls"] += 1
                     listing = uncached_listings[i]
-                    fallback = self._fallback_extraction(
-                        listing.get("title", ""),
-                        listing.get("description")
-                    )
+                    fallback = self._fallback_extraction(listing.get("title", ""), listing.get("description"))
                     results[extraction_idx] = fallback
                     title_hash = self._hash_title(listing.get("title", ""))
                     self._cache_set(title_hash, fallback)
@@ -685,10 +774,7 @@ Always return valid JSON matching the schema exactly."""
                 # Fallback if index out of range
                 self._metrics["fallback_calls"] += 1
                 listing = uncached_listings[i]
-                fallback = self._fallback_extraction(
-                    listing.get("title", ""),
-                    listing.get("description")
-                )
+                fallback = self._fallback_extraction(listing.get("title", ""), listing.get("description"))
                 results[extraction_idx] = fallback
                 title_hash = self._hash_title(listing.get("title", ""))
                 self._cache_set(title_hash, fallback)
@@ -716,16 +802,13 @@ Always return valid JSON matching the schema exactly."""
                         "role": "system",
                         "content": """You are an expert at parsing TCG/CCG marketplace listings.
 Extract structured data from listings for 'Wonders of the First' trading card game.
-Always return valid JSON matching the schema exactly."""
+Always return valid JSON matching the schema exactly.""",
                     },
-                    {
-                        "role": "user",
-                        "content": batch_prompt
-                    }
+                    {"role": "user", "content": batch_prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.1,
-                max_tokens=2000
+                max_tokens=2000,
             )
 
             # Parse batch JSON response
@@ -737,13 +820,15 @@ Always return valid JSON matching the schema exactly."""
             for i, listing in enumerate(listings):
                 if i < len(raw_extractions):
                     extracted = raw_extractions[i]
-                    results.append({
-                        "quantity": extracted.get("quantity", 1),
-                        "product_type": extracted.get("product_type", "Single"),
-                        "condition": extracted.get("condition"),
-                        "treatment": extracted.get("treatment", "Classic Paper"),
-                        "confidence": extracted.get("confidence", 0.8)
-                    })
+                    results.append(
+                        {
+                            "quantity": extracted.get("quantity", 1),
+                            "product_type": extracted.get("product_type", "Single"),
+                            "condition": extracted.get("condition"),
+                            "treatment": extracted.get("treatment", "Classic Paper"),
+                            "confidence": extracted.get("confidence", 0.8),
+                        }
+                    )
                 else:
                     results.append(None)  # Will trigger fallback
 
@@ -754,10 +839,7 @@ Always return valid JSON matching the schema exactly."""
             # Return None for all to trigger fallbacks
             return [None] * len(listings)
 
-    def _build_batch_extraction_prompt(
-        self,
-        listings: List[Dict[str, Any]]
-    ) -> str:
+    def _build_batch_extraction_prompt(self, listings: List[Dict[str, Any]]) -> str:
         """Build extraction prompt for multiple listings."""
         listings_text = ""
         for i, listing in enumerate(listings, 1):
@@ -822,12 +904,7 @@ For SINGLE CARDS:
 
 Return ONLY valid JSON with a "listings" array containing {len(listings)} entries in order, no markdown or extra text."""
 
-    def _build_extraction_prompt(
-        self,
-        title: str,
-        description: Optional[str],
-        price: Optional[float]
-    ) -> str:
+    def _build_extraction_prompt(self, title: str, description: Optional[str], price: Optional[float]) -> str:
         """Build the extraction prompt for the AI."""
         return f"""Extract listing data from this TCG product listing:
 
@@ -877,17 +954,13 @@ For SINGLE CARDS:
 
 Return ONLY valid JSON, no markdown or extra text."""
 
-    def _fallback_extraction(
-        self,
-        title: str,
-        description: Optional[str]
-    ) -> Dict[str, Any]:
+    def _fallback_extraction(self, title: str, description: Optional[str]) -> Dict[str, Any]:
         """Fallback rule-based extraction if AI fails."""
         title_lower = title.lower()
 
         # Detect quantity
         quantity = 1
-        quantity_match = re.search(r'(\d+)x|lot of (\d+)|bundle (\d+)', title_lower)
+        quantity_match = re.search(r"(\d+)x|lot of (\d+)|bundle (\d+)", title_lower)
         if quantity_match:
             quantity = int(quantity_match.group(1) or quantity_match.group(2) or quantity_match.group(3))
 
@@ -929,7 +1002,7 @@ Return ONLY valid JSON, no markdown or extra text."""
                 treatment = "Formless Foil"
             elif "foil" in title_lower or "holo" in title_lower:
                 treatment = "Classic Foil"
-            elif "serialized" in title_lower or re.search(r'/\d{2,3}\b', title_lower):
+            elif "serialized" in title_lower or re.search(r"/\d{2,3}\b", title_lower):
                 treatment = "OCM Serialized"
             elif "prerelease" in title_lower:
                 treatment = "Prerelease"
@@ -947,9 +1020,8 @@ Return ONLY valid JSON, no markdown or extra text."""
             "quantity": quantity,
             "product_type": product_type,
             "treatment": treatment,
-            "confidence": 0.6  # Lower confidence for fallback
+            "confidence": 0.6,  # Lower confidence for fallback
         }
-
 
     # =========================================================================
     # RULE-BASED PATTERN MATCHING (Fast, no API cost)
@@ -967,7 +1039,7 @@ Return ONLY valid JSON, no markdown or extra text."""
         for tcg, patterns in NON_WOTF_INDICATORS.items():
             for pattern in patterns:
                 # Check if it's a regex pattern (starts with r')
-                if pattern.startswith('r\'') or '\\d' in pattern or pattern.startswith(r'mp\d'):
+                if pattern.startswith("r'") or "\\d" in pattern or pattern.startswith(r"mp\d"):
                     # Try regex match
                     try:
                         if re.search(pattern, title_lower):
@@ -986,13 +1058,10 @@ Return ONLY valid JSON, no markdown or extra text."""
         """Extract grading information from title."""
         for service in GRADING_SERVICES:
             # Look for patterns like "PSA 10", "CGC 9.5", "BGS 10"
-            pattern = rf'\b{service}\s*(\d+(?:\.\d+)?)\b'
+            pattern = rf"\b{service}\s*(\d+(?:\.\d+)?)\b"
             match = re.search(pattern, title_lower)
             if match:
-                return {
-                    "service": service.upper(),
-                    "grade": float(match.group(1))
-                }
+                return {"service": service.upper(), "grade": float(match.group(1))}
         return None
 
     def _extract_condition(self, title_lower: str) -> Optional[str]:
@@ -1004,7 +1073,7 @@ Return ONLY valid JSON, no markdown or extra text."""
 
     def _extract_card_number(self, title_lower: str) -> Optional[str]:
         """Extract card number from title (e.g., '123/401')."""
-        match = re.search(r'(\d{1,3})/(\d{3})', title_lower)
+        match = re.search(r"(\d{1,3})/(\d{3})", title_lower)
         if match:
             return f"{match.group(1)}/{match.group(2)}"
         return None
@@ -1013,12 +1082,7 @@ Return ONLY valid JSON, no markdown or extra text."""
     # STRUCTURED EXTRACTION - Full data extraction from listings
     # =========================================================================
 
-    def extract_structured_data(
-        self,
-        title: str,
-        card_name: str,
-        description: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def extract_structured_data(self, title: str, card_name: str, description: Optional[str] = None) -> Dict[str, Any]:
         """
         Extract comprehensive structured data from a listing.
 
@@ -1063,27 +1127,27 @@ Return ONLY valid JSON, no markdown or extra text."""
         }
 
         # Detect set
-        if 'existence' in title_lower:
+        if "existence" in title_lower:
             result["set_name"] = "Existence"
-        elif 'genesis' in title_lower:
+        elif "genesis" in title_lower:
             result["set_name"] = "Genesis"
 
         # Detect treatment
-        if 'stonefoil' in title_lower or 'stone foil' in title_lower or 'stone-foil' in title_lower:
+        if "stonefoil" in title_lower or "stone foil" in title_lower or "stone-foil" in title_lower:
             result["treatment"] = "Stonefoil"
-        elif 'formless' in title_lower:
+        elif "formless" in title_lower:
             result["treatment"] = "Formless Foil"
-        elif 'serialized' in title_lower or re.search(r'/\d{2,3}\b', title_lower):
+        elif "serialized" in title_lower or re.search(r"/\d{2,3}\b", title_lower):
             result["treatment"] = "OCM Serialized"
-        elif 'classic foil' in title_lower or ('foil' in title_lower and 'formless' not in title_lower):
+        elif "classic foil" in title_lower or ("foil" in title_lower and "formless" not in title_lower):
             result["treatment"] = "Classic Foil"
-        elif 'holo' in title_lower or 'refractor' in title_lower:
+        elif "holo" in title_lower or "refractor" in title_lower:
             result["treatment"] = "Classic Foil"
-        elif 'prerelease' in title_lower:
+        elif "prerelease" in title_lower:
             result["treatment"] = "Prerelease"
-        elif 'promo' in title_lower:
+        elif "promo" in title_lower:
             result["treatment"] = "Promo"
-        elif 'classic paper' in title_lower or 'paper' in title_lower:
+        elif "classic paper" in title_lower or "paper" in title_lower:
             result["treatment"] = "Classic Paper"
 
         # Check grading
@@ -1107,10 +1171,7 @@ Return ONLY valid JSON, no markdown or extra text."""
         return result
 
     def _ai_extract_structured(
-        self,
-        title: str,
-        card_name: str,
-        description: Optional[str] = None
+        self, title: str, card_name: str, description: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """Use AI to extract structured data from ambiguous listings."""
         if not self.client:
@@ -1147,12 +1208,15 @@ Rules:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert at parsing Wonders of the First TCG listings. Extract accurate structured data."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are an expert at parsing Wonders of the First TCG listings. Extract accurate structured data.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.1,
-                max_tokens=300
+                max_tokens=300,
             )
 
             return json.loads(response.choices[0].message.content)
@@ -1196,7 +1260,7 @@ Rules:
                 "confidence": 0.95,
                 "reason": f"Contains WOTF indicator: '{wotf_indicator}'",
                 "detected_tcg": "WOTF",
-                "tier": "HIGH"
+                "tier": "HIGH",
             }
             self._metrics["rule_based_accepts"] += 1
             self._log_decision(title, card_name, result, "rule_based")
@@ -1211,7 +1275,7 @@ Rules:
                 "confidence": 0.95,
                 "reason": f"Contains {tcg} indicator: '{indicator}'",
                 "detected_tcg": tcg,
-                "tier": "HIGH"
+                "tier": "HIGH",
             }
             self._metrics["rule_based_rejects"] += 1
             self._log_decision(title, card_name, result, "rule_based")
@@ -1219,9 +1283,7 @@ Rules:
 
         # STEP 3: Calculate confidence tier for ambiguous cases
         confidence_tier = self._calculate_confidence_tier(
-            title, card_name,
-            has_wotf_indicator=False,
-            has_non_wotf_indicator=False
+            title, card_name, has_wotf_indicator=False, has_non_wotf_indicator=False
         )
 
         # STEP 4: For medium-high confidence, accept without AI
@@ -1231,7 +1293,7 @@ Rules:
                 "confidence": confidence_tier["confidence"],
                 "reason": confidence_tier["reason"],
                 "detected_tcg": "WOTF",
-                "tier": confidence_tier["tier"]
+                "tier": confidence_tier["tier"],
             }
             self._metrics["rule_based_accepts"] += 1
             self._log_decision(title, card_name, result, "rule_based")
@@ -1244,7 +1306,7 @@ Rules:
                 "confidence": confidence_tier["confidence"],
                 "reason": f"{confidence_tier['reason']} (no AI available)",
                 "detected_tcg": None,
-                "tier": confidence_tier["tier"]
+                "tier": confidence_tier["tier"],
             }
             self._log_decision(title, card_name, result, "rule_based")
             return result
@@ -1280,7 +1342,7 @@ Determine if an eBay listing is for "Wonders of the First" (WOTF) TCG or another
 - MTG: Planeswalker, Wizards of the Coast
 - Sports: Topps, Panini, league names (NBA, NFL)
 
-Return JSON only."""
+Return JSON only.""",
                     },
                     {
                         "role": "user",
@@ -1289,12 +1351,12 @@ Return JSON only."""
 Title: "{title}"
 
 Return:
-{{"is_wotf": true/false, "confidence": 0.0-1.0, "reason": "explanation", "detected_tcg": "WOTF/Yu-Gi-Oh/Pokemon/Dragon Ball Z/One Piece/MTG/Sports/Unknown"}}"""
-                    }
+{{"is_wotf": true/false, "confidence": 0.0-1.0, "reason": "explanation", "detected_tcg": "WOTF/Yu-Gi-Oh/Pokemon/Dragon Ball Z/One Piece/MTG/Sports/Unknown"}}""",
+                    },
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.1,
-                max_tokens=200
+                max_tokens=200,
             )
 
             ai_result = json.loads(response.choices[0].message.content)
@@ -1304,7 +1366,7 @@ Return:
                 "confidence": ai_result.get("confidence", 0.7),
                 "reason": ai_result.get("reason", "AI validation"),
                 "detected_tcg": ai_result.get("detected_tcg", "Unknown"),
-                "tier": "AI"
+                "tier": "AI",
             }
 
             # Track metrics
@@ -1323,7 +1385,7 @@ Return:
                 "confidence": 0.5,
                 "reason": f"AI validation failed: {str(e)}",
                 "detected_tcg": None,
-                "tier": "FALLBACK"
+                "tier": "FALLBACK",
             }
             self._log_decision(title, card_name, result, "ai_error")
             return result

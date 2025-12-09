@@ -1,9 +1,9 @@
-import os
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
 load_dotenv()
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Wonder Scraper"
@@ -35,5 +35,5 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 
-settings = Settings()
 
+settings = Settings()

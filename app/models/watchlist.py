@@ -14,6 +14,7 @@ from datetime import datetime
 
 class Watchlist(SQLModel, table=True):
     """User's watchlist entry for a card."""
+
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
     card_id: int = Field(foreign_key="card.id", index=True)
@@ -44,6 +45,7 @@ class Watchlist(SQLModel, table=True):
 
 class EmailPreferences(SQLModel, table=True):
     """User's email notification preferences."""
+
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", unique=True, index=True)
 

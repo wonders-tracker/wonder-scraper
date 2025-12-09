@@ -8,7 +8,6 @@ from sqlmodel import Session, select, func, desc
 from datetime import datetime, timedelta
 from cachetools import TTLCache
 
-from app.api import deps
 from app.db import get_session
 from app.models.card import Card, Rarity
 from app.models.market import MarketSnapshot, MarketPrice
@@ -22,20 +21,24 @@ router = APIRouter()
 _cache = TTLCache(maxsize=1000, ttl=300)
 _cache_lock = threading.Lock()
 
+
 def get_cache_key(endpoint: str, **params) -> str:
     """Generate cache key from endpoint and params."""
     param_str = json.dumps(params, sort_keys=True)
     return hashlib.md5(f"{endpoint}:{param_str}".encode()).hexdigest()
+
 
 def get_cached(key: str) -> Optional[Any]:
     """Get cached response if not expired (thread-safe)."""
     with _cache_lock:
         return _cache.get(key)
 
+
 def set_cache(key: str, value: Any, ttl: int = 300):
     """Set cache entry (thread-safe). TTL managed by TTLCache."""
     with _cache_lock:
         _cache[key] = value
+
 
 @router.get("/")
 def read_cards(
@@ -55,7 +58,16 @@ def read_cards(
     Use slim=true for ~50% smaller payload (recommended for list views).
     """
     # Check cache first (v14 = slim mode support)
-    cache_key = get_cache_key("cards_v14", skip=skip, limit=limit, search=search or "", time_period=time_period, product_type=product_type or "", include_total=include_total, slim=slim)
+    cache_key = get_cache_key(
+        "cards_v14",
+        skip=skip,
+        limit=limit,
+        search=search or "",
+        time_period=time_period,
+        product_type=product_type or "",
+        include_total=include_total,
+        slim=slim,
+    )
     cached = get_cached(cache_key)
     if cached:
         return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
@@ -66,7 +78,7 @@ def read_cards(
         "7d": timedelta(days=7),
         "30d": timedelta(days=30),
         "90d": timedelta(days=90),
-        "all": None
+        "all": None,
     }
     cutoff_delta = time_cutoffs.get(time_period)
     cutoff_time = datetime.utcnow() - cutoff_delta if cutoff_delta else None
@@ -87,10 +99,10 @@ def read_cards(
     # Fetch paginated cards
     card_query = base_query.offset(skip).limit(limit)
     cards = session.exec(card_query).all()
-    
+
     if not cards:
         return []
-    
+
     # Batch fetch ALL snapshots for these cards in ONE query
     card_ids = [c.id for c in cards]
     snapshot_query = select(MarketSnapshot).where(MarketSnapshot.card_id.in_(card_ids))
@@ -98,7 +110,7 @@ def read_cards(
         snapshot_query = snapshot_query.where(MarketSnapshot.timestamp >= cutoff_time)
     snapshot_query = snapshot_query.order_by(MarketSnapshot.card_id, desc(MarketSnapshot.timestamp))
     all_snapshots = session.exec(snapshot_query).all()
-    
+
     # Group snapshots by card_id
     snapshots_by_card = {}
     for snap in all_snapshots:
@@ -111,14 +123,14 @@ def read_cards(
         # So we want index 0 (newest) and index -1 (oldest in filtered set)
         # The loop currently just appends. Let's fix this logic:
         # We will just group ALL valid snapshots then pick first/last after loop
-    
+
     # Correct logic: Group all then pick
     snapshots_by_card = {}
     for snap in all_snapshots:
         if snap.card_id not in snapshots_by_card:
             snapshots_by_card[snap.card_id] = []
         snapshots_by_card[snap.card_id].append(snap)
-    
+
     # Batch fetch rarities
     rarities = session.exec(select(Rarity)).all()
     rarity_map = {r.id: r.name for r in rarities}
@@ -126,7 +138,6 @@ def read_cards(
     # Batch fetch actual LAST SALE price (Postgres DISTINCT ON)
     last_sale_map = {}
     vwap_map = {}
-    prev_price_map = {} # Price N hours ago
     active_stats_map = {}  # Computed from MarketPrice for fresh lowest_ask/inventory
     floor_price_map = {}  # Floor price (avg of 4 lowest sales)
     volume_map = {}  # Volume filtered by time period
@@ -146,7 +157,7 @@ def read_cards(
                 ORDER BY card_id, COALESCE(sold_date, scraped_at) DESC
             """)
             results = session.execute(query, {"card_ids": card_ids}).all()
-            last_sale_map = {row[0]: {'price': row[1], 'treatment': row[2]} for row in results}
+            last_sale_map = {row[0]: {"price": row[1], "treatment": row[2]} for row in results}
 
             # Calculate AVG price (commonly called VWAP for single-item sales)
             # Use COALESCE(sold_date, scraped_at) for consistent time filtering
@@ -181,7 +192,7 @@ def read_cards(
                 GROUP BY card_id
             """)
             active_stats_results = session.execute(active_stats_query, {"card_ids": card_ids}).all()
-            active_stats_map = {row[0]: {'lowest_ask': row[1], 'inventory': row[2]} for row in active_stats_results}
+            active_stats_map = {row[0]: {"lowest_ask": row[1], "inventory": row[2]} for row in active_stats_results}
 
             # Batch calculate floor prices (avg of up to 4 lowest sales)
             # Prefers base treatments (Classic Paper/Classic Foil), falls back to
@@ -233,7 +244,9 @@ def read_cards(
             # Fallback 1: 30 days cheapest treatment for cards missing floor price
             missing_floor_ids = [cid for cid in card_ids if cid not in floor_price_map]
             if missing_floor_ids:
-                cheapest_results_30d = session.execute(cheapest_treatment_query, {"card_ids": missing_floor_ids, "cutoff": floor_cutoff_30d}).all()
+                cheapest_results_30d = session.execute(
+                    cheapest_treatment_query, {"card_ids": missing_floor_ids, "cutoff": floor_cutoff_30d}
+                ).all()
                 for row in cheapest_results_30d:
                     floor_price_map[row[0]] = round(float(row[1]), 2)
 
@@ -241,14 +254,18 @@ def read_cards(
             missing_floor_ids = [cid for cid in card_ids if cid not in floor_price_map]
             if missing_floor_ids:
                 floor_cutoff_90d = datetime.utcnow() - timedelta(days=90)
-                floor_results_90d = session.execute(base_floor_query, {"card_ids": missing_floor_ids, "cutoff": floor_cutoff_90d}).all()
+                floor_results_90d = session.execute(
+                    base_floor_query, {"card_ids": missing_floor_ids, "cutoff": floor_cutoff_90d}
+                ).all()
                 for row in floor_results_90d:
                     floor_price_map[row[0]] = round(float(row[1]), 2)
 
             # Fallback 3: 90 days cheapest treatment for cards still missing
             missing_floor_ids = [cid for cid in card_ids if cid not in floor_price_map]
             if missing_floor_ids:
-                cheapest_results_90d = session.execute(cheapest_treatment_query, {"card_ids": missing_floor_ids, "cutoff": floor_cutoff_90d}).all()
+                cheapest_results_90d = session.execute(
+                    cheapest_treatment_query, {"card_ids": missing_floor_ids, "cutoff": floor_cutoff_90d}
+                ).all()
                 for row in cheapest_results_90d:
                     floor_price_map[row[0]] = round(float(row[1]), 2)
 
@@ -282,7 +299,7 @@ def read_cards(
             # Use COALESCE(sold_date, scraped_at) for consistent time filtering
             avg_price_map = {}
 
-            for days, label in [(30, '30d'), (90, '90d'), (None, 'all')]:
+            for days, label in [(30, "30d"), (90, "90d"), (None, "all")]:
                 if days:
                     cutoff = datetime.utcnow() - timedelta(days=days)
                     avg_query = text("""
@@ -321,23 +338,23 @@ def read_cards(
     for card in cards:
         card_snaps = snapshots_by_card.get(card.id, [])
         latest_snap = card_snaps[0] if card_snaps else None
-        oldest_snap = card_snaps[-1] if card_snaps else None # Oldest in the time window
-        
+        card_snaps[-1] if card_snaps else None  # Oldest in the time window
+
         # Use actual last sale if available, otherwise fallback to avg
         last_sale_data = last_sale_map.get(card.id)
-        last_price = last_sale_data['price'] if last_sale_data else None
-        last_treatment = last_sale_data['treatment'] if last_sale_data else None
-        
+        last_price = last_sale_data["price"] if last_sale_data else None
+        last_treatment = last_sale_data["treatment"] if last_sale_data else None
+
         if last_price is None and latest_snap:
             last_price = latest_snap.avg_price
-            
+
         # Get VWAP (true volume-weighted average price)
         card_vwap = vwap_map.get(card.id)
 
         # Get LIVE active stats from MarketPrice (preferred), fallback to snapshot only if None
         live_active = active_stats_map.get(card.id, {})
-        live_lowest = live_active.get('lowest_ask')
-        live_inv = live_active.get('inventory')
+        live_lowest = live_active.get("lowest_ask")
+        live_inv = live_active.get("inventory")
         lowest_ask = live_lowest if live_lowest is not None else (latest_snap.lowest_ask if latest_snap else None)
         inventory = live_inv if live_inv is not None else (latest_snap.inventory if latest_snap else 0)
 
@@ -364,8 +381,7 @@ def read_cards(
             set_name=card.set_name,
             rarity_id=card.rarity_id,
             rarity_name=rarity_map.get(card.rarity_id, "Unknown"),
-            product_type=card.product_type if hasattr(card, 'product_type') else "Single",
-
+            product_type=card.product_type if hasattr(card, "product_type") else "Single",
             # Prices
             floor_price=card_floor_price,
             vwap=card_vwap,
@@ -374,19 +390,15 @@ def read_cards(
             max_price=latest_snap.max_price if latest_snap else None,
             avg_price=latest_snap.avg_price if latest_snap else None,
             fair_market_price=None,  # FMP only on detail page
-
             # Volume & Inventory
             volume=card_volume,
             inventory=inventory,
-
             # Deltas
             price_delta=price_delta,
             floor_delta=floor_delta,
-
             # Metadata
             last_treatment=last_treatment,
             last_updated=latest_snap.timestamp if latest_snap else None,
-
             # Deprecated fields (backwards compat)
             volume_30d=card_volume,
             price_delta_24h=price_delta,
@@ -397,24 +409,27 @@ def read_cards(
 
     # Convert to dict for caching - use slim schema if requested
     if slim:
-        results_dict = [CardListItem(
-            id=r.id,
-            name=r.name,
-            slug=r.slug,
-            set_name=r.set_name,
-            rarity_name=r.rarity_name,
-            product_type=r.product_type,
-            floor_price=r.floor_price,
-            latest_price=r.latest_price,
-            lowest_ask=r.lowest_ask,
-            max_price=r.max_price,
-            volume=r.volume,
-            inventory=r.inventory,
-            price_delta=r.price_delta,
-            last_treatment=r.last_treatment,
-        ).model_dump(mode='json') for r in results]
+        results_dict = [
+            CardListItem(
+                id=r.id,
+                name=r.name,
+                slug=r.slug,
+                set_name=r.set_name,
+                rarity_name=r.rarity_name,
+                product_type=r.product_type,
+                floor_price=r.floor_price,
+                latest_price=r.latest_price,
+                lowest_ask=r.lowest_ask,
+                max_price=r.max_price,
+                volume=r.volume,
+                inventory=r.inventory,
+                price_delta=r.price_delta,
+                last_treatment=r.last_treatment,
+            ).model_dump(mode="json")
+            for r in results
+        ]
     else:
-        results_dict = [r.model_dump(mode='json') for r in results]
+        results_dict = [r.model_dump(mode="json") for r in results]
 
     # Build response with pagination metadata
     if include_total:
@@ -423,7 +438,7 @@ def read_cards(
             "total": total,
             "skip": skip,
             "limit": limit,
-            "hasMore": skip + len(results_dict) < total if total else False
+            "hasMore": skip + len(results_dict) < total if total else False,
         }
     else:
         # Backwards compatible: return array directly when no pagination requested
@@ -432,6 +447,7 @@ def read_cards(
     set_cache(cache_key, response_data, ttl=300)  # 5 minutes
 
     return JSONResponse(content=response_data, headers={"X-Cache": "MISS"})
+
 
 def get_card_by_id_or_slug(session: Session, card_identifier: str) -> Card:
     """Resolve card by ID (numeric) or slug (string)."""
@@ -446,6 +462,7 @@ def get_card_by_id_or_slug(session: Session, card_identifier: str) -> Card:
         return card
     raise HTTPException(status_code=404, detail="Card not found")
 
+
 @router.get("/{card_id}", response_model=CardOut)
 def read_card(
     card_id: str,  # Accept string to support both ID and slug
@@ -458,28 +475,34 @@ def read_card(
         return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
 
     card = get_card_by_id_or_slug(session, card_id)
-    
+
     # Fetch rarity name
     rarity_name = "Unknown"
     if card.rarity_id:
         rarity = session.get(Rarity, card.rarity_id)
         if rarity:
             rarity_name = rarity.name
-    
+
     # Fetch latest 2 snapshots to calculate delta
     # We want to find OLDEST snapshot in the window for meaningful delta
     # Since this is single card view, let's just get all recent ones and pick
     # Or simpler: Get latest and one from 24h ago
-    stmt = select(MarketSnapshot).where(MarketSnapshot.card_id == card.id).order_by(desc(MarketSnapshot.timestamp)).limit(50)
+    stmt = (
+        select(MarketSnapshot)
+        .where(MarketSnapshot.card_id == card.id)
+        .order_by(desc(MarketSnapshot.timestamp))
+        .limit(50)
+    )
     snapshots = session.exec(stmt).all()
-    
+
     latest_snap = snapshots[0] if snapshots else None
     # Rough approximation for "oldest in recent history" since we don't have time_period param here easily
     # Let's just take the last one fetched (up to 50 snapshots ago)
-    oldest_snap = snapshots[-1] if snapshots else None
-    
+    snapshots[-1] if snapshots else None
+
     # Fetch actual last sale using COALESCE for proper date ordering
     from sqlalchemy import text as sql_text
+
     last_sale_query = sql_text("""
         SELECT id, price, treatment, sold_date, scraped_at
         FROM marketprice
@@ -491,13 +514,13 @@ def read_card(
 
     real_price = last_sale_result[1] if last_sale_result else (latest_snap.avg_price if latest_snap else None)
     real_treatment = last_sale_result[2] if last_sale_result else None
-    
+
     # Calculate MEDIAN price and 30-day volume for single card
     vwap = None
-    prev_close = None
     volume_30d = 0
     try:
         from sqlalchemy import text
+
         cutoff_30d = datetime.utcnow() - timedelta(days=30)
 
         # Get AVG price (consistent with list view VWAP calculation)
@@ -529,7 +552,7 @@ def read_card(
             ORDER BY COALESCE(sold_date, scraped_at) DESC LIMIT 1
         """)
         prev_res = session.execute(prev_q, {"cid": card.id, "cutoff": cutoff_30d}).first()
-        prev_close = prev_res[0] if prev_res else None
+        prev_res[0] if prev_res else None
 
     except Exception:
         pass
@@ -595,17 +618,14 @@ def read_card(
     # Calculate Fair Market Price and Floor Price
     fair_market_price = None
     floor_price = None
-    product_type = card.product_type if hasattr(card, 'product_type') else 'Single'
+    product_type = card.product_type if hasattr(card, "product_type") else "Single"
     try:
         pricing_service = FairMarketPriceService(session)
         fmp_result = pricing_service.calculate_fmp(
-            card_id=card.id,
-            set_name=card.set_name,
-            rarity_name=rarity_name,
-            product_type=product_type
+            card_id=card.id, set_name=card.set_name, rarity_name=rarity_name, product_type=product_type
         )
-        fair_market_price = fmp_result.get('fair_market_price')
-        floor_price = fmp_result.get('floor_price')
+        fair_market_price = fmp_result.get("fair_market_price")
+        floor_price = fmp_result.get("floor_price")
     except Exception as e:
         print(f"Error calculating FMP for card {card.id}: {e}")
 
@@ -618,25 +638,26 @@ def read_card(
         rarity_name=rarity_name,
         latest_price=real_price,
         volume_30d=volume_30d,
-        price_delta_24h=price_delta,   # Sale price change (recent vs oldest in period)
-        last_sale_diff=sale_delta,     # Last sale vs current floor
+        price_delta_24h=price_delta,  # Sale price change (recent vs oldest in period)
+        last_sale_diff=sale_delta,  # Last sale vs current floor
         last_sale_treatment=real_treatment,
         lowest_ask=lowest_ask,
         inventory=inventory,
-        product_type=card.product_type if hasattr(card, 'product_type') else "Single",
+        product_type=card.product_type if hasattr(card, "product_type") else "Single",
         max_price=latest_snap.max_price if latest_snap else None,
         avg_price=latest_snap.avg_price if latest_snap else None,
         vwap=vwap if vwap else (latest_snap.avg_price if latest_snap else None),
         last_updated=latest_snap.timestamp if latest_snap else None,
         fair_market_price=fair_market_price,
-        floor_price=floor_price
+        floor_price=floor_price,
     )
-    
+
     # Cache result
-    result_dict = c_out.model_dump(mode='json')
+    result_dict = c_out.model_dump(mode="json")
     set_cache(cache_key, result_dict, ttl=300)
-    
+
     return JSONResponse(content=result_dict, headers={"X-Cache": "MISS"})
+
 
 @router.get("/{card_id}/market", response_model=Optional[MarketSnapshotOut])
 def read_market_data(
@@ -647,13 +668,16 @@ def read_market_data(
     Get latest market snapshot for a card.
     """
     card = get_card_by_id_or_slug(session, card_id)
-    statement = select(MarketSnapshot).where(MarketSnapshot.card_id == card.id).order_by(MarketSnapshot.timestamp.desc())
+    statement = (
+        select(MarketSnapshot).where(MarketSnapshot.card_id == card.id).order_by(MarketSnapshot.timestamp.desc())
+    )
     snapshot = session.exec(statement).first()
 
     if not snapshot:
         raise HTTPException(status_code=404, detail="Market data not found for this card")
 
     return MarketSnapshotOut.model_validate(snapshot)
+
 
 @router.get("/{card_id}/history")
 def read_sales_history(
@@ -673,10 +697,13 @@ def read_sales_history(
     card = get_card_by_id_or_slug(session, card_id)
 
     # Fetch results
-    statement = select(MarketPrice).where(
-        MarketPrice.card_id == card.id,
-        MarketPrice.listing_type == "sold"
-    ).order_by(desc(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at))).offset(offset).limit(limit)
+    statement = (
+        select(MarketPrice)
+        .where(MarketPrice.card_id == card.id, MarketPrice.listing_type == "sold")
+        .order_by(desc(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at)))
+        .offset(offset)
+        .limit(limit)
+    )
     prices = session.exec(statement).all()
 
     # Convert to output schema
@@ -688,8 +715,7 @@ def read_sales_history(
 
     # Get total count only when paginated (avoids extra query)
     count_stmt = select(func.count(MarketPrice.id)).where(
-        MarketPrice.card_id == card.id,
-        MarketPrice.listing_type == "sold"
+        MarketPrice.card_id == card.id, MarketPrice.listing_type == "sold"
     )
     total = session.exec(count_stmt).one()
 
@@ -698,8 +724,9 @@ def read_sales_history(
         "total": total,
         "offset": offset,
         "limit": limit,
-        "hasMore": offset + len(prices_out) < total
+        "hasMore": offset + len(prices_out) < total,
     }
+
 
 @router.get("/{card_id}/active", response_model=List[MarketPriceOut])
 def read_active_listings(
@@ -711,10 +738,12 @@ def read_active_listings(
     Get active listings for a card.
     """
     card = get_card_by_id_or_slug(session, card_id)
-    statement = select(MarketPrice).where(
-        MarketPrice.card_id == card.id,
-        MarketPrice.listing_type == "active"
-    ).order_by(desc(MarketPrice.scraped_at)).limit(limit)
+    statement = (
+        select(MarketPrice)
+        .where(MarketPrice.card_id == card.id, MarketPrice.listing_type == "active")
+        .order_by(desc(MarketPrice.scraped_at))
+        .limit(limit)
+    )
     active = session.exec(statement).all()
     return [MarketPriceOut.model_validate(a) for a in active]
 
@@ -737,34 +766,28 @@ def read_card_pricing(
         if rarity:
             rarity_name = rarity.name
 
-    product_type = card.product_type if hasattr(card, 'product_type') else 'Single'
+    product_type = card.product_type if hasattr(card, "product_type") else "Single"
     pricing_service = FairMarketPriceService(session)
 
     # Get FMP breakdown by treatment/variant
     treatment_fmps = pricing_service.get_fmp_by_treatment(
-        card_id=card.id,
-        set_name=card.set_name,
-        rarity_name=rarity_name,
-        product_type=product_type
+        card_id=card.id, set_name=card.set_name, rarity_name=rarity_name, product_type=product_type
     )
 
     # Also get overall FMP and floor
     fmp_result = pricing_service.calculate_fmp(
-        card_id=card.id,
-        set_name=card.set_name,
-        rarity_name=rarity_name,
-        product_type=product_type
+        card_id=card.id, set_name=card.set_name, rarity_name=rarity_name, product_type=product_type
     )
 
     return {
         "card_id": card.id,
         "card_name": card.name,
         "product_type": product_type,
-        "fair_market_price": fmp_result.get('fair_market_price'),
-        "floor_price": fmp_result.get('floor_price'),
-        "calculation_method": fmp_result.get('calculation_method'),  # 'formula' or 'median'
-        "breakdown": fmp_result.get('breakdown'),  # None for non-Singles
-        "by_treatment": treatment_fmps
+        "fair_market_price": fmp_result.get("fair_market_price"),
+        "floor_price": fmp_result.get("floor_price"),
+        "calculation_method": fmp_result.get("calculation_method"),  # 'formula' or 'median'
+        "breakdown": fmp_result.get("breakdown"),  # None for non-Singles
+        "by_treatment": treatment_fmps,
     }
 
 
@@ -784,10 +807,12 @@ def read_snapshot_history(
 
     cutoff = datetime.utcnow() - timedelta(days=days)
 
-    statement = select(MarketSnapshot).where(
-        MarketSnapshot.card_id == card.id,
-        MarketSnapshot.timestamp >= cutoff
-    ).order_by(desc(MarketSnapshot.timestamp)).limit(limit)
+    statement = (
+        select(MarketSnapshot)
+        .where(MarketSnapshot.card_id == card.id, MarketSnapshot.timestamp >= cutoff)
+        .order_by(desc(MarketSnapshot.timestamp))
+        .limit(limit)
+    )
 
     snapshots = session.exec(statement).all()
     return [MarketSnapshotOut.model_validate(s) for s in snapshots]

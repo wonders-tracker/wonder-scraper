@@ -2,9 +2,9 @@
 Simple HTTP-based scraper as fallback when browser automation fails.
 Uses httpx with proper headers to mimic a real browser.
 """
+
 import httpx
 import asyncio
-from typing import Optional
 import random
 
 # Rotate through multiple user agents
@@ -14,6 +14,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
 ]
+
 
 async def get_page_simple(url: str, retries: int = 3) -> str:
     """
@@ -34,37 +35,32 @@ async def get_page_simple(url: str, retries: int = 3) -> str:
         "Sec-Fetch-User": "?1",
         "Cache-Control": "max-age=0",
     }
-    
+
     last_error = None
-    
+
     for attempt in range(retries):
         try:
-            async with httpx.AsyncClient(
-                timeout=30.0,
-                follow_redirects=True,
-                headers=headers
-            ) as client:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers=headers) as client:
                 # Add random delay to mimic human behavior
                 await asyncio.sleep(random.uniform(0.5, 1.5))
-                
+
                 response = await client.get(url)
                 response.raise_for_status()
-                
+
                 content = response.text
-                
+
                 if not content or len(content) < 100:
                     raise Exception("Empty or invalid page content")
-                    
+
                 return content
-                
+
         except Exception as e:
             last_error = e
             print(f"HTTP request attempt {attempt + 1} failed: {e}")
-            
+
             if attempt < retries - 1:
                 # Exponential backoff
-                wait_time = (2 ** attempt) + random.uniform(0, 1)
+                wait_time = (2**attempt) + random.uniform(0, 1)
                 await asyncio.sleep(wait_time)
-    
-    raise Exception(f"Failed to fetch {url} after {retries} attempts: {last_error}")
 
+    raise Exception(f"Failed to fetch {url} after {retries} attempts: {last_error}")

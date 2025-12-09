@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from saas.api.billing import router
+
     BILLING_AVAILABLE = True
     logger.info("SaaS billing module loaded")
 except ImportError:
@@ -24,26 +25,17 @@ except ImportError:
     @router.get("/billing/status")
     async def billing_status():
         """Billing not available in OSS version."""
-        return {
-            "available": False,
-            "message": "Billing features require the saas/ module"
-        }
+        return {"available": False, "message": "Billing features require the saas/ module"}
 
     @router.post("/billing/checkout")
     async def create_checkout():
         """Checkout not available in OSS version."""
-        raise HTTPException(
-            status_code=501,
-            detail="Billing features are not available in the open-source version"
-        )
+        raise HTTPException(status_code=501, detail="Billing features are not available in the open-source version")
 
     @router.get("/billing/portal")
     async def get_portal():
         """Portal not available in OSS version."""
-        raise HTTPException(
-            status_code=501,
-            detail="Billing features are not available in the open-source version"
-        )
+        raise HTTPException(status_code=501, detail="Billing features are not available in the open-source version")
 
 
 __all__ = ["router", "BILLING_AVAILABLE"]

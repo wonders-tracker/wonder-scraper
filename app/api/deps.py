@@ -1,5 +1,5 @@
-from typing import Generator, Optional, Tuple
-from fastapi import Depends, HTTPException, Request, status, Header
+from typing import Optional, Tuple
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
 
 import jwt
@@ -46,9 +46,7 @@ def get_token_from_request(request: Request, header_token: Optional[str] = None)
 
 
 def get_current_user(
-    request: Request,
-    header_token: Optional[str] = Depends(oauth2_scheme),
-    session: Session = Depends(get_session)
+    request: Request, header_token: Optional[str] = Depends(oauth2_scheme), session: Session = Depends(get_session)
 ) -> User:
     """
     Get current user from JWT token (header or cookie).
@@ -84,9 +82,7 @@ def get_current_user(
 
 
 def get_current_user_optional(
-    request: Request,
-    header_token: Optional[str] = Depends(oauth2_scheme),
-    session: Session = Depends(get_session)
+    request: Request, header_token: Optional[str] = Depends(oauth2_scheme), session: Session = Depends(get_session)
 ) -> Optional[User]:
     """
     Get current user if authenticated, otherwise return None.
@@ -124,6 +120,7 @@ def get_current_superuser(
 
 # ============== API KEY AUTHENTICATION ==============
 
+
 def validate_api_key(
     request: Request,
     api_key: Optional[str] = Depends(api_key_header),
@@ -140,9 +137,7 @@ def validate_api_key(
     key_hash = APIKey.hash_key(api_key)
 
     # Find the API key
-    db_key = session.exec(
-        select(APIKey).where(APIKey.key_hash == key_hash)
-    ).first()
+    db_key = session.exec(select(APIKey).where(APIKey.key_hash == key_hash)).first()
 
     if not db_key:
         raise HTTPException(
@@ -181,7 +176,7 @@ def validate_api_key(
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Rate limit exceeded. Please slow down.",
-                headers={"Retry-After": "60"}
+                headers={"Retry-After": "60"},
             )
 
     # Record the request
@@ -222,6 +217,7 @@ def require_api_key(
 
 
 # ============== PROTECTED DATA ACCESS ==============
+
 
 def get_data_access(
     request: Request,
@@ -290,4 +286,3 @@ def get_data_access_optional(
             pass
 
     return None
-

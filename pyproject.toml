@@ -50,6 +50,13 @@ asyncio_mode = "strict"
 testpaths = ["tests", "saas/tests"]
 # SaaS tests are skipped if saas/ module not available (see conftest.py)
 
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# Ignore certain rules in specific files (legacy code patterns)
+per-file-ignores = { "app/api/admin.py" = ["E722"], "app/api/analytics.py" = ["E722"], "app/api/market.py" = ["E402"], "app/core/scheduler.py" = ["E722"], "app/discord_bot/bot.py" = ["E402"], "app/discord_bot/stats.py" = ["E741"], "app/discord_bot/webhook.py" = ["E402"], "app/scraper/opensea.py" = ["E701"], "app/services/market_insights.py" = ["E741"] }
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

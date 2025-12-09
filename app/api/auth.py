@@ -20,25 +20,31 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
+
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 class UserCreate(BaseModel):
     email: str
     password: str
+
 
 class UserResponse(BaseModel):
     id: int
     email: str
     is_active: bool
 
+
 class ForgotPasswordRequest(BaseModel):
     email: str
+
 
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
+
 
 class MessageResponse(BaseModel):
     message: str
@@ -71,9 +77,7 @@ def clear_auth_cookie(response: Response):
 
 @router.post("/login")
 def login_access_token(
-    request: Request,
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    session: Session = Depends(get_session)
+    request: Request, form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)
 ) -> Any:
     # Rate limiting: 5 attempts per minute, lockout after 5 failures
     ip = get_client_ip(request)
@@ -83,7 +87,7 @@ def login_access_token(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Too many login attempts. Please try again in {retry_after} seconds.",
-            headers={"Retry-After": str(retry_after)}
+            headers={"Retry-After": str(retry_after)},
         )
 
     rate_limiter.record_request(ip)
@@ -96,7 +100,7 @@ def login_access_token(
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=f"Account locked due to too many failed attempts. Try again in {remaining} seconds.",
-                headers={"Retry-After": str(remaining)}
+                headers={"Retry-After": str(remaining)},
             )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -118,10 +122,12 @@ def login_access_token(
     token = create_access_token(user.email, expires_delta=access_token_expires)
 
     # Return token AND set cookie for persistence
-    response = JSONResponse(content={
-        "access_token": token,
-        "token_type": "bearer",
-    })
+    response = JSONResponse(
+        content={
+            "access_token": token,
+            "token_type": "bearer",
+        }
+    )
     set_auth_cookie(response, token)
     return response
 
@@ -156,10 +162,7 @@ def get_current_user_info(
 
 @router.post("/register", response_model=UserResponse)
 def register_user(
-    request: Request,
-    user_in: UserCreate,
-    background_tasks: BackgroundTasks,
-    session: Session = Depends(get_session)
+    request: Request, user_in: UserCreate, background_tasks: BackgroundTasks, session: Session = Depends(get_session)
 ) -> Any:
     # Rate limiting: 3 registrations per hour per IP
     ip = get_client_ip(request)
@@ -169,7 +172,7 @@ def register_user(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many registration attempts. Please try again later.",
-            headers={"Retry-After": str(retry_after)}
+            headers={"Retry-After": str(retry_after)},
         )
 
     rate_limiter.record_request(ip)
@@ -192,7 +195,7 @@ def register_user(
         email=user_in.email,
         hashed_password=security.get_password_hash(user_in.password),
         is_active=True,
-        is_superuser=False
+        is_superuser=False,
     )
     session.add(new_user)
     session.commit()
@@ -203,6 +206,7 @@ def register_user(
 
     return new_user
 
+
 @router.get("/discord/login")
 def login_discord():
     """
@@ -211,6 +215,7 @@ def login_discord():
     return {
         "url": f"https://discord.com/oauth2/authorize?client_id={settings.DISCORD_CLIENT_ID}&redirect_uri={settings.DISCORD_REDIRECT_URI}&response_type=code&scope=identify%20email"
     }
+
 
 @router.get("/discord/callback")
 async def callback_discord(code: str, session: Session = Depends(get_session)):
@@ -225,17 +230,17 @@ async def callback_discord(code: str, session: Session = Depends(get_session)):
             "client_secret": settings.DISCORD_CLIENT_SECRET,
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": settings.DISCORD_REDIRECT_URI
+            "redirect_uri": settings.DISCORD_REDIRECT_URI,
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        
+
         try:
             r = await client.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
             r.raise_for_status()
             token_data = r.json()
             access_token = token_data["access_token"]
         except httpx.HTTPStatusError as e:
-             raise HTTPException(status_code=400, detail=f"Failed to authenticate with Discord: {e.response.text}")
+            raise HTTPException(status_code=400, detail=f"Failed to authenticate with Discord: {e.response.text}")
 
         # Get User Info
         headers = {"Authorization": f"Bearer {access_token}"}
@@ -243,9 +248,9 @@ async def callback_discord(code: str, session: Session = Depends(get_session)):
             r = await client.get("https://discord.com/api/users/@me", headers=headers)
             r.raise_for_status()
             discord_user = r.json()
-        except httpx.HTTPStatusError as e:
-             raise HTTPException(status_code=400, detail="Failed to fetch Discord user info")
-        
+        except httpx.HTTPStatusError:
+            raise HTTPException(status_code=400, detail="Failed to fetch Discord user info")
+
         discord_id = discord_user["id"]
         email = discord_user.get("email")
         username = discord_user.get("username")
@@ -255,29 +260,29 @@ async def callback_discord(code: str, session: Session = Depends(get_session)):
         # Find or Create User
         # Check by discord_id
         user = session.exec(select(User).where(User.discord_id == discord_id)).first()
-        
+
         if not user and email:
-             # Check by email
-             user = session.exec(select(User).where(User.email == email)).first()
-             if user:
-                 # Link account and update last login
-                 user.discord_id = discord_id
-                 user.discord_handle = handle
-                 user.last_login = datetime.utcnow()
-                 session.add(user)
-                 session.commit()
-                 session.refresh(user)
-        
+            # Check by email
+            user = session.exec(select(User).where(User.email == email)).first()
+            if user:
+                # Link account and update last login
+                user.discord_id = discord_id
+                user.discord_handle = handle
+                user.last_login = datetime.utcnow()
+                session.add(user)
+                session.commit()
+                session.refresh(user)
+
         if not user:
             # Create new user
             random_pw = secrets.token_urlsafe(32)
             user = User(
-                email=email or f"{discord_id}@discord.placeholder", # Fallback if no email
+                email=email or f"{discord_id}@discord.placeholder",  # Fallback if no email
                 hashed_password=security.get_password_hash(random_pw),
                 is_active=True,
                 discord_id=discord_id,
                 discord_handle=handle,
-                last_login=datetime.utcnow()
+                last_login=datetime.utcnow(),
             )
             session.add(user)
             session.commit()
@@ -304,7 +309,7 @@ def forgot_password(
     request: Request,
     body: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ) -> Any:
     """
     Send password reset email.
@@ -318,7 +323,7 @@ def forgot_password(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many password reset attempts. Please try again later.",
-            headers={"Retry-After": str(retry_after)}
+            headers={"Retry-After": str(retry_after)},
         )
 
     rate_limiter.record_request(ip)
@@ -341,11 +346,7 @@ def forgot_password(
 
 
 @router.post("/reset-password", response_model=MessageResponse)
-def reset_password(
-    request: Request,
-    body: ResetPasswordRequest,
-    session: Session = Depends(get_session)
-) -> Any:
+def reset_password(request: Request, body: ResetPasswordRequest, session: Session = Depends(get_session)) -> Any:
     """
     Reset password using token from email.
     """
@@ -357,7 +358,7 @@ def reset_password(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many reset attempts. Please try again later.",
-            headers={"Retry-After": str(retry_after)}
+            headers={"Retry-After": str(retry_after)},
         )
 
     rate_limiter.record_request(ip)

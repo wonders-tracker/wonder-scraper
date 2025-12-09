@@ -2,19 +2,18 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from app.core.config import settings
 from app.api import auth, cards, portfolio, users, market, admin, blokpax, analytics, meta, billing, webhooks, watchlist
 from app.api.billing import BILLING_AVAILABLE
 from app.middleware.metering import APIMeteringMiddleware, METERING_AVAILABLE
-from app.core.saas import get_mode_info, SAAS_ENABLED
+from app.core.saas import get_mode_info
 from contextlib import asynccontextmanager
 from app.core.scheduler import start_scheduler
 from app.core.anti_scraping import AntiScrapingMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,22 +27,19 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown (scheduler stops automatically usually or we can stop it)
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    lifespan=lifespan
-)
+
+app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json", lifespan=lifespan)
 
 # Set all CORS enabled origins
 origins = [
-    "http://localhost:5173", # Vite default
-    "http://localhost:3000", # React default
+    "http://localhost:5173",  # Vite default
+    "http://localhost:3000",  # React default
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
-    "https://wonderstracker.com", # Production
-    "https://wonderstrader.com", # Production (Correction)
-    "https://www.wonderstrader.com", # Production (WWW)
-    settings.FRONTEND_URL, # Dynamic from env
+    "https://wonderstracker.com",  # Production
+    "https://wonderstrader.com",  # Production (Correction)
+    "https://www.wonderstrader.com",  # Production (WWW)
+    settings.FRONTEND_URL,  # Dynamic from env
 ]
 
 # Clean up duplicates and empty strings
@@ -85,6 +81,7 @@ app.include_router(analytics.router, prefix=f"{settings.API_V1_STR}/analytics", 
 app.include_router(billing.router, prefix=settings.API_V1_STR, tags=["billing"])
 app.include_router(webhooks.router, prefix=settings.API_V1_STR, tags=["webhooks"])
 app.include_router(watchlist.router, prefix=f"{settings.API_V1_STR}/watchlist", tags=["watchlist"])
+
 
 @app.get("/")
 def root():

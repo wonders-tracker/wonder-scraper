@@ -2,6 +2,7 @@
 Admin API endpoints for triggering maintenance tasks like backfill.
 Protected by superuser authentication.
 """
+
 import asyncio
 from typing import Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Depends
@@ -42,7 +43,13 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
     from app.scraper.browser import BrowserManager
     from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
 
-    _running_jobs[job_id] = {"status": "running", "started": datetime.utcnow(), "processed": 0, "errors": 0, "new_listings": 0}
+    _running_jobs[job_id] = {
+        "status": "running",
+        "started": datetime.utcnow(),
+        "processed": 0,
+        "errors": 0,
+        "new_listings": 0,
+    }
     start_time = datetime.utcnow()
 
     try:
@@ -91,8 +98,8 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
                         card_id=card.id,
                         search_term=f"{card.name} {card.set_name}",
                         set_name=card.set_name,
-                        product_type=card.product_type if hasattr(card, 'product_type') else 'Single',
-                        is_backfill=is_backfill
+                        product_type=card.product_type if hasattr(card, "product_type") else "Single",
+                        is_backfill=is_backfill,
                     )
                     _running_jobs[job_id]["processed"] = i + 1
                 except Exception as e:
@@ -114,7 +121,7 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
             new_listings=_running_jobs[job_id].get("new_listings", 0),
             new_sales=0,  # TODO: Track this if needed
             duration_seconds=duration,
-            errors=_running_jobs[job_id]["errors"]
+            errors=_running_jobs[job_id]["errors"],
         )
 
     except Exception as e:
@@ -142,26 +149,20 @@ async def trigger_backfill(
         if job.get("status") == "running":
             raise HTTPException(
                 status_code=409,
-                detail=f"Backfill job {job_id} is already running. Processed: {job.get('processed', 0)}/{job.get('total', '?')}"
+                detail=f"Backfill job {job_id} is already running. Processed: {job.get('processed', 0)}/{job.get('total', '?')}",
             )
 
     # Create new job
     job_id = f"backfill_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
 
     # Start background task
-    background_tasks.add_task(
-        run_backfill_job,
-        job_id,
-        request.limit,
-        request.force_all,
-        request.is_backfill
-    )
+    background_tasks.add_task(run_backfill_job, job_id, request.limit, request.force_all, request.is_backfill)
 
     return BackfillResponse(
         status="started",
         message=f"Backfill job started with limit={request.limit}, force_all={request.force_all}",
         job_id=job_id,
-        started_at=datetime.utcnow().isoformat()
+        started_at=datetime.utcnow().isoformat(),
     )
 
 
@@ -209,51 +210,49 @@ async def get_admin_stats(
     with Session(engine) as session:
         # User stats
         total_users = session.exec(select(func.count(UserModel.id))).one()
-        active_users_24h = session.exec(
-            select(func.count(UserModel.id)).where(
-                UserModel.last_login >= datetime.utcnow() - timedelta(hours=24)
-            )
-        ).one() if hasattr(UserModel, 'last_login') else 0
+        active_users_24h = (
+            session.exec(
+                select(func.count(UserModel.id)).where(UserModel.last_login >= datetime.utcnow() - timedelta(hours=24))
+            ).one()
+            if hasattr(UserModel, "last_login")
+            else 0
+        )
 
         # Get all users with details
         all_users = session.exec(select(UserModel).order_by(UserModel.created_at.desc())).all()
         users_list = []
         for u in all_users:
-            users_list.append({
-                "id": u.id,
-                "email": u.email,
-                "username": getattr(u, 'username', None),
-                "discord_handle": getattr(u, 'discord_handle', None),
-                "is_superuser": u.is_superuser,
-                "is_active": u.is_active,
-                "created_at": u.created_at.isoformat() if u.created_at else None,
-                "last_login": u.last_login.isoformat() if hasattr(u, 'last_login') and u.last_login else None,
-            })
+            users_list.append(
+                {
+                    "id": u.id,
+                    "email": u.email,
+                    "username": getattr(u, "username", None),
+                    "discord_handle": getattr(u, "discord_handle", None),
+                    "is_superuser": u.is_superuser,
+                    "is_active": u.is_active,
+                    "created_at": u.created_at.isoformat() if u.created_at else None,
+                    "last_login": u.last_login.isoformat() if hasattr(u, "last_login") and u.last_login else None,
+                }
+            )
 
         # Card stats
         total_cards = session.exec(select(func.count(Card.id))).one()
 
         # Market data stats
         total_listings = session.exec(select(func.count(MarketPrice.id))).one()
-        sold_listings = session.exec(
-            select(func.count(MarketPrice.id)).where(MarketPrice.listing_type == "sold")
-        ).one()
+        sold_listings = session.exec(select(func.count(MarketPrice.id)).where(MarketPrice.listing_type == "sold")).one()
         active_listings = session.exec(
             select(func.count(MarketPrice.id)).where(MarketPrice.listing_type == "active")
         ).one()
 
         # Listings in last 24h
         listings_24h = session.exec(
-            select(func.count(MarketPrice.id)).where(
-                MarketPrice.scraped_at >= datetime.utcnow() - timedelta(hours=24)
-            )
+            select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.utcnow() - timedelta(hours=24))
         ).one()
 
         # Listings in last 7d
         listings_7d = session.exec(
-            select(func.count(MarketPrice.id)).where(
-                MarketPrice.scraped_at >= datetime.utcnow() - timedelta(days=7)
-            )
+            select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.utcnow() - timedelta(days=7))
         ).one()
 
         # Portfolio stats
@@ -269,93 +268,110 @@ async def get_admin_stats(
 
         # Database size (PostgreSQL)
         try:
-            db_size_result = session.execute(text(
-                "SELECT pg_size_pretty(pg_database_size(current_database()))"
-            )).first()
+            db_size_result = session.execute(
+                text("SELECT pg_size_pretty(pg_database_size(current_database()))")
+            ).first()
             db_size = db_size_result[0] if db_size_result else "Unknown"
         except:
             db_size = "Unknown"
 
         # Top scraped cards (by listing count)
-        top_cards_result = session.execute(text("""
+        top_cards_result = session.execute(
+            text("""
             SELECT c.name, COUNT(mp.id) as listing_count
             FROM card c
             JOIN marketprice mp ON mp.card_id = c.id
             GROUP BY c.id, c.name
             ORDER BY listing_count DESC
             LIMIT 10
-        """)).all()
+        """)
+        ).all()
         top_cards = [{"name": row[0], "listings": row[1]} for row in top_cards_result]
 
         # Daily scrape volume (last 7 days)
-        daily_volume_result = session.execute(text("""
+        daily_volume_result = session.execute(
+            text("""
             SELECT DATE(scraped_at) as date, COUNT(*) as count
             FROM marketprice
             WHERE scraped_at >= NOW() - INTERVAL '7 days'
             GROUP BY DATE(scraped_at)
             ORDER BY date DESC
-        """)).all()
+        """)
+        ).all()
         daily_volume = [{"date": str(row[0]), "count": row[1]} for row in daily_volume_result]
 
         # Analytics - Page views
         try:
             total_pageviews = session.exec(select(func.count(PageView.id))).one()
             pageviews_24h = session.exec(
-                select(func.count(PageView.id)).where(
-                    PageView.timestamp >= datetime.utcnow() - timedelta(hours=24)
-                )
+                select(func.count(PageView.id)).where(PageView.timestamp >= datetime.utcnow() - timedelta(hours=24))
             ).one()
             pageviews_7d = session.exec(
-                select(func.count(PageView.id)).where(
-                    PageView.timestamp >= datetime.utcnow() - timedelta(days=7)
-                )
+                select(func.count(PageView.id)).where(PageView.timestamp >= datetime.utcnow() - timedelta(days=7))
             ).one()
 
             # Unique visitors (by ip_hash) in 24h
-            unique_visitors_24h = session.execute(text("""
+            unique_visitors_24h = (
+                session.execute(
+                    text("""
                 SELECT COUNT(DISTINCT ip_hash) FROM pageview
                 WHERE timestamp >= NOW() - INTERVAL '24 hours'
-            """)).scalar() or 0
+            """)
+                ).scalar()
+                or 0
+            )
 
             # Unique visitors in 7d
-            unique_visitors_7d = session.execute(text("""
+            unique_visitors_7d = (
+                session.execute(
+                    text("""
                 SELECT COUNT(DISTINCT ip_hash) FROM pageview
                 WHERE timestamp >= NOW() - INTERVAL '7 days'
-            """)).scalar() or 0
+            """)
+                ).scalar()
+                or 0
+            )
 
             # Top pages (last 7 days)
-            top_pages_result = session.execute(text("""
+            top_pages_result = session.execute(
+                text("""
                 SELECT path, COUNT(*) as views
                 FROM pageview
                 WHERE timestamp >= NOW() - INTERVAL '7 days'
                 GROUP BY path
                 ORDER BY views DESC
                 LIMIT 10
-            """)).all()
+            """)
+            ).all()
             top_pages = [{"path": row[0], "views": row[1]} for row in top_pages_result]
 
             # Traffic by device type
-            device_breakdown_result = session.execute(text("""
+            device_breakdown_result = session.execute(
+                text("""
                 SELECT device_type, COUNT(*) as count
                 FROM pageview
                 WHERE timestamp >= NOW() - INTERVAL '7 days'
                 GROUP BY device_type
                 ORDER BY count DESC
-            """)).all()
+            """)
+            ).all()
             device_breakdown = [{"device": row[0] or "unknown", "count": row[1]} for row in device_breakdown_result]
 
             # Daily pageviews (last 7 days)
-            daily_pageviews_result = session.execute(text("""
+            daily_pageviews_result = session.execute(
+                text("""
                 SELECT DATE(timestamp) as date, COUNT(*) as count
                 FROM pageview
                 WHERE timestamp >= NOW() - INTERVAL '7 days'
                 GROUP BY DATE(timestamp)
                 ORDER BY date DESC
-            """)).all()
+            """)
+            ).all()
             daily_pageviews = [{"date": str(row[0]), "count": row[1]} for row in daily_pageviews_result]
 
             # Top referrers
-            top_referrers_result = session.execute(text("""
+            top_referrers_result = session.execute(
+                text("""
                 SELECT referrer, COUNT(*) as count
                 FROM pageview
                 WHERE timestamp >= NOW() - INTERVAL '7 days'
@@ -364,7 +380,8 @@ async def get_admin_stats(
                 GROUP BY referrer
                 ORDER BY count DESC
                 LIMIT 10
-            """)).all()
+            """)
+            ).all()
             top_referrers = [{"referrer": row[0], "count": row[1]} for row in top_referrers_result]
 
             analytics_data = {
@@ -435,12 +452,14 @@ async def get_scheduler_status(
 
     jobs = []
     for job in scheduler.get_jobs():
-        jobs.append({
-            "id": job.id,
-            "name": job.name,
-            "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
-            "trigger": str(job.trigger),
-        })
+        jobs.append(
+            {
+                "id": job.id,
+                "name": job.name,
+                "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
+                "trigger": str(job.trigger),
+            }
+        )
 
     return {
         "running": scheduler.running,
@@ -449,6 +468,7 @@ async def get_scheduler_status(
 
 
 # ============== API KEY MANAGEMENT (Admin) ==============
+
 
 @router.get("/api-keys")
 async def list_all_api_keys(
@@ -462,28 +482,28 @@ async def list_all_api_keys(
 
     with Session(engine) as session:
         # Get all API keys with user info
-        keys = session.exec(
-            select(APIKey).order_by(APIKey.created_at.desc())
-        ).all()
+        keys = session.exec(select(APIKey).order_by(APIKey.created_at.desc())).all()
 
         result = []
         for key in keys:
             user = session.get(UserModel, key.user_id)
-            result.append({
-                "id": key.id,
-                "user_id": key.user_id,
-                "user_email": user.email if user else "Unknown",
-                "key_prefix": key.key_prefix,
-                "name": key.name,
-                "is_active": key.is_active,
-                "rate_limit_per_minute": key.rate_limit_per_minute,
-                "rate_limit_per_day": key.rate_limit_per_day,
-                "requests_today": key.requests_today,
-                "requests_total": key.requests_total,
-                "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None,
-                "created_at": key.created_at.isoformat() if key.created_at else None,
-                "expires_at": key.expires_at.isoformat() if key.expires_at else None,
-            })
+            result.append(
+                {
+                    "id": key.id,
+                    "user_id": key.user_id,
+                    "user_email": user.email if user else "Unknown",
+                    "key_prefix": key.key_prefix,
+                    "name": key.name,
+                    "is_active": key.is_active,
+                    "rate_limit_per_minute": key.rate_limit_per_minute,
+                    "rate_limit_per_day": key.rate_limit_per_day,
+                    "requests_today": key.requests_today,
+                    "requests_total": key.requests_total,
+                    "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None,
+                    "created_at": key.created_at.isoformat() if key.created_at else None,
+                    "expires_at": key.expires_at.isoformat() if key.expires_at else None,
+                }
+            )
 
         return result
 
@@ -503,38 +523,29 @@ async def get_api_key_stats(
         total_keys = session.exec(select(func.count(APIKey.id))).one()
 
         # Active keys
-        active_keys = session.exec(
-            select(func.count(APIKey.id)).where(APIKey.is_active == True)
-        ).one()
+        active_keys = session.exec(select(func.count(APIKey.id)).where(APIKey.is_active is True)).one()
 
         # Keys used today
-        keys_used_today = session.exec(
-            select(func.count(APIKey.id)).where(APIKey.requests_today > 0)
-        ).one()
+        keys_used_today = session.exec(select(func.count(APIKey.id)).where(APIKey.requests_today > 0)).one()
 
         # Total requests today
-        total_requests_today = session.exec(
-            select(func.sum(APIKey.requests_today))
-        ).one() or 0
+        total_requests_today = session.exec(select(func.sum(APIKey.requests_today))).one() or 0
 
         # Total requests all time
-        total_requests_all = session.exec(
-            select(func.sum(APIKey.requests_total))
-        ).one() or 0
+        total_requests_all = session.exec(select(func.sum(APIKey.requests_total))).one() or 0
 
         # Top users by API usage
-        top_users_result = session.execute(text("""
+        top_users_result = session.execute(
+            text("""
             SELECT u.email, SUM(ak.requests_total) as total_requests, COUNT(ak.id) as key_count
             FROM apikey ak
             JOIN "user" u ON ak.user_id = u.id
             GROUP BY u.id, u.email
             ORDER BY total_requests DESC
             LIMIT 10
-        """)).all()
-        top_users = [
-            {"email": row[0], "total_requests": row[1] or 0, "key_count": row[2]}
-            for row in top_users_result
-        ]
+        """)
+        ).all()
+        top_users = [{"email": row[0], "total_requests": row[1] or 0, "key_count": row[2]} for row in top_users_result]
 
         return {
             "total_keys": total_keys,
@@ -568,7 +579,7 @@ async def admin_toggle_api_key(
         return {
             "id": key.id,
             "is_active": key.is_active,
-            "message": f"API key {'enabled' if key.is_active else 'disabled'}"
+            "message": f"API key {'enabled' if key.is_active else 'disabled'}",
         }
 
 
@@ -591,10 +602,7 @@ async def admin_delete_api_key(
         session.delete(key)
         session.commit()
 
-        return {
-            "message": "API key deleted",
-            "key_prefix": key_prefix
-        }
+        return {"message": "API key deleted", "key_prefix": key_prefix}
 
 
 @router.put("/api-keys/{key_id}/limits")
@@ -623,7 +631,7 @@ async def admin_update_api_key_limits(
             "id": key.id,
             "rate_limit_per_minute": key.rate_limit_per_minute,
             "rate_limit_per_day": key.rate_limit_per_day,
-            "message": "Rate limits updated"
+            "message": "Rate limits updated",
         }
 
 
@@ -637,13 +645,12 @@ async def admin_reset_daily_counts(
     from app.db import engine
 
     with Session(engine) as session:
-        result = session.execute(text("""
+        result = session.execute(
+            text("""
             UPDATE apikey
             SET requests_today = 0, last_reset_date = NOW()
-        """))
+        """)
+        )
         session.commit()
 
-        return {
-            "message": "Daily counts reset for all API keys",
-            "keys_affected": result.rowcount
-        }
+        return {"message": "Daily counts reset for all API keys", "keys_affected": result.rowcount}

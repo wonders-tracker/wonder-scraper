@@ -2,9 +2,11 @@ from typing import Optional
 from sqlmodel import Field, SQLModel
 from datetime import datetime, timezone
 
+
 def _utc_now() -> datetime:
     """Get current UTC time (timezone-aware)."""
     return datetime.now(timezone.utc)
+
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

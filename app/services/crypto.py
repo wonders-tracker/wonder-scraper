@@ -1,5 +1,5 @@
 import httpx
-from typing import Optional
+
 
 async def get_eth_price() -> float:
     """
@@ -16,4 +16,3 @@ async def get_eth_price() -> float:
         print(f"Failed to fetch ETH price: {e}")
         # Fallback price (approximate, better than 0)
         return 3000.0
-

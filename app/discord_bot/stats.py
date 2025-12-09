@@ -1,10 +1,11 @@
 """
 Market stats calculation for Discord reports.
 """
+
 import csv
 import io
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from dataclasses import dataclass
 
 from sqlmodel import Session, select, func, desc
@@ -16,6 +17,7 @@ from app.models.market import MarketSnapshot, MarketPrice
 @dataclass
 class MarketStats:
     """Container for market statistics."""
+
     period: str
     total_sales: int
     total_volume_usd: float
@@ -63,64 +65,76 @@ def _generate_insights(
     avg_price: float,
     volume_trend_pct: float,
     sales_trend_pct: float,
-    period: str
+    period: str,
 ) -> List[Dict[str, Any]]:
     """Generate actionable market insights based on data."""
     insights = []
 
     # Insight 1: Volume/activity trend
     if volume_trend_pct > 20:
-        insights.append({
-            "type": "bullish",
-            "icon": "📈",
-            "title": "Market Heating Up",
-            "text": f"Volume is up {volume_trend_pct:.0f}% vs last {period}. Consider selling high-value cards while demand is strong."
-        })
+        insights.append(
+            {
+                "type": "bullish",
+                "icon": "📈",
+                "title": "Market Heating Up",
+                "text": f"Volume is up {volume_trend_pct:.0f}% vs last {period}. Consider selling high-value cards while demand is strong.",
+            }
+        )
     elif volume_trend_pct < -20:
-        insights.append({
-            "type": "bearish",
-            "icon": "📉",
-            "title": "Market Cooling Down",
-            "text": f"Volume is down {abs(volume_trend_pct):.0f}% vs last {period}. Good time to buy if you're patient - less competition."
-        })
+        insights.append(
+            {
+                "type": "bearish",
+                "icon": "📉",
+                "title": "Market Cooling Down",
+                "text": f"Volume is down {abs(volume_trend_pct):.0f}% vs last {period}. Good time to buy if you're patient - less competition.",
+            }
+        )
     elif sales_trend_pct > 15:
-        insights.append({
-            "type": "neutral",
-            "icon": "📊",
-            "title": "More Activity",
-            "text": f"Sales up {sales_trend_pct:.0f}% but prices stable. Market is active - good liquidity for buyers and sellers."
-        })
+        insights.append(
+            {
+                "type": "neutral",
+                "icon": "📊",
+                "title": "More Activity",
+                "text": f"Sales up {sales_trend_pct:.0f}% but prices stable. Market is active - good liquidity for buyers and sellers.",
+            }
+        )
 
     # Insight 2: Best buying opportunities (cards that dropped significantly)
     buy_opportunities = [m for m in top_movers if m.get("pct_change", 0) < -15]
     if buy_opportunities:
         best_buy = min(buy_opportunities, key=lambda x: x["pct_change"])
-        insights.append({
-            "type": "opportunity",
-            "icon": "💰",
-            "title": "Buy Opportunity",
-            "text": f"**{best_buy['name']}** dropped {abs(best_buy['pct_change']):.0f}% to ${best_buy['current_price']:.2f}. Could be a dip worth buying."
-        })
+        insights.append(
+            {
+                "type": "opportunity",
+                "icon": "💰",
+                "title": "Buy Opportunity",
+                "text": f"**{best_buy['name']}** dropped {abs(best_buy['pct_change']):.0f}% to ${best_buy['current_price']:.2f}. Could be a dip worth buying.",
+            }
+        )
 
     # Insight 3: Hot cards with momentum
     hot_cards = [m for m in top_movers if m.get("pct_change", 0) > 15 and m.get("volume", 0) >= 2]
     if hot_cards:
         hottest = max(hot_cards, key=lambda x: x["pct_change"])
-        insights.append({
-            "type": "trending",
-            "icon": "🔥",
-            "title": "Hot Card Alert",
-            "text": f"**{hottest['name']}** is up {hottest['pct_change']:.0f}% with {hottest.get('volume', 0)} sales. Momentum is building."
-        })
+        insights.append(
+            {
+                "type": "trending",
+                "icon": "🔥",
+                "title": "Hot Card Alert",
+                "text": f"**{hottest['name']}** is up {hottest['pct_change']:.0f}% with {hottest.get('volume', 0)} sales. Momentum is building.",
+            }
+        )
 
     # Insight 4: New all-time highs signal
     if new_highs:
-        insights.append({
-            "type": "milestone",
-            "icon": "🏆",
-            "title": "New Records Set",
-            "text": f"{len(new_highs)} card(s) hit all-time highs. **{new_highs[0]['name']}** reached ${new_highs[0]['price']:.2f}."
-        })
+        insights.append(
+            {
+                "type": "milestone",
+                "icon": "🏆",
+                "title": "New Records Set",
+                "text": f"{len(new_highs)} card(s) hit all-time highs. **{new_highs[0]['name']}** reached ${new_highs[0]['price']:.2f}.",
+            }
+        )
 
     # Insight 5: Underpriced cards (current ask significantly below recent avg sale)
     # Compute LIVE lowest_ask from MarketPrice table instead of stale snapshot
@@ -154,22 +168,19 @@ def _generate_insights(
         # If current ask is 20%+ below avg sold price
         discount_pct = ((avg_price - lowest_ask) / avg_price) * 100
         if discount_pct > 20 and lowest_ask >= 5:  # Min $5 to avoid junk
-            underpriced.append({
-                "name": card.name,
-                "ask": lowest_ask,
-                "avg": avg_price,
-                "discount": discount_pct
-            })
+            underpriced.append({"name": card.name, "ask": lowest_ask, "avg": avg_price, "discount": discount_pct})
 
     if underpriced and len(insights) < 4:
         underpriced.sort(key=lambda x: x["discount"], reverse=True)
         best = underpriced[0]
-        insights.append({
-            "type": "deal",
-            "icon": "🎯",
-            "title": "Below-Market Listing",
-            "text": f"**{best['name']}** listed at ${best['ask']:.2f} ({best['discount']:.0f}% below ${best['avg']:.2f} avg). Could be a quick flip."
-        })
+        insights.append(
+            {
+                "type": "deal",
+                "icon": "🎯",
+                "title": "Below-Market Listing",
+                "text": f"**{best['name']}** listed at ${best['ask']:.2f} ({best['discount']:.0f}% below ${best['avg']:.2f} avg). Could be a quick flip.",
+            }
+        )
 
     # Insight 6: High volume concentration (one card dominating)
     if top_volume and sales:
@@ -178,29 +189,35 @@ def _generate_insights(
         if total_vol > 0:
             concentration = (top_card_volume / total_vol) * 100
             if concentration > 30:
-                insights.append({
-                    "type": "info",
-                    "icon": "👀",
-                    "title": "Concentrated Volume",
-                    "text": f"**{top_volume[0]['name']}** accounts for {concentration:.0f}% of all volume. Watch for price swings."
-                })
+                insights.append(
+                    {
+                        "type": "info",
+                        "icon": "👀",
+                        "title": "Concentrated Volume",
+                        "text": f"**{top_volume[0]['name']}** accounts for {concentration:.0f}% of all volume. Watch for price swings.",
+                    }
+                )
 
     # Ensure we have at least 3 insights
     if len(insights) < 3:
         if avg_price > 50:
-            insights.append({
-                "type": "info",
-                "icon": "💎",
-                "title": "Premium Market",
-                "text": f"Average sale price is ${avg_price:.2f}. High-value trades dominating this period."
-            })
+            insights.append(
+                {
+                    "type": "info",
+                    "icon": "💎",
+                    "title": "Premium Market",
+                    "text": f"Average sale price is ${avg_price:.2f}. High-value trades dominating this period.",
+                }
+            )
         elif avg_price > 0:
-            insights.append({
-                "type": "info",
-                "icon": "📦",
-                "title": "Accessible Market",
-                "text": f"Average sale price is ${avg_price:.2f}. Good entry point for new collectors."
-            })
+            insights.append(
+                {
+                    "type": "info",
+                    "icon": "📦",
+                    "title": "Accessible Market",
+                    "text": f"Average sale price is ${avg_price:.2f}. Good entry point for new collectors.",
+                }
+            )
 
     # Cap at 3 insights for clean display
     return insights[:3]
@@ -253,7 +270,9 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
         # Calculate avg_price for each treatment
         for treatment in treatment_breakdown:
             cnt = treatment_breakdown[treatment]["count"]
-            treatment_breakdown[treatment]["avg_price"] = treatment_breakdown[treatment]["volume"] / cnt if cnt > 0 else 0
+            treatment_breakdown[treatment]["avg_price"] = (
+                treatment_breakdown[treatment]["volume"] / cnt if cnt > 0 else 0
+            )
 
         # Get previous period for comparison
         prev_start = start_time - (end_time - start_time)
@@ -275,13 +294,13 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
         MAX_TREND_PCT = 100  # Cap at ±100% to avoid crazy numbers like -500%
 
         if prev_total_volume > 0 and prev_total_sales >= MIN_SALES_FOR_TREND:
-            volume_trend_pct = ((total_volume_usd - prev_total_volume) / prev_total_volume * 100)
+            volume_trend_pct = (total_volume_usd - prev_total_volume) / prev_total_volume * 100
             volume_trend_pct = max(-MAX_TREND_PCT, min(MAX_TREND_PCT, volume_trend_pct))
         else:
             volume_trend_pct = 0  # Not enough data for meaningful comparison
 
         if prev_total_sales >= MIN_SALES_FOR_TREND:
-            sales_trend_pct = ((total_sales - prev_total_sales) / prev_total_sales * 100)
+            sales_trend_pct = (total_sales - prev_total_sales) / prev_total_sales * 100
             sales_trend_pct = max(-MAX_TREND_PCT, min(MAX_TREND_PCT, sales_trend_pct))
         else:
             sales_trend_pct = 0  # Not enough data for meaningful comparison
@@ -312,14 +331,16 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
 
             if prev_avg > 0:
                 pct_change = ((current_avg - prev_avg) / prev_avg) * 100
-                top_movers.append({
-                    "card_id": card.id,
-                    "name": card.name,
-                    "current_price": current_avg,
-                    "prev_price": prev_avg,
-                    "pct_change": pct_change,
-                    "volume": len(current_sales)
-                })
+                top_movers.append(
+                    {
+                        "card_id": card.id,
+                        "name": card.name,
+                        "current_price": current_avg,
+                        "prev_price": prev_avg,
+                        "pct_change": pct_change,
+                        "volume": len(current_sales),
+                    }
+                )
 
         # Sort by absolute change, get top 5 gainers and losers
         top_movers.sort(key=lambda x: x["pct_change"], reverse=True)
@@ -338,13 +359,15 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
         for card_id, data in sorted(card_volumes.items(), key=lambda x: x[1]["count"], reverse=True)[:5]:
             card = session.get(Card, card_id)
             if card:
-                top_volume.append({
-                    "card_id": card_id,
-                    "name": card.name,
-                    "sales_count": data["count"],
-                    "total_volume": data["total"],
-                    "avg_price": data["total"] / data["count"]
-                })
+                top_volume.append(
+                    {
+                        "card_id": card_id,
+                        "name": card.name,
+                        "sales_count": data["count"],
+                        "total_volume": data["total"],
+                        "avg_price": data["total"] / data["count"],
+                    }
+                )
 
         # New all-time highs
         new_highs = []
@@ -364,12 +387,9 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
             ).first()
 
             if hist_max is None or max_current > hist_max:
-                new_highs.append({
-                    "card_id": card.id,
-                    "name": card.name,
-                    "price": max_current,
-                    "prev_high": hist_max or 0
-                })
+                new_highs.append(
+                    {"card_id": card.id, "name": card.name, "price": max_current, "prev_high": hist_max or 0}
+                )
 
         new_highs.sort(key=lambda x: x["price"], reverse=True)
         new_highs = new_highs[:5]
@@ -392,12 +412,9 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
             ).first()
 
             if hist_min is None or min_current < hist_min:
-                new_lows.append({
-                    "card_id": card.id,
-                    "name": card.name,
-                    "price": min_current,
-                    "prev_low": hist_min or 0
-                })
+                new_lows.append(
+                    {"card_id": card.id, "name": card.name, "price": min_current, "prev_low": hist_min or 0}
+                )
 
         new_lows.sort(key=lambda x: x["price"])
         new_lows = new_lows[:5]
@@ -413,7 +430,7 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
             avg_price=avg_price,
             volume_trend_pct=volume_trend_pct,
             sales_trend_pct=sales_trend_pct,
-            period=period
+            period=period,
         )
 
         return MarketStats(
@@ -433,7 +450,7 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
             sales_trend_pct=sales_trend_pct,
             insights=insights,
             product_breakdown=product_breakdown,
-            treatment_breakdown=treatment_breakdown
+            treatment_breakdown=treatment_breakdown,
         )
 
 
@@ -458,30 +475,31 @@ def generate_csv_report(period: str = "daily") -> tuple[str, bytes]:
         writer = csv.writer(output)
 
         # Header
-        writer.writerow([
-            "Date", "Card Name", "Set", "Rarity", "Price", "Treatment",
-            "Seller", "Condition", "Platform", "URL"
-        ])
+        writer.writerow(
+            ["Date", "Card Name", "Set", "Rarity", "Price", "Treatment", "Seller", "Condition", "Platform", "URL"]
+        )
 
         for sale, card in sales:
             # Get rarity name
             rarity = session.get(Rarity, card.rarity_id) if card.rarity_id else None
             rarity_name = rarity.name if rarity else "Unknown"
 
-            writer.writerow([
-                sale.sold_date.strftime("%Y-%m-%d %H:%M") if sale.sold_date else "",
-                card.name,
-                card.set_name,
-                rarity_name,
-                f"${sale.price:.2f}",
-                sale.treatment or "Classic Paper",
-                sale.seller_name or "Unknown",
-                sale.condition or "Not Specified",
-                sale.platform,
-                sale.url or ""
-            ])
+            writer.writerow(
+                [
+                    sale.sold_date.strftime("%Y-%m-%d %H:%M") if sale.sold_date else "",
+                    card.name,
+                    card.set_name,
+                    rarity_name,
+                    f"${sale.price:.2f}",
+                    sale.treatment or "Classic Paper",
+                    sale.seller_name or "Unknown",
+                    sale.condition or "Not Specified",
+                    sale.platform,
+                    sale.url or "",
+                ]
+            )
 
-        csv_content = output.getvalue().encode('utf-8')
+        csv_content = output.getvalue().encode("utf-8")
         filename = f"wonders_market_{period}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
 
         return filename, csv_content
@@ -490,7 +508,7 @@ def generate_csv_report(period: str = "daily") -> tuple[str, bytes]:
 def format_stats_embed(stats: MarketStats) -> Dict[str, Any]:
     """Format stats for Discord embed."""
     period_label = stats.period.capitalize()
-    period_text = '24 hours' if stats.period == 'daily' else '7 days' if stats.period == 'weekly' else '30 days'
+    period_text = "24 hours" if stats.period == "daily" else "7 days" if stats.period == "weekly" else "30 days"
 
     # Build trend indicators for overview
     # Only show trends if they're non-zero (meaning we had enough prior data)
@@ -509,7 +527,9 @@ def format_stats_embed(stats: MarketStats) -> Dict[str, Any]:
     # Add context about previous period if we have meaningful data
     prev_context = ""
     if stats.prev_total_sales >= 5:
-        prev_context = f"\n*vs {stats.prev_total_sales} sales (${stats.prev_total_volume_usd:,.0f}) prior {stats.period}*"
+        prev_context = (
+            f"\n*vs {stats.prev_total_sales} sales (${stats.prev_total_volume_usd:,.0f}) prior {stats.period}*"
+        )
 
     # Top gainers section
     gainers_text = ""
@@ -590,43 +610,15 @@ def format_stats_embed(stats: MarketStats) -> Dict[str, Any]:
         {
             "name": "Overview",
             "value": f"**Total Sales**: {stats.total_sales}{sales_trend}\n**Volume**: ${stats.total_volume_usd:,.2f}{volume_trend}\n**Cards Traded**: {stats.unique_cards_traded}\n**Avg Price**: ${stats.avg_sale_price:.2f}{prev_context}",
-            "inline": False
+            "inline": False,
         },
-        {
-            "name": "Market Breakdown",
-            "value": breakdown_text,
-            "inline": False
-        },
-        {
-            "name": "Actionable Insights",
-            "value": insights_text,
-            "inline": False
-        },
-        {
-            "name": "Top Gainers",
-            "value": gainers_text,
-            "inline": True
-        },
-        {
-            "name": "Top Losers",
-            "value": losers_text,
-            "inline": True
-        },
-        {
-            "name": "Most Active",
-            "value": volume_text,
-            "inline": False
-        },
-        {
-            "name": "New All-Time Highs",
-            "value": highs_text,
-            "inline": True
-        },
-        {
-            "name": "New All-Time Lows",
-            "value": lows_text,
-            "inline": True
-        }
+        {"name": "Market Breakdown", "value": breakdown_text, "inline": False},
+        {"name": "Actionable Insights", "value": insights_text, "inline": False},
+        {"name": "Top Gainers", "value": gainers_text, "inline": True},
+        {"name": "Top Losers", "value": losers_text, "inline": True},
+        {"name": "Most Active", "value": volume_text, "inline": False},
+        {"name": "New All-Time Highs", "value": highs_text, "inline": True},
+        {"name": "New All-Time Lows", "value": lows_text, "inline": True},
     ]
 
     return {
@@ -634,8 +626,6 @@ def format_stats_embed(stats: MarketStats) -> Dict[str, Any]:
         "description": f"Market stats for the past {period_text}",
         "color": 0x10B981,  # Emerald green
         "fields": fields,
-        "footer": {
-            "text": f"Generated at {stats.generated_at.strftime('%Y-%m-%d %H:%M UTC')}"
-        },
-        "timestamp": stats.generated_at.isoformat()
+        "footer": {"text": f"Generated at {stats.generated_at.strftime('%Y-%m-%d %H:%M UTC')}"},
+        "timestamp": stats.generated_at.isoformat(),
     }

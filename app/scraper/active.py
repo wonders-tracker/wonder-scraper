@@ -1,16 +1,19 @@
-import asyncio
 from sqlmodel import Session, select
 from app.db import engine
-from app.models.card import Card
-from app.models.market import MarketSnapshot
-from app.scraper.browser import BrowserManager, get_page_content
-from app.scraper.simple_http import get_page_simple
+from app.scraper.browser import get_page_content
 from app.scraper.utils import build_ebay_url
 from app.scraper.ebay import parse_active_results, parse_total_results
 from app.discord_bot.logger import log_new_listing
 from typing import Tuple, Optional
 
-async def scrape_active_data(card_name: str, card_id: int, search_term: Optional[str] = None, save_to_db: bool = True, product_type: str = "Single") -> Tuple[float, int, float]:
+
+async def scrape_active_data(
+    card_name: str,
+    card_id: int,
+    search_term: Optional[str] = None,
+    save_to_db: bool = True,
+    product_type: str = "Single",
+) -> Tuple[float, int, float]:
     """
     Scrapes active listings to find:
     - Lowest Ask (min price)
@@ -51,7 +54,7 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
 
         for item in items:
             # Check if it has bids (we monkey-patched this property in parse_generic_results)
-            bid_count = getattr(item, 'bid_count', 0)
+            bid_count = getattr(item, "bid_count", 0)
             if bid_count > 0:
                 if item.price > highest_bid:
                     highest_bid = item.price
@@ -73,7 +76,7 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                     stmt = select(MarketPrice).where(
                         MarketPrice.card_id == card_id,
                         MarketPrice.listing_type == "active",
-                        MarketPrice.scraped_at < cutoff
+                        MarketPrice.scraped_at < cutoff,
                     )
                     old_listings = session.exec(stmt).all()
                     deleted_count = len(old_listings)
@@ -84,8 +87,7 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                     # Check GLOBALLY (any card_id) to prevent duplicate key errors
                     # when the same eBay listing matches multiple cards
                     stmt = select(MarketPrice).where(
-                        MarketPrice.listing_type == "active",
-                        MarketPrice.external_id.isnot(None)
+                        MarketPrice.listing_type == "active", MarketPrice.external_id.isnot(None)
                     )
                     all_existing = session.exec(stmt).all()
 
@@ -124,10 +126,10 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                             existing.url = item.url
                             existing.scraped_at = datetime.utcnow()
                             # Don't update listed_at - preserve original "first seen" time
-                            existing.image_url = getattr(item, 'image_url', existing.image_url)
-                            existing.seller_name = getattr(item, 'seller_name', existing.seller_name)
-                            existing.condition = getattr(item, 'condition', existing.condition)
-                            existing.shipping_cost = getattr(item, 'shipping_cost', existing.shipping_cost)
+                            existing.image_url = getattr(item, "image_url", existing.image_url)
+                            existing.seller_name = getattr(item, "seller_name", existing.seller_name)
+                            existing.condition = getattr(item, "condition", existing.condition)
+                            existing.shipping_cost = getattr(item, "shipping_cost", existing.shipping_cost)
                             session.add(existing)
                             updated_count += 1
                         else:
@@ -140,14 +142,14 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
 
                                 # Send webhook notification for NEW listings only
                                 try:
-                                    is_auction = getattr(item, 'bid_count', 0) > 0
+                                    is_auction = getattr(item, "bid_count", 0) > 0
                                     log_new_listing(
                                         card_name=card_name,
                                         price=item.price,
-                                        treatment=getattr(item, 'treatment', None),
+                                        treatment=getattr(item, "treatment", None),
                                         url=item.url,
                                         is_auction=is_auction,
-                                        floor_price=lowest_ask if lowest_ask > 0 else None
+                                        floor_price=lowest_ask if lowest_ask > 0 else None,
                                     )
                                 except Exception as webhook_err:
                                     print(f"Discord webhook failed for {card_name}: {webhook_err}")
@@ -161,7 +163,9 @@ async def scrape_active_data(card_name: str, card_id: int, search_term: Optional
                     session.commit()
                     skip_msg = f", {skipped_count} duplicates skipped" if skipped_count > 0 else ""
                     batch_msg = f", {duplicate_in_batch} batch duplicates" if duplicate_in_batch > 0 else ""
-                    print(f"Active listings for {card_name}: {new_count} new, {updated_count} updated, {deleted_count} stale removed{skip_msg}{batch_msg}")
+                    print(
+                        f"Active listings for {card_name}: {new_count} new, {updated_count} updated, {deleted_count} stale removed{skip_msg}{batch_msg}"
+                    )
             except Exception as db_err:
                 print(f"DB save error for {card_name} active listings (stats still valid): {db_err}")
 

@@ -12,6 +12,7 @@ from app.schemas import UserOut, UserUpdate
 
 router = APIRouter()
 
+
 @router.get("/me", response_model=UserOut)
 def read_user_me(
     current_user: User = Depends(deps.get_current_user),
@@ -20,6 +21,12 @@ def read_user_me(
     Get current user profile.
     """
     return UserOut.model_validate(current_user)
+
+
+# Fields users are allowed to update on their own profile
+# SECURITY: This is a defense-in-depth measure - never add privilege fields here
+ALLOWED_USER_UPDATE_FIELDS = frozenset({"username", "discord_handle", "bio"})
+
 
 @router.put("/me", response_model=UserOut)
 def update_user_me(
@@ -31,8 +38,11 @@ def update_user_me(
     Update current user profile.
     """
     user_data = user_in.model_dump(exclude_unset=True)
+
+    # SECURITY: Only update explicitly allowed fields (defense-in-depth)
     for key, value in user_data.items():
-        setattr(current_user, key, value)
+        if key in ALLOWED_USER_UPDATE_FIELDS:
+            setattr(current_user, key, value)
 
     session.add(current_user)
     session.commit()
@@ -56,6 +66,7 @@ def complete_onboarding(
 
 # ============== API KEY MANAGEMENT ==============
 
+
 class APIKeyCreate(BaseModel):
     name: str = "Default"
 
@@ -78,6 +89,7 @@ class APIKeyOut(BaseModel):
 
 class APIKeyCreated(APIKeyOut):
     """Response when creating a new API key - includes the actual key (shown only once)."""
+
     key: str  # The actual API key - only shown on creation!
 
 
@@ -90,9 +102,7 @@ def list_api_keys(
     List all API keys for the current user.
     Note: The actual key values are NOT returned - only the prefix for identification.
     """
-    keys = session.exec(
-        select(APIKey).where(APIKey.user_id == current_user.id)
-    ).all()
+    keys = session.exec(select(APIKey).where(APIKey.user_id == current_user.id)).all()
     return [APIKeyOut.model_validate(k) for k in keys]
 
 
@@ -114,21 +124,13 @@ def create_api_key(
     """
     # Check if user has API access (superusers always have access)
     if not current_user.is_superuser and not current_user.has_api_access:
-        raise HTTPException(
-            status_code=403,
-            detail="API access not granted. Please request access from the API page."
-        )
+        raise HTTPException(status_code=403, detail="API access not granted. Please request access from the API page.")
 
     # Limit to 5 keys per user
-    existing_count = len(session.exec(
-        select(APIKey).where(APIKey.user_id == current_user.id)
-    ).all())
+    existing_count = len(session.exec(select(APIKey).where(APIKey.user_id == current_user.id)).all())
 
     if existing_count >= 5:
-        raise HTTPException(
-            status_code=400,
-            detail="Maximum of 5 API keys per user. Delete an existing key first."
-        )
+        raise HTTPException(status_code=400, detail="Maximum of 5 API keys per user. Delete an existing key first.")
 
     # Generate the key
     raw_key = APIKey.generate_key()
@@ -205,6 +207,7 @@ def toggle_api_key(
 
 # ============== API ACCESS REQUEST ==============
 
+
 class APIAccessRequest(BaseModel):
     name: str
     email: str
@@ -224,10 +227,7 @@ def request_api_access(
 
     # Send email to admin
     email_sent = send_api_access_request_email(
-        requester_email=request.email,
-        requester_name=request.name,
-        use_case=request.use_case,
-        company=request.company
+        requester_email=request.email, requester_name=request.name, use_case=request.use_case, company=request.company
     )
 
     if not email_sent:
@@ -236,6 +236,5 @@ def request_api_access(
 
     return {
         "message": "Your API access request has been submitted. We'll review it and get back to you soon.",
-        "email": request.email
+        "email": request.email,
     }
-

@@ -23,11 +23,11 @@ def get_vote_summary(session: Session, card_id: int) -> MetaVoteSummary:
 
     summary = MetaVoteSummary()
     for vote_type, count in votes:
-        if vote_type == 'yes':
+        if vote_type == "yes":
             summary.yes = count
-        elif vote_type == 'no':
+        elif vote_type == "no":
             summary.no = count
-        elif vote_type == 'unsure':
+        elif vote_type == "unsure":
             summary.unsure = count
 
     summary.total = summary.yes + summary.no + summary.unsure
@@ -46,11 +46,11 @@ def get_consensus(summary: MetaVoteSummary) -> Optional[str]:
     # Check for ties
     leaders = []
     if summary.yes == max_count:
-        leaders.append('yes')
+        leaders.append("yes")
     if summary.no == max_count:
-        leaders.append('no')
+        leaders.append("no")
     if summary.unsure == max_count:
-        leaders.append('unsure')
+        leaders.append("unsure")
 
     # Return None if tie, otherwise return the leader
     return leaders[0] if len(leaders) == 1 else None
@@ -77,18 +77,12 @@ def get_meta_votes(
     user_vote = None
     if current_user:
         vote = session.exec(
-            select(CardMetaVote)
-            .where(CardMetaVote.card_id == card_id)
-            .where(CardMetaVote.user_id == current_user.id)
+            select(CardMetaVote).where(CardMetaVote.card_id == card_id).where(CardMetaVote.user_id == current_user.id)
         ).first()
         if vote:
             user_vote = vote.vote
 
-    return MetaVoteResponse(
-        summary=summary,
-        user_vote=user_vote,
-        consensus=get_consensus(summary)
-    )
+    return MetaVoteResponse(summary=summary, user_vote=user_vote, consensus=get_consensus(summary))
 
 
 @router.post("/{card_id}/meta", response_model=MetaVoteResponse)
@@ -103,7 +97,7 @@ def cast_meta_vote(
     Requires authentication.
     """
     # Validate vote value
-    if vote_in.vote not in ('yes', 'no', 'unsure'):
+    if vote_in.vote not in ("yes", "no", "unsure"):
         raise HTTPException(status_code=400, detail="Vote must be 'yes', 'no', or 'unsure'")
 
     # Verify card exists
@@ -113,9 +107,7 @@ def cast_meta_vote(
 
     # Check if user already voted - update if so, create if not
     existing_vote = session.exec(
-        select(CardMetaVote)
-        .where(CardMetaVote.card_id == card_id)
-        .where(CardMetaVote.user_id == current_user.id)
+        select(CardMetaVote).where(CardMetaVote.card_id == card_id).where(CardMetaVote.user_id == current_user.id)
     ).first()
 
     if existing_vote:
@@ -123,22 +115,14 @@ def cast_meta_vote(
         existing_vote.updated_at = datetime.utcnow()
         session.add(existing_vote)
     else:
-        new_vote = CardMetaVote(
-            card_id=card_id,
-            user_id=current_user.id,
-            vote=vote_in.vote
-        )
+        new_vote = CardMetaVote(card_id=card_id, user_id=current_user.id, vote=vote_in.vote)
         session.add(new_vote)
 
     session.commit()
 
     # Return updated summary
     summary = get_vote_summary(session, card_id)
-    return MetaVoteResponse(
-        summary=summary,
-        user_vote=vote_in.vote,
-        consensus=get_consensus(summary)
-    )
+    return MetaVoteResponse(summary=summary, user_vote=vote_in.vote, consensus=get_consensus(summary))
 
 
 @router.delete("/{card_id}/meta", response_model=MetaVoteResponse)
@@ -158,9 +142,7 @@ def delete_meta_vote(
 
     # Find and delete the vote
     vote = session.exec(
-        select(CardMetaVote)
-        .where(CardMetaVote.card_id == card_id)
-        .where(CardMetaVote.user_id == current_user.id)
+        select(CardMetaVote).where(CardMetaVote.card_id == card_id).where(CardMetaVote.user_id == current_user.id)
     ).first()
 
     if vote:
@@ -169,8 +151,4 @@ def delete_meta_vote(
 
     # Return updated summary
     summary = get_vote_summary(session, card_id)
-    return MetaVoteResponse(
-        summary=summary,
-        user_vote=None,
-        consensus=get_consensus(summary)
-    )
+    return MetaVoteResponse(summary=summary, user_vote=None, consensus=get_consensus(summary))

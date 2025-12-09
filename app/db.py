@@ -1,5 +1,5 @@
 from sqlmodel import create_engine, SQLModel, Session
-from sqlalchemy import event, text
+from sqlalchemy import event
 from sqlalchemy.engine import Engine
 import os
 import logging
@@ -33,7 +33,7 @@ engine = create_engine(
     connect_args={
         "connect_timeout": 10,  # Connection timeout
         # Note: statement_timeout set via event listener below (Neon pooler doesn't support it in options)
-    }
+    },
 )
 
 
@@ -53,10 +53,11 @@ def set_database_security(dbapi_connection, connection_record):
     finally:
         cursor.close()
 
+
 def get_session():
     with Session(engine) as session:
         yield session
 
+
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
-

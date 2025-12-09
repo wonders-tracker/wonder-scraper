@@ -2,13 +2,14 @@
 Discord webhook for sending scheduled reports.
 Simpler than running a full bot - just POST to the webhook URL.
 """
+
 import os
 import io
 import requests
 from datetime import datetime
-from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from app.discord_bot.stats import calculate_market_stats, generate_csv_report, format_stats_embed
@@ -23,7 +24,7 @@ def send_webhook_message(
     embeds: list = None,
     username: str = "Wonders Market Bot",
     file_data: bytes = None,
-    filename: str = None
+    filename: str = None,
 ) -> bool:
     """
     Send a message via Discord webhook.
@@ -52,21 +53,12 @@ def send_webhook_message(
     try:
         if file_data and filename:
             # Send with file attachment
-            files = {
-                "file": (filename, io.BytesIO(file_data), "text/csv")
-            }
+            files = {"file": (filename, io.BytesIO(file_data), "text/csv")}
             # payload_json is required when sending files with embeds
-            response = requests.post(
-                WEBHOOK_URL,
-                data={"payload_json": __import__('json').dumps(payload)},
-                files=files
-            )
+            response = requests.post(WEBHOOK_URL, data={"payload_json": __import__("json").dumps(payload)}, files=files)
         else:
             # Send JSON only
-            response = requests.post(
-                WEBHOOK_URL,
-                json=payload
-            )
+            response = requests.post(WEBHOOK_URL, json=payload)
 
         if response.status_code in (200, 204):
             return True
@@ -93,7 +85,7 @@ def send_daily_report() -> bool:
             "color": embed_data["color"],
             "timestamp": embed_data["timestamp"],
             "footer": embed_data["footer"],
-            "fields": embed_data["fields"]
+            "fields": embed_data["fields"],
         }
 
         # Generate and store CSV in Postgres
@@ -105,11 +97,7 @@ def send_daily_report() -> bool:
             print(f"Failed to store CSV: {e}")
 
         # Send embed (attach CSV as file for Discord users)
-        success = send_webhook_message(
-            embeds=[embed],
-            file_data=csv_content,
-            filename=filename
-        )
+        success = send_webhook_message(embeds=[embed], file_data=csv_content, filename=filename)
 
         if success:
             print(f"Daily report sent at {datetime.utcnow()}")
@@ -134,7 +122,7 @@ def send_weekly_report() -> bool:
             "color": embed_data["color"],
             "timestamp": embed_data["timestamp"],
             "footer": embed_data["footer"],
-            "fields": embed_data["fields"]
+            "fields": embed_data["fields"],
         }
 
         # Generate and store CSV in Postgres
@@ -146,11 +134,7 @@ def send_weekly_report() -> bool:
             print(f"Failed to store CSV: {e}")
 
         # Send embed (attach CSV as file for Discord users)
-        success = send_webhook_message(
-            embeds=[embed],
-            file_data=csv_content,
-            filename=filename
-        )
+        success = send_webhook_message(embeds=[embed], file_data=csv_content, filename=filename)
 
         if success:
             print(f"Weekly report sent at {datetime.utcnow()}")
@@ -165,12 +149,14 @@ def send_test_message() -> bool:
     """Send a test message to verify webhook is working."""
     return send_webhook_message(
         content="Wonders Market Bot is connected!",
-        embeds=[{
-            "title": "Test Message",
-            "description": "If you see this, the webhook is working correctly.",
-            "color": 0x10B981,
-            "timestamp": datetime.utcnow().isoformat()
-        }]
+        embeds=[
+            {
+                "title": "Test Message",
+                "description": "If you see this, the webhook is working correctly.",
+                "color": 0x10B981,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        ],
     )
 
 
