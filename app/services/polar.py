@@ -1,81 +1,57 @@
 """
-Polar.sh integration for subscription billing and usage metering.
+Polar.sh integration stub.
+
+This file provides graceful fallbacks when the saas/ module is not available.
+In OSS deployments (without saas/ submodule), these functions are no-ops.
 """
+
 import logging
 from typing import Optional
-from polar_sdk import Polar
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-
-def get_polar_client() -> Polar:
-    """Get configured Polar client."""
-    return Polar(
-        access_token=settings.POLAR_ACCESS_TOKEN,
-        server="sandbox" if settings.POLAR_ENVIRONMENT == "sandbox" else None
+try:
+    from saas.services.polar import (
+        get_polar_client,
+        create_checkout_session,
+        get_customer_portal_url,
+        ingest_usage_event,
     )
+    POLAR_AVAILABLE = True
+except ImportError:
+    POLAR_AVAILABLE = False
+    logger.info("SaaS module not available - Polar integration disabled")
+
+    def get_polar_client():
+        """Stub: Polar client not available."""
+        raise NotImplementedError("Polar integration requires saas/ module")
+
+    async def create_checkout_session(
+        product_id: str,
+        customer_email: str,
+        success_url: str,
+        metadata: Optional[dict] = None
+    ) -> str:
+        """Stub: Checkout not available in OSS version."""
+        raise NotImplementedError("Billing requires saas/ module")
+
+    async def get_customer_portal_url(customer_id: str) -> str:
+        """Stub: Customer portal not available in OSS version."""
+        raise NotImplementedError("Billing requires saas/ module")
+
+    async def ingest_usage_event(
+        customer_id: str,
+        event_name: str,
+        metadata: Optional[dict] = None
+    ) -> None:
+        """Stub: Usage metering not available - silent no-op."""
+        pass  # Silent no-op for metering
 
 
-async def create_checkout_session(
-    product_id: str,
-    customer_email: str,
-    success_url: str,
-    metadata: Optional[dict] = None
-) -> str:
-    """
-    Create a Polar checkout session.
-
-    Returns the checkout URL to redirect the user to.
-    """
-    polar = get_polar_client()
-
-    checkout = polar.checkouts.custom.create(
-        product_id=product_id,
-        customer_email=customer_email,
-        success_url=success_url,
-        metadata=metadata or {}
-    )
-
-    return checkout.url
-
-
-async def get_customer_portal_url(customer_id: str) -> str:
-    """Get the customer portal URL for managing subscription."""
-    polar = get_polar_client()
-
-    session = polar.customer_sessions.create(
-        customer_id=customer_id
-    )
-
-    return session.customer_portal_url
-
-
-async def ingest_usage_event(
-    customer_id: str,
-    event_name: str,
-    metadata: Optional[dict] = None
-) -> None:
-    """
-    Send a usage event to Polar for metering.
-
-    Args:
-        customer_id: Polar customer ID
-        event_name: Event name (e.g., "api_request")
-        metadata: Additional event data
-    """
-    if not customer_id or not settings.POLAR_ACCESS_TOKEN:
-        return
-
-    try:
-        polar = get_polar_client()
-
-        polar.events.ingest(
-            events=[{
-                "name": event_name,
-                "external_customer_id": customer_id,
-                "metadata": metadata or {}
-            }]
-        )
-    except Exception as e:
-        logger.exception("Failed to ingest usage event", extra={"customer_id": customer_id, "event_name": event_name})
+__all__ = [
+    "POLAR_AVAILABLE",
+    "get_polar_client",
+    "create_checkout_session",
+    "get_customer_portal_url",
+    "ingest_usage_event",
+]

@@ -37,9 +37,34 @@ volumes:
   postgres_data:
   redis_data:
 
-# Usage:
+# =============================================================================
+# CONTRIBUTOR QUICKSTART
+# =============================================================================
+#
+# 1. Start local database:
+#    docker-compose up -d postgres
+#
+# 2. Configure environment:
+#    cp .env.example .env
+#    # DATABASE_URL is pre-configured for docker-compose
+#
+# 3. Run migrations:
+#    poetry run alembic upgrade head
+#
+# 4. (Optional) Import contributor data:
+#    # Get data dump from wonders-tracker/wonder-data repo
+#    python scripts/import_contributor_data.py data/exports/wonder_data_YYYYMMDD.sql.gz
+#
+# 5. Start the API:
+#    poetry run uvicorn app.main:app --reload
+#
+# =============================================================================
+# COMMON COMMANDS
+# =============================================================================
+#
 # Start services:     docker-compose up -d
 # Stop services:      docker-compose down
 # View logs:          docker-compose logs -f postgres
 # Connect to psql:    docker-compose exec postgres psql -U wonder -d wonder_dev
 # Reset database:     docker-compose down -v && docker-compose up -d
+# Check status:       docker-compose ps

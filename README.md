@@ -1,7 +1,7 @@
 # WondersTracker
 
-[![CI](https://github.com/codyrobertson/wonder-scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/codyrobertson/wonder-scraper/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/wonders-tracker/wonder-scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/wonders-tracker/wonder-scraper/actions/workflows/ci.yml)
+[![License: O'Saasy](https://img.shields.io/badge/License-O'Saasy-blue.svg)](LICENSE.md)
 
 Real-time market tracking and price analytics platform for the **Wonders of the First** trading card game. Aggregates sales data from eBay and Blokpax to provide pricing, market trends, and portfolio management.
 
@@ -39,7 +39,7 @@ Real-time market tracking and price analytics platform for the **Wonders of the 
 
 ```bash
 # Clone the repository
-git clone https://github.com/codyrobertson/wonder-scraper.git
+git clone https://github.com/wonders-tracker/wonder-scraper.git
 cd wonder-scraper
 
 # Install dependencies
@@ -149,7 +149,11 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+**O'Saasy License** - Source available with SaaS restriction.
+
+You're free to use, modify, and deploy this software for personal or internal use. However, you may not offer it as a competing SaaS product.
+
+See [LICENSE.md](LICENSE.md) for full terms.
 
 ## Links
 

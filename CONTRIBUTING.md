@@ -16,9 +16,127 @@ Be respectful, inclusive, and constructive. We're all here to build something gr
    ```
 3. **Add upstream remote**:
    ```bash
-   git remote add upstream https://github.com/codyrobertson/wonder-scraper.git
+   git remote add upstream https://github.com/wonders-tracker/wonder-scraper.git
    ```
-4. **Set up development environment** (see [README.md](README.md))
+4. **Set up development environment** (see below)
+
+## Development Environment Setup
+
+### Prerequisites
+
+- Python 3.11+
+- Poetry (Python package manager)
+- Node.js 20+
+- Docker (for local PostgreSQL)
+
+### Quick Start
+
+```bash
+# 1. Start local PostgreSQL
+docker-compose up -d postgres
+
+# 2. Install dependencies
+poetry install
+cd frontend && npm install && cd ..
+
+# 3. Configure environment
+cp .env.example .env
+# Edit .env if needed - defaults work with docker-compose
+
+# 4. Run database migrations
+poetry run alembic upgrade head
+
+# 5. (Optional) Import sample data - see "Working with Data" below
+
+# 6. Start the backend
+poetry run uvicorn app.main:app --reload
+
+# 7. Start the frontend (separate terminal)
+cd frontend && npm run dev
+```
+
+## Working with Data
+
+### Option A: Empty Database (Minimal)
+
+For most contributions, an empty database with just the schema is fine:
+
+```bash
+poetry run alembic upgrade head
+```
+
+### Option B: Sample Data (Recommended)
+
+For a realistic development experience, import the contributor data dump:
+
+1. **Request access** to the [wonders-tracker/wonder-data](https://github.com/wonders-tracker/wonder-data) private repo
+   - Join the `contributors` team on the wonders-tracker org
+   - This repo contains sanitized market data (no user PII)
+
+2. **Clone the data repo**:
+   ```bash
+   git clone https://github.com/wonders-tracker/wonder-data.git ../wonder-data
+   ```
+
+3. **Import the data**:
+   ```bash
+   python scripts/import_contributor_data.py ../wonder-data/exports/latest.sql.gz
+   ```
+
+### What's in the Data Dump?
+
+The contributor data includes **public market data only**:
+
+| Included (Safe) | Excluded (Sensitive) |
+|-----------------|----------------------|
+| Cards & Rarities | Users & Passwords |
+| Market Prices | Portfolios |
+| Market Snapshots | API Keys |
+| Blokpax Data | Page Views |
+| Listing Reports | Watchlists |
+
+### Creating Test Data
+
+For unit tests, use the test fixtures in `tests/conftest.py`:
+
+```python
+def test_my_feature(sample_cards, sample_market_prices):
+    # sample_cards and sample_market_prices are automatically created
+    pass
+```
+
+## OSS vs SaaS Mode
+
+WondersTracker runs in two modes:
+
+| Mode | Description | Who Uses It |
+|------|-------------|-------------|
+| **OSS** | Core features only, billing disabled | Contributors |
+| **SaaS** | Full features with billing/metering | Production |
+
+### How It Works
+
+- The `saas/` directory contains proprietary code (billing, Polar integration)
+- When `saas/` is not present, the app runs in OSS mode automatically
+- All core features work identically in both modes
+
+### What You'll See
+
+On startup, check the logs:
+```
+INFO: WondersTracker API Starting
+INFO: SaaS Features: DISABLED (OSS mode)   ← This is normal for contributors
+INFO: Usage Metering: DISABLED
+```
+
+### Testing
+
+SaaS-specific tests are automatically skipped when running in OSS mode:
+```bash
+poetry run pytest  # SaaS tests show as "skipped"
+```
+
+See [docs/architecture/saas-setup.md](docs/architecture/saas-setup.md) for more details.
 
 ## Development Workflow
 

@@ -76,3 +76,10 @@ frontend/app.config.timestamp_*.js
 # Vercel build output
 public/
 .coverage
+
+# SaaS Module (Private Submodule)
+# The saas/ directory contains proprietary code and is managed as a Git submodule.
+# For OSS users: This directory won't exist and the app runs in OSS mode.
+# For maintainers: Clone the private repo as a submodule (see docs/architecture/saas-setup.md)
+# Note: Do NOT add saas/ here if using submodules - Git handles submodule tracking.
+# This entry is for cases where saas/ is created locally for development without submodule setup.

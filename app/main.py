@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -5,14 +6,23 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from app.core.config import settings
 from app.api import auth, cards, portfolio, users, market, admin, blokpax, analytics, meta, billing, webhooks, watchlist
+from app.api.billing import BILLING_AVAILABLE
+from app.middleware.metering import APIMeteringMiddleware, METERING_AVAILABLE
 from contextlib import asynccontextmanager
 from app.core.scheduler import start_scheduler
 from app.core.anti_scraping import AntiScrapingMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+logger = logging.getLogger(__name__)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    logger.info("=" * 50)
+    logger.info("WondersTracker API Starting")
+    logger.info(f"SaaS Features: {'ENABLED' if BILLING_AVAILABLE else 'DISABLED (OSS mode)'}")
+    logger.info(f"Usage Metering: {'ENABLED' if METERING_AVAILABLE else 'DISABLED'}")
+    logger.info("=" * 50)
     start_scheduler()
     yield
     # Shutdown (scheduler stops automatically usually or we can stop it)
@@ -45,6 +55,10 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 # Anti-scraping middleware - detects bots, headless browsers, rate limits
 # Protects /api/v1/cards, /api/v1/market, /api/v1/blokpax endpoints
 app.add_middleware(AntiScrapingMiddleware, enabled=True)
+
+# API metering middleware - tracks usage for billing (only when SaaS enabled)
+# This is a no-op pass-through when saas/ module is not available
+app.add_middleware(APIMeteringMiddleware)
 
 # GZip compression for responses > 1KB (80-90% bandwidth reduction)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
