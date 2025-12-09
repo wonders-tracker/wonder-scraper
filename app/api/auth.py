@@ -109,6 +109,11 @@ def login_access_token(
     # Clear failed attempts on successful login
     rate_limiter.record_successful_login(ip)
 
+    # Update last login timestamp
+    user.last_login = datetime.utcnow()
+    session.add(user)
+    session.commit()
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     token = create_access_token(user.email, expires_delta=access_token_expires)
 
@@ -142,7 +147,10 @@ def get_current_user_info(
         "username": current_user.username,
         "discord_handle": current_user.discord_handle,
         "is_active": current_user.is_active,
+        "is_superuser": current_user.is_superuser,
         "onboarding_completed": current_user.onboarding_completed,
+        "subscription_tier": current_user.subscription_tier,
+        "is_pro": current_user.is_pro,
     }
 
 
@@ -252,9 +260,10 @@ async def callback_discord(code: str, session: Session = Depends(get_session)):
              # Check by email
              user = session.exec(select(User).where(User.email == email)).first()
              if user:
-                 # Link account
+                 # Link account and update last login
                  user.discord_id = discord_id
                  user.discord_handle = handle
+                 user.last_login = datetime.utcnow()
                  session.add(user)
                  session.commit()
                  session.refresh(user)
@@ -267,11 +276,17 @@ async def callback_discord(code: str, session: Session = Depends(get_session)):
                 hashed_password=security.get_password_hash(random_pw),
                 is_active=True,
                 discord_id=discord_id,
-                discord_handle=handle
+                discord_handle=handle,
+                last_login=datetime.utcnow()
             )
             session.add(user)
             session.commit()
             session.refresh(user)
+        else:
+            # Update last login for existing user
+            user.last_login = datetime.utcnow()
+            session.add(user)
+            session.commit()
 
         # Create JWT
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
