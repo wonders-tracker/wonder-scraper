@@ -357,10 +357,13 @@ function ApiPage() {
 
               <div className="space-y-4">
                 {/* Cards */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
-                    <code className="text-sm">/api/v1/cards</code>
+                <Link to="/docs/cards" className="block border rounded-lg overflow-hidden hover:border-primary/50 transition-colors group">
+                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                      <code className="text-sm">/api/v1/cards</code>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                   <div className="p-4">
                     <p className="text-sm text-muted-foreground mb-2">List all cards with current market data.</p>
@@ -368,24 +371,30 @@ function ApiPage() {
                       <strong>Query Params:</strong> <code>limit</code>, <code>skip</code>, <code>search</code>, <code>time_period</code>, <code>product_type</code>
                     </div>
                   </div>
-                </div>
+                </Link>
 
                 {/* Single Card */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
-                    <code className="text-sm">/api/v1/cards/{'{card_id}'}</code>
+                <Link to="/docs/cards-detail" className="block border rounded-lg overflow-hidden hover:border-primary/50 transition-colors group">
+                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                      <code className="text-sm">/api/v1/cards/{'{card_id}'}</code>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                   <div className="p-4">
                     <p className="text-sm text-muted-foreground">Get detailed data for a single card including FMP breakdown.</p>
                   </div>
-                </div>
+                </Link>
 
                 {/* Sales History */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
-                    <code className="text-sm">/api/v1/cards/{'{card_id}'}/history</code>
+                <Link to="/docs/cards-history" className="block border rounded-lg overflow-hidden hover:border-primary/50 transition-colors group">
+                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                      <code className="text-sm">/api/v1/cards/{'{card_id}'}/history</code>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                   <div className="p-4">
                     <p className="text-sm text-muted-foreground mb-2">Get sales history for a card.</p>
@@ -393,24 +402,30 @@ function ApiPage() {
                       <strong>Query Params:</strong> <code>limit</code>, <code>offset</code>, <code>paginated</code>
                     </div>
                   </div>
-                </div>
+                </Link>
 
                 {/* Active Listings */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
-                    <code className="text-sm">/api/v1/cards/{'{card_id}'}/active</code>
+                <Link to="/docs/cards-active" className="block border rounded-lg overflow-hidden hover:border-primary/50 transition-colors group">
+                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                      <code className="text-sm">/api/v1/cards/{'{card_id}'}/active</code>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                   <div className="p-4">
                     <p className="text-sm text-muted-foreground">Get currently active listings for a card.</p>
                   </div>
-                </div>
+                </Link>
 
                 {/* Market Overview */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
-                    <code className="text-sm">/api/v1/market/overview</code>
+                <Link to="/docs/market-overview" className="block border rounded-lg overflow-hidden hover:border-primary/50 transition-colors group">
+                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                      <code className="text-sm">/api/v1/market/overview</code>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                   <div className="p-4">
                     <p className="text-sm text-muted-foreground mb-2">Get market-wide statistics and trends.</p>
@@ -418,18 +433,31 @@ function ApiPage() {
                       <strong>Query Params:</strong> <code>time_period</code> (1h, 24h, 7d, 30d, 90d, all)
                     </div>
                   </div>
-                </div>
+                </Link>
 
                 {/* Blokpax */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                    <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
-                    <code className="text-sm">/api/v1/blokpax/summary</code>
+                <Link to="/docs/blokpax-summary" className="block border rounded-lg overflow-hidden hover:border-primary/50 transition-colors group">
+                  <div className="bg-muted/50 px-4 py-2 border-b flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-brand-300/20 text-brand-300 px-2 py-0.5 rounded text-xs font-bold">GET</span>
+                      <code className="text-sm">/api/v1/blokpax/summary</code>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                   <div className="p-4">
                     <p className="text-sm text-muted-foreground">Get Blokpax NFT market summary including floor prices.</p>
                   </div>
-                </div>
+                </Link>
+
+                {/* View Full Docs Link */}
+                <Link
+                  to="/docs"
+                  className="flex items-center justify-center gap-2 p-4 border border-dashed rounded-lg text-sm text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  View Full API Documentation
+                  <ExternalLink className="w-3 h-3" />
+                </Link>
               </div>
             </section>
 
