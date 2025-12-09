@@ -39,9 +39,21 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
         "/api/v1/admin",      # Already requires superuser
         "/api/v1/users",      # User management
         "/api/v1/analytics",  # Analytics tracking
+        "/api/v1/billing",    # Billing endpoints
+        "/api/v1/webhooks",   # Webhook endpoints
         "/",
         "/docs",
         "/openapi.json",
+        "/health",
+        "/healthz",
+        "/ready",
+    ]
+
+    # IPs to never block (localhost, internal)
+    TRUSTED_IPS = [
+        "127.0.0.1",
+        "localhost",
+        "::1",
     ]
 
     # Known bot/scraper User-Agents (case-insensitive patterns)
@@ -267,12 +279,16 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
         if not self._is_protected_path(path):
             return await call_next(request)
 
+        ip = self._get_client_ip(request)
+
+        # Skip for trusted IPs (localhost, internal services)
+        if ip in self.TRUSTED_IPS or ip.startswith("10.") or ip.startswith("172.") or ip.startswith("192.168."):
+            return await call_next(request)
+
         # Skip rate limiting for authenticated users
         auth_header = request.headers.get("authorization", "")
         if auth_header.startswith("Bearer "):
             return await call_next(request)
-
-        ip = self._get_client_ip(request)
         user_agent = request.headers.get("user-agent", "")
 
         # 1. Check if IP is blocked
