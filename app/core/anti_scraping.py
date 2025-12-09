@@ -242,6 +242,20 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
         self._fingerprints.clear()
         self._suspicious_ips.clear()
 
+    def unblock_ip(self, ip: str) -> bool:
+        """Manually unblock an IP address."""
+        if ip in self._blocked_ips:
+            del self._blocked_ips[ip]
+        if ip in self._suspicious_ips:
+            del self._suspicious_ips[ip]
+        return True
+
+    def get_blocked_ips(self) -> Dict[str, float]:
+        """Get list of currently blocked IPs."""
+        now = time.time()
+        # Return only IPs that are still blocked
+        return {ip: until for ip, until in self._blocked_ips.items() if until > now}
+
     async def dispatch(self, request: Request, call_next):
         """Main middleware dispatch."""
         if not self.enabled:
@@ -251,6 +265,11 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
 
         # Skip non-protected paths
         if not self._is_protected_path(path):
+            return await call_next(request)
+
+        # Skip rate limiting for authenticated users
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
             return await call_next(request)
 
         ip = self._get_client_ip(request)
