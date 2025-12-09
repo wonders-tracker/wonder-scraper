@@ -481,6 +481,132 @@ async def job_check_price_alerts():
         print(f"[Alerts] Error checking price alerts: {e}")
 
 
+async def job_backfill_seller_data():
+    """
+    Periodic job to backfill missing seller data from eBay item pages.
+    Runs daily at 3 AM UTC (off-peak hours).
+    Processes up to 100 items per run to avoid overloading eBay.
+    """
+    print(f"[{datetime.utcnow()}] Starting Seller Data Backfill...")
+
+    try:
+        from pydoll.browser import Chrome
+        from pydoll.browser.options import ChromiumOptions
+        from app.scraper.seller import extract_seller_from_html
+        import re
+
+        # Setup browser
+        options = ChromiumOptions()
+        options.headless = True
+        options.add_argument('--disable-gpu')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+
+        browser = Chrome(options=options)
+        await browser.start()
+        print("[Seller] Browser started")
+
+        with Session(engine) as session:
+            # Get listings missing seller data (prioritize recent sold items)
+            from sqlalchemy import text
+            query = text("""
+                SELECT id, external_id, url, title
+                FROM marketprice
+                WHERE listing_type = 'sold'
+                AND seller_name IS NULL
+                AND platform = 'ebay'
+                AND (url IS NOT NULL OR external_id IS NOT NULL)
+                ORDER BY sold_date DESC NULLS LAST
+                LIMIT 100
+            """)
+
+            results = session.execute(query).all()
+            print(f"[Seller] Found {len(results)} items to process")
+
+            updated = 0
+            failed = 0
+
+            for mp_id, external_id, url, title in results:
+                # Extract item ID
+                item_id = external_id
+                if not item_id and url:
+                    match = re.search(r'/itm/(?:[^/]+/)?(\d+)', url)
+                    if match:
+                        item_id = match.group(1)
+
+                if not item_id:
+                    failed += 1
+                    continue
+
+                try:
+                    # Fetch page
+                    tab = await browser.new_tab()
+                    item_url = f"https://www.ebay.com/itm/{item_id}"
+                    await tab.go_to(item_url, timeout=30)
+                    await asyncio.sleep(2)
+
+                    result = await tab.execute_script(
+                        "return document.documentElement.outerHTML;",
+                        return_by_value=True
+                    )
+
+                    html = None
+                    if isinstance(result, dict):
+                        inner = result.get('result', {})
+                        if isinstance(inner, dict):
+                            html = inner.get('result', {}).get('value')
+
+                    await tab.close()
+
+                    if not html:
+                        failed += 1
+                        continue
+
+                    # Check for block
+                    if "Pardon Our Interruption" in html or "Security Measure" in html:
+                        print("[Seller] Blocked by eBay, stopping early")
+                        break
+
+                    # Extract seller info
+                    seller_name, feedback_score, feedback_percent = extract_seller_from_html(html)
+
+                    if seller_name:
+                        session.execute(text("""
+                            UPDATE marketprice
+                            SET seller_name = :seller,
+                                seller_feedback_score = :score,
+                                seller_feedback_percent = :pct
+                            WHERE id = :id
+                        """), {
+                            "seller": seller_name,
+                            "score": feedback_score,
+                            "pct": feedback_percent,
+                            "id": mp_id
+                        })
+                        session.commit()
+                        updated += 1
+                    else:
+                        failed += 1
+
+                    # Rate limit
+                    await asyncio.sleep(1)
+
+                except Exception as e:
+                    print(f"[Seller] Error on ID {mp_id}: {e}")
+                    failed += 1
+                    try:
+                        await tab.close()
+                    except:
+                        pass
+
+        await browser.stop()
+        print(f"[{datetime.utcnow()}] Seller Backfill Complete: {updated} updated, {failed} failed")
+
+    except Exception as e:
+        print(f"[Seller] Fatal error: {e}")
+        log_scrape_error("Seller Backfill", str(e))
+
+
 async def job_market_insights():
     """
     Generate and post AI-powered market insights to Discord.
@@ -596,6 +722,18 @@ def start_scheduler():
         replace_existing=True
     )
 
+    # Seller data backfill daily at 3 AM UTC (off-peak hours)
+    # Grace time of 2 hours - not time-critical
+    scheduler.add_job(
+        job_backfill_seller_data,
+        CronTrigger(hour=3, minute=0),
+        id="job_backfill_seller_data",
+        max_instances=1,
+        misfire_grace_time=7200,  # 2 hours
+        coalesce=True,
+        replace_existing=True
+    )
+
     scheduler.start()
     print("Scheduler started (with misfire handling):")
     print("  - job_update_market_data (eBay): 45m interval, 30m grace")
@@ -604,4 +742,5 @@ def start_scheduler():
     print("  - job_send_daily_digests (Email): 9:15 UTC daily, 1h grace")
     print("  - job_send_weekly_reports (Email): Mon 9:30 UTC, 2h grace")
     print("  - job_check_price_alerts (Email): 30m interval, 15m grace")
+    print("  - job_backfill_seller_data (Seller): 3:00 UTC daily, 2h grace")
 

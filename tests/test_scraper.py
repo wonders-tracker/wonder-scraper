@@ -1105,3 +1105,190 @@ class TestAIExtractorEnhancements:
             result = extractor.validate_wotf_listing(title, "Test Card")
             assert result["is_wotf"] is False, f"Should reject: {title}"
             assert result["detected_tcg"] == expected_tcg, f"Wrong TCG for: {title}"
+
+
+class TestScoreSealedMatch:
+    """Tests for the score_sealed_match function for smart duplicate resolution."""
+
+    def test_bundle_vs_box_play_bundle_listing(self):
+        """Play Bundle listing should score higher for Bundle card than Box card."""
+        from app.scraper.ebay import score_sealed_match
+
+        title = "Wonders of the First - Existence Play Bundle Blaster Box 6 Booster Packs"
+
+        bundle_score = score_sealed_match(title, "Existence Play Booster Bundle", "Bundle")
+        box_score = score_sealed_match(title, "Wonders of the First Booster Box", "Box")
+
+        assert bundle_score > box_score, f"Bundle ({bundle_score}) should beat Box ({box_score})"
+
+    def test_collector_box_vs_generic_box(self):
+        """Collector Booster Box listing should score higher for specific card."""
+        from app.scraper.ebay import score_sealed_match
+
+        title = "Wonders of the First WOTF CCG Collector Booster Box New SEALED"
+
+        collector_score = score_sealed_match(title, "Collector Booster Box", "Box")
+        generic_score = score_sealed_match(title, "Wonders of the First Booster Box", "Box")
+
+        assert collector_score > generic_score, f"Collector ({collector_score}) should beat Generic ({generic_score})"
+
+    def test_starter_pack_matching(self):
+        """Starter Pack listing should score higher for Starter Pack card."""
+        from app.scraper.ebay import score_sealed_match
+
+        title = "Wonders Of The First 2-Player Starter Pack 1st Edition Sealed"
+
+        starter_score = score_sealed_match(title, "Wonders of the First Starter Pack", "Pack")
+        generic_score = score_sealed_match(title, "Existence Sealed Pack", "Pack")
+
+        assert starter_score > generic_score, f"Starter ({starter_score}) should beat Generic ({generic_score})"
+
+    def test_singles_return_zero(self):
+        """Singles should return 0 score (not applicable)."""
+        from app.scraper.ebay import score_sealed_match
+
+        score = score_sealed_match("Wonders of the First Progo Stonefoil", "Progo", "Single")
+        assert score == 0
+
+    def test_exact_card_name_bonus(self):
+        """Exact card name in title should give +100 bonus."""
+        from app.scraper.ebay import score_sealed_match
+
+        title = "Existence Play Booster Bundle Sealed"
+
+        # Card name appears exactly in title
+        exact_score = score_sealed_match(title, "Existence Play Booster Bundle", "Bundle")
+
+        # Card name does NOT appear exactly
+        partial_score = score_sealed_match(title, "Play Bundle", "Bundle")
+
+        assert exact_score >= partial_score + 100, f"Exact ({exact_score}) should have +100 over partial ({partial_score})"
+
+    def test_product_type_alignment(self):
+        """Product type alignment should boost score."""
+        from app.scraper.ebay import score_sealed_match
+
+        # Listing clearly a bundle
+        title = "WOTF Play Bundle 6 Packs"
+
+        bundle_score = score_sealed_match(title, "Generic Bundle", "Bundle")
+        box_score = score_sealed_match(title, "Generic Box", "Box")
+
+        assert bundle_score > box_score
+
+    def test_generic_card_penalty(self):
+        """Generic card names should get penalized."""
+        from app.scraper.ebay import score_sealed_match
+
+        title = "Wonders of the First Booster Box"
+
+        # Generic card gets penalty
+        generic_score = score_sealed_match(title, "Existence Booster Box", "Box")
+
+        # Specific card (no penalty)
+        specific_score = score_sealed_match(title, "Collector Booster Box", "Box")
+
+        # Generic should be lower (or at least not higher)
+        assert generic_score <= specific_score
+
+    def test_serialized_advantage_bonus(self):
+        """Serialized Advantage listings should strongly match Serialized Advantage card."""
+        from app.scraper.ebay import score_sealed_match
+
+        title = "WOTF Serialized Advantage Pack Bundle Sealed"
+
+        serialized_score = score_sealed_match(title, "Serialized Advantage Bundle", "Bundle")
+        generic_score = score_sealed_match(title, "Existence Play Booster Bundle", "Bundle")
+
+        assert serialized_score > generic_score
+
+    def test_blaster_box_matches_bundle(self):
+        """Blaster Box listings should match Bundle cards well."""
+        from app.scraper.ebay import score_sealed_match
+
+        title = "Wonders of the First Blaster Box 6 Booster Packs"
+
+        bundle_score = score_sealed_match(title, "Existence Play Booster Bundle", "Bundle")
+        box_score = score_sealed_match(title, "Collector Booster Box", "Box")
+
+        assert bundle_score > box_score, f"Bundle ({bundle_score}) should beat Box ({box_score})"
+
+    def test_lot_matching(self):
+        """Lot listings should match Lot cards."""
+        from app.scraper.ebay import score_sealed_match
+
+        title = "Wonders of the First Card Lot 50 Commons"
+
+        lot_score = score_sealed_match(title, "WOTF Bulk Card Lot", "Lot")
+        pack_score = score_sealed_match(title, "Booster Pack", "Pack")
+
+        assert lot_score > pack_score
+
+
+class TestContaminationBlocklist:
+    """Tests for contamination blocking that slipped through in production."""
+
+    def test_yugioh_stas_starter_set_blocked(self):
+        """Yu-Gi-Oh STAS-EN starter set codes should be blocked."""
+        # These exact listings contaminated WOTF starter products
+        contaminated = [
+            "Coral Dragon STAS-EN042 2-Player Starter Set 1st Edition",
+            "Mask of Darkness Common 2-Player Starter Set STAS-EN023 LP",
+            "Divine Arsenal AA-ZEUS - Sky Thunder STAX-EN044 2-Player Starter Set",
+        ]
+        for title in contaminated:
+            assert _is_valid_match(title, "2-Player Starter Set") is False, \
+                f"Should block: {title}"
+
+    def test_mtg_awakening_possessed_blocked(self):
+        """MTG 'Awakening of the Possessed' cards should be blocked."""
+        contaminated = [
+            "Awakening of the Possessed - DUOV-EN030 - Ultra Rare - 1st Edition",
+            "Awakening of the Possessed - Greater Inari Fire Ultra Rare 1st",
+            "3x Awakening of the Possessed - Nefariouser Archfiend",
+            "Awakening of the Crystal Ultimates - SDCB-EN016 - Common",
+        ]
+        for title in contaminated:
+            assert _is_valid_match(title, "The Awakening") is False, \
+                f"Should block: {title}"
+
+    def test_mtg_black_market_connections_blocked(self):
+        """MTG 'Black Market Connections' cards should be blocked."""
+        contaminated = [
+            "Black Market Connections Commander: The Lost Caverns of Ixalan",
+            "Black Market Connections R Commander: The Lost Caverns",
+        ]
+        for title in contaminated:
+            assert _is_valid_match(title, "Market of Lost Wonders") is False, \
+                f"Should block: {title}"
+
+    def test_mtg_treasure_cove_blocked(self):
+        """MTG 'Treasure Map // Treasure Cove' cards should be blocked."""
+        contaminated = [
+            "1 x Treasure Map // Treasure Cove - Foil - Extended Art - The Lost Caverns",
+        ]
+        for title in contaminated:
+            assert _is_valid_match(title, "Treasure Map") is False, \
+                f"Should block: {title}"
+
+    def test_pokemon_machamp_blocked(self):
+        """Pokemon Machamp cards should be blocked."""
+        contaminated = [
+            "1x Machamp NM-MINT - 8/102 - Holo Rare - 1st Edition - Base Set",
+            "CGC 9 Machamp 1999 1st Edition Base Set Cosmos Holo",
+        ]
+        for title in contaminated:
+            assert _is_valid_match(title, "2-Player Starter Set") is False, \
+                f"Should block: {title}"
+
+    def test_legitimate_wotf_still_passes(self):
+        """Legitimate WOTF cards should still pass after blocklist updates."""
+        legitimate = [
+            ("Wonders of the First The Awakening Mythic Rare", "The Awakening"),
+            ("WOTF Existence Market of Lost Wonders", "Market of Lost Wonders"),
+            ("Wonders of the First 2-Player Starter Set Sealed", "2-Player Starter Set"),
+            ("Wonders of the First Treasure Map Classic Foil", "Treasure Map"),
+        ]
+        for title, card in legitimate:
+            assert _is_valid_match(title, card) is True, \
+                f"Should NOT block legitimate WOTF: {title}"
