@@ -1,8 +1,8 @@
-import { Outlet, createRootRoute, Link, useNavigate } from '@tanstack/react-router'
-import { LayoutDashboard, LineChart, Wallet, User, Server, LogOut, Menu, X, Shield } from 'lucide-react'
+import { Outlet, createRootRoute, Link, useNavigate, redirect } from '@tanstack/react-router'
+import { LayoutDashboard, LineChart, Wallet, User, Server, LogOut, Menu, X, Shield, ChevronDown, Settings, Sparkles } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { usePageTracking } from '../hooks/usePageTracking'
 import Marquee from '../components/ui/marquee'
 import { Tooltip } from '../components/ui/tooltip'
@@ -13,6 +13,9 @@ type UserProfile = {
     id: number
     email: string
     is_superuser: boolean
+    onboarding_completed: boolean
+    subscription_tier: string
+    is_pro: boolean
 }
 
 type Card = {
@@ -28,9 +31,120 @@ type Card = {
   price_delta_24h?: number
 }
 
+// Paths that should skip onboarding check
+const SKIP_ONBOARDING_PATHS = ['/welcome', '/login', '/signup', '/auth/callback', '/forgot-password', '/reset-password']
+
 export const Route = createRootRoute({
   component: RootComponent,
+  beforeLoad: async ({ location }) => {
+    // Skip onboarding check for auth-related pages
+    if (SKIP_ONBOARDING_PATHS.some(path => location.pathname.startsWith(path))) {
+      return
+    }
+
+    // Check if user has a token
+    if (typeof window === 'undefined') return
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    // Fetch user profile to check onboarding status
+    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/auth/me`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('token')
+      }
+      return
+    }
+    const user = await response.json()
+    // Check if onboarding is incomplete: either flag is false OR username is empty
+    const needsOnboarding = user && (user.onboarding_completed === false || !user.username)
+    console.log('[onboarding check] user:', user?.email, 'onboarding_completed:', user?.onboarding_completed, 'username:', user?.username, 'needsOnboarding:', needsOnboarding)
+    if (needsOnboarding) {
+      console.log('[onboarding check] redirecting to /welcome')
+      throw redirect({ to: '/welcome' })
+    }
+  },
 })
+
+// User profile dropdown component - positioned relative to avoid portal issues in sticky header
+function UserDropdown({ user }: { user: UserProfile }) {
+  const [open, setOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside)
+      return () => document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [open])
+
+  // Close on escape
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false)
+    }
+    if (open) {
+      document.addEventListener("keydown", handleEscape)
+      return () => document.removeEventListener("keydown", handleEscape)
+    }
+  }, [open])
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold uppercase rounded hover:bg-muted transition-colors"
+      >
+        <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
+          <User className="w-3.5 h-3.5 text-primary" />
+        </div>
+        <span className="hidden sm:block max-w-[100px] truncate">{user.email.split('@')[0]}</span>
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-48 rounded-md border bg-popover shadow-lg z-[100]">
+          <div className="p-2 border-b">
+            <div className="text-xs font-medium truncate">{user.email}</div>
+            <div className="text-[10px] text-muted-foreground">
+              {user.is_superuser ? 'Administrator' : 'Member'}
+            </div>
+          </div>
+          <div className="p-1">
+            <Link
+              to="/profile"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors w-full"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Settings</span>
+            </Link>
+            <button
+              onClick={() => {
+                setOpen(false)
+                auth.logout()
+              }}
+              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-red-500/10 text-red-500 transition-colors w-full"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function RootComponent() {
   const navigate = useNavigate()
@@ -49,11 +163,14 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
   // Track page views for internal analytics
   usePageTracking()
 
+  // Check if user has token before making API call
+  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('token')
+
   const { data: user } = useQuery({
       queryKey: ['me'],
       queryFn: async () => {
           try {
-              return await api.get('users/me').json<UserProfile>()
+              return await api.get('auth/me').json<UserProfile>()
           } catch {
               // If API fails (e.g. 401), clear local token so app knows we are logged out
               // This prevents redirect loops where localStorage has token but API rejects it
@@ -61,9 +178,12 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
               return null
           }
       },
+      enabled: hasToken, // Only fetch if user has a token
       retry: false,
-      staleTime: 30 * 60 * 1000, // 30 minutes - user profile rarely changes
+      staleTime: 5 * 60 * 1000, // 5 minutes - onboarding check is in beforeLoad now
   })
+
+  // Note: Onboarding redirect is handled in beforeLoad at the route level
 
   // Fetch cards for marquee ticker - uses shared time period
   // Uses same query key as dashboard so data is shared/cached
@@ -96,6 +216,20 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
       <Analytics />
 
       <div className="min-h-screen bg-background text-foreground antialiased font-mono flex flex-col">
+        {/* Upgrade Banner for non-pro users */}
+        {user && !user.is_pro && (
+          <div className="bg-[#7dd3a8] text-gray-900 py-1.5 px-4 text-center text-xs font-bold flex items-center justify-center gap-2">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Unlock Pro features: Advanced analytics, API access, and more</span>
+            <Link
+              to={"/pro" as any}
+              className="ml-2 bg-gray-900/20 hover:bg-gray-900/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-colors"
+            >
+              Upgrade Now
+            </Link>
+          </div>
+        )}
+
         {/* Top Header Navigation */}
         <div className="h-14 border-b border-border sticky top-0 bg-background z-50 flex items-center px-4 justify-between">
           <div className="flex items-center gap-4">
@@ -146,7 +280,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
           <div className="flex items-center gap-4">
             {/* System Status */}
             <div className="hidden md:flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              <span className="w-2 h-2 rounded-full bg-brand-400 animate-pulse"></span>
               <span className="text-[9px] text-muted-foreground uppercase font-bold">System Online</span>
             </div>
 
@@ -162,13 +296,8 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
             )}
 
             {user ? (
-              <div className="flex items-center gap-3">
-                <div className="text-xs font-bold uppercase truncate max-w-[120px] hidden sm:block">{user.email}</div>
-                <Tooltip content="Logout">
-                    <button onClick={() => auth.logout()} className="text-muted-foreground hover:text-red-500 transition-colors p-1">
-                      <LogOut className="w-3.5 h-3.5" />
-                    </button>
-                </Tooltip>
+              <div className="relative">
+                <UserDropdown user={user} />
               </div>
             ) : (
               <Link to="/login" className="text-xs font-bold uppercase px-3 py-1.5 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors relative z-50">
@@ -266,7 +395,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
             </div>
             <div className="flex items-center gap-2 text-[10px] font-mono">
               <span className="text-muted-foreground uppercase">Vel:</span>
-              <span className="font-bold text-emerald-500">{Number(marketMetrics.avgVelocity).toFixed(1)}/d</span>
+              <span className="font-bold text-brand-300">{Number(marketMetrics.avgVelocity).toFixed(1)}/d</span>
             </div>
           </div>
 
@@ -284,7 +413,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
               {topGainers.map(c => (
                 <div key={`ticker-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
                   <span className="font-bold uppercase">{c.name}</span>
-                  <span className="text-emerald-500">+{getDelta(c).toFixed(1)}%</span>
+                  <span className="text-brand-300">+{getDelta(c).toFixed(1)}%</span>
                 </div>
               ))}
               {topLosers.map(c => (
