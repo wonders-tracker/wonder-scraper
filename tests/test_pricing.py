@@ -12,14 +12,19 @@ Tests cover:
 """
 
 import pytest
-from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, MagicMock
 
 from app.services.pricing import (
     FairMarketPriceService,
     DEFAULT_RARITY_MULTIPLIERS,
     DEFAULT_TREATMENT_MULTIPLIERS,
     BASE_TREATMENTS,
+    FMP_AVAILABLE,
+)
+
+# Skip FMP integration tests when saas module is not available
+requires_fmp = pytest.mark.skipif(
+    not FMP_AVAILABLE,
+    reason="FMP pricing requires saas module (not available in OSS mode)"
 )
 
 
@@ -47,6 +52,7 @@ class TestFloorPriceCalculation:
         assert DEFAULT_TREATMENT_MULTIPLIERS["OCM Serialized"] > DEFAULT_TREATMENT_MULTIPLIERS["Formless Foil"]
 
 
+@requires_fmp
 @pytest.mark.integration
 class TestFloorPriceIntegration:
     """Integration tests for floor price calculation using real database."""
@@ -201,6 +207,7 @@ class TestFloorPriceIntegration:
             assert floor != active_min, "Floor should not equal suspicious active listing price"
 
 
+@requires_fmp
 @pytest.mark.integration
 class TestFMPCalculation:
     """Tests for Fair Market Price formula calculation."""
@@ -292,6 +299,7 @@ class TestFMPCalculation:
             assert 0.85 <= adj <= 1.0, f"Liquidity adjustment {adj} out of bounds for card {card_id}"
 
 
+@requires_fmp
 @pytest.mark.integration
 class TestCoalesceHandling:
     """Tests for COALESCE(sold_date, scraped_at) handling."""
@@ -328,6 +336,7 @@ class TestCoalesceHandling:
         assert floor is not None
 
 
+@requires_fmp
 @pytest.mark.integration
 class TestSpecificCards:
     """Tests for specific known cards (regression tests)."""
