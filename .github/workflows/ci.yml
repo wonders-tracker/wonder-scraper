@@ -114,7 +114,7 @@ jobs:
         uses: snok/install-poetry@v1
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: poetry install --no-interaction --no-root
 
       - name: Run ruff check
         run: poetry run ruff check app/ --output-format=github
