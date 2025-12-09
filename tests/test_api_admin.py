@@ -24,6 +24,10 @@ from app.models.portfolio import PortfolioCard
 from app.core import security
 from app.api import deps
 
+# Mark all tests as integration tests - admin endpoints use direct database connections
+# that bypass the session override
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(scope="function")
 def client(test_engine):
