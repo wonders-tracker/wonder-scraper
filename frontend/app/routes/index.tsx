@@ -573,12 +573,28 @@ function Home() {
                 ) : (
                     <>
                         <div className="overflow-auto flex-1">
-                            <table className="w-full text-sm text-left">
+                            <table className="w-full text-sm table-fixed">
+                                <colgroup>
+                                    <col className="w-[200px] md:w-[280px]" /> {/* Name */}
+                                    <col className="w-[100px] md:w-[120px]" /> {/* Floor */}
+                                    <col className="w-[60px]" /> {/* Vol */}
+                                    <col className="w-[90px]" /> {/* Last Sale */}
+                                    <col className="w-[80px]" /> {/* High */}
+                                    <col className="w-[70px]" /> {/* Ask */}
+                                    <col className="w-[70px]" /> {/* Listings */}
+                                    <col className="w-[50px]" /> {/* Track */}
+                                </colgroup>
                                 <thead className="text-xs uppercase bg-muted/30 text-muted-foreground border-b border-border sticky top-0 z-10">
                                     {table.getHeaderGroups().map(headerGroup => (
                                         <tr key={headerGroup.id}>
-                                            {headerGroup.headers.map(header => (
-                                            <th key={header.id} className="px-2 py-1.5 font-medium whitespace-nowrap hover:bg-muted/50 transition-colors bg-muted/30">
+                                            {headerGroup.headers.map((header, idx) => (
+                                            <th
+                                                key={header.id}
+                                                className={clsx(
+                                                    "px-2 py-1.5 font-medium whitespace-nowrap hover:bg-muted/50 transition-colors bg-muted/30",
+                                                    idx === 0 ? "text-left" : idx === headerGroup.headers.length - 1 ? "text-center" : "text-right"
+                                                )}
+                                            >
                                                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                                 </th>
                                             ))}
@@ -593,8 +609,14 @@ function Home() {
                                                 className="hover:bg-muted/30 transition-colors cursor-pointer group"
                                                 onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: row.original.slug || String(row.original.id) } })}
                                             >
-                                                {row.getVisibleCells().map(cell => (
-                                                <td key={cell.id} className="px-2 py-1.5 whitespace-nowrap">
+                                                {row.getVisibleCells().map((cell, idx) => (
+                                                <td
+                                                    key={cell.id}
+                                                    className={clsx(
+                                                        "px-2 py-1.5 whitespace-nowrap overflow-hidden",
+                                                        idx === 0 ? "text-left" : idx === row.getVisibleCells().length - 1 ? "text-center" : "text-right"
+                                                    )}
+                                                >
                                                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                                     </td>
                                                 ))}

@@ -63,7 +63,7 @@ function RequestAccessForm() {
 
   const submitMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const apiUrl = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'wonderstracker.com' ? 'https://api.wonderstracker.com/v1' : 'http://localhost:8000/api/v1')
+      const apiUrl = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'wonderstracker.com' ? 'https://api.wonderstracker.com/api/v1' : 'http://localhost:8000/api/v1')
       const response = await fetch(`${apiUrl}/users/request-api-access`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

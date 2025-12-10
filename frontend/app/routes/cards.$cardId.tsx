@@ -224,7 +224,7 @@ function extractTreatmentFromTitle(title: string): string | null {
 }
 
 // Server-side loader for SEO meta tags
-const API_URL = import.meta.env.VITE_API_URL || 'https://api.wonderstracker.com/v1'
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.wonderstracker.com/api/v1'
 
 async function fetchCardForSEO(cardId: string) {
   try {
@@ -1459,7 +1459,7 @@ function CardDetail() {
             {/* Listing Details Drawer */}
             <div 
                 className={clsx(
-                    "fixed inset-y-0 right-0 w-full md:w-96 bg-card border-l border-border shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col",
+                    "fixed inset-y-0 right-0 w-full md:w-96 bg-card border-l border-border shadow-2xl transform transition-transform duration-300 ease-in-out z-[60] flex flex-col",
                     selectedListing ? "translate-x-0" : "translate-x-full"
                 )}
             >
@@ -1821,7 +1821,7 @@ function CardDetail() {
             {/* Backdrop */}
             {selectedListing && (
                 <div
-                    className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
+                    className="fixed inset-0 bg-black/50 z-[55] backdrop-blur-sm"
                     onClick={() => setSelectedListing(null)}
                 />
             )}

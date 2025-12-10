@@ -10,7 +10,7 @@ const getApiUrl = () => {
   }
   // In production (wonderstracker.com), use the api subdomain directly
   if (typeof window !== 'undefined' && window.location.hostname === 'wonderstracker.com') {
-    return 'https://api.wonderstracker.com/v1'
+    return 'https://api.wonderstracker.com/api/v1'
   }
   // Local development fallback
   return 'http://localhost:8000/api/v1'

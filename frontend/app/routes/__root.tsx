@@ -48,7 +48,7 @@ export const Route = createRootRoute({
     if (!token) return
 
     // Fetch user profile to check onboarding status
-    const apiUrl = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'wonderstracker.com' ? 'https://api.wonderstracker.com/v1' : 'http://localhost:8000/api/v1')
+    const apiUrl = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'wonderstracker.com' ? 'https://api.wonderstracker.com/api/v1' : 'http://localhost:8000/api/v1')
     const response = await fetch(`${apiUrl}/auth/me`, {
       headers: {
         'Authorization': `Bearer ${token}`,
