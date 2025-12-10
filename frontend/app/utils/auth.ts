@@ -1,20 +1,25 @@
 import ky from 'ky'
 
-// Use relative URL in production (proxied by Vercel), absolute in dev
+// API URL configuration
+// Production: Use api.wonderstracker.com subdomain (direct to Railway, bypasses Vercel proxy)
+// Development: Use localhost
 const getApiUrl = () => {
-  // If env var is set, use it
+  // If env var is set, use it (for testing/overrides)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL
   }
-  // In production (wonderstracker.com), use relative URL for Vercel proxy
+  // In production (wonderstracker.com), use the api subdomain directly
   if (typeof window !== 'undefined' && window.location.hostname === 'wonderstracker.com') {
-    return '/api/v1'
+    return 'https://api.wonderstracker.com/v1'
   }
   // Local development fallback
   return 'http://localhost:8000/api/v1'
 }
 
 const API_URL = getApiUrl()
+
+// Export for use in files that can't use the ky client
+export { API_URL, getApiUrl }
 
 export const api = ky.create({
   prefixUrl: API_URL,
@@ -97,7 +102,7 @@ export const auth = {
         onboarding_completed: boolean
       }>()
       return user
-    } catch (e) {
+    } catch {
       return null
     }
   },

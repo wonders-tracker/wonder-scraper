@@ -48,7 +48,8 @@ export const Route = createRootRoute({
     if (!token) return
 
     // Fetch user profile to check onboarding status
-    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/auth/me`, {
+    const apiUrl = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'wonderstracker.com' ? 'https://api.wonderstracker.com/v1' : 'http://localhost:8000/api/v1')
+    const response = await fetch(`${apiUrl}/auth/me`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
@@ -157,7 +158,7 @@ function RootComponent() {
   )
 }
 
-function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate: any, mobileMenuOpen: boolean, setMobileMenuOpen: (v: boolean) => void }) {
+function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate: ReturnType<typeof useNavigate>, mobileMenuOpen: boolean, setMobileMenuOpen: (v: boolean) => void }) {
   const { timePeriod } = useTimePeriod()
   const location = useLocation()
 
@@ -306,10 +307,10 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
                     <span>Profile</span>
                   </Link>
                   {user.is_superuser && (
-                    <Link to={"/admin" as any} className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
+                    <a href="/admin" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase">
                       <Shield className="w-3.5 h-3.5" />
                       <span>Admin</span>
-                    </Link>
+                    </a>
                   )}
                 </>
               )}
@@ -327,9 +328,9 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
             {user?.is_superuser && (
               <div className="hidden md:flex items-center gap-2 border-r border-border pr-4 mr-2">
                 <Tooltip content="Server Health">
-                    <Link to={"/admin" as any} className="text-muted-foreground hover:text-foreground transition-colors">
+                    <a href="/admin" className="text-muted-foreground hover:text-foreground transition-colors">
                       <Server className="w-3.5 h-3.5" />
-                    </Link>
+                    </a>
                 </Tooltip>
               </div>
             )}
@@ -399,14 +400,14 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
               {user && (
                 <>
                   {user.is_superuser && (
-                    <Link
-                      to={"/admin" as any}
-                      className="flex items-center gap-3 px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors text-sm font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5"
+                    <a
+                      href="/admin"
+                      className="flex items-center gap-3 px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors text-sm font-bold uppercase"
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       <Shield className="w-4 h-4" />
                       <span>Admin</span>
-                    </Link>
+                    </a>
                   )}
                   <button
                     onClick={() => {

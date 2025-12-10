@@ -1,11 +1,11 @@
-import { createFileRoute, useParams, useNavigate, Link } from '@tanstack/react-router'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { createFileRoute, useParams, Link } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
-import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink, Calendar, Flag, AlertTriangle } from 'lucide-react'
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getFilteredRowModel } from '@tanstack/react-table'
+import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink, Flag, AlertTriangle } from 'lucide-react'
+import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel } from '@tanstack/react-table'
 import { useMemo, useState, useEffect } from 'react'
-import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, ScatterChart, Scatter, Cell, ComposedChart } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, ScatterChart, Scatter } from 'recharts'
 import { Tooltip } from '../components/ui/tooltip'
 import clsx from 'clsx'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
@@ -72,6 +72,39 @@ type MarketSnapshot = {
     inventory?: number
     timestamp: string
     platform?: string
+}
+
+type MarketData = {
+    avg_price?: number
+    volume?: number
+    lowest_ask?: number
+    inventory?: number
+    max_price?: number
+}
+
+// Type for chart data points used in recharts callbacks
+type ChartDataPoint = {
+    id: string
+    date: string
+    timestamp: number
+    x: number
+    price: number
+    treatment: string
+    product_subtype?: string
+    treatmentColor: string
+    treatmentSimple: string
+    title: string
+    listing_type: string
+    isGraded: boolean
+    grade?: string
+    isActive: boolean
+}
+
+// Type for recharts scatter shape props
+type ScatterShapeProps = {
+    cx?: number
+    cy?: number
+    payload?: ChartDataPoint
 }
 
 // Helper to detect PSA graded cards from title
@@ -191,7 +224,7 @@ function extractTreatmentFromTitle(title: string): string | null {
 }
 
 // Server-side loader for SEO meta tags
-const API_URL = import.meta.env.VITE_API_URL || 'https://wonderstracker.com/api/v1'
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.wonderstracker.com/v1'
 
 async function fetchCardForSEO(cardId: string) {
   try {
@@ -232,8 +265,6 @@ type ChartType = 'line' | 'scatter'
 
 function CardDetail() {
   const { cardId } = useParams({ from: Route.id })
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const [treatmentFilter, setTreatmentFilter] = useState<string>('all')
   const [selectedListing, setSelectedListing] = useState<MarketPrice | null>(null)
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
@@ -263,7 +294,7 @@ function CardDetail() {
       const basic = await api.get(`cards/${cardId}`).json<CardDetail>()
       // Then get market snapshot
       try {
-          const market = await api.get(`cards/${cardId}/market`).json<any>()
+          const market = await api.get(`cards/${cardId}/market`).json<MarketData>()
           // Consistent priority: prefer live data from /cards/{id} over snapshot from /cards/{id}/market
           // basic.* = computed live from MarketPrice table
           // market.* = from MarketSnapshot (historical aggregate)
@@ -277,7 +308,7 @@ function CardDetail() {
               product_type: basic.product_type,
               market_cap: (basic.floor_price || basic.latest_price || market.avg_price || 0) * (basic.volume_30d || market.volume || 0)
           }
-      } catch (e) {
+      } catch {
           // If market data fails (404 or 401), return basic info
           return basic
       }
@@ -301,7 +332,7 @@ function CardDetail() {
               hasMore: soldResponse.hasMore,
               activeCount: activeData.length
             }
-          } catch (e) {
+          } catch {
               return { items: [], total: 0, hasMore: false, activeCount: 0 }
           }
       },
@@ -312,12 +343,12 @@ function CardDetail() {
   const history = historyData?.items ?? []
 
   // Fetch Snapshot History (for OpenSea/NFT items that don't have individual sales)
-  const { data: snapshots } = useQuery({
+  const { data: _snapshots } = useQuery({
       queryKey: ['card-snapshots', cardId],
       queryFn: async () => {
           try {
             return await api.get(`cards/${cardId}/snapshots?days=365&limit=500`).json<MarketSnapshot[]>()
-          } catch (e) {
+          } catch {
               return []
           }
       },
@@ -354,12 +385,12 @@ function CardDetail() {
       } | null
       by_treatment: TreatmentFMP[]
   }
-  const { data: pricingData, isLoading: isLoadingPricing } = useQuery({
+  const { data: pricingData, isLoading: _isLoadingPricing } = useQuery({
       queryKey: ['card-pricing', cardId],
       queryFn: async () => {
           try {
             return await api.get(`cards/${cardId}/pricing`).json<PricingData>()
-          } catch (e) {
+          } catch {
               return null
           }
       },
@@ -367,7 +398,7 @@ function CardDetail() {
   })
 
   // Determine if this is an OpenSea/NFT item (no individual sales, only snapshots)
-  const isOpenSeaItem = useMemo(() => {
+  const _isOpenSeaItem = useMemo(() => {
       if (!history || history.length === 0) return true
       // Check if it's a Proof type or has opensea platform in snapshots
       if (card?.product_type === 'Proof') return true
@@ -648,7 +679,7 @@ function CardDetail() {
   }, [chartData])
   
   // Get all unique treatments for creating lines
-  const chartTreatments = useMemo(() => {
+  const _chartTreatments = useMemo(() => {
       if (!history) return []
       const treatments = new Set(history.map(h => h.treatment || 'Classic Paper'))
       return Array.from(treatments)
@@ -1000,7 +1031,7 @@ function CardDetail() {
                                                             cursor={{ strokeDasharray: '3 3', stroke: '#71717a' }}
                                                             content={({ active, payload }) => {
                                                                 if (active && payload && payload.length) {
-                                                                    const data = payload[0].payload as any
+                                                                    const data = payload[0].payload as ChartDataPoint
                                                                     return (
                                                                         <div className="bg-black/90 border border-border rounded p-3 shadow-lg">
                                                                             <div className="text-brand-300 font-bold font-mono text-lg">${data.price.toFixed(2)}</div>
@@ -1031,7 +1062,7 @@ function CardDetail() {
                                                         />
                                                         <Scatter
                                                             data={chartData}
-                                                            shape={(props: any) => {
+                                                            shape={(props: ScatterShapeProps) => {
                                                                 const { cx, cy, payload } = props
                                                                 if (!cx || !cy || !payload) return <g />
 
@@ -1115,7 +1146,7 @@ function CardDetail() {
                                                             cursor={{ strokeDasharray: '3 3', stroke: '#71717a' }}
                                                             content={({ active, payload }) => {
                                                                 if (active && payload && payload.length) {
-                                                                    const data = payload[0].payload as any
+                                                                    const data = payload[0].payload as ChartDataPoint
                                                                     return (
                                                                         <div className="bg-black/90 border border-border rounded p-3 shadow-lg">
                                                                             <div className="text-brand-300 font-bold font-mono text-lg">${data.price.toFixed(2)}</div>
@@ -1155,7 +1186,7 @@ function CardDetail() {
                                                         />
                                                         <Scatter
                                                             data={chartData}
-                                                            shape={(props: any) => {
+                                                            shape={(props: ScatterShapeProps) => {
                                                                 const { cx, cy, payload } = props
                                                                 if (!cx || !cy || !payload) return <g />
 

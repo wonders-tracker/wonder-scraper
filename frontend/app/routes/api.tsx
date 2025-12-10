@@ -19,7 +19,7 @@ import {
   Lock,
   RefreshCw,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 export const Route = createFileRoute('/api')({
   component: ApiPage,
@@ -63,7 +63,8 @@ function RequestAccessForm() {
 
   const submitMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/users/request-api-access`, {
+      const apiUrl = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'wonderstracker.com' ? 'https://api.wonderstracker.com/v1' : 'http://localhost:8000/api/v1')
+      const response = await fetch(`${apiUrl}/users/request-api-access`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

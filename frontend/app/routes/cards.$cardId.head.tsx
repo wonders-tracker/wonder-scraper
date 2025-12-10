@@ -4,8 +4,25 @@ const SITE_NAME = 'WondersTracker'
 const SITE_URL = 'https://wonderstracker.com'
 const TWITTER_HANDLE = '@WondersTracker'
 
+type LoaderData = {
+  card?: {
+    name?: string
+    set_name?: string
+    rarity_name?: string
+    latest_price?: number
+    volume_30d?: number
+    lowest_ask?: number
+    inventory?: number
+  }
+}
+
+type HeadParams = {
+  params: { cardId: string }
+  loaderData?: LoaderData | null | undefined
+}
+
 export const Route = createFileRoute('/cards/$cardId/head')({
-  head: ({ params, loaderData }: any) => {
+  head: ({ params, loaderData }: HeadParams) => {
     const card = loaderData?.card
     const cardName = card?.name || 'Card Details'
     const setName = card?.set_name || 'Existence'
