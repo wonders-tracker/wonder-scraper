@@ -290,6 +290,13 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("authorization", "")
         if auth_header.startswith("Bearer "):
             return await call_next(request)
+
+        # Skip for requests from our frontend (Vercel proxy)
+        origin = request.headers.get("origin", "")
+        referer = request.headers.get("referer", "")
+        if "wonderstracker.com" in origin or "wonderstracker.com" in referer:
+            return await call_next(request)
+
         user_agent = request.headers.get("user-agent", "")
 
         # 1. Check if IP is blocked
