@@ -3,7 +3,7 @@ export const config = {
 }
 
 const SITE_URL = 'https://wonderstracker.com'
-const API_URL = 'https://wonder-scraper-production.up.railway.app'
+const API_URL = 'https://wonderstracker.com'
 
 interface Card {
   id: number

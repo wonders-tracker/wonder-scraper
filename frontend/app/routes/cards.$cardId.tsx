@@ -191,7 +191,7 @@ function extractTreatmentFromTitle(title: string): string | null {
 }
 
 // Server-side loader for SEO meta tags
-const API_URL = import.meta.env.VITE_API_URL || 'https://wonder-scraper-production.up.railway.app/api/v1'
+const API_URL = import.meta.env.VITE_API_URL || 'https://wonderstracker.com/api/v1'
 
 async function fetchCardForSEO(cardId: string) {
   try {

@@ -15,7 +15,7 @@ export default async function handler(req: NextRequest) {
     }
 
     // Fetch card data from your API
-    const API_URL = process.env.VITE_API_URL || 'https://wonder-scraper-production.up.railway.app/api/v1'
+    const API_URL = process.env.VITE_API_URL || 'https://wonderstracker.com/api/v1'
 
     let cardData: any
     let historyData: any[] = []
