@@ -1,6 +1,20 @@
 import ky from 'ky'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+// Use relative URL in production (proxied by Vercel), absolute in dev
+const getApiUrl = () => {
+  // If env var is set, use it
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+  // In production (wonderstracker.com), use relative URL for Vercel proxy
+  if (typeof window !== 'undefined' && window.location.hostname === 'wonderstracker.com') {
+    return '/api/v1'
+  }
+  // Local development fallback
+  return 'http://localhost:8000/api/v1'
+}
+
+const API_URL = getApiUrl()
 
 export const api = ky.create({
   prefixUrl: API_URL,

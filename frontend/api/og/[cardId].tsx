@@ -1,11 +1,13 @@
 import { ImageResponse } from '@vercel/og'
-import { NextRequest } from 'next/server'
 
 export const config = {
   runtime: 'edge',
 }
 
-export default async function handler(req: NextRequest) {
+// API URL for edge function (calls Railway directly since this runs server-side)
+const API_URL = 'https://wonder-scraper-production.up.railway.app/api/v1'
+
+export default async function handler(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
     const cardId = searchParams.get('cardId')
@@ -13,9 +15,6 @@ export default async function handler(req: NextRequest) {
     if (!cardId) {
       return new Response('Missing cardId', { status: 400 })
     }
-
-    // Fetch card data from your API
-    const API_URL = process.env.VITE_API_URL || 'https://wonderstracker.com/api/v1'
 
     let cardData: any
     let historyData: any[] = []
