@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { analytics } from '~/services/analytics'
-import { ArrowLeft, TrendingUp, Trash2, Search, Edit, X, TrendingDown, BarChart3, Plus, Filter, Package } from 'lucide-react'
+import { ArrowLeft, TrendingUp, Trash2, Edit, X, Plus, Filter } from 'lucide-react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel } from '@tanstack/react-table'
 import { useMemo, useState, useEffect } from 'react'
 import clsx from 'clsx'
@@ -176,7 +176,7 @@ function Portfolio() {
 
   // Update Mutation (PATCH for individual cards)
   const updateMutation = useMutation({
-      mutationFn: async ({ id, data }: { id: number, data: any }) => {
+      mutationFn: async ({ id, data }: { id: number, data: Partial<PortfolioCard> }) => {
           return await api.patch(`portfolio/cards/${id}`, { json: data }).json<PortfolioCard>()
       },
       onSuccess: () => {
@@ -286,9 +286,9 @@ function Portfolio() {
           header: 'Card',
           cell: ({ row }) => (
               <div>
-                  <Link to={`/cards/${row.original.card_slug || row.original.card_id}` as any} className="font-bold hover:underline hover:text-primary">
+                  <a href={`/cards/${row.original.card_slug || row.original.card_id}`} className="font-bold hover:underline hover:text-primary">
                       {row.original.card_name || 'Unknown'}
-                  </Link>
+                  </a>
                   <div className="text-[10px] text-muted-foreground uppercase">{row.original.card_set}</div>
               </div>
           )

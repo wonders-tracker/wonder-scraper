@@ -23,8 +23,9 @@ function ForgotPassword() {
         json: { email }
       }).json()
       setSuccess(true)
-    } catch (err: any) {
-      setError(err.message || 'Failed to send reset email. Please try again.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to send reset email. Please try again.'
+      setError(message)
     } finally {
       setLoading(false)
     }

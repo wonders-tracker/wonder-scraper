@@ -26,7 +26,6 @@ import {
   Key,
   Trash2,
   Shield,
-  Zap,
   UserCheck,
   UserX,
   Code,
@@ -167,8 +166,6 @@ function AdminDashboard() {
   // API Access Requests
   const {
     data: apiAccessRequests,
-    isLoading: apiAccessLoading,
-    refetch: refetchApiAccess,
   } = useQuery<APIAccessRequest[]>({
     queryKey: ['api-access-requests'],
     queryFn: async () => {
@@ -218,7 +215,8 @@ function AdminDashboard() {
 
   // Show error if not authorized (not superuser)
   if (statsError) {
-    const errorMessage = (statsError as any)?.response?.status === 403
+    const err = statsError as { response?: { status?: number } }
+    const errorMessage = err?.response?.status === 403
       ? "You don't have permission to access this page."
       : "Failed to load admin stats."
 
@@ -516,7 +514,7 @@ function AdminDashboard() {
               <div className="md:col-span-2">
                 <h3 className="text-sm font-medium mb-2 text-muted-foreground">Top Pages</h3>
                 <div className="space-y-1">
-                  {stats?.analytics?.top_pages?.slice(0, 8).map((page, i) => (
+                  {stats?.analytics?.top_pages?.slice(0, 8).map((page) => (
                     <div key={page.path} className="flex items-center justify-between p-2 bg-muted/20 rounded text-sm">
                       <span className="truncate max-w-[250px] font-mono text-xs">{page.path}</span>
                       <span className="text-muted-foreground ml-2">{page.views.toLocaleString()}</span>

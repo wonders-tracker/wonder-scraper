@@ -26,7 +26,7 @@ export function MetaVote({ cardId }: MetaVoteProps) {
   const queryClient = useQueryClient()
 
   // Fetch current vote data
-  const { data: voteData, isLoading } = useQuery({
+  const { data: voteData } = useQuery({
     queryKey: ['meta-vote', cardId],
     queryFn: () => api.get(`cards/${cardId}/meta`).json<MetaVoteResponse>(),
     staleTime: 30 * 1000, // 30 seconds

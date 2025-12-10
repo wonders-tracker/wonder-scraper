@@ -44,7 +44,7 @@ function AuthCallback() {
             // New user or hasn't completed onboarding
             window.location.href = '/welcome'
           }
-        } catch (e) {
+        } catch {
           // If we can't check, default to welcome
           window.location.href = '/welcome'
         }

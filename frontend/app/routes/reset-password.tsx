@@ -46,8 +46,8 @@ function ResetPassword() {
         json: { token, new_password: password }
       }).json()
       setSuccess(true)
-    } catch (err: any) {
-      const message = err.response?.json?.detail || err.message || 'Failed to reset password. The link may have expired.'
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to reset password. The link may have expired.'
       setError(message)
     } finally {
       setLoading(false)

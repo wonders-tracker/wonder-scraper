@@ -49,7 +49,6 @@ interface TreatmentBadgeProps {
 // Treatment tiers for rarity (affects animation)
 const ULTRA_RARE_TREATMENTS = ['Formless Foil', 'OCM Serialized', 'Serialized', '1/1', 'Legendary']
 const RARE_TREATMENTS = ['Stonefoil', 'Starfoil', 'Full Art Foil', 'Animated', 'Preslab TAG 10']
-const UNCOMMON_TREATMENTS = ['Classic Foil', 'Full Art', 'Prerelease', 'Promo', 'Proof/Sample', 'Error/Errata']
 
 // Color schemes for each treatment
 const TREATMENT_STYLES: Record<string, { bg: string; border: string; text: string; gradient?: string }> = {

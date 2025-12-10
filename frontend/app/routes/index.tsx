@@ -1,10 +1,10 @@
-import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
-import { api, auth } from '../utils/auth'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel, getPaginationRowModel } from '@tanstack/react-table'
-import { useState, useMemo, useEffect, useCallback } from 'react'
-import { ArrowUpDown, Search, ArrowUp, ArrowDown, Calendar, TrendingUp, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Plus, Package, Layers, Gem, Archive } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { ArrowUpDown, Search, LayoutDashboard, ChevronLeft, ChevronRight, Plus, Package, Layers, Gem, Archive } from 'lucide-react'
 import clsx from 'clsx'
 import { Tooltip } from '../components/ui/tooltip'
 import { SimpleDropdown } from '../components/ui/dropdown'
@@ -75,7 +75,7 @@ function Home() {
   const [hideLowSignal, setHideLowSignal] = useState<boolean>(true)  // Hide low signal cards by default
   const [trackingCard, setTrackingCard] = useState<Card | null>(null)
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
+  const _queryClient = useQueryClient()
 
   // Debounced search tracking
   useEffect(() => {
@@ -439,8 +439,8 @@ function Home() {
     },
   })
 
-  // Compute dynamic sidebars
-  const topGainers = useMemo(() => {
+  // Compute dynamic sidebars (reserved for future sidebar features)
+  const _topGainers = useMemo(() => {
       if (!cards) return []
       // Lower threshold to 0.01% to capture more gainers
       const getDelta = (c: Card) => c.price_delta ?? c.price_delta_24h ?? 0
@@ -450,7 +450,7 @@ function Home() {
           .slice(0, 5)
   }, [cards])
 
-  const topLosers = useMemo(() => {
+  const _topLosers = useMemo(() => {
       if (!cards) return []
       // Lower threshold to -0.01% to capture more losers
       const getDelta = (c: Card) => c.price_delta ?? c.price_delta_24h ?? 0
@@ -460,16 +460,16 @@ function Home() {
           .slice(0, 5)
   }, [cards])
 
-  const topVolume = useMemo(() => {
+  const _topVolume = useMemo(() => {
       if (!cards) return []
       const getVolume = (c: Card) => c.volume ?? c.volume_30d ?? 0
       return [...cards]
           .sort((a, b) => getVolume(b) - getVolume(a))
           .slice(0, 5)
   }, [cards])
-  
-  // Calculate market metrics
-  const marketMetrics = useMemo(() => {
+
+  // Calculate market metrics (reserved for future header display)
+  const _marketMetrics = useMemo(() => {
       if (!cards) return { totalVolume: 0, totalVolumeUSD: 0, avgVelocity: 0 }
 
       const getVolume = (c: Card) => c.volume ?? c.volume_30d ?? 0

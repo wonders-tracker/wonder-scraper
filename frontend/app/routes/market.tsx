@@ -1,9 +1,9 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { analytics } from '~/services/analytics'
-import { ArrowLeft, TrendingUp, ArrowUp, ArrowDown, Activity, Zap, BarChart3, DollarSign, TableIcon, PieChartIcon, LineChart, Tag } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, PieChart, Pie, Cell, Legend, Treemap, ScatterChart, Scatter, ZAxis, ComposedChart, Line, ReferenceLine } from 'recharts'
+import { ArrowUp, ArrowDown, Activity, BarChart3, DollarSign, TableIcon, PieChartIcon, LineChart, Tag } from 'lucide-react'
+import { Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Cell, ScatterChart, Scatter, ZAxis, ComposedChart, Line, ReferenceLine } from 'recharts'
 import { Tooltip } from '../components/ui/tooltip'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getPaginationRowModel } from '@tanstack/react-table'
 import { useState, useMemo, useEffect } from 'react'
@@ -37,6 +37,23 @@ type MarketCard = {
     price_delta_24h: number
     market_cap: number
     deal_rating: number
+    treatment?: string
+}
+
+// Raw API response type
+type MarketOverviewItem = {
+    id: number
+    slug?: string
+    name: string
+    set_name: string
+    rarity_id: number
+    latest_price?: number
+    avg_price?: number
+    floor_price?: number
+    volume_period?: number
+    volume_change?: number
+    price_delta_period?: number
+    deal_rating?: number
     treatment?: string
 }
 
@@ -80,7 +97,7 @@ function MarketAnalysis() {
   const { data: rawCards, isLoading } = useQuery({
     queryKey: ['market-overview', timeFrame],
     queryFn: async () => {
-        const data = await api.get(`market/overview?time_period=${timeFrame}`).json<any[]>()
+        const data = await api.get(`market/overview?time_period=${timeFrame}`).json<MarketOverviewItem[]>()
         return data.map(c => {
             // Cap trend percentage at ±100% to avoid crazy numbers
             let priceDelta = c.price_delta_period ?? 0
@@ -267,8 +284,8 @@ function MarketAnalysis() {
       }))
   }, [cards])
 
-  // Deal distribution buckets for the bar portion
-  const dealDistributionData = useMemo(() => {
+  // Deal distribution buckets for the bar portion (reserved for future visualization)
+  const _dealDistributionData = useMemo(() => {
     const withDeals = cards.filter(c => c.volume_30d > 0 && c.deal_rating !== 0)
     const buckets = [
       { range: '50%+ Under', min: -100, max: -50, count: 0, color: '#059669', cards: [] as MarketCard[] },

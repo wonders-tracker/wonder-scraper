@@ -10,11 +10,15 @@
  *   analytics.trackLoginPageView()
  */
 
+// GA types
+type GtagCommand = 'event' | 'config' | 'set' | 'js'
+type GtagParams = Record<string, string | number | boolean | undefined>
+
 // Declare gtag on window
 declare global {
   interface Window {
-    gtag: (...args: any[]) => void
-    dataLayer: any[]
+    gtag: (command: GtagCommand, action: string | Date, params?: GtagParams) => void
+    dataLayer: Array<unknown>
   }
 }
 
@@ -24,7 +28,7 @@ const GA_MEASUREMENT_ID = 'G-28SPPTBF79'
 /**
  * Core tracking function - wraps gtag for safety
  */
-function track(eventName: string, params?: Record<string, any>) {
+function track(eventName: string, params?: GtagParams) {
   if (typeof window === 'undefined') return
   if (!window.gtag) {
     console.warn('[Analytics] gtag not loaded')
@@ -397,7 +401,7 @@ export const analytics = {
   trackChartInteraction,
 
   // Utility: Custom event
-  custom: (eventName: string, params?: Record<string, any>) => track(eventName, params),
+  custom: (eventName: string, params?: GtagParams) => track(eventName, params),
 }
 
 export default analytics

@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { auth, api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
@@ -24,14 +24,13 @@ export const Route = createFileRoute('/welcome')({
 })
 
 function Welcome() {
-  const router = useRouter()
   const [username, setUsername] = useState('')
   const [discordHandle, setDiscordHandle] = useState('')
   const [bio, setBio] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [_userProfile, setUserProfile] = useState<UserProfile | null>(null)
 
   // Fetch current user to pre-fill any existing data
   useEffect(() => {
@@ -68,7 +67,7 @@ function Welcome() {
       await api.post('users/me/complete-onboarding')
       analytics.trackProfileCompleted(!!username, !!discordHandle)
       // Navigate to upsell page
-      router.navigate({ to: '/upgrade' as any })
+      window.location.href = '/upgrade'
     } catch (e) {
       console.error('Failed to update profile:', e)
       setError('Failed to save profile. Please try again.')
@@ -85,7 +84,7 @@ function Welcome() {
       console.error('Failed to complete onboarding:', e)
     }
     analytics.trackProfileSkipped()
-    router.navigate({ to: '/upgrade' as any })
+    window.location.href = '/upgrade'
   }
 
   if (isLoading) {

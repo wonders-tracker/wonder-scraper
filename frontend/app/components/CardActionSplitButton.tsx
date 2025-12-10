@@ -10,7 +10,7 @@ interface CardActionSplitButtonProps {
 
 export function CardActionSplitButton({
   cardId,
-  cardName,
+  cardName: _cardName,
   onAddToPortfolio,
   className = ''
 }: CardActionSplitButtonProps) {
@@ -32,7 +32,7 @@ export function CardActionSplitButton({
     try {
       const data = await api.get(`watchlist/${cardId}`).json<{ id: number } | null>()
       setIsWatching(data !== null)
-    } catch (error) {
+    } catch {
       // 404 means not watching, which is fine
       setIsWatching(false)
     }
@@ -187,7 +187,7 @@ export function CardActionSplitButton({
 // Compact variant for table rows / smaller spaces
 export function CardActionSplitButtonCompact({
   cardId,
-  cardName,
+  cardName: _cardName,
   onAddToPortfolio,
   className = ''
 }: CardActionSplitButtonProps) {

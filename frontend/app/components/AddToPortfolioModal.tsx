@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { api } from '../utils/auth'
-import { X, Plus, Minus, Wallet, Link as LinkIcon, Loader2 } from 'lucide-react'
+import { X, Plus, Minus, Wallet, Link as LinkIcon } from 'lucide-react'
 import clsx from 'clsx'
 import { SimpleDropdown } from './ui/dropdown'
 
@@ -85,7 +85,7 @@ const SOURCES_BY_TYPE: Record<string, string[]> = {
 const parseOpenSeaUrl = (url: string): { chain?: string; contract?: string; tokenId?: string; valid: boolean } => {
     try {
         // Format: https://opensea.io/item/ethereum/0x28a11da34a93712b1fde4ad15da217a3b14d9465/4294968598
-        const regex = /opensea\.io\/(?:assets|item)\/([^\/]+)\/([^\/]+)\/(\d+)/
+        const regex = /opensea\.io\/(?:assets|item)\/([^/]+)\/([^/]+)\/(\d+)/
         const match = url.match(regex)
         if (match) {
             return {

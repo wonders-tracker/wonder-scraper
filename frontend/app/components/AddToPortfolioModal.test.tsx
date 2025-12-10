@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AddToPortfolioModal } from './AddToPortfolioModal'
@@ -69,7 +69,7 @@ describe('parseOpenSeaUrl', () => {
 
   const parseOpenSeaUrl = (url: string): { chain?: string; contract?: string; tokenId?: string; valid: boolean } => {
     try {
-      const regex = /opensea\.io\/(?:assets|item)\/([^\/]+)\/([^\/]+)\/(\d+)/
+      const regex = /opensea\.io\/(?:assets|item)\/([^/]+)\/([^/]+)\/(\d+)/
       const match = url.match(regex)
       if (match) {
         return {

@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useRouter, Link } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { auth, api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
@@ -18,7 +18,6 @@ function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const router = useRouter()
 
   // Track login page view
   useEffect(() => {
@@ -39,7 +38,7 @@ function Login() {
         } else {
           window.location.href = '/welcome'
         }
-      } catch (e) {
+      } catch {
         // Default to welcome if check fails
         window.location.href = '/welcome'
       }
@@ -53,7 +52,7 @@ function Login() {
       analytics.trackDiscordLoginInitiated()
       const res = await api.get('auth/discord/login').json<{ url: string }>()
       window.location.href = res.url
-    } catch (e) {
+    } catch {
       setError('Failed to initiate Discord login')
     }
   }
@@ -182,16 +181,16 @@ function Login() {
           </form>
 
           <div className="mt-4 text-center">
-            <Link to={"/forgot-password" as any} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <a href="/forgot-password" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Forgot your password?
-            </Link>
+            </a>
           </div>
 
           <div className="mt-4 text-center text-sm">
             <span className="text-muted-foreground">Don't have an account? </span>
-            <Link to={"/signup" as any} className="text-primary hover:underline font-bold">
+            <a href="/signup" className="text-primary hover:underline font-bold">
               Sign Up
-            </Link>
+            </a>
           </div>
         </div>
 

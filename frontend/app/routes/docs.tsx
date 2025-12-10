@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, useLocation } from '@tanstack/react-router'
-import { ArrowLeft, Book, Code, Database, Key, Server, ShoppingCart, Activity, FileText, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Book, Database, Key, Server, ShoppingCart, Activity, FileText, ExternalLink } from 'lucide-react'
 
 export const Route = createFileRoute('/docs')({
   component: DocsLayout,

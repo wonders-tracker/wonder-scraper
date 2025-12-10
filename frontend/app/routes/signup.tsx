@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { api } from '~/utils/auth'
 import { analytics } from '~/services/analytics'
@@ -14,7 +14,6 @@ function Signup() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
 
   // Track signup page view
   useEffect(() => {
@@ -26,7 +25,7 @@ function Signup() {
       analytics.trackDiscordSignupInitiated()
       const res = await api.get('auth/discord/login').json<{ url: string }>()
       window.location.href = res.url
-    } catch (e) {
+    } catch {
       setError('Failed to initiate Discord signup')
     }
   }
@@ -50,7 +49,7 @@ function Signup() {
 
     try {
       // Register user
-      const response = await api.post('auth/register', {
+      await api.post('auth/register', {
         json: { email, password }
       }).json()
 
@@ -68,8 +67,9 @@ function Signup() {
         // New users go to onboarding
         window.location.href = '/welcome'
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to create account. Please try again.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create account. Please try again.'
+      setError(message)
     } finally {
       setLoading(false)
     }
