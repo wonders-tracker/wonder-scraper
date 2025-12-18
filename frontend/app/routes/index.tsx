@@ -12,6 +12,25 @@ import { useTimePeriod } from '../context/TimePeriodContext'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
 
+// Card thumbnail that only renders if src provided and loads successfully (prevents layout shift)
+function CardThumbnail({ src, alt, className }: { src?: string; alt: string; className: string }) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+
+  // Don't render anything if no src or error
+  if (!src || error) return null
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={clsx(className, !loaded && 'hidden')}
+      onLoad={() => setLoaded(true)}
+      onError={() => setError(true)}
+    />
+  )
+}
+
 // Truncate treatment for display if too long
 function simplifyTreatmentForDisplay(treatment: string): string {
     if (!treatment) return ''
@@ -53,6 +72,7 @@ type Card = {
 
   // === METADATA ===
   last_treatment?: string // Treatment of last sale (e.g., "Classic Foil")
+  image_url?: string // Card thumbnail URL from blob storage
 
   // === DEPRECATED (backwards compat) ===
   volume_30d?: number // @deprecated: use 'volume'
@@ -72,6 +92,7 @@ type Listing = {
   card_id: number
   card_name: string
   card_slug?: string
+  card_image_url?: string // Card thumbnail from blob storage
   product_type: string
   title: string
   price: number
@@ -243,13 +264,10 @@ function Home() {
 
         return (
           <div className="flex items-center gap-1.5 sm:gap-2 max-w-[140px] sm:max-w-[180px] md:max-w-[250px] lg:max-w-none">
-              <img
-                  src={`https://byhenwreijyrx2ww.public.blob.vercel-storage.com/cards/${row.original.id}-thumb.webp`}
+              <CardThumbnail
+                  src={row.original.image_url}
                   alt={row.getValue('name')}
                   className="w-6 h-8 sm:w-8 sm:h-11 lg:w-10 lg:h-14 rounded object-cover bg-muted shrink-0"
-                  onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                  }}
               />
               <div className="min-w-0 overflow-hidden flex-1">
                   <div className="flex items-center gap-1 sm:gap-1.5">
@@ -995,13 +1013,10 @@ function Home() {
                                                   {/* Card with thumbnail */}
                                                   <td className="px-2 py-1.5">
                                                       <div className="flex items-center gap-2">
-                                                          <img
-                                                              src={`https://byhenwreijyrx2ww.public.blob.vercel-storage.com/cards/${listing.card_id}-thumb.webp`}
+                                                          <CardThumbnail
+                                                              src={listing.card_image_url}
                                                               alt={listing.card_name}
                                                               className="w-8 h-11 lg:w-10 lg:h-14 rounded object-cover bg-muted shrink-0"
-                                                              onError={(e) => {
-                                                                  e.currentTarget.style.display = 'none'
-                                                              }}
                                                           />
                                                           <div className="min-w-0">
                                                               <div className="font-bold text-sm lg:text-base truncate max-w-[120px] md:max-w-none">{listing.card_name}</div>

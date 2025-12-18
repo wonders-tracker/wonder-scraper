@@ -346,7 +346,7 @@ def read_market_listings(
     cutoff_time = datetime.utcnow() - cutoff_delta if cutoff_delta else None
 
     # Build base query with join to Card for product info
-    query = select(MarketPrice, Card.name, Card.slug, Card.product_type).join(Card, MarketPrice.card_id == Card.id)
+    query = select(MarketPrice, Card.name, Card.slug, Card.product_type, Card.image_url).join(Card, MarketPrice.card_id == Card.id)
 
     # Apply listing type filter
     if listing_type and listing_type != "all":
@@ -423,7 +423,7 @@ def read_market_listings(
     results = session.exec(query).all()
 
     # Get unique card IDs to batch fetch floor prices and VWAP
-    card_ids = list(set(listing.card_id for listing, _, _, _ in results))
+    card_ids = list(set(listing.card_id for listing, _, _, _, _ in results))
     floor_price_map = {}
     vwap_map = {}
 
@@ -486,7 +486,7 @@ def read_market_listings(
 
     # Format results
     listings = []
-    for listing, card_name, card_slug, card_product_type in results:
+    for listing, card_name, card_slug, card_product_type, card_image_url in results:
         # Get treatment-specific floor price if available
         # Determine variant key: use product_subtype for sealed, treatment for singles
         variant_key = listing.product_subtype if listing.product_subtype else listing.treatment
@@ -500,6 +500,7 @@ def read_market_listings(
             "card_id": listing.card_id,
             "card_name": card_name,
             "card_slug": card_slug,
+            "card_image_url": card_image_url,
             "product_type": card_product_type or "Single",
             "title": listing.title,
             "price": listing.price,
