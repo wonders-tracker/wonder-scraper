@@ -50,7 +50,7 @@ def get_live_market_price(session: Session, card_id: int) -> float:
     snapshot = session.exec(
         select(MarketSnapshot)
         .where(MarketSnapshot.card_id == card_id)
-        .order_by(desc(MarketSnapshot.timestamp))
+        .order_by(desc(MarketSnapshot.timestamp), desc(MarketSnapshot.id))
         .limit(1)
     ).first()
     return snapshot.avg_price if snapshot and snapshot.avg_price else 0.0

@@ -148,7 +148,7 @@ def get_storefront_snapshots(
         select(BlokpaxSnapshot)
         .where(BlokpaxSnapshot.storefront_slug == slug)
         .where(BlokpaxSnapshot.timestamp >= cutoff)
-        .order_by(desc(BlokpaxSnapshot.timestamp))
+        .order_by(desc(BlokpaxSnapshot.timestamp), desc(BlokpaxSnapshot.id))
         .limit(limit)
     ).all()
 

@@ -98,8 +98,8 @@ def read_cards(
         count_query = select(func.count()).select_from(base_query.subquery())
         total = session.exec(count_query).one()
 
-    # Fetch paginated cards
-    card_query = base_query.offset(skip).limit(limit)
+    # Fetch paginated cards with deterministic ordering
+    card_query = base_query.order_by(Card.name, Card.id).offset(skip).limit(limit)
     cards = session.exec(card_query).all()
 
     if not cards:
@@ -547,7 +547,7 @@ def read_card(
     stmt = (
         select(MarketSnapshot)
         .where(MarketSnapshot.card_id == card.id)
-        .order_by(desc(MarketSnapshot.timestamp))
+        .order_by(desc(MarketSnapshot.timestamp), desc(MarketSnapshot.id))
         .limit(50)
     )
     snapshots = session.exec(stmt).all()
@@ -803,7 +803,7 @@ def read_market_data(
     """
     card = get_card_by_id_or_slug(session, card_id)
     statement = (
-        select(MarketSnapshot).where(MarketSnapshot.card_id == card.id).order_by(MarketSnapshot.timestamp.desc())
+        select(MarketSnapshot).where(MarketSnapshot.card_id == card.id).order_by(MarketSnapshot.timestamp.desc(), MarketSnapshot.id.desc())
     )
     snapshot = session.exec(statement).first()
 
@@ -951,7 +951,7 @@ def read_snapshot_history(
     statement = (
         select(MarketSnapshot)
         .where(MarketSnapshot.card_id == card.id, MarketSnapshot.timestamp >= cutoff)
-        .order_by(desc(MarketSnapshot.timestamp))
+        .order_by(desc(MarketSnapshot.timestamp), desc(MarketSnapshot.id))
         .limit(limit)
     )
 

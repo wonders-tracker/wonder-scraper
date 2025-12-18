@@ -66,7 +66,7 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
                     snapshot = session.exec(
                         select(MarketSnapshot)
                         .where(MarketSnapshot.card_id == card.id)
-                        .order_by(MarketSnapshot.timestamp.desc())
+                        .order_by(MarketSnapshot.timestamp.desc(), MarketSnapshot.id.desc())
                         .limit(1)
                     ).first()
 
@@ -263,7 +263,7 @@ async def get_admin_stats(
         # Snapshot stats
         total_snapshots = session.exec(select(func.count(MarketSnapshot.id))).one()
         latest_snapshot = session.exec(
-            select(MarketSnapshot).order_by(MarketSnapshot.timestamp.desc()).limit(1)
+            select(MarketSnapshot).order_by(MarketSnapshot.timestamp.desc(), MarketSnapshot.id.desc()).limit(1)
         ).first()
 
         # Database size (PostgreSQL)
