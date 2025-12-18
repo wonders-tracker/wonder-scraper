@@ -116,7 +116,6 @@ function Home() {
   const { timePeriod, setTimePeriod } = useTimePeriod()
   const [productType, setProductType] = useState<string>('all')
   const [platform, setPlatform] = useState<string>('all')
-  const [hideLowSignal, setHideLowSignal] = useState<boolean>(true)  // Hide low signal cards by default
   const [trackingCard, setTrackingCard] = useState<Card | null>(null)
   const [activeTab, setActiveTab] = useState<DashboardTab>('products')
   // Listings tab state
@@ -243,7 +242,7 @@ function Home() {
           : null
 
         return (
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 max-w-[140px] sm:max-w-[180px] md:max-w-[250px] lg:max-w-none">
               <img
                   src={`https://byhenwreijyrx2ww.public.blob.vercel-storage.com/cards/${row.original.id}-thumb.webp`}
                   alt={row.getValue('name')}
@@ -252,10 +251,10 @@ function Home() {
                       e.currentTarget.style.display = 'none'
                   }}
               />
-              <div className="max-w-[100px] sm:max-w-[140px] md:max-w-none min-w-0">
+              <div className="min-w-0 overflow-hidden flex-1">
                   <div className="flex items-center gap-1 sm:gap-1.5">
                     <Tooltip content={row.getValue('name')}>
-                        <span className="font-bold text-foreground truncate text-xs sm:text-sm lg:text-base">{row.getValue('name')}</span>
+                        <span className="font-bold text-foreground text-xs sm:text-sm lg:text-base truncate block max-w-[80px] sm:max-w-[120px] md:max-w-[180px] lg:max-w-none">{row.getValue('name')}</span>
                     </Tooltip>
                     {isSingle && rarity && (
                       <Tooltip content={rarity}>
@@ -552,13 +551,11 @@ function Home() {
     }
   ], [user])
 
-  // Filter out low signal cards (no confirmed sales, only ask prices)
+  // Cards data (no filtering)
   const filteredCards = useMemo(() => {
     if (!cards) return []
-    if (!hideLowSignal) return cards
-    // Low signal = volume is 0 (no confirmed sales in selected period)
-    return cards.filter(c => (c.volume ?? c.volume_30d ?? 0) > 0)
-  }, [cards, hideLowSignal])
+    return cards
+  }, [cards])
 
   const table = useReactTable({
     data: filteredCards,
@@ -727,18 +724,6 @@ function Home() {
                                   className="flex-1 sm:w-[100px]"
                                   triggerClassName="uppercase font-mono text-xs"
                               />
-                              {/* Low Signal Filter */}
-                              <Tooltip content="Hide cards with no confirmed sales (only asking prices)">
-                                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                                      <input
-                                          type="checkbox"
-                                          checked={hideLowSignal}
-                                          onChange={e => setHideLowSignal(e.target.checked)}
-                                          className="w-3.5 h-3.5 rounded border-border bg-background text-primary focus:ring-1 focus:ring-primary cursor-pointer"
-                                      />
-                                      <span className="text-xs text-muted-foreground whitespace-nowrap">Hide Low Signal</span>
-                                  </label>
-                              </Tooltip>
                           </div>
                       </div>
                     ) : (
