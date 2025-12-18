@@ -364,9 +364,25 @@ def read_market_listings(
     if treatment:
         query = query.where(MarketPrice.treatment.ilike(f"%{treatment}%"))
 
-    # Apply time period filter
+    # Apply time period filter - smart behavior based on listing type
+    # Active listings: filter by listed_at (when seller posted it)
+    # Sold listings: filter by sold_date (when it sold)
     if cutoff_time:
-        query = query.where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= cutoff_time)
+        if listing_type == "active":
+            # Use listed_at for active listings, fallback to scraped_at
+            query = query.where(func.coalesce(MarketPrice.listed_at, MarketPrice.scraped_at) >= cutoff_time)
+        elif listing_type == "sold":
+            # Use sold_date for sold listings
+            query = query.where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= cutoff_time)
+        else:
+            # "all" - use appropriate date for each type
+            query = query.where(
+                func.coalesce(
+                    MarketPrice.sold_date,
+                    MarketPrice.listed_at,
+                    MarketPrice.scraped_at
+                ) >= cutoff_time
+            )
 
     # Apply price range filters
     if min_price is not None:
