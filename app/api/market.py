@@ -408,8 +408,13 @@ def read_market_listings(
     sort_column = {
         "price": MarketPrice.price,
         "scraped_at": MarketPrice.scraped_at,
+        "listed_at": func.coalesce(MarketPrice.listed_at, MarketPrice.scraped_at),
         "sold_date": func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at),
     }.get(sort_by, MarketPrice.scraped_at)
+
+    # For active listings default to listed_at (more meaningful than scraped_at)
+    if sort_by == "scraped_at" and listing_type == "active":
+        sort_column = func.coalesce(MarketPrice.listed_at, MarketPrice.scraped_at)
 
     # Add secondary sort by id for deterministic ordering when primary sort values are equal
     if sort_order == "asc":
