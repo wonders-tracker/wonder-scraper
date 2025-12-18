@@ -148,6 +148,8 @@ function Home() {
   const [listingSearch, setListingSearch] = useState<string>('')
   const [listingSortBy, setListingSortBy] = useState<string>('scraped_at')
   const [listingSortOrder, setListingSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [listingPage, setListingPage] = useState<number>(0)
+  const LISTINGS_PER_PAGE = 100
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -203,13 +205,14 @@ function Home() {
     refetchOnMount: false, // Don't refetch on component mount if data exists
   })
 
-  // Listings query for the Listings tab
-  const { data: listingsData, isLoading: listingsLoading } = useQuery({
-    queryKey: ['listings', listingType, listingPlatform, listingProductType, listingTreatment, listingTimePeriod, listingSearch, listingSortBy, listingSortOrder],
+  // Listings query for the Listings tab (server-side pagination)
+  const { data: listingsData, isLoading: listingsLoading, isFetching: listingsFetching } = useQuery({
+    queryKey: ['listings', listingType, listingPlatform, listingProductType, listingTreatment, listingTimePeriod, listingSearch, listingSortBy, listingSortOrder, listingPage],
     queryFn: async () => {
       const params = new URLSearchParams()
       params.set('listing_type', listingType)
-      params.set('limit', '200')
+      params.set('limit', String(LISTINGS_PER_PAGE))
+      params.set('offset', String(listingPage * LISTINGS_PER_PAGE))
       params.set('sort_by', listingSortBy)
       params.set('sort_order', listingSortOrder)
       if (listingPlatform !== 'all') params.set('platform', listingPlatform)
@@ -223,7 +226,13 @@ function Home() {
     enabled: activeTab === 'listings', // Only fetch when Listings tab is active
     staleTime: 2 * 60 * 1000, // 2 minutes - listings change more frequently
     refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev, // Keep previous data while fetching new page
   })
+
+  // Reset to page 0 when filters change
+  useEffect(() => {
+    setListingPage(0)
+  }, [listingType, listingPlatform, listingProductType, listingTreatment, listingTimePeriod, listingSearch, listingSortBy, listingSortOrder])
 
   // Helper to toggle listing sort
   const toggleListingSort = (column: string) => {
@@ -1175,7 +1184,27 @@ function Home() {
                           {/* Listings count footer */}
                           <div className="border-t border-border px-3 py-2 flex items-center justify-between bg-muted/20">
                               <div className="text-xs text-muted-foreground">
-                                  Showing {listingsData?.items.length || 0} of {listingsData?.total || 0} listings
+                                  Showing {listingPage * LISTINGS_PER_PAGE + 1} to {Math.min((listingPage + 1) * LISTINGS_PER_PAGE, listingsData?.total || 0)} of {listingsData?.total || 0} listings
+                                  {listingsFetching && <span className="ml-2 text-primary">Loading...</span>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                  <button
+                                      onClick={() => setListingPage(p => Math.max(0, p - 1))}
+                                      disabled={listingPage === 0}
+                                      className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                                  >
+                                      <ChevronLeft className="w-4 h-4" />
+                                  </button>
+                                  <span className="text-xs text-muted-foreground">
+                                      Page {listingPage + 1} of {Math.ceil((listingsData?.total || 0) / LISTINGS_PER_PAGE)}
+                                  </span>
+                                  <button
+                                      onClick={() => setListingPage(p => p + 1)}
+                                      disabled={!listingsData?.hasMore}
+                                      className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                                  >
+                                      <ChevronRight className="w-4 h-4" />
+                                  </button>
                               </div>
                           </div>
                       </>
