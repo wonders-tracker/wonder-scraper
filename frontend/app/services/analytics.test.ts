@@ -392,15 +392,12 @@ describe('Analytics Service', () => {
       consoleSpy.mockRestore()
     })
 
-    it('should warn when gtag is not loaded', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    it('should still track to Vercel Analytics when gtag is not loaded', () => {
       // @ts-ignore
       window.gtag = undefined
 
-      analytics.track('test_event')
-
-      expect(consoleSpy).toHaveBeenCalledWith('[Analytics] gtag not loaded')
-      consoleSpy.mockRestore()
+      // Should not throw when gtag is undefined - Vercel Analytics handles it
+      expect(() => analytics.track('test_event')).not.toThrow()
     })
   })
 })

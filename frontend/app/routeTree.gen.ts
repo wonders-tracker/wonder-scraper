@@ -23,6 +23,7 @@ import { Route as ApiRouteImport } from './routes/api'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as MarketHeadRouteImport } from './routes/market.head'
 import { Route as IndexHeadRouteImport } from './routes/index.head'
 import { Route as DocsMarketTreatmentsRouteImport } from './routes/docs.market-treatments'
@@ -39,6 +40,11 @@ import { Route as DocsBlokpaxOffersRouteImport } from './routes/docs.blokpax-off
 import { Route as DocsAuthenticationRouteImport } from './routes/docs.authentication'
 import { Route as CardsCardIdRouteImport } from './routes/cards.$cardId'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as AdminScrapersRouteImport } from './routes/admin.scrapers'
+import { Route as AdminMarketRouteImport } from './routes/admin.market'
+import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as CardsCardIdHeadRouteImport } from './routes/cards.$cardId.head'
 
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -110,6 +116,11 @@ const DocsIndexRoute = DocsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => DocsRoute,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
 } as any)
 const MarketHeadRoute = MarketHeadRouteImport.update({
   id: '/head',
@@ -191,6 +202,31 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminScrapersRoute = AdminScrapersRouteImport.update({
+  id: '/scrapers',
+  path: '/scrapers',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminMarketRoute = AdminMarketRouteImport.update({
+  id: '/market',
+  path: '/market',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminApiKeysRoute = AdminApiKeysRouteImport.update({
+  id: '/api-keys',
+  path: '/api-keys',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AdminRoute,
+} as any)
 const CardsCardIdHeadRoute = CardsCardIdHeadRouteImport.update({
   id: '/head',
   path: '/head',
@@ -199,7 +235,7 @@ const CardsCardIdHeadRoute = CardsCardIdHeadRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/api': typeof ApiRoute
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
@@ -211,6 +247,11 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/upgrade': typeof UpgradeRoute
   '/welcome': typeof WelcomeRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/api-keys': typeof AdminApiKeysRoute
+  '/admin/market': typeof AdminMarketRoute
+  '/admin/scrapers': typeof AdminScrapersRoute
+  '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -227,12 +268,12 @@ export interface FileRoutesByFullPath {
   '/docs/market-treatments': typeof DocsMarketTreatmentsRoute
   '/index/head': typeof IndexHeadRoute
   '/market/head': typeof MarketHeadRoute
+  '/admin/': typeof AdminIndexRoute
   '/docs/': typeof DocsIndexRoute
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/api': typeof ApiRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -243,6 +284,11 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/upgrade': typeof UpgradeRoute
   '/welcome': typeof WelcomeRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/api-keys': typeof AdminApiKeysRoute
+  '/admin/market': typeof AdminMarketRoute
+  '/admin/scrapers': typeof AdminScrapersRoute
+  '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -259,13 +305,14 @@ export interface FileRoutesByTo {
   '/docs/market-treatments': typeof DocsMarketTreatmentsRoute
   '/index/head': typeof IndexHeadRoute
   '/market/head': typeof MarketHeadRoute
+  '/admin': typeof AdminIndexRoute
   '/docs': typeof DocsIndexRoute
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/api': typeof ApiRoute
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
@@ -277,6 +324,11 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/upgrade': typeof UpgradeRoute
   '/welcome': typeof WelcomeRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/api-keys': typeof AdminApiKeysRoute
+  '/admin/market': typeof AdminMarketRoute
+  '/admin/scrapers': typeof AdminScrapersRoute
+  '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -293,6 +345,7 @@ export interface FileRoutesById {
   '/docs/market-treatments': typeof DocsMarketTreatmentsRoute
   '/index/head': typeof IndexHeadRoute
   '/market/head': typeof MarketHeadRoute
+  '/admin/': typeof AdminIndexRoute
   '/docs/': typeof DocsIndexRoute
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
 }
@@ -312,6 +365,11 @@ export interface FileRouteTypes {
     | '/signup'
     | '/upgrade'
     | '/welcome'
+    | '/admin/analytics'
+    | '/admin/api-keys'
+    | '/admin/market'
+    | '/admin/scrapers'
+    | '/admin/users'
     | '/auth/callback'
     | '/cards/$cardId'
     | '/docs/authentication'
@@ -328,12 +386,12 @@ export interface FileRouteTypes {
     | '/docs/market-treatments'
     | '/index/head'
     | '/market/head'
+    | '/admin/'
     | '/docs/'
     | '/cards/$cardId/head'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/api'
     | '/forgot-password'
     | '/login'
@@ -344,6 +402,11 @@ export interface FileRouteTypes {
     | '/signup'
     | '/upgrade'
     | '/welcome'
+    | '/admin/analytics'
+    | '/admin/api-keys'
+    | '/admin/market'
+    | '/admin/scrapers'
+    | '/admin/users'
     | '/auth/callback'
     | '/cards/$cardId'
     | '/docs/authentication'
@@ -360,6 +423,7 @@ export interface FileRouteTypes {
     | '/docs/market-treatments'
     | '/index/head'
     | '/market/head'
+    | '/admin'
     | '/docs'
     | '/cards/$cardId/head'
   id:
@@ -377,6 +441,11 @@ export interface FileRouteTypes {
     | '/signup'
     | '/upgrade'
     | '/welcome'
+    | '/admin/analytics'
+    | '/admin/api-keys'
+    | '/admin/market'
+    | '/admin/scrapers'
+    | '/admin/users'
     | '/auth/callback'
     | '/cards/$cardId'
     | '/docs/authentication'
@@ -393,13 +462,14 @@ export interface FileRouteTypes {
     | '/docs/market-treatments'
     | '/index/head'
     | '/market/head'
+    | '/admin/'
     | '/docs/'
     | '/cards/$cardId/head'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   ApiRoute: typeof ApiRoute
   DocsRoute: typeof DocsRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
@@ -516,6 +586,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsIndexRouteImport
       parentRoute: typeof DocsRoute
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/market/head': {
       id: '/market/head'
       path: '/head'
@@ -628,6 +705,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/scrapers': {
+      id: '/admin/scrapers'
+      path: '/scrapers'
+      fullPath: '/admin/scrapers'
+      preLoaderRoute: typeof AdminScrapersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/market': {
+      id: '/admin/market'
+      path: '/market'
+      fullPath: '/admin/market'
+      preLoaderRoute: typeof AdminMarketRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/api-keys': {
+      id: '/admin/api-keys'
+      path: '/api-keys'
+      fullPath: '/admin/api-keys'
+      preLoaderRoute: typeof AdminApiKeysRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/analytics': {
+      id: '/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/cards/$cardId/head': {
       id: '/cards/$cardId/head'
       path: '/head'
@@ -637,6 +749,26 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AdminRouteChildren {
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
+  AdminApiKeysRoute: typeof AdminApiKeysRoute
+  AdminMarketRoute: typeof AdminMarketRoute
+  AdminScrapersRoute: typeof AdminScrapersRoute
+  AdminUsersRoute: typeof AdminUsersRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
+  AdminApiKeysRoute: AdminApiKeysRoute,
+  AdminMarketRoute: AdminMarketRoute,
+  AdminScrapersRoute: AdminScrapersRoute,
+  AdminUsersRoute: AdminUsersRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface DocsRouteChildren {
   DocsAuthenticationRoute: typeof DocsAuthenticationRoute
@@ -697,7 +829,7 @@ const CardsCardIdRouteWithChildren = CardsCardIdRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   ApiRoute: ApiRoute,
   DocsRoute: DocsRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,

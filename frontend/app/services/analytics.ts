@@ -1,14 +1,18 @@
 /**
- * Google Analytics Service
+ * Hybrid Analytics Service (Google Analytics + Vercel Analytics)
  *
  * Extensible analytics factory for tracking custom events.
- * Measurement ID: G-28SPPTBF79
+ * Sends events to both GA and Vercel Analytics for redundancy.
+ *
+ * GA Measurement ID: G-28SPPTBF79
  *
  * Usage:
  *   import { analytics } from '~/services/analytics'
  *   analytics.trackSignup('email')
  *   analytics.trackLoginPageView()
  */
+
+import { track as vercelTrack } from '@vercel/analytics'
 
 // Declare gtag on window
 declare global {
@@ -22,23 +26,56 @@ declare global {
 const GA_MEASUREMENT_ID = 'G-28SPPTBF79'
 
 /**
- * Core tracking function - wraps gtag for safety
+ * Core tracking function - sends to both GA and Vercel Analytics
  */
 function track(eventName: string, params?: Record<string, any>) {
   if (typeof window === 'undefined') return
-  if (!window.gtag) {
-    console.warn('[Analytics] gtag not loaded')
-    return
+
+  // Send to Google Analytics
+  if (window.gtag) {
+    try {
+      window.gtag('event', eventName, {
+        ...params,
+        send_to: GA_MEASUREMENT_ID,
+      })
+    } catch (error) {
+      console.error('[Analytics:GA] Error tracking event:', error)
+    }
   }
 
+  // Send to Vercel Analytics
   try {
-    window.gtag('event', eventName, {
-      ...params,
-      send_to: GA_MEASUREMENT_ID,
-    })
+    // Vercel Analytics has limitations: max 255 chars per key/value, no nested objects
+    // Clean params for Vercel compatibility
+    const vercelParams = params ? cleanParamsForVercel(params) : undefined
+    vercelTrack(eventName, vercelParams)
   } catch (error) {
-    console.error('[Analytics] Error tracking event:', error)
+    console.error('[Analytics:Vercel] Error tracking event:', error)
   }
+}
+
+/**
+ * Clean params for Vercel Analytics compatibility
+ * - Removes nested objects
+ * - Truncates strings > 255 chars
+ * - Only allows strings, numbers, booleans, null
+ */
+function cleanParamsForVercel(params: Record<string, any>): Record<string, string | number | boolean | null> {
+  const cleaned: Record<string, string | number | boolean | null> = {}
+
+  for (const [key, value] of Object.entries(params)) {
+    // Skip nested objects/arrays
+    if (typeof value === 'object' && value !== null) continue
+
+    // Truncate long strings
+    if (typeof value === 'string') {
+      cleaned[key.slice(0, 255)] = value.slice(0, 255)
+    } else if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+      cleaned[key.slice(0, 255)] = value
+    }
+  }
+
+  return cleaned
 }
 
 /**
