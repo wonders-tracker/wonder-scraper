@@ -395,10 +395,11 @@ def read_market_listings(
         "sold_date": func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at),
     }.get(sort_by, MarketPrice.scraped_at)
 
+    # Add secondary sort by id for deterministic ordering when primary sort values are equal
     if sort_order == "asc":
-        query = query.order_by(sort_column)
+        query = query.order_by(sort_column, MarketPrice.id)
     else:
-        query = query.order_by(desc(sort_column))
+        query = query.order_by(desc(sort_column), desc(MarketPrice.id))
 
     # Apply pagination
     query = query.offset(offset).limit(limit)
