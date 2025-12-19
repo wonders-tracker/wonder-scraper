@@ -234,6 +234,15 @@ function Home() {
     setListingPage(0)
   }, [listingType, listingPlatform, listingProductType, listingTreatment, listingTimePeriod, listingSearch, listingSortBy, listingSortOrder])
 
+  // Update default sort when listing type changes
+  useEffect(() => {
+    if (listingType === 'sold') {
+      setListingSortBy('sold_date')
+    } else if (listingType === 'active') {
+      setListingSortBy('listed_at')
+    }
+  }, [listingType])
+
   // Helper to toggle listing sort
   const toggleListingSort = (column: string) => {
     if (listingSortBy === column) {
