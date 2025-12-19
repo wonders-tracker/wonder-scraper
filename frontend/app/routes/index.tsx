@@ -24,6 +24,7 @@ function CardThumbnail({ src, alt, className }: { src?: string; alt: string; cla
     <img
       src={src}
       alt={alt}
+      loading="lazy"
       className={clsx(className, !loaded && 'hidden')}
       onLoad={() => setLoaded(true)}
       onError={() => setError(true)}

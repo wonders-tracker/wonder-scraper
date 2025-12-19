@@ -213,6 +213,7 @@ function AdminAnalytics() {
                         <img
                           src={card.image_url}
                           alt={card.card_name || `Card ${card.card_id}`}
+                          loading="lazy"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                         />
                       ) : (

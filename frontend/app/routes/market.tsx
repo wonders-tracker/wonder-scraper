@@ -1329,6 +1329,7 @@ function MarketAnalysis() {
                                                             <img
                                                                 src={listing.card_image_url}
                                                                 alt={listing.card_name}
+                                                                loading="lazy"
                                                                 className="w-14 h-20 object-cover rounded flex-shrink-0"
                                                             />
                                                         ) : (
