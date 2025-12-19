@@ -20,7 +20,7 @@ This is slow but necessary - there's no API to filter by "listed only".
 
 import httpx
 from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 import asyncio
 
@@ -924,7 +924,7 @@ async def fetch_redemptions(slug: str, max_pages: int = 50) -> List[BlokpaxRedem
 
                     # Parse timestamp
                     timestamp_str = item.get("timestamp")
-                    redeemed_at = _parse_datetime(timestamp_str) or datetime.utcnow()
+                    redeemed_at = _parse_datetime(timestamp_str) or datetime.now(timezone.utc)
 
                     redemptions.append(
                         BlokpaxRedemptionData(

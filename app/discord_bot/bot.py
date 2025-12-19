@@ -16,7 +16,7 @@ import os
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from typing import Literal
 from dotenv import load_dotenv
 
@@ -268,7 +268,7 @@ async def daily_report_task():
 @tasks.loop(time=time(hour=9, minute=0))  # 9 AM UTC
 async def weekly_report_task():
     """Send weekly report on Mondays."""
-    if datetime.utcnow().weekday() != 0:  # Only Monday (0)
+    if datetime.now(timezone.utc).weekday() != 0:  # Only Monday (0)
         return
 
     if not REPORT_CHANNEL_ID:

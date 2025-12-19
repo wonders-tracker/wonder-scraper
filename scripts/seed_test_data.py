@@ -11,7 +11,7 @@ Usage:
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -99,7 +99,7 @@ def seed_cards(session: Session, rarities: dict) -> list:
 
 def seed_market_prices(session: Session, cards: list) -> list:
     """Seed market price records for floor price and FMP calculations."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     prices = []
 
     # Map cards by slug for easy access
@@ -264,7 +264,7 @@ def seed_users(session: Session) -> list:
 
 def seed_market_snapshots(session: Session, cards: list) -> list:
     """Seed market snapshots for cards."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     snapshots = []
 
     for card in cards[:5]:  # Only first 5 cards

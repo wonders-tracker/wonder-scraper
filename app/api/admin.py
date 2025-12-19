@@ -7,7 +7,7 @@ import asyncio
 from typing import Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Depends
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.api import deps
 from app.models.user import User
@@ -45,19 +45,19 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
 
     _running_jobs[job_id] = {
         "status": "running",
-        "started": datetime.utcnow(),
+        "started": datetime.now(timezone.utc),
         "processed": 0,
         "errors": 0,
         "new_listings": 0,
     }
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
 
     try:
         with Session(engine) as session:
             all_cards = session.exec(select(Card)).all()
 
             cards_to_scrape = []
-            cutoff_time = datetime.utcnow() - timedelta(hours=4)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=4)
 
             for card in all_cards:
                 if force_all:
@@ -112,10 +112,10 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
             await BrowserManager.close()
 
         _running_jobs[job_id]["status"] = "completed"
-        _running_jobs[job_id]["finished"] = datetime.utcnow()
+        _running_jobs[job_id]["finished"] = datetime.now(timezone.utc)
 
         # Log scrape completion to Discord
-        duration = (datetime.utcnow() - start_time).total_seconds()
+        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
         log_scrape_complete(
             cards_processed=_running_jobs[job_id]["processed"],
             new_listings=_running_jobs[job_id].get("new_listings", 0),
@@ -153,7 +153,7 @@ async def trigger_backfill(
             )
 
     # Create new job
-    job_id = f"backfill_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    job_id = f"backfill_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
     # Start background task
     background_tasks.add_task(run_backfill_job, job_id, request.limit, request.force_all, request.is_backfill)
@@ -162,7 +162,7 @@ async def trigger_backfill(
         status="started",
         message=f"Backfill job started with limit={request.limit}, force_all={request.force_all}",
         job_id=job_id,
-        started_at=datetime.utcnow().isoformat(),
+        started_at=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -211,7 +211,7 @@ async def get_admin_stats(
         total_users = session.exec(select(func.count(UserModel.id))).one()
         active_users_24h = (
             session.exec(
-                select(func.count(UserModel.id)).where(UserModel.last_login >= datetime.utcnow() - timedelta(hours=24))
+                select(func.count(UserModel.id)).where(UserModel.last_login >= datetime.now(timezone.utc) - timedelta(hours=24))
             ).one()
             if hasattr(UserModel, "last_login")
             else 0
@@ -270,12 +270,12 @@ async def get_admin_stats(
 
         # Listings in last 24h
         listings_24h = session.exec(
-            select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.utcnow() - timedelta(hours=24))
+            select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.now(timezone.utc) - timedelta(hours=24))
         ).one()
 
         # Listings in last 7d
         listings_7d = session.exec(
-            select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.utcnow() - timedelta(days=7))
+            select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.now(timezone.utc) - timedelta(days=7))
         ).one()
 
         # Portfolio stats

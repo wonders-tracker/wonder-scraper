@@ -141,7 +141,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
     Card 2 (Rare): Has Classic Paper + Foil sales
     Card 3 (Promo Only): NO Classic Paper/Foil - should fallback to cheapest treatment
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     prices = []
 
     # Card 1: Classic Paper sales (base treatment)
@@ -242,7 +242,7 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
 @pytest.fixture
 def old_market_prices(test_session: Session, sample_cards: List[Card]) -> List[MarketPrice]:
     """Create market prices older than 30 days for testing time window fallbacks."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     prices = []
 
     # Card 4 (Box): Only has old sales (>30 days ago)
@@ -268,7 +268,7 @@ def old_market_prices(test_session: Session, sample_cards: List[Card]) -> List[M
 @pytest.fixture
 def null_sold_date_prices(test_session: Session, sample_cards: List[Card]) -> List[MarketPrice]:
     """Create market prices with NULL sold_date to test COALESCE logic."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     prices = []
 
     # Card 1: Sales with NULL sold_date (should use scraped_at)
@@ -437,7 +437,7 @@ class TestDataFactory:
     def random_date(self, days_back: int = 30) -> datetime:
         """Generate a random date within the past N days."""
         days = random.randint(0, days_back)
-        return datetime.utcnow() - timedelta(days=days)
+        return datetime.now(timezone.utc) - timedelta(days=days)
 
     def get_or_create_rarity(self, name: str) -> Rarity:
         """Get or create a rarity by name."""
@@ -511,7 +511,7 @@ class TestDataFactory:
             treatment=treatment,
             listing_type=listing_type,
             sold_date=sold_date,
-            scraped_at=datetime.utcnow(),
+            scraped_at=datetime.now(timezone.utc),
             title=f"{card.name} - {treatment}",
             platform="ebay",
         )
@@ -535,7 +535,7 @@ class TestDataFactory:
                 card=card,
                 price=price,
                 treatment=treatment or random.choice(self.TREATMENTS),
-                sold_date=datetime.utcnow() - timedelta(days=i),
+                sold_date=datetime.now(timezone.utc) - timedelta(days=i),
             )
             prices.append(mp)
         return prices
@@ -634,7 +634,7 @@ def sample_portfolio_cards(test_session: Session, sample_user: User, sample_card
         treatment="Classic Paper",
         source="eBay",
         purchase_price=1.50,
-        purchase_date=datetime.utcnow().date() - timedelta(days=10),
+        purchase_date=datetime.now(timezone.utc).date() - timedelta(days=10),
     ))
     cards.append(PortfolioCard(
         user_id=sample_user.id,
@@ -642,7 +642,7 @@ def sample_portfolio_cards(test_session: Session, sample_user: User, sample_card
         treatment="Classic Foil",
         source="LGS",
         purchase_price=5.00,
-        purchase_date=datetime.utcnow().date() - timedelta(days=5),
+        purchase_date=datetime.now(timezone.utc).date() - timedelta(days=5),
     ))
     cards.append(PortfolioCard(
         user_id=sample_user.id,
@@ -650,7 +650,7 @@ def sample_portfolio_cards(test_session: Session, sample_user: User, sample_card
         treatment="Classic Paper",
         source="Pack Pull",
         purchase_price=0.00,  # Pulled from pack
-        purchase_date=datetime.utcnow().date() - timedelta(days=20),
+        purchase_date=datetime.now(timezone.utc).date() - timedelta(days=20),
     ))
 
     # User has 1 graded card
@@ -660,7 +660,7 @@ def sample_portfolio_cards(test_session: Session, sample_user: User, sample_card
         treatment="Classic Paper",
         source="eBay",
         purchase_price=25.00,
-        purchase_date=datetime.utcnow().date() - timedelta(days=30),
+        purchase_date=datetime.now(timezone.utc).date() - timedelta(days=30),
         grading="PSA 10",
     ))
 

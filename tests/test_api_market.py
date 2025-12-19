@@ -10,7 +10,7 @@ Tests cover:
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -211,7 +211,7 @@ class TestMarketActivityEndpoint:
     def test_market_activity_only_sold_listings(self, client, test_session, sample_cards, sample_market_prices):
         """Test that only sold listings are returned, not active."""
         # Add an active listing
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         active_listing = MarketPrice(
             card_id=sample_cards[0].id,
             price=999.99,
@@ -573,7 +573,7 @@ class TestListingReportsEndpoint:
         listing = sample_market_prices[0]
 
         # Create reports with different timestamps
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         for i in range(5):
             report = ListingReport(
                 listing_id=listing.id,

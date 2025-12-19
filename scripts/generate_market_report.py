@@ -17,7 +17,7 @@ Arguments:
 
 import argparse
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlmodel import Session
@@ -54,7 +54,7 @@ def format_currency(val: float) -> str:
 def generate_report_data(days: int = 7) -> dict:
     """Gather all market data for the report."""
     with Session(engine) as session:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         period_start = now - timedelta(days=days)
         prev_period_start = period_start - timedelta(days=days)
 
@@ -494,7 +494,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate filename base
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     base_name = f"{date_str}-{report_type}"
 
     saved_files = []

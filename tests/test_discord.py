@@ -16,7 +16,7 @@ Tests cover:
 
 import pytest
 from unittest.mock import patch, MagicMock, call, Mock
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import sys
 
@@ -727,7 +727,7 @@ class TestDiscordWebhook:
             top_volume=[],
             new_highs=[],
             new_lows=[],
-            generated_at=datetime.utcnow()
+            generated_at=datetime.now(timezone.utc)
         )
         mock_stats.return_value = mock_stats_obj
 
@@ -736,7 +736,7 @@ class TestDiscordWebhook:
             "title": "Daily Report",
             "description": "Test",
             "color": 0x10B981,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "footer": {"text": "Test"},
             "fields": []
         }
@@ -787,7 +787,7 @@ class TestDiscordWebhook:
             top_volume=[],
             new_highs=[],
             new_lows=[],
-            generated_at=datetime.utcnow()
+            generated_at=datetime.now(timezone.utc)
         )
         mock_stats.return_value = mock_stats_obj
 
@@ -796,7 +796,7 @@ class TestDiscordWebhook:
             "title": "Weekly Report",
             "description": "Test",
             "color": 0x10B981,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "footer": {"text": "Test"},
             "fields": []
         }
@@ -857,7 +857,7 @@ class TestDiscordWebhook:
             top_volume=[],
             new_highs=[],
             new_lows=[],
-            generated_at=datetime.utcnow()
+            generated_at=datetime.now(timezone.utc)
         )
         mock_stats.return_value = mock_stats_obj
 
@@ -866,7 +866,7 @@ class TestDiscordWebhook:
             "title": "Daily Report",
             "description": "Test",
             "color": 0x10B981,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "footer": {"text": "Test"},
             "fields": []
         }

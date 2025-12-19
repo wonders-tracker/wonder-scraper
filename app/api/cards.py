@@ -5,7 +5,7 @@ import threading
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select, func, desc
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from cachetools import TTLCache
 
 from app.db import get_session
@@ -83,7 +83,7 @@ def read_cards(
         "all": None,
     }
     cutoff_delta = time_cutoffs.get(time_period)
-    cutoff_time = datetime.utcnow() - cutoff_delta if cutoff_delta else None
+    cutoff_time = datetime.now(timezone.utc) - cutoff_delta if cutoff_delta else None
 
     # Build base query with filters
     base_query = select(Card)
@@ -274,7 +274,7 @@ def read_cards(
             """)
 
             # First try 30 days
-            floor_cutoff_30d = datetime.utcnow() - timedelta(days=30)
+            floor_cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
             floor_variant_results = session.execute(
                 floor_by_variant_query, {"card_ids": card_ids, "cutoff": floor_cutoff_30d}
             ).all()
@@ -292,7 +292,7 @@ def read_cards(
             # Fallback: 90 days for cards still missing
             missing_floor_ids = [cid for cid in card_ids if cid not in floor_price_map]
             if missing_floor_ids:
-                floor_cutoff_90d = datetime.utcnow() - timedelta(days=90)
+                floor_cutoff_90d = datetime.now(timezone.utc) - timedelta(days=90)
                 floor_variant_results_90d = session.execute(
                     floor_by_variant_query, {"card_ids": missing_floor_ids, "cutoff": floor_cutoff_90d}
                 ).all()
@@ -349,7 +349,7 @@ def read_cards(
 
             for days, label in [(30, "30d"), (90, "90d"), (None, "all")]:
                 if days:
-                    cutoff = datetime.utcnow() - timedelta(days=days)
+                    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
                     avg_query = text(f"""
                         SELECT card_id, AVG(price) as avg_price
                         FROM marketprice
@@ -578,7 +578,7 @@ def read_card(
     try:
         from sqlalchemy import text
 
-        cutoff_30d = datetime.utcnow() - timedelta(days=30)
+        cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
 
         # Get AVG price (consistent with list view VWAP calculation)
         # Use COALESCE(sold_date, scraped_at) for consistent time filtering
@@ -643,7 +643,7 @@ def read_card(
     try:
         for days in [30, 90, None]:
             if days:
-                cutoff = datetime.utcnow() - timedelta(days=days)
+                cutoff = datetime.now(timezone.utc) - timedelta(days=days)
                 avg_q = text("""
                     SELECT AVG(price) FROM marketprice
                     WHERE card_id = :cid AND listing_type = 'sold'
@@ -690,7 +690,7 @@ def read_card(
 
     # Calculate floor_by_variant and lowest_ask_by_variant for single card
     try:
-        floor_cutoff = datetime.utcnow() - timedelta(days=30)
+        floor_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
 
         # Floor by variant query
         floor_variant_query = text("""
@@ -946,7 +946,7 @@ def read_snapshot_history(
     """
     card = get_card_by_id_or_slug(session, card_id)
 
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     statement = (
         select(MarketSnapshot)

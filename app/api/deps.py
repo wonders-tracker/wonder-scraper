@@ -6,7 +6,7 @@ import jwt
 from jwt.exceptions import PyJWTError
 from pydantic import BaseModel
 from sqlmodel import Session, select
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db import get_session
 from app.models.user import User
@@ -153,7 +153,7 @@ def validate_api_key(
         )
 
     # Check if key is expired
-    if db_key.expires_at and db_key.expires_at < datetime.utcnow():
+    if db_key.expires_at and db_key.expires_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key has expired",
@@ -185,7 +185,7 @@ def validate_api_key(
     # Update usage stats
     db_key.requests_today += 1
     db_key.requests_total += 1
-    db_key.last_used_at = datetime.utcnow()
+    db_key.last_used_at = datetime.now(timezone.utc)
     session.add(db_key)
     session.commit()
 

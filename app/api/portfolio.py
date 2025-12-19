@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, func, desc
 
@@ -245,7 +245,7 @@ def batch_get_treatment_market_prices(
     if not card_treatment_pairs:
         return {}
 
-    cutoff = datetime.utcnow() - timedelta(days=30)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
 
     # Get unique card_ids and treatments
     card_ids = list(set(pair[0] for pair in card_treatment_pairs))
@@ -332,7 +332,7 @@ def get_treatment_market_price(session: Session, card_id: int, treatment: str) -
     Falls back to card-level price if treatment-specific not available.
     """
     # Try to get treatment-specific VWAP (last 30 days)
-    cutoff = datetime.utcnow() - timedelta(days=30)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
 
     treatment_avg = session.exec(
         select(func.avg(MarketPrice.price))
@@ -443,7 +443,7 @@ def create_portfolio_card(
 
     # Validate purchase date is not in the future
     if card_in.purchase_date:
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
         purchase_date = card_in.purchase_date.date() if hasattr(card_in.purchase_date, 'date') else card_in.purchase_date
         if purchase_date > today:
             raise HTTPException(status_code=400, detail="Purchase date cannot be in the future")
@@ -500,7 +500,7 @@ def create_portfolio_cards_batch(
     card_ids = set(c.card_id for c in batch_in.cards)
     db_cards = {c.id: c for c in session.exec(select(Card).where(Card.id.in_(card_ids))).all()}
 
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     for i, card_in in enumerate(batch_in.cards):
         if card_in.card_id not in db_cards:
             raise HTTPException(status_code=400, detail=f"Card at index {i}: Card ID {card_in.card_id} not found")
@@ -726,7 +726,7 @@ def update_portfolio_card(
     if card_in.purchase_date is not None:
         # Validate purchase date is not in the future
         if card_in.purchase_date:
-            today = datetime.utcnow().date()
+            today = datetime.now(timezone.utc).date()
             purchase_date = card_in.purchase_date.date() if hasattr(card_in.purchase_date, 'date') else card_in.purchase_date
             if purchase_date > today:
                 raise HTTPException(status_code=400, detail="Purchase date cannot be in the future")
@@ -736,7 +736,7 @@ def update_portfolio_card(
     if card_in.notes is not None:
         card.notes = card_in.notes if card_in.notes else None
 
-    card.updated_at = datetime.utcnow()
+    card.updated_at = datetime.now(timezone.utc)
     session.add(card)
     session.commit()
     session.refresh(card)
@@ -762,7 +762,7 @@ def delete_portfolio_card(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     # Soft delete
-    card.deleted_at = datetime.utcnow()
+    card.deleted_at = datetime.now(timezone.utc)
     session.add(card)
     session.commit()
     session.refresh(card)
@@ -822,7 +822,7 @@ def get_portfolio_value_history(
         return {"history": [], "cost_basis_history": []}
 
     # Build date range
-    end_date = datetime.utcnow().date()
+    end_date = datetime.now(timezone.utc).date()
     start_date = end_date - timedelta(days=days)
 
     # Get unique card_ids and treatments

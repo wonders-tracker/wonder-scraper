@@ -6,7 +6,7 @@ Simpler than running a full bot - just POST to the webhook URL.
 import os
 import io
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 
@@ -100,7 +100,7 @@ def send_daily_report() -> bool:
         success = send_webhook_message(embeds=[embed], file_data=csv_content, filename=filename)
 
         if success:
-            print(f"Daily report sent at {datetime.utcnow()}")
+            print(f"Daily report sent at {datetime.now(timezone.utc)}")
         return success
 
     except Exception as e:
@@ -137,7 +137,7 @@ def send_weekly_report() -> bool:
         success = send_webhook_message(embeds=[embed], file_data=csv_content, filename=filename)
 
         if success:
-            print(f"Weekly report sent at {datetime.utcnow()}")
+            print(f"Weekly report sent at {datetime.now(timezone.utc)}")
         return success
 
     except Exception as e:
@@ -154,7 +154,7 @@ def send_test_message() -> bool:
                 "title": "Test Message",
                 "description": "If you see this, the webhook is working correctly.",
                 "color": 0x10B981,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         ],
     )

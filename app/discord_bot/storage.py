@@ -2,7 +2,7 @@
 Storage for CSV reports using Postgres (text column).
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict
 from sqlmodel import Session, select, desc
 
@@ -83,7 +83,7 @@ def cleanup_old_reports(days: int = 30) -> int:
     """Delete reports older than N days. Returns count deleted."""
     from datetime import timedelta
 
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     with Session(engine) as session:
         old_reports = session.exec(select(Report).where(Report.created_at < cutoff)).all()

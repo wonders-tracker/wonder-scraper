@@ -4,7 +4,7 @@ Discord webhook logger for scrape activity and system events.
 
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -36,7 +36,7 @@ def _send_log(
         "title": title,
         "description": description,
         "color": color,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {"text": "WondersTracker"},
     }
 
@@ -64,7 +64,7 @@ def log_scrape_start(card_count: int, scrape_type: str = "full") -> bool:
         fields=[
             {"name": "📦 Cards", "value": f"`{card_count:,}`", "inline": True},
             {"name": "📋 Type", "value": scrape_type.title(), "inline": True},
-            {"name": "🕐 Time", "value": datetime.utcnow().strftime("%H:%M UTC"), "inline": True},
+            {"name": "🕐 Time", "value": datetime.now(timezone.utc).strftime("%H:%M UTC"), "inline": True},
         ],
     )
 
@@ -116,7 +116,7 @@ def log_snapshot_update(cards_updated: int) -> bool:
         color=0x8B5CF6,  # Purple
         fields=[
             {"name": "📦 Cards", "value": f"`{cards_updated:,}`", "inline": True},
-            {"name": "🕐 Time", "value": datetime.utcnow().strftime("%H:%M UTC"), "inline": True},
+            {"name": "🕐 Time", "value": datetime.now(timezone.utc).strftime("%H:%M UTC"), "inline": True},
         ],
     )
 

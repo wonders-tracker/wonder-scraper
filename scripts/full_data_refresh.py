@@ -3,7 +3,7 @@ Complete data refresh: eBay cards + boxes/packs + OpenSea collections + Blokpax 
 """
 import asyncio
 import multiprocessing as mp
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 from sqlmodel import Session, select
 from app.db import engine
@@ -178,7 +178,7 @@ async def scrape_all_blokpax():
                     storefront.floor_price_usd = floor_usd
                     storefront.listed_count = listed
                     storefront.total_tokens = total
-                    storefront.updated_at = datetime.utcnow()
+                    storefront.updated_at = datetime.now(timezone.utc)
                     session.add(storefront)
 
                 session.commit()

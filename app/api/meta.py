@@ -1,5 +1,5 @@
 from typing import Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, func
 
@@ -112,7 +112,7 @@ def cast_meta_vote(
 
     if existing_vote:
         existing_vote.vote = vote_in.vote
-        existing_vote.updated_at = datetime.utcnow()
+        existing_vote.updated_at = datetime.now(timezone.utc)
         session.add(existing_vote)
     else:
         new_vote = CardMetaVote(card_id=card_id, user_id=current_user.id, vote=vote_in.vote)

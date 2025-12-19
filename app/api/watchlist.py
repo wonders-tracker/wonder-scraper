@@ -6,7 +6,7 @@ from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.api import deps
 from app.db import get_session
@@ -185,7 +185,7 @@ def update_watchlist_item(
     for key, value in update_data.items():
         setattr(item, key, value)
 
-    item.updated_at = datetime.utcnow()
+    item.updated_at = datetime.now(timezone.utc)
     session.add(item)
     session.commit()
     session.refresh(item)
@@ -264,7 +264,7 @@ def update_email_preferences(
     for key, value in update_data.items():
         setattr(prefs, key, value)
 
-    prefs.updated_at = datetime.utcnow()
+    prefs.updated_at = datetime.now(timezone.utc)
     session.add(prefs)
     session.commit()
     session.refresh(prefs)

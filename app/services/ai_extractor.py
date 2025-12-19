@@ -12,7 +12,7 @@ Uses GPT-4o-mini via OpenRouter to intelligently parse eBay listings for:
 
 from typing import Optional, Dict, Any, List
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -380,7 +380,7 @@ class AIListingExtractor:
 
     def _evict_expired_cache_entries(self):
         """Remove expired entries based on TTL."""
-        now = datetime.utcnow().timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         expired_keys = [key for key, ts in self._cache_timestamps.items() if now - ts > self.CACHE_TTL_SECONDS]
 
         for key in expired_keys:
@@ -405,7 +405,7 @@ class AIListingExtractor:
 
         if title_hash in self._title_cache:
             # Check if expired
-            now = datetime.utcnow().timestamp()
+            now = datetime.now(timezone.utc).timestamp()
             if now - self._cache_timestamps[title_hash] > self.CACHE_TTL_SECONDS:
                 # Expired, remove it
                 del self._title_cache[title_hash]
@@ -426,7 +426,7 @@ class AIListingExtractor:
         """Set cache value and track timestamp."""
         self._evict_if_cache_full()
         self._title_cache[title_hash] = value
-        self._cache_timestamps[title_hash] = datetime.utcnow().timestamp()
+        self._cache_timestamps[title_hash] = datetime.now(timezone.utc).timestamp()
 
     def get_metrics(self) -> Dict[str, int]:
         """Get performance metrics."""
@@ -468,7 +468,7 @@ class AIListingExtractor:
     ):
         """Log a validation decision for review."""
         entry = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "title": title,
             "card_name": card_name,
             "decision": decision,
@@ -497,7 +497,7 @@ class AIListingExtractor:
         """Export feedback log to JSON file for analysis."""
         if filepath is None:
             self.FEEDBACK_LOG_DIR.mkdir(parents=True, exist_ok=True)
-            filepath = str(self.FEEDBACK_LOG_DIR / f"decisions_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json")
+            filepath = str(self.FEEDBACK_LOG_DIR / f"decisions_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json")
 
         with open(filepath, "w") as f:
             json.dump(self._feedback_log, f, indent=2)

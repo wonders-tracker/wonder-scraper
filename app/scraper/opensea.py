@@ -6,7 +6,7 @@ import asyncio
 import aiohttp
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from app.scraper.browser import get_page_content
 from bs4 import BeautifulSoup
 import re
@@ -307,7 +307,7 @@ async def scrape_opensea_sales(collection_slug: str, limit: int = 50, event_type
                         sold_at = (
                             datetime.fromisoformat(event_timestamp.replace("Z", "+00:00"))
                             if event_timestamp
-                            else datetime.utcnow()
+                            else datetime.now(timezone.utc)
                         )
 
                         # Extract seller/buyer
@@ -401,7 +401,7 @@ async def _scrape_opensea_sales_web(collection_slug: str, eth_price_usd: float, 
                                 try:
                                     sold_at = datetime.fromisoformat(event_time.replace("Z", "+00:00"))
                                 except (ValueError, TypeError, AttributeError):
-                                    sold_at = datetime.utcnow()
+                                    sold_at = datetime.now(timezone.utc)
 
                                 # Extract transaction hash
                                 tx_hash = item.get("transactionHash", "")

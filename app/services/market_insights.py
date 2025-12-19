@@ -5,7 +5,7 @@ Uses the same data and format as the market report script.
 Generates formatted reports for 2x daily Discord posts.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 from sqlmodel import Session
 from sqlalchemy import text
@@ -32,7 +32,7 @@ class MarketInsightsGenerator:
     def gather_market_data(self, days: int = 1) -> Dict[str, Any]:
         """Gather market data for the report."""
         with Session(engine) as session:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             period_start = now - timedelta(days=days)
             prev_period_start = period_start - timedelta(days=days)
 

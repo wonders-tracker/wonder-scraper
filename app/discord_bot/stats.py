@@ -4,7 +4,7 @@ Market stats calculation for Discord reports.
 
 import csv
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any
 from dataclasses import dataclass
 
@@ -43,7 +43,7 @@ class MarketStats:
 
 def get_period_bounds(period: str) -> tuple[datetime, datetime]:
     """Get start and end datetime for a period."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if period == "daily":
         start = now - timedelta(days=1)
     elif period == "weekly":
@@ -443,7 +443,7 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
             top_volume=top_volume,
             new_highs=new_highs,
             new_lows=new_lows,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
             prev_total_sales=prev_total_sales,
             prev_total_volume_usd=prev_total_volume,
             volume_trend_pct=volume_trend_pct,
@@ -500,7 +500,7 @@ def generate_csv_report(period: str = "daily") -> tuple[str, bytes]:
             )
 
         csv_content = output.getvalue().encode("utf-8")
-        filename = f"wonders_market_{period}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"wonders_market_{period}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
 
         return filename, csv_content
 

@@ -27,7 +27,7 @@ from app.scraper.opensea import (
     scrape_opensea_listings_to_db,
 )
 from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error, log_market_insights
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 scheduler = AsyncIOScheduler()
 
@@ -77,12 +77,12 @@ async def job_update_market_data():
     Optimized polling job - scrapes cards in batches with concurrency control.
     Includes robust error handling for browser startup failures.
     """
-    print(f"[{datetime.utcnow()}] Starting Scheduled Market Update...")
+    print(f"[{datetime.now(timezone.utc)}] Starting Scheduled Market Update...")
     start_time = time.time()
 
     with Session(engine) as session:
         # Get cards that haven't been updated in the last hour (or all if none)
-        cutoff_time = datetime.utcnow() - timedelta(hours=1)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=1)
 
         # Subquery for latest snapshot per card
         latest_snapshots = (
@@ -183,7 +183,7 @@ async def job_update_market_data():
     finally:
         await BrowserManager.close()
 
-    print(f"[{datetime.utcnow()}] Scheduled Update Complete.")
+    print(f"[{datetime.now(timezone.utc)}] Scheduled Update Complete.")
 
 
 async def job_update_blokpax_data():
@@ -191,7 +191,7 @@ async def job_update_blokpax_data():
     Scheduled job to update Blokpax floor prices and sales.
     Runs on a separate interval from eBay since it's lightweight (API-based).
     """
-    print(f"[{datetime.utcnow()}] Starting Blokpax Update...")
+    print(f"[{datetime.now(timezone.utc)}] Starting Blokpax Update...")
     start_time = time.time()
 
     log_scrape_start(len(WOTF_STOREFRONTS), scrape_type="blokpax")
@@ -238,7 +238,7 @@ async def job_update_blokpax_data():
                         storefront.floor_price_usd = floor_usd
                         storefront.listed_count = listed
                         storefront.total_tokens = total
-                        storefront.updated_at = datetime.utcnow()
+                        storefront.updated_at = datetime.now(timezone.utc)
                         session.add(storefront)
 
                     session.commit()
@@ -284,7 +284,7 @@ async def job_update_blokpax_data():
     # ===== OpenSea Active Listings =====
     opensea_listings = 0
     try:
-        print(f"[{datetime.utcnow()}] Scraping OpenSea Active Listings...")
+        print(f"[{datetime.now(timezone.utc)}] Scraping OpenSea Active Listings...")
         with Session(engine) as session:
             for collection_slug, card_name in OPENSEA_WOTF_COLLECTIONS.items():
                 try:
@@ -325,7 +325,7 @@ async def job_update_blokpax_data():
         errors=errors,
     )
 
-    print(f"[{datetime.utcnow()}] NFT Update Complete. Duration: {duration:.1f}s, Listings: {total_listings}, Sales: {total_sales}")
+    print(f"[{datetime.now(timezone.utc)}] NFT Update Complete. Duration: {duration:.1f}s, Listings: {total_listings}, Sales: {total_sales}")
 
 
 async def job_send_daily_digests():
@@ -333,7 +333,7 @@ async def job_send_daily_digests():
     Send daily market digest emails to users who have opted in.
     Runs once daily at 9 AM UTC.
     """
-    print(f"[{datetime.utcnow()}] Sending Daily Digest Emails...")
+    print(f"[{datetime.now(timezone.utc)}] Sending Daily Digest Emails...")
 
     try:
         from app.models.watchlist import EmailPreferences
@@ -390,7 +390,7 @@ async def job_send_personal_welcome_emails():
     Send personal welcome emails from founder to users who signed up 24-48h ago.
     Runs once daily at 10 AM UTC.
     """
-    print(f"[{datetime.utcnow()}] Checking for Personal Welcome Emails...")
+    print(f"[{datetime.now(timezone.utc)}] Checking for Personal Welcome Emails...")
 
     try:
         from app.models.user import User
@@ -398,7 +398,7 @@ async def job_send_personal_welcome_emails():
 
         with Session(engine) as session:
             # Find users who signed up 24-48 hours ago and haven't received the personal welcome
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             cutoff_start = now - timedelta(hours=48)  # Oldest eligible
             cutoff_end = now - timedelta(hours=24)    # Newest eligible
 
@@ -439,7 +439,7 @@ async def job_send_weekly_reports():
     Send weekly market report emails to users who have opted in.
     Runs once weekly on Monday at 9 AM UTC.
     """
-    print(f"[{datetime.utcnow()}] Sending Weekly Report Emails...")
+    print(f"[{datetime.now(timezone.utc)}] Sending Weekly Report Emails...")
 
     try:
         from app.models.watchlist import EmailPreferences
@@ -460,7 +460,7 @@ async def job_send_weekly_reports():
             data = generator.gather_market_data(days=7)
 
             # Format for email
-            week_end = datetime.utcnow()
+            week_end = datetime.now(timezone.utc)
             week_start = week_end - timedelta(days=7)
 
             report_data = {
@@ -503,7 +503,7 @@ async def job_check_price_alerts():
     Check watchlist price alerts and send notifications.
     Runs every 30 minutes.
     """
-    print(f"[{datetime.utcnow()}] Checking Price Alerts...")
+    print(f"[{datetime.now(timezone.utc)}] Checking Price Alerts...")
 
     try:
         from app.models.watchlist import Watchlist
@@ -548,7 +548,7 @@ async def job_check_price_alerts():
 
                 # Cooldown: don't alert more than once per hour per card
                 if alert.last_alerted_at:
-                    time_since_last = datetime.utcnow() - alert.last_alerted_at
+                    time_since_last = datetime.now(timezone.utc) - alert.last_alerted_at
                     if time_since_last.total_seconds() < 3600:
                         continue
 
@@ -567,7 +567,7 @@ async def job_check_price_alerts():
                     if success:
                         sent_count += 1
                         # Update alert tracking
-                        alert.last_alerted_at = datetime.utcnow()
+                        alert.last_alerted_at = datetime.now(timezone.utc)
                         alert.last_alerted_price = current_price
                         session.add(alert)
 
@@ -584,7 +584,7 @@ async def job_backfill_seller_data():
     Runs daily at 3 AM UTC (off-peak hours).
     Processes up to 100 items per run to avoid overloading eBay.
     """
-    print(f"[{datetime.utcnow()}] Starting Seller Data Backfill...")
+    print(f"[{datetime.now(timezone.utc)}] Starting Seller Data Backfill...")
 
     try:
         from pydoll.browser import Chrome
@@ -695,7 +695,7 @@ async def job_backfill_seller_data():
                         pass
 
         await browser.stop()
-        print(f"[{datetime.utcnow()}] Seller Backfill Complete: {updated} updated, {failed} failed")
+        print(f"[{datetime.now(timezone.utc)}] Seller Backfill Complete: {updated} updated, {failed} failed")
 
     except Exception as e:
         print(f"[Seller] Fatal error: {e}")
@@ -707,7 +707,7 @@ async def job_market_insights():
     Generate and post AI-powered market insights to Discord.
     Runs 2x daily (morning and evening).
     """
-    print(f"[{datetime.utcnow()}] Generating Market Insights...")
+    print(f"[{datetime.now(timezone.utc)}] Generating Market Insights...")
 
     try:
         from app.services.market_insights import get_insights_generator
@@ -724,12 +724,12 @@ async def job_market_insights():
         success = log_market_insights(insights)
 
         if success:
-            print(f"[{datetime.utcnow()}] Market insights posted to Discord")
+            print(f"[{datetime.now(timezone.utc)}] Market insights posted to Discord")
         else:
-            print(f"[{datetime.utcnow()}] Failed to post market insights")
+            print(f"[{datetime.now(timezone.utc)}] Failed to post market insights")
 
     except Exception as e:
-        print(f"[{datetime.utcnow()}] Market insights error: {e}")
+        print(f"[{datetime.now(timezone.utc)}] Market insights error: {e}")
         log_scrape_error("Market Insights", str(e))
 
 

@@ -3,7 +3,7 @@ import threading
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select, desc
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from cachetools import TTLCache
 
 from app.db import get_session
@@ -87,7 +87,7 @@ def read_market_overview(
         "all": None,
     }
     cutoff_delta = time_cutoffs.get(time_period)
-    cutoff_time = datetime.utcnow() - cutoff_delta if cutoff_delta else None
+    cutoff_time = datetime.now(timezone.utc) - cutoff_delta if cutoff_delta else None
 
     # Fetch all cards
     cards = session.exec(select(Card)).all()
@@ -118,7 +118,7 @@ def read_market_overview(
         try:
             from sqlalchemy import text
 
-            period_start = cutoff_time if cutoff_time else datetime.utcnow() - timedelta(hours=24)
+            period_start = cutoff_time if cutoff_time else datetime.now(timezone.utc) - timedelta(hours=24)
 
             # Use parameterized queries to prevent SQL injection
             # Use COALESCE(sold_date, scraped_at) to include sales with NULL sold_date
@@ -348,7 +348,7 @@ def read_market_listings(
         "all": None,
     }
     cutoff_delta = time_cutoffs.get(time_period) if time_period else None
-    cutoff_time = datetime.utcnow() - cutoff_delta if cutoff_delta else None
+    cutoff_time = datetime.now(timezone.utc) - cutoff_delta if cutoff_delta else None
 
     # Build base query with join to Card for product info
     query = select(MarketPrice, Card.name, Card.slug, Card.product_type, Card.image_url).join(Card, MarketPrice.card_id == Card.id)
@@ -443,7 +443,7 @@ def read_market_listings(
         # NOTE: Floor price always uses 90-day lookback regardless of time_period filter
         # This ensures we have enough sales data for meaningful floor calculations
         # IMPORTANT: Use LOWER() for case-insensitive matching
-        floor_cutoff = datetime.utcnow() - timedelta(days=90)
+        floor_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
         floor_by_variant_query = text("""
             SELECT card_id, variant, AVG(price) as floor_price
             FROM (

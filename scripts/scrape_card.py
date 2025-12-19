@@ -1,6 +1,6 @@
 import asyncio
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlmodel import Session, select
 from app.db import engine
@@ -320,7 +320,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                             active_listing.listing_type = "sold"
                             active_listing.sold_date = price.sold_date
                             active_listing.price = price.price  # May have changed
-                            active_listing.scraped_at = datetime.utcnow()
+                            active_listing.scraped_at = datetime.now(timezone.utc)
                             # listed_at preserved from when it was first seen as active
                             session.add(active_listing)
                             session.flush()
