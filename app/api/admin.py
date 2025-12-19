@@ -325,21 +325,52 @@ async def get_admin_stats(
         daily_volume = [{"date": str(row[0]), "count": row[1]} for row in daily_volume_result]
 
         # Analytics - Page views
+        # Filter out: admin users (superusers) and localhost traffic
         try:
-            total_pageviews = session.exec(select(func.count(PageView.id))).one()
-            pageviews_24h = session.exec(
-                select(func.count(PageView.id)).where(PageView.timestamp >= datetime.utcnow() - timedelta(hours=24))
-            ).one()
-            pageviews_7d = session.exec(
-                select(func.count(PageView.id)).where(PageView.timestamp >= datetime.utcnow() - timedelta(days=7))
-            ).one()
+            # Get superuser IDs to exclude
+            superuser_ids = session.exec(
+                select(UserModel.id).where(UserModel.is_superuser == True)
+            ).all()
+            superuser_ids_list = list(superuser_ids) if superuser_ids else []
+
+            # Base filter: exclude admin users and localhost referrers
+            def exclude_admin_localhost_pv(query_text: str) -> str:
+                """Add WHERE clause to exclude admin/localhost from pageview queries."""
+                exclusions = []
+                if superuser_ids_list:
+                    ids_str = ",".join(str(id) for id in superuser_ids_list)
+                    exclusions.append(f"(user_id IS NULL OR user_id NOT IN ({ids_str}))")
+                exclusions.append("(referrer IS NULL OR referrer NOT LIKE '%localhost%')")
+                exclusions.append("path NOT LIKE '%/auth/callback%'")
+                return " AND ".join(exclusions)
+
+            def exclude_admin_localhost_ev(query_text: str) -> str:
+                """Add WHERE clause to exclude admin/localhost from event queries."""
+                exclusions = []
+                if superuser_ids_list:
+                    ids_str = ",".join(str(id) for id in superuser_ids_list)
+                    exclusions.append(f"(user_id IS NULL OR user_id NOT IN ({ids_str}))")
+                return " AND ".join(exclusions) if exclusions else "1=1"
+
+            pv_filter = exclude_admin_localhost_pv("")
+            ev_filter = exclude_admin_localhost_ev("")
+
+            total_pageviews = session.execute(
+                text(f"SELECT COUNT(*) FROM pageview WHERE {pv_filter}")
+            ).scalar() or 0
+            pageviews_24h = session.execute(
+                text(f"SELECT COUNT(*) FROM pageview WHERE timestamp >= NOW() - INTERVAL '24 hours' AND {pv_filter}")
+            ).scalar() or 0
+            pageviews_7d = session.execute(
+                text(f"SELECT COUNT(*) FROM pageview WHERE timestamp >= NOW() - INTERVAL '7 days' AND {pv_filter}")
+            ).scalar() or 0
 
             # Unique visitors (by ip_hash) in 24h
             unique_visitors_24h = (
                 session.execute(
-                    text("""
+                    text(f"""
                 SELECT COUNT(DISTINCT ip_hash) FROM pageview
-                WHERE timestamp >= NOW() - INTERVAL '24 hours'
+                WHERE timestamp >= NOW() - INTERVAL '24 hours' AND {pv_filter}
             """)
                 ).scalar()
                 or 0
@@ -348,9 +379,9 @@ async def get_admin_stats(
             # Unique visitors in 7d
             unique_visitors_7d = (
                 session.execute(
-                    text("""
+                    text(f"""
                 SELECT COUNT(DISTINCT ip_hash) FROM pageview
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {pv_filter}
             """)
                 ).scalar()
                 or 0
@@ -358,10 +389,10 @@ async def get_admin_stats(
 
             # Top pages (last 7 days)
             top_pages_result = session.execute(
-                text("""
+                text(f"""
                 SELECT path, COUNT(*) as views
                 FROM pageview
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {pv_filter}
                 GROUP BY path
                 ORDER BY views DESC
                 LIMIT 10
@@ -371,10 +402,10 @@ async def get_admin_stats(
 
             # Traffic by device type
             device_breakdown_result = session.execute(
-                text("""
+                text(f"""
                 SELECT device_type, COUNT(*) as count
                 FROM pageview
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {pv_filter}
                 GROUP BY device_type
                 ORDER BY count DESC
             """)
@@ -383,24 +414,26 @@ async def get_admin_stats(
 
             # Daily pageviews (last 7 days)
             daily_pageviews_result = session.execute(
-                text("""
+                text(f"""
                 SELECT DATE(timestamp) as date, COUNT(*) as count
                 FROM pageview
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {pv_filter}
                 GROUP BY DATE(timestamp)
                 ORDER BY date DESC
             """)
             ).all()
             daily_pageviews = [{"date": str(row[0]), "count": row[1]} for row in daily_pageviews_result]
 
-            # Top referrers
+            # Top referrers (exclude localhost)
             top_referrers_result = session.execute(
-                text("""
+                text(f"""
                 SELECT referrer, COUNT(*) as count
                 FROM pageview
                 WHERE timestamp >= NOW() - INTERVAL '7 days'
                   AND referrer IS NOT NULL
                   AND referrer != ''
+                  AND referrer NOT LIKE '%localhost%'
+                  AND {pv_filter}
                 GROUP BY referrer
                 ORDER BY count DESC
                 LIMIT 10
@@ -410,7 +443,7 @@ async def get_admin_stats(
 
             # Popular cards (from pageviews to /cards/{id} routes)
             popular_cards_result = session.execute(
-                text("""
+                text(f"""
                 SELECT
                     pv.path,
                     c.id as card_id,
@@ -427,6 +460,7 @@ async def get_admin_stats(
                 )
                 WHERE pv.timestamp >= NOW() - INTERVAL '7 days'
                   AND pv.path ~ '^/cards/[0-9]+$'
+                  AND {pv_filter}
                 GROUP BY pv.path, c.id, c.name, c.image_url
                 ORDER BY views DESC
                 LIMIT 10
@@ -443,25 +477,23 @@ async def get_admin_stats(
                 for row in popular_cards_result
             ]
 
-            # Events summary
-            total_events = session.exec(select(func.count(AnalyticsEvent.id))).one()
-            events_24h = session.exec(
-                select(func.count(AnalyticsEvent.id)).where(
-                    AnalyticsEvent.timestamp >= datetime.utcnow() - timedelta(hours=24)
-                )
-            ).one()
-            events_7d = session.exec(
-                select(func.count(AnalyticsEvent.id)).where(
-                    AnalyticsEvent.timestamp >= datetime.utcnow() - timedelta(days=7)
-                )
-            ).one()
+            # Events summary (exclude admin users)
+            total_events = session.execute(
+                text(f"SELECT COUNT(*) FROM analytics_event WHERE {ev_filter}")
+            ).scalar() or 0
+            events_24h = session.execute(
+                text(f"SELECT COUNT(*) FROM analytics_event WHERE timestamp >= NOW() - INTERVAL '24 hours' AND {ev_filter}")
+            ).scalar() or 0
+            events_7d = session.execute(
+                text(f"SELECT COUNT(*) FROM analytics_event WHERE timestamp >= NOW() - INTERVAL '7 days' AND {ev_filter}")
+            ).scalar() or 0
 
-            # Top events by name
+            # Top events by name (exclude admin users)
             top_events_result = session.execute(
-                text("""
+                text(f"""
                 SELECT event_name, COUNT(*) as count
                 FROM analytics_event
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {ev_filter}
                 GROUP BY event_name
                 ORDER BY count DESC
                 LIMIT 10
@@ -469,26 +501,27 @@ async def get_admin_stats(
             ).all()
             top_events = [{"event_name": row[0], "count": row[1]} for row in top_events_result]
 
-            # Daily events (last 7 days)
+            # Daily events (last 7 days, exclude admin users)
             daily_events_result = session.execute(
-                text("""
+                text(f"""
                 SELECT DATE(timestamp) as date, COUNT(*) as count
                 FROM analytics_event
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {ev_filter}
                 GROUP BY DATE(timestamp)
                 ORDER BY date DESC
             """)
             ).all()
             daily_events = [{"date": str(row[0]), "count": row[1]} for row in daily_events_result]
 
-            # Top external link clicks by platform
+            # Top external link clicks by platform (exclude admin users)
             external_clicks_result = session.execute(
-                text("""
+                text(f"""
                 SELECT platform, COUNT(*) as count
                 FROM analytics_event
                 WHERE event_name = 'external_link_click'
                   AND timestamp >= NOW() - INTERVAL '7 days'
                   AND platform IS NOT NULL
+                  AND {ev_filter}
                 GROUP BY platform
                 ORDER BY count DESC
                 LIMIT 5
