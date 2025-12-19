@@ -4,9 +4,11 @@ import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink, Calendar, Flag, AlertTriangle } from 'lucide-react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getFilteredRowModel } from '@tanstack/react-table'
-import { useMemo, useState, useEffect } from 'react'
-import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, ScatterChart, Scatter, Cell, ComposedChart } from 'recharts'
+import { useMemo, useState, useEffect, lazy, Suspense } from 'react'
 import { Tooltip } from '../components/ui/tooltip'
+
+// Lazy load chart component (378KB recharts bundle) - only loads when needed
+const PriceHistoryChart = lazy(() => import('../components/charts/PriceHistoryChart'))
 import clsx from 'clsx'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
@@ -987,246 +989,21 @@ function CardDetail() {
                                         </div>
                                     </div>
 
-                                    {/* Chart */}
+                                    {/* Chart - lazy loaded */}
                                     <div className="h-[300px] p-4">
                                         {chartData.length > 0 ? (
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                {chartType === 'scatter' ? (
-                                                    /* Scatter Chart View */
-                                                    (<ScatterChart margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
-                                                        <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} />
-                                                        <XAxis
-                                                            dataKey="timestamp"
-                                                            type="number"
-                                                            domain={['dataMin', 'dataMax']}
-                                                            tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                                            tick={{ fill: '#71717a', fontSize: 10 }}
-                                                            axisLine={{ stroke: '#27272a' }}
-                                                            tickLine={{ stroke: '#27272a' }}
-                                                        />
-                                                        <YAxis
-                                                            dataKey="price"
-                                                            orientation="right"
-                                                            tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val.toFixed(0)}`}
-                                                            tick={{ fill: '#71717a', fontSize: 10 }}
-                                                            axisLine={{ stroke: '#27272a' }}
-                                                            tickLine={{ stroke: '#27272a' }}
-                                                            domain={['auto', 'auto']}
-                                                        />
-                                                        {/* Fair Market Price reference line */}
-                                                        {pricingData?.fair_market_price && pricingData.fair_market_price > 0 && (
-                                                            <ReferenceLine
-                                                                y={pricingData.fair_market_price}
-                                                                stroke="#3b82f6"
-                                                                strokeDasharray="5 5"
-                                                                strokeWidth={1.5}
-                                                                label={{ value: `FMP $${pricingData.fair_market_price.toFixed(2)}`, fill: `#3b82f6`, fontSize: 9, position: `insideTopLeft` }}
-                                                            />
-                                                        )}
-                                                        {/* Floor Price reference line */}
-                                                        {card.floor_price && card.floor_price > 0 && (
-                                                            <ReferenceLine
-                                                                y={card.floor_price}
-                                                                stroke="#7dd3a8"
-                                                                strokeDasharray="3 3"
-                                                                strokeWidth={1.5}
-                                                                label={{ value: `Floor $${card.floor_price.toFixed(2)}`, fill: `#7dd3a8`, fontSize: 9, position: `insideTopLeft` }}
-                                                            />
-                                                        )}
-                                                        <RechartsTooltip
-                                                            cursor={{ strokeDasharray: '3 3', stroke: '#71717a' }}
-                                                            content={({ active, payload }) => {
-                                                                if (active && payload && payload.length) {
-                                                                    const data = payload[0].payload as any
-                                                                    return (
-                                                                        <div className="bg-black/90 border border-border rounded p-3 shadow-lg">
-                                                                            <div className="text-brand-300 font-bold font-mono text-lg">${data.price.toFixed(2)}</div>
-                                                                            <div className="text-muted-foreground text-xs mt-1">
-                                                                                {data.date}
-                                                                            </div>
-                                                                            {data.treatment && (
-                                                                                <div className="mt-2">
-                                                                                    <span
-                                                                                        className="px-2 py-0.5 rounded text-[9px] uppercase font-bold"
-                                                                                        style={{
-                                                                                            backgroundColor: `${data.treatmentColor}30`,
-                                                                                            color: data.treatmentColor
-                                                                                        }}
-                                                                                    >
-                                                                                        {data.treatment}
-                                                                                    </span>
-                                                                                </div>
-                                                                            )}
-                                                                            <div className="text-[10px] text-muted-foreground mt-1">
-                                                                                {data.isActive ? '◆ Active Listing' : '● Sold'}
-                                                                            </div>
-                                                                        </div>
-                                                                    )
-                                                                }
-                                                                return null
-                                                            }}
-                                                        />
-                                                        <Scatter
-                                                            data={chartData}
-                                                            shape={(props: any) => {
-                                                                const { cx, cy, payload } = props
-                                                                if (!cx || !cy || !payload) return <g />
-
-                                                                // Active listings: diamond shape
-                                                                if (payload.isActive) {
-                                                                    const size = 7
-                                                                    return (
-                                                                        <polygon
-                                                                            points={`${cx},${cy-size} ${cx+size},${cy} ${cx},${cy+size} ${cx-size},${cy}`}
-                                                                            fill={payload.treatmentColor || '#3b82f6'}
-                                                                            stroke="#0a0a0a"
-                                                                            strokeWidth={2}
-                                                                            style={{ filter: 'drop-shadow(0 0 4px rgba(59,130,246,0.5))' }}
-                                                                        />
-                                                                    )
-                                                                }
-
-                                                                // Sold listings: circle
-                                                                return (
-                                                                    <circle
-                                                                        cx={cx}
-                                                                        cy={cy}
-                                                                        r={6}
-                                                                        fill={payload.treatmentColor || '#7dd3a8'}
-                                                                        stroke="#0a0a0a"
-                                                                        strokeWidth={2}
-                                                                        style={{ filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.5))' }}
-                                                                    />
-                                                                )
-                                                            }}
-                                                        />
-                                                    </ScatterChart>)
-                                                ) : (
-                                                    /* Line Chart View */
-                                                    (<AreaChart data={chartData} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
-                                                        <defs>
-                                                            <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                                                                <stop offset="5%" stopColor="#7dd3a8" stopOpacity={0.15}/>
-                                                                <stop offset="95%" stopColor="#7dd3a8" stopOpacity={0}/>
-                                                            </linearGradient>
-                                                        </defs>
-                                                        <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} horizontal={true} />
-                                                        <XAxis
-                                                            dataKey="timestamp"
-                                                            type="number"
-                                                            domain={['dataMin', 'dataMax']}
-                                                            tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                                            tick={{ fill: '#71717a', fontSize: 10 }}
-                                                            axisLine={{ stroke: '#27272a' }}
-                                                            tickLine={{ stroke: '#27272a' }}
-                                                        />
-                                                        <YAxis
-                                                            orientation="right"
-                                                            tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val.toFixed(0)}`}
-                                                            tick={{ fill: '#71717a', fontSize: 10 }}
-                                                            axisLine={{ stroke: '#27272a' }}
-                                                            tickLine={{ stroke: '#27272a' }}
-                                                            domain={['auto', 'auto']}
-                                                        />
-                                                        {/* Fair Market Price reference line */}
-                                                        {pricingData?.fair_market_price && pricingData.fair_market_price > 0 && (
-                                                            <ReferenceLine
-                                                                y={pricingData.fair_market_price}
-                                                                stroke="#3b82f6"
-                                                                strokeDasharray="5 5"
-                                                                strokeWidth={1.5}
-                                                                label={{ value: `FMP $${pricingData.fair_market_price.toFixed(2)}`, fill: `#3b82f6`, fontSize: 9, position: `insideTopLeft` }}
-                                                            />
-                                                        )}
-                                                        {/* Floor Price reference line */}
-                                                        {card.floor_price && card.floor_price > 0 && (
-                                                            <ReferenceLine
-                                                                y={card.floor_price}
-                                                                stroke="#7dd3a8"
-                                                                strokeDasharray="3 3"
-                                                                strokeWidth={1.5}
-                                                                label={{ value: `Floor $${card.floor_price.toFixed(2)}`, fill: `#7dd3a8`, fontSize: 9, position: `insideTopLeft` }}
-                                                            />
-                                                        )}
-                                                        <RechartsTooltip
-                                                            cursor={{ strokeDasharray: '3 3', stroke: '#71717a' }}
-                                                            content={({ active, payload }) => {
-                                                                if (active && payload && payload.length) {
-                                                                    const data = payload[0].payload as any
-                                                                    return (
-                                                                        <div className="bg-black/90 border border-border rounded p-3 shadow-lg">
-                                                                            <div className="text-brand-300 font-bold font-mono text-lg">${data.price.toFixed(2)}</div>
-                                                                            <div className="text-muted-foreground text-xs mt-1">
-                                                                                {data.date}
-                                                                            </div>
-                                                                            {data.treatment && (
-                                                                                <div className="mt-2">
-                                                                                    <span
-                                                                                        className="px-2 py-0.5 rounded text-[9px] uppercase font-bold"
-                                                                                        style={{
-                                                                                            backgroundColor: `${data.treatmentColor}30`,
-                                                                                            color: data.treatmentColor
-                                                                                        }}
-                                                                                    >
-                                                                                        {data.treatment}
-                                                                                    </span>
-                                                                                </div>
-                                                                            )}
-                                                                            <div className="text-[10px] text-muted-foreground mt-1">
-                                                                                {data.isActive ? '◆ Active Listing' : '● Sold'}
-                                                                            </div>
-                                                                        </div>
-                                                                    )
-                                                                }
-                                                                return null
-                                                            }}
-                                                        />
-                                                        <Area
-                                                            type="monotone"
-                                                            dataKey="price"
-                                                            stroke="#7dd3a8"
-                                                            strokeWidth={2}
-                                                            fill="url(#priceGradient)"
-                                                            dot={false}
-                                                            activeDot={false}
-                                                        />
-                                                        <Scatter
-                                                            data={chartData}
-                                                            shape={(props: any) => {
-                                                                const { cx, cy, payload } = props
-                                                                if (!cx || !cy || !payload) return <g />
-
-                                                                // Active listings: larger diamond
-                                                                if (payload.isActive) {
-                                                                    const size = 9
-                                                                    return (
-                                                                        <polygon
-                                                                            points={`${cx},${cy-size} ${cx+size},${cy} ${cx},${cy+size} ${cx-size},${cy}`}
-                                                                            fill={payload.treatmentColor || '#3b82f6'}
-                                                                            stroke="#fff"
-                                                                            strokeWidth={3}
-                                                                            style={{ filter: 'drop-shadow(0 0 8px rgba(59,130,246,0.6))' }}
-                                                                        />
-                                                                    )
-                                                                }
-
-                                                                // Sold listings: larger circle
-                                                                return (
-                                                                    <circle
-                                                                        cx={cx}
-                                                                        cy={cy}
-                                                                        r={8}
-                                                                        fill={payload.treatmentColor || '#7dd3a8'}
-                                                                        stroke="#fff"
-                                                                        strokeWidth={3}
-                                                                        style={{ filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.3))' }}
-                                                                    />
-                                                                )
-                                                            }}
-                                                        />
-                                                    </AreaChart>)
-                                                )}
-                                            </ResponsiveContainer>
+                                            <Suspense fallback={
+                                                <div className="flex items-center justify-center h-full">
+                                                    <div className="text-muted-foreground text-sm">Loading chart...</div>
+                                                </div>
+                                            }>
+                                                <PriceHistoryChart
+                                                    data={chartData}
+                                                    chartType={chartType}
+                                                    floorPrice={card.floor_price ?? undefined}
+                                                    fmpPrice={pricingData?.fair_market_price ?? undefined}
+                                                />
+                                            </Suspense>
                                         ) : (
                                             <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                                                 <div className="text-xs uppercase mb-2">

@@ -3,8 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { ArrowLeft, TrendingUp, ArrowUp, ArrowDown, Activity, Zap, BarChart3, DollarSign, TableIcon, PieChartIcon, LineChart, Tag } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, PieChart, Pie, Cell, Legend, Treemap, ScatterChart, Scatter, ZAxis, ComposedChart, Line, ReferenceLine } from 'recharts'
 import { Tooltip } from '../components/ui/tooltip'
+import { lazy, Suspense } from 'react'
+
+// Lazy load recharts components (368KB) - only loads when user clicks Sentiment tab
+const SentimentChart = lazy(() => import('../components/charts/SentimentChart'))
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getPaginationRowModel } from '@tanstack/react-table'
 import { useState, useMemo, useEffect } from 'react'
 import clsx from 'clsx'
@@ -981,44 +984,15 @@ function MarketAnalysis() {
                                     </div>
                                 </div>
 
-                                {/* Sentiment Distribution Chart */}
+                                {/* Sentiment Distribution Chart - Lazy loaded */}
                                 <div className="flex-1 min-h-[280px]">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <ComposedChart data={sentimentChartData} margin={{ left: 10, right: 30, bottom: 20 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                            <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
-                                            <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                                            <ReferenceLine y={0} stroke="hsl(var(--border))" />
-                                            <RechartsTooltip
-                                                content={({ active, payload }) => {
-                                                    if (active && payload && payload.length) {
-                                                        const data = payload[0].payload
-                                                        return (
-                                                            <div className="bg-card border border-border rounded-md p-2 text-xs shadow-lg">
-                                                                <div className="font-bold mb-1">{data.name}</div>
-                                                                <div className="text-muted-foreground">{data.value} assets</div>
-                                                                {data.topCard && (
-                                                                    <div className="mt-1 pt-1 border-t border-border">
-                                                                        <span className="text-muted-foreground">Top: </span>
-                                                                        <span className="font-bold">{data.topCard.name}</span>
-                                                                        <span className={clsx("ml-1 font-mono", data.topCard.price_delta_24h > 0 ? "text-brand-300" : "text-red-500")}>
-                                                                            {data.topCard.price_delta_24h > 0 ? '+' : ''}{data.topCard.price_delta_24h?.toFixed(1)}%
-                                                                        </span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )
-                                                    }
-                                                    return null
-                                                }}
-                                            />
-                                            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                                                {sentimentChartData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                                                ))}
-                                            </Bar>
-                                        </ComposedChart>
-                                    </ResponsiveContainer>
+                                    <Suspense fallback={
+                                        <div className="flex items-center justify-center h-full">
+                                            <div className="text-muted-foreground text-sm">Loading chart...</div>
+                                        </div>
+                                    }>
+                                        <SentimentChart data={sentimentChartData} />
+                                    </Suspense>
                                 </div>
 
                                 {/* Top Movers in each direction */}
