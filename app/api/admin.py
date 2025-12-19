@@ -204,7 +204,6 @@ async def get_admin_stats(
     from app.models.card import Card
     from app.models.market import MarketPrice, MarketSnapshot
     from app.models.portfolio import PortfolioCard
-    from app.models.analytics import PageView, AnalyticsEvent
     from datetime import timedelta
 
     with Session(engine) as session:
@@ -329,7 +328,7 @@ async def get_admin_stats(
         try:
             # Get superuser IDs to exclude
             superuser_ids = session.exec(
-                select(UserModel.id).where(UserModel.is_superuser == True)
+                select(UserModel.id).where(UserModel.is_superuser.is_(True))
             ).all()
             superuser_ids_list = list(superuser_ids) if superuser_ids else []
 
@@ -639,7 +638,7 @@ async def get_user_activity(
     from sqlmodel import Session, select, text
     from app.db import engine
     from app.models.user import User as UserModel
-    from app.models.analytics import PageView, AnalyticsEvent
+    from app.models.analytics import PageView
 
     with Session(engine) as session:
         # Verify user exists
