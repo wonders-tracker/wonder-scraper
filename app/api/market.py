@@ -1,5 +1,7 @@
 from typing import Any, Optional
 import threading
+import time
+import logging
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select, desc
@@ -11,10 +13,19 @@ from app.models.card import Card
 from app.models.market import MarketSnapshot, MarketPrice
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Thread-safe cache with TTL (2 min for market data - it changes frequently)
 _market_cache = TTLCache(maxsize=50, ttl=120)
 _market_cache_lock = threading.Lock()
+
+
+def log_query_time(operation: str, start_time: float, threshold: float = 0.5):
+    """Log slow queries for debugging."""
+    elapsed = time.time() - start_time
+    if elapsed > threshold:
+        logger.warning(f"SLOW QUERY [{operation}]: {elapsed:.2f}s")
+    return elapsed
 
 
 def get_market_cache(key: str) -> Optional[Any]:
@@ -337,6 +348,7 @@ def read_market_listings(
     Get marketplace listings across all cards with comprehensive filtering.
     Returns individual listings from MarketPrice table with card details including floor price.
     """
+    start_time = time.time()
     from sqlalchemy import func, or_, text
     from app.models.market import MarketPrice
 
@@ -539,6 +551,9 @@ def read_market_listings(
             "scraped_at": listing.scraped_at.isoformat() if listing.scraped_at else None,
             "listed_at": listing.listed_at.isoformat() if listing.listed_at else None,
         })
+
+    # Log slow queries for performance monitoring
+    log_query_time(f"listings(type={listing_type}, platform={platform})", start_time)
 
     return {
         "items": listings,
