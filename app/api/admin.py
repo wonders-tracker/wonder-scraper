@@ -218,10 +218,31 @@ async def get_admin_stats(
             else 0
         )
 
-        # Get all users with details
+        # Get all users with details and activity data
         all_users = session.exec(select(UserModel).order_by(UserModel.created_at.desc())).all()
+
+        # Get user activity stats in bulk for efficiency
+        user_activity_result = session.execute(
+            text("""
+                SELECT
+                    user_id,
+                    MAX(timestamp) as last_active,
+                    COUNT(*) as pageview_count,
+                    COUNT(DISTINCT path) as unique_pages
+                FROM pageview
+                WHERE user_id IS NOT NULL
+                GROUP BY user_id
+            """)
+        ).all()
+        user_activity_map = {
+            row[0]: {"last_active": row[1], "pageview_count": row[2], "unique_pages": row[3]}
+            for row in user_activity_result
+        }
+
         users_list = []
         for u in all_users:
+            activity = user_activity_map.get(u.id, {})
+            last_active = activity.get("last_active")
             users_list.append(
                 {
                     "id": u.id,
@@ -232,6 +253,9 @@ async def get_admin_stats(
                     "is_active": u.is_active,
                     "created_at": u.created_at.isoformat() if u.created_at else None,
                     "last_login": u.last_login.isoformat() if hasattr(u, "last_login") and u.last_login else None,
+                    "last_active": last_active.isoformat() if last_active else None,
+                    "pageview_count": activity.get("pageview_count", 0),
+                    "unique_pages": activity.get("unique_pages", 0),
                 }
             )
 
@@ -465,6 +489,87 @@ async def get_scheduler_status(
         "running": scheduler.running,
         "jobs": jobs,
     }
+
+
+# ============== USER ACTIVITY (Admin) ==============
+
+
+@router.get("/users/{user_id}/activity")
+async def get_user_activity(
+    user_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    current_user: User = Depends(deps.get_current_superuser),
+):
+    """Get detailed activity for a specific user."""
+    from sqlmodel import Session, select, text
+    from app.db import engine
+    from app.models.user import User as UserModel
+    from app.models.analytics import PageView
+
+    with Session(engine) as session:
+        # Verify user exists
+        user = session.get(UserModel, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get recent page views
+        pageviews = session.exec(
+            select(PageView)
+            .where(PageView.user_id == user_id)
+            .order_by(PageView.timestamp.desc())
+            .limit(limit)
+        ).all()
+
+        # Get top pages for this user
+        top_pages_result = session.execute(
+            text("""
+                SELECT path, COUNT(*) as views
+                FROM pageview
+                WHERE user_id = :user_id
+                GROUP BY path
+                ORDER BY views DESC
+                LIMIT 10
+            """),
+            {"user_id": user_id}
+        ).all()
+
+        # Get activity by day (last 30 days)
+        daily_activity_result = session.execute(
+            text("""
+                SELECT DATE(timestamp) as date, COUNT(*) as views
+                FROM pageview
+                WHERE user_id = :user_id
+                AND timestamp >= NOW() - INTERVAL '30 days'
+                GROUP BY DATE(timestamp)
+                ORDER BY date DESC
+            """),
+            {"user_id": user_id}
+        ).all()
+
+        return {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "username": getattr(user, "username", None),
+            },
+            "recent_pageviews": [
+                {
+                    "path": pv.path,
+                    "timestamp": pv.timestamp.isoformat(),
+                    "device_type": pv.device_type,
+                    "referrer": pv.referrer,
+                }
+                for pv in pageviews
+            ],
+            "top_pages": [
+                {"path": row[0], "views": row[1]}
+                for row in top_pages_result
+            ],
+            "daily_activity": [
+                {"date": str(row[0]), "views": row[1]}
+                for row in daily_activity_result
+            ],
+        }
 
 
 # ============== API KEY MANAGEMENT (Admin) ==============
