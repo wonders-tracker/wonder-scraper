@@ -595,7 +595,7 @@ async def scrape_opensea_listings(
 
                         # Get listing timestamp
                         start_time = parameters.get("startTime")
-                        listed_at = datetime.fromtimestamp(int(start_time)) if start_time else None
+                        listed_at = datetime.fromtimestamp(int(start_time), tz=timezone.utc) if start_time else None
 
                         listing = OpenSeaListing(
                             token_id=str(token_id),
@@ -798,7 +798,7 @@ async def scrape_opensea_listings_to_db(
                 # Update price if changed
                 if existing.price != round(listing.price_usd, 2):
                     existing.price = round(listing.price_usd, 2)
-                    existing.scraped_at = datetime.now()
+                    existing.scraped_at = datetime.now(timezone.utc)
                     session.add(existing)
                     listings_saved += 1
                 continue
@@ -818,7 +818,7 @@ async def scrape_opensea_listings_to_db(
                 url=listing.listing_url,
                 image_url=listing.image_url,
                 listed_at=listing.listed_at,
-                scraped_at=datetime.now(),
+                scraped_at=datetime.now(timezone.utc),
             )
 
             session.add(mp)

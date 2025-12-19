@@ -125,7 +125,7 @@ async def get_bpx_price() -> float:
 
     # Quick check without lock (read is safe)
     if _bpx_price_cache["price"] and _bpx_price_cache["timestamp"]:
-        age = datetime.now() - _bpx_price_cache["timestamp"]
+        age = datetime.now(timezone.utc) - _bpx_price_cache["timestamp"]
         if age.total_seconds() < _bpx_price_cache["ttl_seconds"]:
             return _bpx_price_cache["price"]
 
@@ -133,7 +133,7 @@ async def get_bpx_price() -> float:
     async with _bpx_cache_lock:
         # Double-check after acquiring lock (another task may have updated)
         if _bpx_price_cache["price"] and _bpx_price_cache["timestamp"]:
-            age = datetime.now() - _bpx_price_cache["timestamp"]
+            age = datetime.now(timezone.utc) - _bpx_price_cache["timestamp"]
             if age.total_seconds() < _bpx_price_cache["ttl_seconds"]:
                 return _bpx_price_cache["price"]
 
@@ -148,7 +148,7 @@ async def get_bpx_price() -> float:
 
                 # Update cache
                 _bpx_price_cache["price"] = price
-                _bpx_price_cache["timestamp"] = datetime.now()
+                _bpx_price_cache["timestamp"] = datetime.now(timezone.utc)
 
                 print(f"BPX Price: ${price:.6f} USD")
                 return price
@@ -337,7 +337,7 @@ def parse_sale(activity: Dict[str, Any], bpx_price_usd: float) -> Optional[Blokp
         quantity=listing.get("quantity", 1),
         seller_address=listing.get("seller", {}).get("address", ""),
         buyer_address=listing.get("buyer", {}).get("address", ""),
-        filled_at=_parse_datetime(listing.get("filled_at")) or datetime.now(),
+        filled_at=_parse_datetime(listing.get("filled_at")) or datetime.now(timezone.utc),
     )
 
 
@@ -1089,7 +1089,7 @@ async def scrape_preslab_sales(session: Session, max_pages: int = 10, save_to_db
                     platform="blokpax",
                     traits=traits if traits else None,
                     seller_name=listing.get("seller", {}).get("username", "")[:20] if listing.get("seller") else None,
-                    scraped_at=datetime.now(),
+                    scraped_at=datetime.now(timezone.utc),
                 )
 
                 session.add(mp)
@@ -1190,7 +1190,7 @@ async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> 
                     # Update price if changed
                     if existing.price != round(listing.price_usd, 2):
                         existing.price = round(listing.price_usd, 2)
-                        existing.scraped_at = datetime.now()
+                        existing.scraped_at = datetime.now(timezone.utc)
                         session.add(existing)
                     continue
 
@@ -1212,7 +1212,7 @@ async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> 
                     traits=traits if traits else None,
                     seller_name=listing.seller_address[:20] if listing.seller_address else None,
                     listed_at=listing.created_at,
-                    scraped_at=datetime.now(),
+                    scraped_at=datetime.now(timezone.utc),
                 )
 
                 session.add(mp)

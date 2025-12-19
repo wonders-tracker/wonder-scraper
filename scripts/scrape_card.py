@@ -101,7 +101,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
         print("No active data from scrape. Checking existing DB records...")
         with Session(engine) as fallback_session:
             # MarketPrice already imported at top of file
-            cutoff = datetime.now() - timedelta(hours=24)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
             existing_active = fallback_session.exec(
                 select(MarketPrice)
                 .where(MarketPrice.card_id == card_id, MarketPrice.listing_type == "active")
@@ -236,7 +236,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
         if card_id > 0:
             with Session(engine) as fallback_session:
                 # First try 30-day records, then fall back to ALL records
-                cutoff = datetime.now() - timedelta(days=30)
+                cutoff = datetime.now(timezone.utc) - timedelta(days=30)
                 existing_prices = fallback_session.exec(
                     select(MarketPrice)
                     .where(MarketPrice.card_id == card_id, MarketPrice.listing_type == "sold")
