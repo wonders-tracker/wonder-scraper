@@ -14,13 +14,40 @@ Marketing/digest emails:
 """
 
 import resend
-from typing import Optional, Dict, Any
+import time
+from typing import Optional, Dict, Any, Callable
+from functools import wraps
 from app.core.config import settings
 
 # Initialize Resend
 resend.api_key = settings.RESEND_API_KEY
 
 
+def with_retry(max_attempts: int = 3, base_delay: float = 1.0):
+    """
+    Decorator that retries a function with exponential backoff.
+    For transient email delivery failures (network issues, rate limits).
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    if attempt < max_attempts - 1:
+                        delay = base_delay * (2 ** attempt)  # Exponential backoff
+                        print(f"[Email] Attempt {attempt + 1} failed, retrying in {delay}s: {e}")
+                        time.sleep(delay)
+            print(f"[Email] All {max_attempts} attempts failed: {last_exception}")
+            return False
+        return wrapper
+    return decorator
+
+
+@with_retry(max_attempts=3)
 def send_welcome_email(to_email: str, user_name: Optional[str] = None) -> bool:
     """
     Send welcome email to new users.
@@ -99,6 +126,7 @@ def send_welcome_email(to_email: str, user_name: Optional[str] = None) -> bool:
         return False
 
 
+@with_retry(max_attempts=3)
 def send_personal_welcome_email(to_email: str, user_name: Optional[str] = None) -> bool:
     """
     Send a personal welcome email from Cody Robertson 1 day after signup.
@@ -204,6 +232,7 @@ def send_personal_welcome_email(to_email: str, user_name: Optional[str] = None) 
         return False
 
 
+@with_retry(max_attempts=3)
 def send_password_reset_email(to_email: str, reset_token: str) -> bool:
     """
     Send password reset email with reset link.
@@ -445,6 +474,7 @@ async def send_api_access_approved_email(to_email: str, user_name: str) -> bool:
         return False
 
 
+@with_retry(max_attempts=3)
 def send_api_key_approved_email(to_email: str, user_name: str, api_key: str) -> bool:
     """
     Send email to user when their API access is approved with their new key.
