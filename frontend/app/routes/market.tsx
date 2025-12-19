@@ -35,12 +35,12 @@ type MarketCard = {
     volume_30d: number // Mapped from volume_period (Total/Window)
     volume_change: number // Delta
     price_delta_24h: number
-    market_cap: number
+    dollar_volume: number // Total $ traded in period (sum of sale prices)
     deal_rating: number
     treatment?: string
 }
 
-type AnalyticsTab = 'table' | 'volume' | 'marketcap' | 'sentiment' | 'prices' | 'deals'
+type AnalyticsTab = 'table' | 'volume' | 'dollarvol' | 'sentiment' | 'prices' | 'deals'
 
 function MarketAnalysis() {
   const navigate = useNavigate()
@@ -56,6 +56,45 @@ function MarketAnalysis() {
   useEffect(() => {
     analytics.trackMarketPageView()
   }, [])
+
+  // Fetch actual deal listings (active listings below floor price)
+  // Only show listings scraped in the last 24 hours to avoid showing ended listings
+  const { data: dealListings, isLoading: dealsLoading } = useQuery({
+    queryKey: ['market-deals', timeFrame],
+    queryFn: async () => {
+      // Get active listings sorted by price ascending, only from last 24h to ensure freshness
+      const data = await api.get(`market/listings?listing_type=active&time_period=24h&sort_by=price&sort_order=asc&limit=200`).json<{
+        items: Array<{
+          id: number
+          card_id: number
+          card_name: string
+          card_slug: string
+          card_image_url: string | null
+          title: string
+          price: number
+          floor_price: number | null
+          vwap: number | null
+          platform: string
+          treatment: string | null
+          url: string
+          seller_name: string | null
+          scraped_at: string | null
+        }>
+      }>()
+
+      // Filter to only listings below floor price and calculate deal %
+      return data.items
+        .filter(l => l.floor_price && l.price < l.floor_price)
+        .map(l => ({
+          ...l,
+          dealPct: l.floor_price ? ((l.floor_price - l.price) / l.floor_price) * 100 : 0
+        }))
+        .sort((a, b) => b.dealPct - a.dealPct)
+        .slice(0, 30)
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    enabled: activeTab === 'deals', // Only fetch when deals tab is active
+  })
 
   // Fetch treatment price floors
   const { data: treatments } = useQuery({
@@ -100,7 +139,7 @@ function MarketAnalysis() {
                 volume_change: c.volume_change ?? 0,
                 price_delta_24h: priceDelta,
                 deal_rating: c.deal_rating ?? 0,
-                market_cap: (c.floor_price ?? c.latest_price ?? 0) * volumePeriod
+                dollar_volume: c.dollar_volume ?? 0
             }
         }) as MarketCard[]
     },
@@ -124,7 +163,7 @@ function MarketAnalysis() {
   // Compute Stats
   const metrics = useMemo(() => {
       const totalVolume = cards.reduce((acc, c) => acc + c.volume_30d, 0)
-      const totalCap = cards.reduce((acc, c) => acc + c.market_cap, 0)
+      const totalDollarVolume = cards.reduce((acc, c) => acc + c.dollar_volume, 0)
       const avgVol = cards.length > 0 ? totalVolume / cards.length : 0
       const gainers = cards.filter(c => c.price_delta_24h > 0).length
       const losers = cards.filter(c => c.price_delta_24h < 0).length
@@ -146,7 +185,7 @@ function MarketAnalysis() {
       // Breadth ratio
       const breadthRatio = totalAssets > 0 ? ((gainers - losers) / totalAssets * 100) : 0
 
-      return { totalVolume, totalCap, avgVol, gainers, losers, unchanged, totalAssets, topMover, mostActive, highestValue, breadthRatio }
+      return { totalVolume, totalDollarVolume, avgVol, gainers, losers, unchanged, totalAssets, topMover, mostActive, highestValue, breadthRatio }
   }, [cards])
 
   // Top Lists
@@ -167,7 +206,7 @@ function MarketAnalysis() {
       slug: c.slug || c.id,
       volume: c.volume_30d,
       floor: c.floor_price || c.latest_price,
-      marketCap: c.market_cap,
+      dollarVolume: c.dollar_volume,
       trend: c.price_delta_24h,
       pctOfMax: (c.volume_30d / maxVol) * 100
     }))
@@ -187,69 +226,68 @@ function MarketAnalysis() {
     }
   }, [cards, volumeChartData])
 
-  // Chart Data - Market Cap Treemap (visual representation of market share)
-  const marketCapChartData = useMemo(() => {
+  // Chart Data - Dollar Volume (total $ traded per card)
+  const dollarVolumeChartData = useMemo(() => {
     const sorted = [...cards]
-      .filter(c => c.market_cap > 0)
-      .sort((a, b) => b.market_cap - a.market_cap)
+      .filter(c => c.dollar_volume > 0)
+      .sort((a, b) => b.dollar_volume - a.dollar_volume)
       .slice(0, 20)
 
-    const totalCap = sorted.reduce((acc, c) => acc + c.market_cap, 0)
+    const totalDollarVol = sorted.reduce((acc, c) => acc + c.dollar_volume, 0)
     return sorted.map(c => ({
       name: c.name.length > 12 ? c.name.slice(0, 12) + '...' : c.name,
       fullName: c.name,
       slug: c.slug || c.id,
-      marketCap: c.market_cap,
+      dollarVolume: c.dollar_volume,
       volume: c.volume_30d,
       floor: c.floor_price || c.latest_price,
-      share: totalCap > 0 ? ((c.market_cap / totalCap) * 100).toFixed(1) : '0'
+      share: totalDollarVol > 0 ? ((c.dollar_volume / totalDollarVol) * 100).toFixed(1) : '0'
     }))
   }, [cards])
 
-  // Market cap summary stats
-  const marketCapStats = useMemo(() => {
-    const withCap = cards.filter(c => c.market_cap > 0)
-    const total = withCap.reduce((acc, c) => acc + c.market_cap, 0)
-    const top5 = marketCapChartData.slice(0, 5).reduce((acc, c) => acc + c.marketCap, 0)
-    const avgFloor = withCap.length > 0
-      ? withCap.reduce((acc, c) => acc + (c.floor_price || c.latest_price), 0) / withCap.length
+  // Dollar volume summary stats
+  const dollarVolumeStats = useMemo(() => {
+    const withVolume = cards.filter(c => c.dollar_volume > 0)
+    const total = withVolume.reduce((acc, c) => acc + c.dollar_volume, 0)
+    const top5 = dollarVolumeChartData.slice(0, 5).reduce((acc, c) => acc + c.dollarVolume, 0)
+    const avgFloor = withVolume.length > 0
+      ? withVolume.reduce((acc, c) => acc + (c.floor_price || c.latest_price), 0) / withVolume.length
       : 0
     return {
       total,
       top5Pct: total > 0 ? ((top5 / total) * 100).toFixed(0) : '0',
       avgFloor: avgFloor.toFixed(2)
     }
-  }, [cards, marketCapChartData])
+  }, [cards, dollarVolumeChartData])
 
-  // Chart Data - Price Distribution with volume weight
-  const priceDistributionData = useMemo(() => {
-    const withPrices = cards.filter(c => c.floor_price && c.floor_price > 0)
-    if (withPrices.length === 0) return []
+  // Chart Data - Price Scatter (price vs volume with trend coloring)
+  const priceScatterData = useMemo(() => {
+    return cards
+      .filter(c => (c.floor_price || c.latest_price) > 0 && c.volume_30d > 0)
+      .map(c => ({
+        name: c.name,
+        slug: c.slug || c.id,
+        price: c.floor_price || c.latest_price,
+        volume: c.volume_30d,
+        dollarVolume: c.dollar_volume,
+        trend: c.price_delta_24h,
+        isUp: c.price_delta_24h > 0,
+        isDown: c.price_delta_24h < 0,
+      }))
+  }, [cards])
 
-    const buckets = [
-      { range: '$0-10', min: 0, max: 10, count: 0, volume: 0, totalValue: 0, cards: [] as MarketCard[] },
-      { range: '$10-25', min: 10, max: 25, count: 0, volume: 0, totalValue: 0, cards: [] as MarketCard[] },
-      { range: '$25-50', min: 25, max: 50, count: 0, volume: 0, totalValue: 0, cards: [] as MarketCard[] },
-      { range: '$50-100', min: 50, max: 100, count: 0, volume: 0, totalValue: 0, cards: [] as MarketCard[] },
-      { range: '$100-250', min: 100, max: 250, count: 0, volume: 0, totalValue: 0, cards: [] as MarketCard[] },
-      { range: '$250+', min: 250, max: Infinity, count: 0, volume: 0, totalValue: 0, cards: [] as MarketCard[] },
-    ]
-
-    withPrices.forEach(c => {
-      const price = c.floor_price!
-      const bucket = buckets.find(b => price >= b.min && price < b.max)
-      if (bucket) {
-        bucket.count++
-        bucket.volume += c.volume_30d
-        bucket.totalValue += c.market_cap
-        bucket.cards.push(c)
-      }
-    })
-
-    return buckets.filter(b => b.count > 0).map(b => ({
-      ...b,
-      avgPrice: b.count > 0 ? (b.cards.reduce((acc, c) => acc + (c.floor_price || 0), 0) / b.count).toFixed(2) : '0'
-    }))
+  // Price scatter summary stats
+  const priceScatterStats = useMemo(() => {
+    const withPrices = cards.filter(c => (c.floor_price || c.latest_price) > 0)
+    const totalAssets = withPrices.length
+    const avgPrice = totalAssets > 0
+      ? withPrices.reduce((acc, c) => acc + (c.floor_price || c.latest_price), 0) / totalAssets
+      : 0
+    const highPrice = Math.max(...withPrices.map(c => c.floor_price || c.latest_price))
+    const lowPrice = Math.min(...withPrices.filter(c => (c.floor_price || c.latest_price) > 0).map(c => c.floor_price || c.latest_price))
+    const under25 = withPrices.filter(c => (c.floor_price || c.latest_price) < 25).length
+    const premium = withPrices.filter(c => (c.floor_price || c.latest_price) >= 100).length
+    return { totalAssets, avgPrice, highPrice, lowPrice, under25, premium }
   }, [cards])
 
   // Chart Data - Deal Rating Scatter (volume vs deal rating)
@@ -260,9 +298,10 @@ function MarketAnalysis() {
         name: c.name,
         slug: c.slug || c.id,
         volume: c.volume_30d,
-        dealRating: c.deal_rating,
+        // Clamp deal rating to ±100% for clean chart display
+        dealRating: Math.max(-100, Math.min(100, c.deal_rating)),
         floor: c.floor_price || c.latest_price,
-        marketCap: c.market_cap,
+        dollarVolume: c.dollar_volume,
         isGoodDeal: c.deal_rating < 0
       }))
   }, [cards])
@@ -412,24 +451,24 @@ function MarketAnalysis() {
           cell: ({ row }) => <div className="text-right font-mono">{row.original.volume_30d}</div>
       },
       {
-          accessorKey: 'market_cap',
+          accessorKey: 'dollar_volume',
           header: ({ column }) => (
-              <Tooltip content="Market cap = floor price × volume">
+              <Tooltip content="Total $ traded in period (sum of sale prices)">
                   <div className="flex items-center justify-end gap-1 cursor-pointer select-none" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
-                      MKT CAP {column.getIsSorted() && <ArrowUp className={clsx("w-3 h-3 transition-transform", column.getIsSorted() === 'desc' && "rotate-180")} />}
+                      $ VOL {column.getIsSorted() && <ArrowUp className={clsx("w-3 h-3 transition-transform", column.getIsSorted() === 'desc' && "rotate-180")} />}
                   </div>
               </Tooltip>
           ),
           cell: ({ row }) => {
-              const cap = row.original.market_cap
-              if (cap === 0 || !cap) return <div className="text-right font-mono text-muted-foreground">-</div>
+              const vol = row.original.dollar_volume
+              if (vol === 0 || !vol) return <div className="text-right font-mono text-muted-foreground">-</div>
               let formatted: string
-              if (cap >= 1000000) {
-                  formatted = `$${(cap / 1000000).toFixed(1)}M`
-              } else if (cap >= 1000) {
-                  formatted = `$${(cap / 1000).toFixed(1)}k`
+              if (vol >= 1000000) {
+                  formatted = `$${(vol / 1000000).toFixed(1)}M`
+              } else if (vol >= 1000) {
+                  formatted = `$${(vol / 1000).toFixed(1)}k`
               } else {
-                  formatted = `$${cap.toFixed(0)}`
+                  formatted = `$${vol.toFixed(0)}`
               }
               return <div className="text-right font-mono text-muted-foreground">{formatted}</div>
           }
@@ -555,15 +594,17 @@ function MarketAnalysis() {
                     <div className="text-xs text-muted-foreground mt-1">units sold</div>
                 </div>
 
-                {/* Market Cap */}
+                {/* Dollar Volume */}
                 <div className="bg-card border border-border p-4 rounded hover:border-primary/50 transition-colors">
-                    <div className="text-[10px] uppercase text-muted-foreground font-medium mb-2">Market Cap</div>
+                    <div className="text-[10px] uppercase text-muted-foreground font-medium mb-2">Dollar Volume</div>
                     <div className="text-3xl font-mono font-bold text-brand-300">
-                        {metrics.totalCap >= 1000000
-                            ? `$${(metrics.totalCap / 1000000).toFixed(2)}M`
-                            : `$${(metrics.totalCap / 1000).toFixed(1)}k`}
+                        {metrics.totalDollarVolume >= 1000000
+                            ? `$${(metrics.totalDollarVolume / 1000000).toFixed(2)}M`
+                            : metrics.totalDollarVolume >= 1000
+                            ? `$${(metrics.totalDollarVolume / 1000).toFixed(1)}k`
+                            : `$${metrics.totalDollarVolume.toFixed(0)}`}
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">floor × volume</div>
+                    <div className="text-xs text-muted-foreground mt-1">total $ traded</div>
                 </div>
 
                 {/* Market Sentiment with visual bar */}
@@ -710,7 +751,7 @@ function MarketAnalysis() {
                         {[
                             { id: 'table' as AnalyticsTab, label: 'Table', icon: TableIcon },
                             { id: 'volume' as AnalyticsTab, label: 'Volume', icon: BarChart3 },
-                            { id: 'marketcap' as AnalyticsTab, label: 'Market Cap', icon: DollarSign },
+                            { id: 'dollarvol' as AnalyticsTab, label: '$ Volume', icon: DollarSign },
                             { id: 'sentiment' as AnalyticsTab, label: 'Sentiment', icon: PieChartIcon },
                             { id: 'prices' as AnalyticsTab, label: 'Prices', icon: LineChart },
                             { id: 'deals' as AnalyticsTab, label: 'Deals', icon: Tag },
@@ -804,8 +845,8 @@ function MarketAnalysis() {
                                                                     <span className="font-mono font-bold">{data.volume}</span>
                                                                     <span className="text-muted-foreground">Floor:</span>
                                                                     <span className="font-mono text-brand-300">${data.floor?.toFixed(2)}</span>
-                                                                    <span className="text-muted-foreground">Mkt Cap:</span>
-                                                                    <span className="font-mono">${data.marketCap?.toLocaleString()}</span>
+                                                                    <span className="text-muted-foreground">$ Volume:</span>
+                                                                    <span className="font-mono">${data.dollarVolume?.toLocaleString()}</span>
                                                                     <span className="text-muted-foreground">Trend:</span>
                                                                     <span className={clsx("font-mono", data.trend > 0 ? "text-brand-300" : data.trend < 0 ? "text-red-500" : "")}>
                                                                         {data.trend > 0 ? '+' : ''}{data.trend?.toFixed(1)}%
@@ -847,37 +888,39 @@ function MarketAnalysis() {
                             </div>
                         )}
 
-                        {/* Market Cap Chart Tab */}
-                        {activeTab === 'marketcap' && (
+                        {/* Dollar Volume Chart Tab */}
+                        {activeTab === 'dollarvol' && (
                             <div className="p-4 flex flex-col h-full">
                                 {/* Summary Stats Row */}
                                 <div className="grid grid-cols-4 gap-3 mb-4">
                                     <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">Total Market Cap</div>
+                                        <div className="text-[10px] uppercase text-muted-foreground">Total $ Volume</div>
                                         <div className="text-xl font-bold font-mono text-brand-300">
-                                            ${marketCapStats.total >= 1000000
-                                                ? `${(marketCapStats.total / 1000000).toFixed(2)}M`
-                                                : `${(marketCapStats.total / 1000).toFixed(1)}k`}
+                                            ${dollarVolumeStats.total >= 1000000
+                                                ? `${(dollarVolumeStats.total / 1000000).toFixed(2)}M`
+                                                : dollarVolumeStats.total >= 1000
+                                                ? `${(dollarVolumeStats.total / 1000).toFixed(1)}k`
+                                                : dollarVolumeStats.total.toFixed(0)}
                                         </div>
                                     </div>
                                     <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">Top 5 Dominance</div>
-                                        <div className="text-xl font-bold font-mono">{marketCapStats.top5Pct}%</div>
+                                        <div className="text-[10px] uppercase text-muted-foreground">Top 5 Share</div>
+                                        <div className="text-xl font-bold font-mono">{dollarVolumeStats.top5Pct}%</div>
                                     </div>
                                     <div className="bg-muted/30 rounded p-3">
                                         <div className="text-[10px] uppercase text-muted-foreground">Avg Floor Price</div>
-                                        <div className="text-xl font-bold font-mono">${marketCapStats.avgFloor}</div>
+                                        <div className="text-xl font-bold font-mono">${dollarVolumeStats.avgFloor}</div>
                                     </div>
                                     <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">Assets w/ Cap</div>
-                                        <div className="text-xl font-bold font-mono">{marketCapChartData.length}</div>
+                                        <div className="text-[10px] uppercase text-muted-foreground">Active Assets</div>
+                                        <div className="text-xl font-bold font-mono">{dollarVolumeChartData.length}</div>
                                     </div>
                                 </div>
 
-                                {/* Market Cap Chart with share percentages */}
+                                {/* Dollar Volume Chart with share percentages */}
                                 <div className="flex-1 min-h-[280px]">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <ComposedChart data={marketCapChartData} layout="vertical" margin={{ left: 10, right: 60 }}>
+                                        <ComposedChart data={dollarVolumeChartData} layout="vertical" margin={{ left: 10, right: 60 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
                                             <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
                                             <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
@@ -889,13 +932,13 @@ function MarketAnalysis() {
                                                             <div className="bg-card border border-border rounded-md p-2 text-xs shadow-lg">
                                                                 <div className="font-bold mb-1">{data.fullName}</div>
                                                                 <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                                                                    <span className="text-muted-foreground">Market Cap:</span>
-                                                                    <span className="font-mono font-bold text-brand-300">${data.marketCap?.toLocaleString()}</span>
+                                                                    <span className="text-muted-foreground">$ Volume:</span>
+                                                                    <span className="font-mono font-bold text-brand-300">${data.dollarVolume?.toLocaleString()}</span>
                                                                     <span className="text-muted-foreground">Share:</span>
                                                                     <span className="font-mono">{data.share}%</span>
                                                                     <span className="text-muted-foreground">Floor:</span>
                                                                     <span className="font-mono">${data.floor?.toFixed(2)}</span>
-                                                                    <span className="text-muted-foreground">Volume:</span>
+                                                                    <span className="text-muted-foreground">Sales:</span>
                                                                     <span className="font-mono">{data.volume}</span>
                                                                 </div>
                                                             </div>
@@ -904,8 +947,8 @@ function MarketAnalysis() {
                                                     return null
                                                 }}
                                             />
-                                            <Bar dataKey="marketCap" radius={[0, 4, 4, 0]}>
-                                                {marketCapChartData.map((entry, index) => (
+                                            <Bar dataKey="dollarVolume" radius={[0, 4, 4, 0]}>
+                                                {dollarVolumeChartData.map((entry, index) => (
                                                     <Cell
                                                         key={`cell-${index}`}
                                                         fill="#7dd3a8"
@@ -917,14 +960,14 @@ function MarketAnalysis() {
                                     </ResponsiveContainer>
                                 </div>
 
-                                {/* Market Cap Leaders */}
+                                {/* Dollar Volume Leaders */}
                                 <div className="mt-4 border-t border-border pt-3">
-                                    <div className="text-[10px] uppercase text-muted-foreground mb-2">Market Cap Leaders</div>
+                                    <div className="text-[10px] uppercase text-muted-foreground mb-2">Top $ Volume</div>
                                     <div className="grid grid-cols-5 gap-2 text-xs">
-                                        {marketCapChartData.slice(0, 5).map((item, i) => (
+                                        {dollarVolumeChartData.slice(0, 5).map((item, i) => (
                                             <div key={i} className="bg-muted/20 rounded p-2 hover:bg-muted/40 cursor-pointer transition-colors" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(item.slug) } })}>
                                                 <div className="font-bold truncate">{item.fullName}</div>
-                                                <div className="font-mono text-brand-300">${(item.marketCap / 1000).toFixed(1)}k</div>
+                                                <div className="font-mono text-brand-300">${(item.dollarVolume / 1000).toFixed(1)}k</div>
                                                 <div className="text-muted-foreground">{item.share}% share</div>
                                             </div>
                                         ))}
@@ -1026,126 +1069,54 @@ function MarketAnalysis() {
                             </div>
                         )}
 
-                        {/* Prices Distribution Tab */}
+                        {/* Prices Scatter Tab */}
                         {activeTab === 'prices' && (
                             <div className="p-4 flex flex-col h-full">
                                 {/* Summary Stats Row */}
                                 <div className="grid grid-cols-4 gap-3 mb-4">
                                     <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">Total Assets</div>
-                                        <div className="text-xl font-bold font-mono">{priceDistributionData.reduce((acc, b) => acc + b.count, 0)}</div>
+                                        <div className="text-[10px] uppercase text-muted-foreground">Avg Price</div>
+                                        <div className="text-xl font-bold font-mono text-brand-300">${priceScatterStats.avgPrice.toFixed(2)}</div>
+                                    </div>
+                                    <div className="bg-muted/30 rounded p-3">
+                                        <div className="text-[10px] uppercase text-muted-foreground">Price Range</div>
+                                        <div className="text-xl font-bold font-mono">
+                                            ${priceScatterStats.lowPrice?.toFixed(0) || 0} - ${priceScatterStats.highPrice?.toFixed(0) || 0}
+                                        </div>
                                     </div>
                                     <div className="bg-muted/30 rounded p-3">
                                         <div className="text-[10px] uppercase text-muted-foreground">Under $25</div>
-                                        <div className="text-xl font-bold font-mono text-brand-300">
-                                            {priceDistributionData.filter(b => b.max <= 25).reduce((acc, b) => acc + b.count, 0)}
-                                        </div>
-                                    </div>
-                                    <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">$25 - $100</div>
-                                        <div className="text-xl font-bold font-mono">
-                                            {priceDistributionData.filter(b => b.min >= 25 && b.max <= 100).reduce((acc, b) => acc + b.count, 0)}
-                                        </div>
+                                        <div className="text-xl font-bold font-mono text-brand-300">{priceScatterStats.under25}</div>
                                     </div>
                                     <div className="bg-muted/30 rounded p-3">
                                         <div className="text-[10px] uppercase text-muted-foreground">Premium ($100+)</div>
-                                        <div className="text-xl font-bold font-mono text-amber-500">
-                                            {priceDistributionData.filter(b => b.min >= 100).reduce((acc, b) => acc + b.count, 0)}
-                                        </div>
+                                        <div className="text-xl font-bold font-mono text-amber-500">{priceScatterStats.premium}</div>
                                     </div>
                                 </div>
 
-                                {/* Stacked bar showing volume and count per price tier */}
+                                {/* Price vs Volume Scatter Plot */}
                                 <div className="flex-1 min-h-[280px]">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <ComposedChart data={priceDistributionData} margin={{ left: 10, right: 30, bottom: 10 }}>
+                                        <ScatterChart margin={{ left: 10, right: 30, bottom: 20, top: 10 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                            <XAxis dataKey="range" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                                            <YAxis yAxisId="left" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                                            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => `${v}`} />
-                                            <RechartsTooltip
-                                                content={({ active, payload }) => {
-                                                    if (active && payload && payload.length) {
-                                                        const data = payload[0].payload
-                                                        return (
-                                                            <div className="bg-card border border-border rounded-md p-2 text-xs shadow-lg">
-                                                                <div className="font-bold mb-1">{data.range}</div>
-                                                                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                                                                    <span className="text-muted-foreground">Assets:</span>
-                                                                    <span className="font-mono font-bold">{data.count}</span>
-                                                                    <span className="text-muted-foreground">Volume:</span>
-                                                                    <span className="font-mono">{data.volume}</span>
-                                                                    <span className="text-muted-foreground">Total Value:</span>
-                                                                    <span className="font-mono text-brand-300">${data.totalValue?.toLocaleString()}</span>
-                                                                    <span className="text-muted-foreground">Avg Price:</span>
-                                                                    <span className="font-mono">${data.avgPrice}</span>
-                                                                </div>
-                                                            </div>
-                                                        )
-                                                    }
-                                                    return null
-                                                }}
+                                            <XAxis
+                                                type="number"
+                                                dataKey="price"
+                                                name="Floor Price"
+                                                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                                                tickFormatter={(v) => `$${v}`}
+                                                label={{ value: 'Floor Price', position: 'bottom', fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                                             />
-                                            <Bar yAxisId="left" dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} fillOpacity={0.8} />
-                                            <Line yAxisId="right" type="monotone" dataKey="volume" stroke="#7dd3a8" strokeWidth={2} dot={{ fill: '#7dd3a8', r: 4 }} />
-                                        </ComposedChart>
-                                    </ResponsiveContainer>
-                                </div>
-
-                                {/* Price tier breakdown table */}
-                                <div className="mt-4 border-t border-border pt-3">
-                                    <div className="text-[10px] uppercase text-muted-foreground mb-2">Price Tier Details</div>
-                                    <div className="grid grid-cols-6 gap-2 text-xs">
-                                        {priceDistributionData.map((bucket, i) => (
-                                            <div key={i} className="bg-muted/20 rounded p-2 text-center">
-                                                <div className="font-bold">{bucket.range}</div>
-                                                <div className="font-mono text-primary">{bucket.count} cards</div>
-                                                <div className="text-muted-foreground">{bucket.volume} sold</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Deals Distribution Tab - Scatter plot with deal opportunities */}
-                        {activeTab === 'deals' && (
-                            <div className="p-4 flex flex-col h-full">
-                                {/* Summary Stats Row */}
-                                <div className="grid grid-cols-4 gap-3 mb-4">
-                                    <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">Good Deals</div>
-                                        <div className="text-xl font-bold font-mono text-brand-300">{dealStats.goodDeals}</div>
-                                        <div className="text-[10px] text-muted-foreground">10%+ under avg</div>
-                                    </div>
-                                    <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">Fair Priced</div>
-                                        <div className="text-xl font-bold font-mono">{dealStats.fairPriced}</div>
-                                        <div className="text-[10px] text-muted-foreground">within ±10%</div>
-                                    </div>
-                                    <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">Overpriced</div>
-                                        <div className="text-xl font-bold font-mono text-amber-500">{dealStats.overpriced}</div>
-                                        <div className="text-[10px] text-muted-foreground">10%+ over avg</div>
-                                    </div>
-                                    <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">Avg Deal Rating</div>
-                                        <div className={clsx("text-xl font-bold font-mono", parseFloat(dealStats.avgDeal) < 0 ? "text-brand-300" : parseFloat(dealStats.avgDeal) > 0 ? "text-amber-500" : "")}>
-                                            {parseFloat(dealStats.avgDeal) > 0 ? '+' : ''}{dealStats.avgDeal}%
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Scatter plot: Volume vs Deal Rating */}
-                                <div className="flex-1 min-h-[280px]">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <ScatterChart margin={{ left: 10, right: 30, bottom: 10 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                            <XAxis type="number" dataKey="dealRating" name="Deal Rating" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => `${v}%`} domain={[-50, 50]} />
-                                            <YAxis type="number" dataKey="volume" name="Volume" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                                            <ZAxis type="number" dataKey="floor" range={[50, 400]} />
-                                            <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={2} />
+                                            <YAxis
+                                                type="number"
+                                                dataKey="volume"
+                                                name="Volume"
+                                                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                                                label={{ value: 'Sales Volume', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                                            />
+                                            <ZAxis type="number" dataKey="dollarVolume" range={[40, 400]} name="$ Volume" />
                                             <RechartsTooltip
+                                                cursor={{ strokeDasharray: '3 3' }}
                                                 content={({ active, payload }) => {
                                                     if (active && payload && payload.length) {
                                                         const data = payload[0].payload
@@ -1153,14 +1124,16 @@ function MarketAnalysis() {
                                                             <div className="bg-card border border-border rounded-md p-2 text-xs shadow-lg">
                                                                 <div className="font-bold mb-1">{data.name}</div>
                                                                 <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                                                                    <span className="text-muted-foreground">Deal Rating:</span>
-                                                                    <span className={clsx("font-mono font-bold", data.dealRating < 0 ? "text-brand-300" : "text-amber-500")}>
-                                                                        {data.dealRating > 0 ? '+' : ''}{data.dealRating?.toFixed(1)}%
-                                                                    </span>
-                                                                    <span className="text-muted-foreground">Volume:</span>
-                                                                    <span className="font-mono">{data.volume}</span>
                                                                     <span className="text-muted-foreground">Floor:</span>
-                                                                    <span className="font-mono">${data.floor?.toFixed(2)}</span>
+                                                                    <span className="font-mono font-bold text-brand-300">${data.price?.toFixed(2)}</span>
+                                                                    <span className="text-muted-foreground">Volume:</span>
+                                                                    <span className="font-mono font-bold">{data.volume} sales</span>
+                                                                    <span className="text-muted-foreground">$ Volume:</span>
+                                                                    <span className="font-mono">${data.dollarVolume?.toLocaleString()}</span>
+                                                                    <span className="text-muted-foreground">Trend:</span>
+                                                                    <span className={clsx("font-mono font-bold", data.trend > 0 ? "text-brand-300" : data.trend < 0 ? "text-red-500" : "")}>
+                                                                        {data.trend > 0 ? '+' : ''}{data.trend?.toFixed(1)}%
+                                                                    </span>
                                                                 </div>
                                                             </div>
                                                         )
@@ -1168,53 +1141,154 @@ function MarketAnalysis() {
                                                     return null
                                                 }}
                                             />
-                                            <Scatter data={dealScatterData} shape="circle">
-                                                {dealScatterData.map((entry, index) => (
-                                                    <Cell
-                                                        key={`cell-${index}`}
-                                                        fill={entry.isGoodDeal ? '#7dd3a8' : '#f59e0b'}
-                                                        fillOpacity={0.7}
-                                                    />
-                                                ))}
-                                            </Scatter>
+                                            {/* Gainers - green dots */}
+                                            <Scatter
+                                                name="Gainers"
+                                                data={priceScatterData.filter(d => d.isUp)}
+                                                fill="#7dd3a8"
+                                                fillOpacity={0.7}
+                                                onClick={(data) => navigate({ to: '/cards/$cardId', params: { cardId: String(data.slug) } })}
+                                                cursor="pointer"
+                                            />
+                                            {/* Losers - red dots */}
+                                            <Scatter
+                                                name="Losers"
+                                                data={priceScatterData.filter(d => d.isDown)}
+                                                fill="#ef4444"
+                                                fillOpacity={0.7}
+                                                onClick={(data) => navigate({ to: '/cards/$cardId', params: { cardId: String(data.slug) } })}
+                                                cursor="pointer"
+                                            />
+                                            {/* Flat - gray dots */}
+                                            <Scatter
+                                                name="Flat"
+                                                data={priceScatterData.filter(d => !d.isUp && !d.isDown)}
+                                                fill="hsl(var(--muted-foreground))"
+                                                fillOpacity={0.5}
+                                                onClick={(data) => navigate({ to: '/cards/$cardId', params: { cardId: String(data.slug) } })}
+                                                cursor="pointer"
+                                            />
+                                            <Legend />
                                         </ScatterChart>
                                     </ResponsiveContainer>
                                 </div>
 
-                                {/* Best Deals Table */}
-                                <div className="mt-4 border-t border-border pt-3 grid grid-cols-2 gap-4">
-                                    <div>
-                                        <div className="text-[10px] uppercase text-brand-300 mb-2">Best Deals (Under Avg)</div>
-                                        <div className="space-y-1">
-                                            {dealScatterData
-                                                .filter(d => d.dealRating < 0)
-                                                .sort((a, b) => a.dealRating - b.dealRating)
-                                                .slice(0, 4)
-                                                .map((deal, i) => (
-                                                    <div key={i} className="flex items-center justify-between text-xs bg-brand-300/10 rounded px-2 py-1 cursor-pointer hover:bg-brand-300/20" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(deal.slug) } })}>
-                                                        <span className="truncate flex-1">{deal.name}</span>
-                                                        <span className="font-mono text-brand-300 ml-2">{deal.dealRating.toFixed(0)}%</span>
-                                                        <span className="font-mono text-muted-foreground ml-2">${deal.floor?.toFixed(2)}</span>
-                                                    </div>
-                                                ))}
-                                        </div>
+                                {/* Legend explanation */}
+                                <div className="mt-4 pt-3 border-t border-border text-center text-[10px] text-muted-foreground">
+                                    Point size = $ volume traded. Click any point to view card details.
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Deals Tab - Active listings below floor price */}
+                        {activeTab === 'deals' && (
+                            <div className="p-4 flex flex-col h-full overflow-auto">
+                                {/* Summary Stats Row */}
+                                <div className="grid grid-cols-4 gap-3 mb-4">
+                                    <div className="bg-muted/30 rounded p-3">
+                                        <div className="text-[10px] uppercase text-muted-foreground">Deals Found</div>
+                                        <div className="text-2xl font-bold font-mono text-brand-300">{dealListings?.length ?? 0}</div>
+                                        <div className="text-[10px] text-muted-foreground">below floor price</div>
                                     </div>
-                                    <div>
-                                        <div className="text-[10px] uppercase text-amber-500 mb-2">Premium Priced (Over Avg)</div>
-                                        <div className="space-y-1">
-                                            {dealScatterData
-                                                .filter(d => d.dealRating > 0)
-                                                .sort((a, b) => b.dealRating - a.dealRating)
-                                                .slice(0, 4)
-                                                .map((deal, i) => (
-                                                    <div key={i} className="flex items-center justify-between text-xs bg-amber-500/10 rounded px-2 py-1 cursor-pointer hover:bg-amber-500/20" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(deal.slug) } })}>
-                                                        <span className="truncate flex-1">{deal.name}</span>
-                                                        <span className="font-mono text-amber-500 ml-2">+{deal.dealRating.toFixed(0)}%</span>
-                                                        <span className="font-mono text-muted-foreground ml-2">${deal.floor?.toFixed(2)}</span>
-                                                    </div>
-                                                ))}
+                                    <div className="bg-muted/30 rounded p-3">
+                                        <div className="text-[10px] uppercase text-muted-foreground">Best Deal</div>
+                                        <div className="text-2xl font-bold font-mono text-brand-300">
+                                            {dealListings?.[0]?.dealPct ? `${dealListings[0].dealPct.toFixed(0)}%` : '-'}
                                         </div>
+                                        <div className="text-[10px] text-muted-foreground">max discount</div>
                                     </div>
+                                    <div className="bg-muted/30 rounded p-3">
+                                        <div className="text-[10px] uppercase text-muted-foreground">Avg Discount</div>
+                                        <div className="text-2xl font-bold font-mono">
+                                            {dealListings && dealListings.length > 0
+                                                ? `${(dealListings.reduce((acc, l) => acc + l.dealPct, 0) / dealListings.length).toFixed(0)}%`
+                                                : '-'}
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground">below floor</div>
+                                    </div>
+                                    <div className="bg-muted/30 rounded p-3">
+                                        <div className="text-[10px] uppercase text-muted-foreground">Total Savings</div>
+                                        <div className="text-2xl font-bold font-mono text-brand-300">
+                                            {dealListings && dealListings.length > 0
+                                                ? `$${dealListings.reduce((acc, l) => acc + ((l.floor_price || 0) - l.price), 0).toFixed(0)}`
+                                                : '-'}
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground">vs floor prices</div>
+                                    </div>
+                                </div>
+
+                                {/* Deals Grid */}
+                                <div className="flex-1">
+                                    {dealsLoading ? (
+                                        <div className="flex items-center justify-center h-64">
+                                            <div className="text-sm text-muted-foreground animate-pulse">Finding deals...</div>
+                                        </div>
+                                    ) : !dealListings || dealListings.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center h-64 text-center border border-dashed border-border rounded-lg">
+                                            <Tag className="w-12 h-12 text-muted-foreground/30 mb-3" />
+                                            <div className="text-lg font-bold text-muted-foreground mb-1">No Deals Right Now</div>
+                                            <div className="text-sm text-muted-foreground max-w-md">
+                                                All active listings are at or above their floor price. Check back later or try a different time period.
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                            {dealListings.map((listing) => (
+                                                <a
+                                                    key={listing.id}
+                                                    href={listing.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={() => analytics.trackExternalLinkClick(listing.platform, listing.card_id, listing.title)}
+                                                    className="border border-border rounded-lg p-3 hover:border-brand-300 hover:bg-brand-300/5 transition-all group"
+                                                >
+                                                    {/* Deal Badge */}
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="px-2 py-1 bg-brand-300/20 text-brand-300 text-xs font-bold rounded">
+                                                            {listing.dealPct.toFixed(0)}% OFF
+                                                        </span>
+                                                        <span className="text-[10px] text-muted-foreground uppercase font-medium">{listing.platform}</span>
+                                                    </div>
+
+                                                    {/* Card Info */}
+                                                    <div className="flex gap-3">
+                                                        {listing.card_image_url ? (
+                                                            <img
+                                                                src={listing.card_image_url}
+                                                                alt={listing.card_name}
+                                                                className="w-14 h-20 object-cover rounded flex-shrink-0"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-14 h-20 bg-muted rounded flex-shrink-0 flex items-center justify-center">
+                                                                <Tag className="w-6 h-6 text-muted-foreground/50" />
+                                                            </div>
+                                                        )}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="font-bold text-sm truncate group-hover:text-brand-300 transition-colors">
+                                                                {listing.card_name}
+                                                            </div>
+                                                            {listing.treatment && (
+                                                                <div className="text-xs text-brand-300/70 mb-1">{listing.treatment}</div>
+                                                            )}
+                                                            {/* Pricing */}
+                                                            <div className="mt-2">
+                                                                <div className="text-xl font-bold font-mono text-brand-300">${listing.price.toFixed(2)}</div>
+                                                                <div className="flex items-center gap-2 text-xs">
+                                                                    <span className="font-mono text-muted-foreground line-through">${listing.floor_price?.toFixed(2)}</span>
+                                                                    <span className="font-mono text-brand-300 font-medium">Save ${((listing.floor_price || 0) - listing.price).toFixed(2)}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Footer Note */}
+                                <div className="mt-4 pt-3 border-t border-border text-center text-[10px] text-muted-foreground">
+                                    Floor = avg of 4 lowest recent sales per card + treatment. Click any deal to buy on marketplace.
                                 </div>
                             </div>
                         )}

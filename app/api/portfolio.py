@@ -15,6 +15,7 @@ from app.schemas import (
     PortfolioItemUpdate,
     PortfolioCardCreate,
     PortfolioCardBatchCreate,
+    PortfolioCardBatchItem,
     PortfolioCardUpdate,
     PortfolioCardOut,
     PortfolioSummary,
@@ -231,6 +232,100 @@ def delete_portfolio_item(
 # =============================================================================
 
 
+def batch_get_treatment_market_prices(
+    session: Session, card_treatment_pairs: List[tuple[int, str]]
+) -> dict[tuple[int, str], float]:
+    """
+    Batch fetch market prices for multiple card+treatment pairs.
+    Returns a dict of (card_id, treatment) -> price.
+    Much more efficient than calling get_treatment_market_price in a loop.
+    """
+    from sqlalchemy import text
+
+    if not card_treatment_pairs:
+        return {}
+
+    cutoff = datetime.utcnow() - timedelta(days=30)
+
+    # Get unique card_ids and treatments
+    card_ids = list(set(pair[0] for pair in card_treatment_pairs))
+    treatments = list(set(pair[1] for pair in card_treatment_pairs))
+
+    # Batch query: Get VWAP for all card+treatment combinations in one query
+    price_query = text("""
+        SELECT card_id, treatment, AVG(price) as avg_price
+        FROM marketprice
+        WHERE card_id = ANY(:card_ids)
+          AND treatment = ANY(:treatments)
+          AND listing_type = 'sold'
+          AND COALESCE(sold_date, scraped_at) >= :cutoff
+        GROUP BY card_id, treatment
+    """)
+
+    results = session.execute(
+        price_query,
+        {"card_ids": card_ids, "treatments": treatments, "cutoff": cutoff}
+    ).all()
+
+    # Build lookup dict
+    prices: dict[tuple[int, str], float] = {}
+    for row in results:
+        prices[(row.card_id, row.treatment)] = float(row.avg_price)
+
+    # For pairs without recent sales, try to get last sale (any time)
+    missing_pairs = [p for p in card_treatment_pairs if p not in prices]
+    if missing_pairs:
+        missing_card_ids = list(set(p[0] for p in missing_pairs))
+        missing_treatments = list(set(p[1] for p in missing_pairs))
+
+        last_sale_query = text("""
+            SELECT DISTINCT ON (card_id, treatment) card_id, treatment, price
+            FROM marketprice
+            WHERE card_id = ANY(:card_ids)
+              AND treatment = ANY(:treatments)
+              AND listing_type = 'sold'
+            ORDER BY card_id, treatment, sold_date DESC NULLS LAST
+        """)
+
+        last_sales = session.execute(
+            last_sale_query,
+            {"card_ids": missing_card_ids, "treatments": missing_treatments}
+        ).all()
+
+        for row in last_sales:
+            key = (row.card_id, row.treatment)
+            if key not in prices:
+                prices[key] = float(row.price)
+
+    # Final fallback: get card-level prices for anything still missing
+    still_missing = [p for p in card_treatment_pairs if p not in prices]
+    if still_missing:
+        still_missing_card_ids = list(set(p[0] for p in still_missing))
+
+        # Get latest sold price per card (any treatment)
+        fallback_query = text("""
+            SELECT DISTINCT ON (card_id) card_id, price
+            FROM marketprice
+            WHERE card_id = ANY(:card_ids)
+              AND listing_type = 'sold'
+            ORDER BY card_id, sold_date DESC NULLS LAST
+        """)
+
+        fallback_results = session.execute(
+            fallback_query, {"card_ids": still_missing_card_ids}
+        ).all()
+
+        fallback_prices = {row.card_id: float(row.price) for row in fallback_results}
+
+        for card_id, treatment in still_missing:
+            if card_id in fallback_prices:
+                prices[(card_id, treatment)] = fallback_prices[card_id]
+            else:
+                prices[(card_id, treatment)] = 0.0
+
+    return prices
+
+
 def get_treatment_market_price(session: Session, card_id: int, treatment: str) -> float:
     """
     Get market price for a specific card + treatment combination.
@@ -268,14 +363,31 @@ def get_treatment_market_price(session: Session, card_id: int, treatment: str) -
 
 
 def build_portfolio_card_out(
-    session: Session, card: PortfolioCard, db_card: Card, rarity: Optional[Rarity]
+    session: Session, card: PortfolioCard, db_card: Card, rarity: Optional[Rarity],
+    preloaded_market_price: Optional[float] = None
 ) -> PortfolioCardOut:
-    """Build PortfolioCardOut with market data."""
-    market_price = get_treatment_market_price(session, card.card_id, card.treatment)
-    profit_loss = market_price - card.purchase_price if market_price else None
-    profit_loss_pct = (
-        (profit_loss / card.purchase_price * 100) if profit_loss is not None and card.purchase_price > 0 else None
-    )
+    """Build PortfolioCardOut with market data.
+
+    Args:
+        preloaded_market_price: If provided, skip the DB query and use this price.
+                               Used for batch operations to avoid N+1 queries.
+    """
+    market_price = preloaded_market_price if preloaded_market_price is not None else get_treatment_market_price(session, card.card_id, card.treatment)
+
+    # Handle null/zero market prices gracefully
+    if market_price is None or market_price == 0:
+        profit_loss = None
+        profit_loss_pct = None
+    else:
+        profit_loss = market_price - card.purchase_price
+        # Avoid division by zero for pack pulls / free cards
+        if card.purchase_price > 0:
+            profit_loss_pct = (profit_loss / card.purchase_price) * 100
+        elif profit_loss > 0:
+            # Free card with positive value = 100% gain (infinite ROI capped)
+            profit_loss_pct = 100.0
+        else:
+            profit_loss_pct = 0.0
 
     return PortfolioCardOut(
         id=card.id,
@@ -302,14 +414,16 @@ def build_portfolio_card_out(
     )
 
 
-@router.post("/cards", response_model=PortfolioCardOut)
+@router.post("/cards", response_model=List[PortfolioCardOut])
 def create_portfolio_card(
     card_in: PortfolioCardCreate,
     session: Session = Depends(get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """
-    Add a single card to the user's portfolio with treatment/source details.
+    Add card(s) to the user's portfolio with treatment/source details.
+    Use quantity > 1 to create multiple identical cards at once.
+    Returns a list of created cards.
     """
     # Validate card exists
     db_card = session.get(Card, card_in.card_id)
@@ -320,54 +434,23 @@ def create_portfolio_card(
     if card_in.purchase_price < 0:
         raise HTTPException(status_code=400, detail="Purchase price cannot be negative")
 
-    card = PortfolioCard(
-        user_id=current_user.id,
-        card_id=card_in.card_id,
-        treatment=card_in.treatment,
-        source=card_in.source,
-        purchase_price=card_in.purchase_price,
-        purchase_date=card_in.purchase_date.date() if card_in.purchase_date else None,
-        grading=card_in.grading,
-        notes=card_in.notes,
-    )
-    session.add(card)
-    session.commit()
-    session.refresh(card)
+    # Validate quantity
+    quantity = card_in.quantity if card_in.quantity else 1
+    if quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+    if quantity > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 cards per request")
 
-    rarity = session.get(Rarity, db_card.rarity_id) if db_card.rarity_id else None
-    return build_portfolio_card_out(session, card, db_card, rarity)
+    # Validate purchase date is not in the future
+    if card_in.purchase_date:
+        today = datetime.utcnow().date()
+        purchase_date = card_in.purchase_date.date() if hasattr(card_in.purchase_date, 'date') else card_in.purchase_date
+        if purchase_date > today:
+            raise HTTPException(status_code=400, detail="Purchase date cannot be in the future")
 
-
-@router.post("/cards/batch", response_model=List[PortfolioCardOut])
-def create_portfolio_cards_batch(
-    batch_in: PortfolioCardBatchCreate,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(deps.get_current_user),
-) -> Any:
-    """
-    Add multiple cards to the portfolio at once (split entry mode).
-    All cards are added atomically - if one fails, none are added.
-    Max 100 cards per request.
-    """
-    if len(batch_in.cards) > 100:
-        raise HTTPException(status_code=400, detail="Maximum 100 cards per batch")
-
-    if len(batch_in.cards) == 0:
-        raise HTTPException(status_code=400, detail="At least one card required")
-
-    # Validate all cards first
-    card_ids = set(c.card_id for c in batch_in.cards)
-    db_cards = {c.id: c for c in session.exec(select(Card).where(Card.id.in_(card_ids))).all()}
-
-    for i, card_in in enumerate(batch_in.cards):
-        if card_in.card_id not in db_cards:
-            raise HTTPException(status_code=400, detail=f"Card at index {i}: Card ID {card_in.card_id} not found")
-        if card_in.purchase_price < 0:
-            raise HTTPException(status_code=400, detail=f"Card at index {i}: Purchase price cannot be negative")
-
-    # Create all cards
+    # Create the specified quantity of cards
     created_cards = []
-    for card_in in batch_in.cards:
+    for _ in range(quantity):
         card = PortfolioCard(
             user_id=current_user.id,
             card_id=card_in.card_id,
@@ -380,6 +463,75 @@ def create_portfolio_cards_batch(
         )
         session.add(card)
         created_cards.append(card)
+
+    session.commit()
+
+    # Refresh and build response
+    rarity = session.get(Rarity, db_card.rarity_id) if db_card.rarity_id else None
+    results = []
+    for card in created_cards:
+        session.refresh(card)
+        results.append(build_portfolio_card_out(session, card, db_card, rarity))
+
+    return results
+
+
+@router.post("/cards/batch", response_model=List[PortfolioCardOut])
+def create_portfolio_cards_batch(
+    batch_in: PortfolioCardBatchCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    Add multiple cards to the portfolio at once (split entry mode).
+    Each item can have a quantity > 1 to create multiple identical cards.
+    All cards are added atomically - if one fails, none are added.
+    Max 100 total cards per request.
+    """
+    if len(batch_in.cards) == 0:
+        raise HTTPException(status_code=400, detail="At least one card required")
+
+    # Calculate total cards including quantities
+    total_cards = sum(max(1, c.quantity or 1) for c in batch_in.cards)
+    if total_cards > 100:
+        raise HTTPException(status_code=400, detail=f"Maximum 100 cards per batch (requested {total_cards})")
+
+    # Validate all cards first
+    card_ids = set(c.card_id for c in batch_in.cards)
+    db_cards = {c.id: c for c in session.exec(select(Card).where(Card.id.in_(card_ids))).all()}
+
+    today = datetime.utcnow().date()
+    for i, card_in in enumerate(batch_in.cards):
+        if card_in.card_id not in db_cards:
+            raise HTTPException(status_code=400, detail=f"Card at index {i}: Card ID {card_in.card_id} not found")
+        if card_in.purchase_price < 0:
+            raise HTTPException(status_code=400, detail=f"Card at index {i}: Purchase price cannot be negative")
+        quantity = card_in.quantity or 1
+        if quantity < 1:
+            raise HTTPException(status_code=400, detail=f"Card at index {i}: Quantity must be at least 1")
+        # Validate purchase date is not in the future
+        if card_in.purchase_date:
+            purchase_date = card_in.purchase_date.date() if hasattr(card_in.purchase_date, 'date') else card_in.purchase_date
+            if purchase_date > today:
+                raise HTTPException(status_code=400, detail=f"Card at index {i}: Purchase date cannot be in the future")
+
+    # Create all cards (respecting quantity)
+    created_cards = []
+    for card_in in batch_in.cards:
+        quantity = max(1, card_in.quantity or 1)
+        for _ in range(quantity):
+            card = PortfolioCard(
+                user_id=current_user.id,
+                card_id=card_in.card_id,
+                treatment=card_in.treatment,
+                source=card_in.source,
+                purchase_price=card_in.purchase_price,
+                purchase_date=card_in.purchase_date.date() if card_in.purchase_date else None,
+                grading=card_in.grading,
+                notes=card_in.notes,
+            )
+            session.add(card)
+            created_cards.append(card)
 
     session.commit()
 
@@ -425,6 +577,9 @@ def read_portfolio_cards(
     query = query.order_by(desc(PortfolioCard.created_at))
     cards = session.exec(query).all()
 
+    if not cards:
+        return []
+
     # Batch fetch card details
     card_ids = set(c.card_id for c in cards)
     db_cards = {c.id: c for c in session.exec(select(Card).where(Card.id.in_(card_ids))).all()} if card_ids else {}
@@ -435,11 +590,16 @@ def read_portfolio_cards(
         {r.id: r for r in session.exec(select(Rarity).where(Rarity.id.in_(rarity_ids))).all()} if rarity_ids else {}
     )
 
+    # Batch fetch market prices (fixes N+1 query problem)
+    card_treatment_pairs = [(c.card_id, c.treatment) for c in cards]
+    market_prices = batch_get_treatment_market_prices(session, card_treatment_pairs)
+
     results = []
     for card in cards:
         db_card = db_cards.get(card.card_id)
         rarity = rarities.get(db_card.rarity_id) if db_card and db_card.rarity_id else None
-        results.append(build_portfolio_card_out(session, card, db_card, rarity))
+        market_price = market_prices.get((card.card_id, card.treatment))
+        results.append(build_portfolio_card_out(session, card, db_card, rarity, preloaded_market_price=market_price))
 
     return results
 
@@ -451,6 +611,7 @@ def read_portfolio_summary(
 ) -> Any:
     """
     Get portfolio summary statistics.
+    Uses batch price fetching to avoid N+1 queries.
     """
     cards = session.exec(
         select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(PortfolioCard.deleted_at.is_(None))
@@ -459,13 +620,28 @@ def read_portfolio_summary(
     total_cards = len(cards)
     total_cost_basis = sum(c.purchase_price for c in cards)
 
+    if total_cards == 0:
+        return PortfolioSummary(
+            total_cards=0,
+            total_cost_basis=0.0,
+            total_market_value=0.0,
+            total_profit_loss=0.0,
+            total_profit_loss_percent=0.0,
+            by_treatment={},
+            by_source={},
+        )
+
+    # Batch fetch all market prices in a single query (fixes N+1)
+    card_treatment_pairs = [(c.card_id, c.treatment) for c in cards]
+    market_prices = batch_get_treatment_market_prices(session, card_treatment_pairs)
+
     # Calculate market values
     total_market_value = 0.0
-    by_treatment = {}
-    by_source = {}
+    by_treatment: dict[str, dict] = {}
+    by_source: dict[str, dict] = {}
 
     for card in cards:
-        market_price = get_treatment_market_price(session, card.card_id, card.treatment)
+        market_price = market_prices.get((card.card_id, card.treatment), 0.0)
         total_market_value += market_price
 
         # Aggregate by treatment
@@ -483,7 +659,13 @@ def read_portfolio_summary(
         by_source[card.source]["value"] += market_price
 
     total_profit_loss = total_market_value - total_cost_basis
-    total_profit_loss_percent = (total_profit_loss / total_cost_basis * 100) if total_cost_basis > 0 else 0.0
+    # Avoid division by zero for portfolios with all free cards
+    if total_cost_basis > 0:
+        total_profit_loss_percent = (total_profit_loss / total_cost_basis) * 100
+    elif total_market_value > 0:
+        total_profit_loss_percent = 100.0  # All free cards with value
+    else:
+        total_profit_loss_percent = 0.0
 
     return PortfolioSummary(
         total_cards=total_cards,
@@ -542,6 +724,12 @@ def update_portfolio_card(
             raise HTTPException(status_code=400, detail="Purchase price cannot be negative")
         card.purchase_price = card_in.purchase_price
     if card_in.purchase_date is not None:
+        # Validate purchase date is not in the future
+        if card_in.purchase_date:
+            today = datetime.utcnow().date()
+            purchase_date = card_in.purchase_date.date() if hasattr(card_in.purchase_date, 'date') else card_in.purchase_date
+            if purchase_date > today:
+                raise HTTPException(status_code=400, detail="Purchase date cannot be in the future")
         card.purchase_date = card_in.purchase_date.date() if card_in.purchase_date else None
     if card_in.grading is not None:
         card.grading = card_in.grading if card_in.grading else None
@@ -621,6 +809,7 @@ def get_portfolio_value_history(
     """
     Get portfolio value history over time.
     Returns daily portfolio value based on cards owned at each date.
+    Now uses treatment-specific pricing for accurate historical values.
     """
     from sqlalchemy import text
 
@@ -636,38 +825,44 @@ def get_portfolio_value_history(
     end_date = datetime.utcnow().date()
     start_date = end_date - timedelta(days=days)
 
-    # Get unique card_ids
+    # Get unique card_ids and treatments
     card_ids = list(set(c.card_id for c in cards))
+    treatments = list(set(c.treatment for c in cards))
 
-    # Get historical prices for all cards - use daily VWAP from sold listings
-    # This query gets the average sold price per card per day
+    # Get historical prices for all cards WITH treatment-specific pricing
+    # This query gets the average sold price per card+treatment per day
     price_query = text("""
         SELECT
             card_id,
+            treatment,
             DATE(COALESCE(sold_date, scraped_at)) as sale_date,
             AVG(price) as avg_price
         FROM marketprice
         WHERE card_id = ANY(:card_ids)
+          AND treatment = ANY(:treatments)
           AND listing_type = 'sold'
           AND COALESCE(sold_date, scraped_at) >= :start_date
-        GROUP BY card_id, DATE(COALESCE(sold_date, scraped_at))
-        ORDER BY card_id, sale_date
+        GROUP BY card_id, treatment, DATE(COALESCE(sold_date, scraped_at))
+        ORDER BY card_id, treatment, sale_date
     """)
 
-    price_results = session.execute(price_query, {"card_ids": card_ids, "start_date": start_date}).all()
+    price_results = session.execute(
+        price_query,
+        {"card_ids": card_ids, "treatments": treatments, "start_date": start_date}
+    ).all()
 
-    # Build price lookup: {card_id: {date: price}}
-    price_by_card_date = {}
+    # Build price lookup: {(card_id, treatment): {date: price}}
+    price_by_card_treatment_date: dict[tuple[int, str], dict] = {}
     for row in price_results:
-        cid, sale_date, avg_price = row
-        if cid not in price_by_card_date:
-            price_by_card_date[cid] = {}
-        price_by_card_date[cid][sale_date] = float(avg_price)
+        cid, treatment, sale_date, avg_price = row
+        key = (cid, treatment)
+        if key not in price_by_card_treatment_date:
+            price_by_card_treatment_date[key] = {}
+        price_by_card_treatment_date[key][sale_date] = float(avg_price)
 
-    # Get current prices as fallback
-    current_prices = {}
-    for card in cards:
-        current_prices[card.card_id] = get_treatment_market_price(session, card.card_id, card.treatment)
+    # Get current prices as fallback using batch fetch
+    card_treatment_pairs = [(c.card_id, c.treatment) for c in cards]
+    current_prices = batch_get_treatment_market_prices(session, card_treatment_pairs)
 
     # Calculate daily portfolio value
     history = []
@@ -687,8 +882,9 @@ def get_portfolio_value_history(
             # Add cost basis
             daily_cost += card.purchase_price
 
-            # Get price for this card on this date
-            card_prices = price_by_card_date.get(card.card_id, {})
+            # Get treatment-specific price for this card on this date
+            key = (card.card_id, card.treatment)
+            card_prices = price_by_card_treatment_date.get(key, {})
 
             # Find the most recent price on or before current_date
             price = None
@@ -699,7 +895,7 @@ def get_portfolio_value_history(
 
             # If no historical price, use current price
             if price is None:
-                price = current_prices.get(card.card_id, card.purchase_price)
+                price = current_prices.get(key, card.purchase_price)
 
             daily_value += price
 

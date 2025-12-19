@@ -1,8 +1,8 @@
 /**
- * Hybrid Analytics Service (Google Analytics + Vercel Analytics)
+ * Hybrid Analytics Service (Google Analytics + Vercel Analytics + Backend)
  *
  * Extensible analytics factory for tracking custom events.
- * Sends events to both GA and Vercel Analytics for redundancy.
+ * Sends events to GA, Vercel Analytics, and our backend for redundancy.
  *
  * GA Measurement ID: G-28SPPTBF79
  *
@@ -13,6 +13,9 @@
  */
 
 import { track as vercelTrack } from '@vercel/analytics'
+
+// API base URL
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 // Declare gtag on window
 declare global {
@@ -78,6 +81,53 @@ function cleanParamsForVercel(params: Record<string, any>): Record<string, strin
   return cleaned
 }
 
+// Session ID for correlating events
+let sessionId: string | null = null
+function getSessionId(): string {
+  if (typeof window === 'undefined') return ''
+  if (!sessionId) {
+    sessionId = sessionStorage.getItem('wt_session_id')
+    if (!sessionId) {
+      sessionId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+      sessionStorage.setItem('wt_session_id', sessionId)
+    }
+  }
+  return sessionId
+}
+
+/**
+ * Send event to backend analytics API
+ * Fire-and-forget, non-blocking
+ */
+function sendToBackend(eventName: string, properties?: Record<string, any>) {
+  if (typeof window === 'undefined') return
+
+  // Use navigator.sendBeacon for reliability (won't block page unload)
+  const payload = JSON.stringify({
+    event_name: eventName,
+    properties: properties || {},
+    session_id: getSessionId(),
+  })
+
+  try {
+    // Try sendBeacon first (better for page unloads)
+    if (navigator.sendBeacon) {
+      const blob = new Blob([payload], { type: 'application/json' })
+      navigator.sendBeacon(`${API_BASE}/api/v1/analytics/event`, blob)
+    } else {
+      // Fallback to fetch
+      fetch(`${API_BASE}/api/v1/analytics/event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        keepalive: true,
+      }).catch(() => {})
+    }
+  } catch {
+    // Silently fail - analytics should never break the app
+  }
+}
+
 /**
  * Track page views (for SPAs)
  */
@@ -100,11 +150,13 @@ function trackPageView(path: string, title?: string) {
  * Triggered when a user successfully creates an account
  */
 function trackSignup(method: 'email' | 'discord' = 'email') {
-  track('sign_up', {
+  const params = {
     method,
     event_category: 'engagement',
     event_label: `signup_${method}`,
-  })
+  }
+  track('sign_up', params)
+  sendToBackend('sign_up', params)
 }
 
 /**
@@ -167,12 +219,14 @@ function trackPortfolioAccess() {
  * Triggered when a user views a card's detail page
  */
 function trackCardView(cardId: string | number, cardName?: string) {
-  track('view_item', {
+  const params = {
     event_category: 'engagement',
     event_label: 'viewed_card_listing',
     card_id: cardId,
     card_name: cardName,
-  })
+  }
+  track('view_item', params)
+  sendToBackend('card_view', params)
 }
 
 /**
@@ -192,12 +246,14 @@ function trackMultipleListingsViewed(count: number) {
  * Triggered when a user adds a card to their portfolio
  */
 function trackAddToPortfolio(cardId: string | number, cardName?: string) {
-  track('add_to_portfolio', {
+  const params = {
     event_category: 'engagement',
     event_label: 'added_to_portfolio',
     card_id: cardId,
     card_name: cardName,
-  })
+  }
+  track('add_to_portfolio', params)
+  sendToBackend('add_to_portfolio', params)
 }
 
 /**
@@ -205,10 +261,12 @@ function trackAddToPortfolio(cardId: string | number, cardName?: string) {
  * Triggered when a user performs a search
  */
 function trackSearch(searchTerm: string) {
-  track('search', {
+  const params = {
     search_term: searchTerm,
     event_category: 'engagement',
-  })
+  }
+  track('search', params)
+  sendToBackend('search', params)
 }
 
 /**
@@ -228,13 +286,15 @@ function trackFilterApplied(filterType: string, filterValue: string) {
  * Triggered when a user clicks an external link (e.g., eBay listing)
  */
 function trackExternalLinkClick(platform: string, cardId?: string | number, listingTitle?: string) {
-  track('external_link_click', {
+  const params = {
     event_category: 'conversion',
     event_label: `clicked_${platform}_listing`,
     platform,
     card_id: cardId,
     listing_title: listingTitle,
-  })
+  }
+  track('external_link_click', params)
+  sendToBackend('external_link_click', params)
 }
 
 /**
@@ -344,11 +404,13 @@ function trackDiscordLoginInitiated() {
  * Triggered when a user successfully logs in
  */
 function trackLogin(method: 'email' | 'discord' = 'email') {
-  track('login', {
+  const params = {
     method,
     event_category: 'engagement',
     event_label: `login_${method}`,
-  })
+  }
+  track('login', params)
+  sendToBackend('login', params)
 }
 
 // ============================================

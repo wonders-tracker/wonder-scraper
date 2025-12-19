@@ -168,9 +168,12 @@ def read_market_overview(
             ).all()
             {row[0]: {"price": row[1], "date": row[2]} for row in oldest_results}
 
-            # Count sales in period for each card
+            # Count sales in period for each card AND calculate total dollar volume
             sales_count_query = text("""
-                SELECT card_id, COUNT(*) as sale_count, COUNT(DISTINCT DATE(COALESCE(sold_date, scraped_at))) as unique_days
+                SELECT card_id,
+                       COUNT(*) as sale_count,
+                       COUNT(DISTINCT DATE(COALESCE(sold_date, scraped_at))) as unique_days,
+                       SUM(price) as total_value
                 FROM marketprice
                 WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
                 AND COALESCE(sold_date, scraped_at) >= :period_start
@@ -179,7 +182,7 @@ def read_market_overview(
             sales_count_results = session.execute(
                 sales_count_query, {"card_ids": card_ids, "period_start": period_start}
             ).all()
-            sales_count_map = {row[0]: {"count": row[1], "unique_days": row[2]} for row in sales_count_results}
+            sales_count_map = {row[0]: {"count": row[1], "unique_days": row[2], "total_value": float(row[3]) if row[3] else 0} for row in sales_count_results}
 
             # Calculate floor prices (avg of 4 lowest sales per card in period)
             floor_query = text("""
@@ -250,6 +253,8 @@ def read_market_overview(
 
         # Use actual sales count from MarketPrice (more accurate than snapshot volume)
         period_volume = sales_stats["count"] if sales_stats else 0
+        # Total dollar volume = sum of all sale prices in period
+        total_dollar_volume = sales_stats["total_value"] if sales_stats else 0
 
         overview_data.append(
             {
@@ -266,7 +271,7 @@ def read_market_overview(
                 "volume_change": 0,  # TODO: Calculate from previous period if needed
                 "price_delta_period": avg_delta,
                 "deal_rating": deal_delta,
-                "market_cap": (last_price or 0) * period_volume,
+                "dollar_volume": total_dollar_volume,  # Total $ traded in period
             }
         )
 
@@ -437,24 +442,25 @@ def read_market_listings(
         # Uses treatment for singles, product_subtype for sealed
         # NOTE: Floor price always uses 90-day lookback regardless of time_period filter
         # This ensures we have enough sales data for meaningful floor calculations
+        # IMPORTANT: Use LOWER() for case-insensitive matching
         floor_cutoff = datetime.utcnow() - timedelta(days=90)
         floor_by_variant_query = text("""
             SELECT card_id, variant, AVG(price) as floor_price
             FROM (
                 SELECT card_id,
-                       CASE
-                           WHEN product_subtype IS NOT NULL AND product_subtype != ''
-                           THEN product_subtype
-                           ELSE treatment
-                       END as variant,
+                       LOWER(COALESCE(
+                           NULLIF(product_subtype, ''),
+                           treatment,
+                           'unknown'
+                       )) as variant,
                        price,
                        ROW_NUMBER() OVER (
                            PARTITION BY card_id,
-                               CASE
-                                   WHEN product_subtype IS NOT NULL AND product_subtype != ''
-                                   THEN product_subtype
-                                   ELSE treatment
-                               END
+                               LOWER(COALESCE(
+                                   NULLIF(product_subtype, ''),
+                                   treatment,
+                                   'unknown'
+                               ))
                            ORDER BY price ASC
                        ) as rn
                 FROM marketprice
@@ -466,13 +472,14 @@ def read_market_listings(
             GROUP BY card_id, variant
         """)
         floor_results = session.execute(floor_by_variant_query, {"card_ids": card_ids, "cutoff": floor_cutoff}).all()
-        # Build nested map: {card_id: {variant: price}}
+        # Build nested map: {card_id: {variant_lower: price}}
         floor_by_variant_map = {}
         for row in floor_results:
             card_id, variant, price = row[0], row[1], round(float(row[2]), 2)
             if card_id not in floor_by_variant_map:
                 floor_by_variant_map[card_id] = {}
-            floor_by_variant_map[card_id][variant] = price
+            # Store with lowercase key for case-insensitive lookup
+            floor_by_variant_map[card_id][variant.lower() if variant else 'unknown'] = price
         # Also build overall floor map (cheapest variant)
         for card_id, variants in floor_by_variant_map.items():
             floor_price_map[card_id] = min(variants.values())
@@ -494,11 +501,14 @@ def read_market_listings(
     for listing, card_name, card_slug, card_product_type, card_image_url in results:
         # Get treatment-specific floor price if available
         # Determine variant key: use product_subtype for sealed, treatment for singles
-        variant_key = listing.product_subtype if listing.product_subtype else listing.treatment
+        # Use lowercase for case-insensitive matching
+        raw_variant = listing.product_subtype if listing.product_subtype else listing.treatment
+        variant_key = raw_variant.lower().strip() if raw_variant else 'unknown'
         card_variants = floor_by_variant_map.get(listing.card_id, {})
-        variant_floor = card_variants.get(variant_key) if variant_key else None
-        # Fallback to overall floor price
-        floor_price = variant_floor or floor_price_map.get(listing.card_id)
+        # Only use treatment-specific floor - don't fall back to other variants
+        # This prevents comparing a Classic Paper listing to a Stonefoil floor
+        variant_floor = card_variants.get(variant_key)
+        floor_price = variant_floor  # No fallback - must match treatment
 
         listings.append({
             "id": listing.id,

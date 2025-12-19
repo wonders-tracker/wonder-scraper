@@ -122,6 +122,8 @@ function Portfolio() {
   const [filterSource, setFilterSource] = useState<string>('')
   const [filterGraded, setFilterGraded] = useState<string>('')
   const [showFilters, setShowFilters] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [deleteConfirmCard, setDeleteConfirmCard] = useState<PortfolioCard | null>(null)
 
   // Check if user is logged in
   const isLoggedIn = auth.isAuthenticated()
@@ -132,7 +134,7 @@ function Portfolio() {
   }, [])
 
   // Fetch Portfolio Cards (new individual tracking) - only when logged in
-  const { data: portfolioData, isLoading } = useQuery({
+  const { data: portfolioData, isLoading, isError: portfolioError, error: portfolioErrorDetails } = useQuery({
     queryKey: ['portfolio-cards', filterTreatment, filterSource, filterGraded],
     queryFn: async () => {
       const params = new URLSearchParams()
@@ -145,16 +147,18 @@ function Portfolio() {
     },
     staleTime: 2 * 60 * 1000, // 2 minutes - portfolio data is user-specific
     enabled: isLoggedIn, // Only fetch when logged in
+    retry: 1,
   })
 
   // Fetch Portfolio Summary - only when logged in
-  const { data: summaryData } = useQuery({
+  const { data: summaryData, isError: summaryError } = useQuery({
     queryKey: ['portfolio-summary'],
     queryFn: async () => {
       return await api.get('portfolio/cards/summary').json<PortfolioSummary>()
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
     enabled: isLoggedIn,
+    retry: 1,
   })
 
   // Fetch Portfolio Value History - only when logged in
@@ -208,6 +212,24 @@ function Portfolio() {
           grading: card.grading || '',
           notes: card.notes || ''
       })
+      setHasUnsavedChanges(false)
+  }
+
+  // Close edit drawer with unsaved changes check
+  const handleCloseEdit = () => {
+      if (hasUnsavedChanges) {
+          if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
+              return
+          }
+      }
+      setEditingCard(null)
+      setHasUnsavedChanges(false)
+  }
+
+  // Track form changes
+  const handleFormChange = (field: string, value: any) => {
+      setEditForm(prev => ({ ...prev, [field]: value }))
+      setHasUnsavedChanges(true)
   }
 
   // Submit edit
@@ -225,7 +247,21 @@ function Portfolio() {
               grading: editForm.grading || null,
               notes: editForm.notes || null
           }
+      }, {
+          onSuccess: () => setHasUnsavedChanges(false)
       })
+  }
+
+  // Handle delete with custom modal
+  const handleDeleteClick = (card: PortfolioCard) => {
+      setDeleteConfirmCard(card)
+  }
+
+  const confirmDelete = () => {
+      if (deleteConfirmCard) {
+          deleteMutation.mutate(deleteConfirmCard.id)
+          setDeleteConfirmCard(null)
+      }
   }
 
   // Clear filters
@@ -338,9 +374,12 @@ function Portfolio() {
           cell: ({ row }) => {
               const val = row.original.profit_loss || 0
               const pct = row.original.profit_loss_percent || 0
+              // Format: +$5.00 or -$5.00 (always with dollar sign after sign)
+              const sign = val >= 0 ? '+' : '-'
+              const absVal = Math.abs(val)
               return (
                   <div className={clsx("text-right font-mono text-xs", val >= 0 ? "text-brand-300" : "text-red-500")}>
-                      {val >= 0 ? '+' : ''}{val.toFixed(2)} ({pct.toFixed(1)}%)
+                      {sign}${absVal.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)
                   </div>
               )
           }
@@ -364,9 +403,7 @@ function Portfolio() {
                       <button
                         onClick={(e) => {
                             e.stopPropagation()
-                            if (confirm('Remove this card from your portfolio?')) {
-                                deleteMutation.mutate(row.original.id)
-                            }
+                            handleDeleteClick(row.original)
                         }}
                         className="text-muted-foreground hover:text-red-500 transition-colors"
                       >
@@ -394,6 +431,25 @@ function Portfolio() {
             <div className="text-center animate-pulse">
                 <div className="text-xl uppercase tracking-widest mb-2">Loading Portfolio</div>
                 <div className="text-xs text-muted-foreground">Calculating asset values...</div>
+            </div>
+        </div>
+      )
+  }
+
+  if (portfolioError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background text-foreground font-mono">
+            <div className="text-center">
+                <div className="text-xl uppercase tracking-widest mb-2 text-red-500">Error Loading Portfolio</div>
+                <div className="text-xs text-muted-foreground mb-4">
+                    {portfolioErrorDetails instanceof Error ? portfolioErrorDetails.message : 'Failed to load portfolio data. Please try again.'}
+                </div>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded text-sm uppercase font-bold hover:bg-primary/90 transition-colors"
+                >
+                    Retry
+                </button>
             </div>
         </div>
       )
@@ -718,7 +774,7 @@ function Portfolio() {
 
             {/* Edit Drawer */}
             {editingCard && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-end" onClick={() => setEditingCard(null)}>
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-end" onClick={handleCloseEdit}>
                     <div
                         className="bg-card border-l border-border h-full w-full max-w-md p-6 overflow-y-auto shadow-2xl"
                         onClick={(e) => e.stopPropagation()}
@@ -731,12 +787,33 @@ function Portfolio() {
                                 <p className="text-xs text-muted-foreground">{editingCard.card_set}</p>
                             </div>
                             <button
-                                onClick={() => setEditingCard(null)}
+                                onClick={handleCloseEdit}
                                 className="text-muted-foreground hover:text-foreground transition-colors"
                             >
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
+
+                        {/* Quantity Info - Show how many of this card they own */}
+                        {(() => {
+                            const sameCardCount = portfolio?.filter(c => c.card_id === editingCard.card_id).length || 0
+                            if (sameCardCount > 1) {
+                                return (
+                                    <div className="mb-6 p-3 bg-muted/30 rounded border border-border/50 flex items-center justify-between">
+                                        <span className="text-sm text-muted-foreground">
+                                            You own <span className="font-bold text-foreground">{sameCardCount}</span> of this card
+                                        </span>
+                                        <Link
+                                            to={`/cards/${editingCard.card_slug || editingCard.card_id}` as any}
+                                            className="text-xs text-primary hover:underline uppercase font-bold"
+                                        >
+                                            Add More
+                                        </Link>
+                                    </div>
+                                )
+                            }
+                            return null
+                        })()}
 
                         {/* Edit Form */}
                         <form onSubmit={handleEditSubmit} className="space-y-6">
@@ -746,7 +823,7 @@ function Portfolio() {
                                 </label>
                                 <SimpleDropdown
                                     value={editForm.treatment}
-                                    onChange={(value) => setEditForm({ ...editForm, treatment: value })}
+                                    onChange={(value) => handleFormChange('treatment', value)}
                                     options={TREATMENTS.map(t => ({ value: t, label: t }))}
                                     className="w-full"
                                     triggerClassName="font-mono"
@@ -759,7 +836,7 @@ function Portfolio() {
                                 </label>
                                 <SimpleDropdown
                                     value={editForm.source}
-                                    onChange={(value) => setEditForm({ ...editForm, source: value })}
+                                    onChange={(value) => handleFormChange('source', value)}
                                     options={SOURCES.map(s => ({ value: s, label: s }))}
                                     className="w-full"
                                     triggerClassName="font-mono"
@@ -777,7 +854,7 @@ function Portfolio() {
                                         step="0.01"
                                         min="0"
                                         value={editForm.purchase_price}
-                                        onChange={(e) => setEditForm({ ...editForm, purchase_price: parseFloat(e.target.value) || 0 })}
+                                        onChange={(e) => handleFormChange('purchase_price', parseFloat(e.target.value) || 0)}
                                         className="w-full pl-8 pr-4 py-2 bg-background border border-border rounded font-mono focus:outline-none focus:ring-2 focus:ring-primary"
                                     />
                                 </div>
@@ -790,7 +867,7 @@ function Portfolio() {
                                 <input
                                     type="date"
                                     value={editForm.purchase_date}
-                                    onChange={(e) => setEditForm({ ...editForm, purchase_date: e.target.value })}
+                                    onChange={(e) => handleFormChange('purchase_date', e.target.value)}
                                     className="w-full px-4 py-2 bg-background border border-border rounded font-mono focus:outline-none focus:ring-2 focus:ring-primary"
                                 />
                             </div>
@@ -803,7 +880,7 @@ function Portfolio() {
                                     type="text"
                                     placeholder="Leave blank for raw cards"
                                     value={editForm.grading}
-                                    onChange={(e) => setEditForm({ ...editForm, grading: e.target.value })}
+                                    onChange={(e) => handleFormChange('grading', e.target.value)}
                                     className="w-full px-4 py-2 bg-background border border-border rounded font-mono focus:outline-none focus:ring-2 focus:ring-primary"
                                 />
                             </div>
@@ -816,7 +893,7 @@ function Portfolio() {
                                     rows={3}
                                     placeholder="Any notes about this card..."
                                     value={editForm.notes}
-                                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                                    onChange={(e) => handleFormChange('notes', e.target.value)}
                                     className="w-full px-4 py-2 bg-background border border-border rounded font-mono focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                                 />
                             </div>
@@ -833,12 +910,16 @@ function Portfolio() {
                                 </div>
                                 <div className="flex justify-between text-sm">
                                     <span className="text-muted-foreground">Profit/Loss:</span>
-                                    <span className={clsx(
-                                        "font-mono font-bold",
-                                        (editingCard.profit_loss || 0) >= 0 ? "text-brand-300" : "text-red-500"
-                                    )}>
-                                        {(editingCard.profit_loss || 0) >= 0 ? '+' : ''}${(editingCard.profit_loss || 0).toFixed(2)}
-                                    </span>
+                                    {(() => {
+                                        const val = editingCard.profit_loss || 0
+                                        const sign = val >= 0 ? '+' : '-'
+                                        const absVal = Math.abs(val)
+                                        return (
+                                            <span className={clsx("font-mono font-bold", val >= 0 ? "text-brand-300" : "text-red-500")}>
+                                                {sign}${absVal.toFixed(2)}
+                                            </span>
+                                        )
+                                    })()}
                                 </div>
                             </div>
 
@@ -846,7 +927,7 @@ function Portfolio() {
                             <div className="flex gap-3 pt-4">
                                 <button
                                     type="button"
-                                    onClick={() => setEditingCard(null)}
+                                    onClick={handleCloseEdit}
                                     className="flex-1 px-4 py-2 border border-border rounded text-sm uppercase font-bold hover:bg-muted/50 transition-colors"
                                 >
                                     Cancel
@@ -860,6 +941,39 @@ function Portfolio() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmCard && (
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center" onClick={() => setDeleteConfirmCard(null)}>
+                    <div
+                        className="bg-card border border-border rounded-lg p-6 max-w-md mx-4 shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3 className="text-lg font-bold uppercase tracking-tight mb-2">Remove Card</h3>
+                        <p className="text-muted-foreground mb-4">
+                            Are you sure you want to remove <span className="font-bold text-foreground">{deleteConfirmCard.card_name}</span> from your portfolio?
+                        </p>
+                        <p className="text-xs text-muted-foreground mb-6">
+                            This will remove the card from your portfolio tracking. This action cannot be undone.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeleteConfirmCard(null)}
+                                className="flex-1 px-4 py-2 border border-border rounded text-sm uppercase font-bold hover:bg-muted/50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                disabled={deleteMutation.isPending}
+                                className="flex-1 px-4 py-2 bg-red-600 text-white rounded text-sm uppercase font-bold hover:bg-red-700 transition-colors disabled:opacity-50"
+                            >
+                                {deleteMutation.isPending ? 'Removing...' : 'Remove'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

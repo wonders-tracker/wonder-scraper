@@ -204,7 +204,7 @@ async def get_admin_stats(
     from app.models.card import Card
     from app.models.market import MarketPrice, MarketSnapshot
     from app.models.portfolio import PortfolioCard
-    from app.models.analytics import PageView
+    from app.models.analytics import PageView, AnalyticsEvent
     from datetime import timedelta
 
     with Session(engine) as session:
@@ -408,6 +408,94 @@ async def get_admin_stats(
             ).all()
             top_referrers = [{"referrer": row[0], "count": row[1]} for row in top_referrers_result]
 
+            # Popular cards (from pageviews to /cards/{id} routes)
+            popular_cards_result = session.execute(
+                text("""
+                SELECT
+                    pv.path,
+                    c.id as card_id,
+                    c.name as card_name,
+                    c.image_url,
+                    COUNT(*) as views
+                FROM pageview pv
+                LEFT JOIN card c ON c.id = CAST(
+                    CASE
+                        WHEN pv.path ~ '^/cards/[0-9]+$'
+                        THEN regexp_replace(pv.path, '^/cards/', '')
+                        ELSE NULL
+                    END AS INTEGER
+                )
+                WHERE pv.timestamp >= NOW() - INTERVAL '7 days'
+                  AND pv.path ~ '^/cards/[0-9]+$'
+                GROUP BY pv.path, c.id, c.name, c.image_url
+                ORDER BY views DESC
+                LIMIT 10
+            """)
+            ).all()
+            popular_cards = [
+                {
+                    "path": row[0],
+                    "card_id": row[1],
+                    "card_name": row[2],
+                    "image_url": row[3],
+                    "views": row[4],
+                }
+                for row in popular_cards_result
+            ]
+
+            # Events summary
+            total_events = session.exec(select(func.count(AnalyticsEvent.id))).one()
+            events_24h = session.exec(
+                select(func.count(AnalyticsEvent.id)).where(
+                    AnalyticsEvent.timestamp >= datetime.utcnow() - timedelta(hours=24)
+                )
+            ).one()
+            events_7d = session.exec(
+                select(func.count(AnalyticsEvent.id)).where(
+                    AnalyticsEvent.timestamp >= datetime.utcnow() - timedelta(days=7)
+                )
+            ).one()
+
+            # Top events by name
+            top_events_result = session.execute(
+                text("""
+                SELECT event_name, COUNT(*) as count
+                FROM analytics_event
+                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                GROUP BY event_name
+                ORDER BY count DESC
+                LIMIT 10
+            """)
+            ).all()
+            top_events = [{"event_name": row[0], "count": row[1]} for row in top_events_result]
+
+            # Daily events (last 7 days)
+            daily_events_result = session.execute(
+                text("""
+                SELECT DATE(timestamp) as date, COUNT(*) as count
+                FROM analytics_event
+                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                GROUP BY DATE(timestamp)
+                ORDER BY date DESC
+            """)
+            ).all()
+            daily_events = [{"date": str(row[0]), "count": row[1]} for row in daily_events_result]
+
+            # Top external link clicks by platform
+            external_clicks_result = session.execute(
+                text("""
+                SELECT platform, COUNT(*) as count
+                FROM analytics_event
+                WHERE event_name = 'external_link_click'
+                  AND timestamp >= NOW() - INTERVAL '7 days'
+                  AND platform IS NOT NULL
+                GROUP BY platform
+                ORDER BY count DESC
+                LIMIT 5
+            """)
+            ).all()
+            external_clicks = [{"platform": row[0], "count": row[1]} for row in external_clicks_result]
+
             analytics_data = {
                 "total_pageviews": total_pageviews,
                 "pageviews_24h": pageviews_24h,
@@ -418,6 +506,13 @@ async def get_admin_stats(
                 "device_breakdown": device_breakdown,
                 "daily_pageviews": daily_pageviews,
                 "top_referrers": top_referrers,
+                "popular_cards": popular_cards,
+                "total_events": total_events,
+                "events_24h": events_24h,
+                "events_7d": events_7d,
+                "top_events": top_events,
+                "daily_events": daily_events,
+                "external_clicks": external_clicks,
             }
         except Exception as e:
             # Table might not exist yet
@@ -431,6 +526,13 @@ async def get_admin_stats(
                 "device_breakdown": [],
                 "daily_pageviews": [],
                 "top_referrers": [],
+                "popular_cards": [],
+                "total_events": 0,
+                "events_24h": 0,
+                "events_7d": 0,
+                "top_events": [],
+                "daily_events": [],
+                "external_clicks": [],
                 "error": str(e),
             }
 
@@ -504,7 +606,7 @@ async def get_user_activity(
     from sqlmodel import Session, select, text
     from app.db import engine
     from app.models.user import User as UserModel
-    from app.models.analytics import PageView
+    from app.models.analytics import PageView, AnalyticsEvent
 
     with Session(engine) as session:
         # Verify user exists

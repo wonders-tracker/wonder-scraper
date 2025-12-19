@@ -202,15 +202,24 @@ class PortfolioCardBase(BaseModel):
 
 
 class PortfolioCardCreate(PortfolioCardBase):
-    """Create a single card in portfolio."""
+    """Create a single card in portfolio.
 
-    pass
+    Use quantity > 1 to create multiple identical cards at once.
+    """
+
+    quantity: int = 1  # Number of cards to create (defaults to 1)
+
+
+class PortfolioCardBatchItem(PortfolioCardBase):
+    """Single item in a batch create, with optional quantity."""
+
+    quantity: int = 1  # Number of cards to create (defaults to 1)
 
 
 class PortfolioCardBatchCreate(BaseModel):
     """Create multiple cards at once (split entry)."""
 
-    cards: List[PortfolioCardBase]
+    cards: List[PortfolioCardBatchItem]
 
 
 class PortfolioCardUpdate(BaseModel):
