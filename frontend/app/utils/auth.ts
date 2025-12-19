@@ -65,7 +65,7 @@ export const auth = {
     }
   },
 
-  logout: async () => {
+  logout: async (queryClient?: { clear: () => void }) => {
     try {
       // Call logout endpoint to clear cookie
       await api.post('auth/logout')
@@ -74,6 +74,10 @@ export const auth = {
     }
     // Clear localStorage
     localStorage.removeItem('token')
+    // Clear ALL cached queries to prevent data leakage between users
+    if (queryClient) {
+      queryClient.clear()
+    }
     // Notify app of auth state change
     notifyAuthChange()
     window.location.href = '/login'

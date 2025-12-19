@@ -177,11 +177,18 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
 
   // Listen for auth changes (login/logout from same tab or other tabs)
   useEffect(() => {
-    const handleAuthChange = () => {
+    const handleAuthChange = async () => {
       const newHasToken = !!localStorage.getItem('token')
       setHasToken(newHasToken)
-      // Invalidate user query to force refetch on auth state change
-      queryClient.invalidateQueries({ queryKey: ['me'] })
+      // Invalidate and refetch user query to ensure consistency
+      await queryClient.invalidateQueries({ queryKey: ['me'] })
+      if (newHasToken) {
+        // Force refetch to ensure we have fresh data
+        queryClient.refetchQueries({ queryKey: ['me'] })
+      } else {
+        // Logged out - clear user data immediately to prevent stale state
+        queryClient.setQueryData(['me'], null)
+      }
     }
     // Custom event for same-tab auth changes
     window.addEventListener('auth-change', handleAuthChange)
