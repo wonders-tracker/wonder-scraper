@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days (matches cookie expiry)
 
     # Discord OAuth
     DISCORD_CLIENT_ID: str = ""  # Required in production, optional for tests
@@ -19,6 +19,9 @@ class Settings(BaseSettings):
 
     # Frontend URL for redirects
     FRONTEND_URL: str = "http://localhost:3000"
+
+    # Cookie security (False for local dev without HTTPS)
+    COOKIE_SECURE: bool = True
 
     # Resend Email
     RESEND_API_KEY: str = ""
