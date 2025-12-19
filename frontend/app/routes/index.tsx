@@ -200,10 +200,9 @@ function Home() {
       }))
       .filter(c => (c.latest_price && c.latest_price > 0) || ((c.volume ?? c.volume_30d ?? 0) > 0) || (c.lowest_ask && c.lowest_ask > 0)) // Filter out items with no data
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh
-    gcTime: 30 * 60 * 1000, // 30 minutes - cache persists (renamed from cacheTime in v5)
+    staleTime: 2 * 60 * 1000, // 2 minutes - fresher feel while respecting 15min scrape interval
+    gcTime: 30 * 60 * 1000, // 30 minutes - cache persists
     refetchOnWindowFocus: false, // Don't refetch on tab focus
-    refetchOnMount: false, // Don't refetch on component mount if data exists
   })
 
   // Listings query for the Listings tab (server-side pagination)
