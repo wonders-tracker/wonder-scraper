@@ -43,6 +43,7 @@ class MarketPrice(SQLModel, table=True):
     listing_type: str = Field(default="sold")  # 'sold' or 'active'
     treatment: str = Field(default="Classic Paper")  # Classic Paper, Foil, Serialized, etc.
     bid_count: int = Field(default=0)  # Number of bids (for auctions)
+    listing_format: Optional[str] = Field(default=None)  # 'auction', 'buy_it_now', 'best_offer', None if unknown
     external_id: Optional[str] = Field(default=None, index=True)  # Unique ID from source (e.g., eBay item ID)
     url: Optional[str] = Field(default=None)  # Link to the listing
     image_url: Optional[str] = Field(default=None)  # Link to listing image

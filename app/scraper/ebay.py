@@ -1040,8 +1040,9 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
 def _extract_bid_count(item) -> int:
     """
     Extracts the bid count from an item element.
+    Supports both old .s-item format and new .s-card format.
     """
-    # Try standard bid count selector
+    # Try standard bid count selectors (old format)
     bid_elem = item.select_one(".s-item__bidCount, .s-item__bids, .s-item__details .s-item__bidCount")
     if bid_elem:
         text = bid_elem.get_text(strip=True)
@@ -1049,7 +1050,94 @@ def _extract_bid_count(item) -> int:
         if match:
             return int(match.group(1))
 
+    # New s-card format: bid count appears as "X bids" in span elements
+    # Search all text for bid pattern
+    item_text = item.get_text(strip=True)
+    match = re.search(r"(\d+)\s*bids?", item_text, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+
     return 0
+
+
+def _extract_listing_format(item, bid_count: int = 0) -> Optional[str]:
+    """
+    Extracts the listing format from an eBay item element.
+
+    Returns:
+        'auction' - Auction listing (has bids or shows auction indicators)
+        'buy_it_now' - Fixed price Buy It Now listing
+        'best_offer' - Buy It Now with Best Offer option
+        None - Unknown format
+
+    Detection logic:
+    1. If bid_count > 0, it's definitely an auction
+    2. Look for "Buy It Now" text/buttons
+    3. Look for "or Best Offer" text
+    4. Look for auction indicators (time left, place bid)
+    """
+    # Get all text content for searching
+    item_text = item.get_text(strip=True).lower()
+
+    # If there are bids, it's definitely an auction
+    if bid_count > 0:
+        return "auction"
+
+    # Check for Buy It Now indicators
+    buy_it_now_indicators = [
+        ".s-item__buyItNowOption",
+        ".s-item__dynamic.s-item__buyItNowOption",
+        "[class*='buyItNow']",
+        "[class*='buy-it-now']",
+    ]
+    for selector in buy_it_now_indicators:
+        if item.select_one(selector):
+            # Check if also has Best Offer
+            if "best offer" in item_text or "or best offer" in item_text:
+                return "best_offer"
+            return "buy_it_now"
+
+    # Check text content for Buy It Now
+    if "buy it now" in item_text:
+        if "or best offer" in item_text:
+            return "best_offer"
+        return "buy_it_now"
+
+    # Check for auction indicators (both old .s-item and new .s-card formats)
+    auction_indicators = [
+        ".s-item__time-left",  # Old format: Time countdown
+        ".s-item__time-end",
+        ".s-item__bidCount",
+        ".s-card__time-left",  # New format: Time left
+        ".s-card__time",       # New format: Time container
+        "[class*='timeLeft']",
+        "[class*='time-left']",
+    ]
+    for selector in auction_indicators:
+        if item.select_one(selector):
+            return "auction"
+
+    # Check text for auction indicators
+    auction_text_patterns = [
+        r"\d+\s*bids?",
+        r"place bid",
+        r"time left",
+        r"\d+[hmd]\s*\d*[hmd]?\s*left",  # e.g., "2h 30m left", "1d left"
+    ]
+    for pattern in auction_text_patterns:
+        if re.search(pattern, item_text, re.IGNORECASE):
+            return "auction"
+
+    # If we found price info but no format indicators, assume Buy It Now
+    # (Most eBay listings without explicit auction indicators are BIN)
+    price_elem = item.select_one(".s-item__price, .s-card__price")
+    if price_elem:
+        price_text = price_elem.get_text(strip=True).lower()
+        # If price doesn't contain "bid" language, likely BIN
+        if "bid" not in price_text:
+            return "buy_it_now"
+
+    return None
 
 
 def _extract_seller_info(item) -> Tuple[Optional[str], Optional[int], Optional[float]]:
@@ -1312,6 +1400,9 @@ def _parse_generic_results(
         # Extract additional metadata
         bid_count = _extract_bid_count(item)
 
+        # Extract listing format (auction, buy_it_now, best_offer)
+        listing_format = _extract_listing_format(item, bid_count)
+
         # Extract seller info
         seller_name, seller_feedback_score, seller_feedback_percent = _extract_seller_info(item)
 
@@ -1336,6 +1427,7 @@ def _parse_generic_results(
                 "sold_date": sold_date,
                 "url": url,
                 "bid_count": bid_count,
+                "listing_format": listing_format,
                 "image_url": image_url,
                 "seller_name": seller_name,
                 "seller_feedback_score": seller_feedback_score,
@@ -1427,6 +1519,7 @@ def _parse_generic_results(
             product_subtype=product_subtype,
             sold_date=metadata["sold_date"],
             listing_type=listing_type,
+            listing_format=metadata.get("listing_format"),  # auction, buy_it_now, best_offer
             treatment=treatment,
             bid_count=metadata["bid_count"],
             external_id=metadata["external_id"],

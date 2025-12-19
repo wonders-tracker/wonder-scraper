@@ -524,6 +524,7 @@ def read_market_listings(
             "platform": listing.platform,
             "treatment": listing.treatment,
             "listing_type": listing.listing_type,
+            "listing_format": listing.listing_format,  # auction, buy_it_now, best_offer
             "condition": listing.condition,
             "bid_count": listing.bid_count,
             "seller_name": listing.seller_name,
