@@ -11,6 +11,8 @@ from typing import Optional
 from sqlmodel import Field, SQLModel
 from datetime import datetime
 
+from app.core.typing import utc_now
+
 
 class Watchlist(SQLModel, table=True):
     """User's watchlist entry for a card."""
@@ -35,8 +37,8 @@ class Watchlist(SQLModel, table=True):
 
     # Metadata
     notes: Optional[str] = Field(default=None)  # User's notes
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     class Config:
         # Unique constraint: one entry per user+card
@@ -63,5 +65,5 @@ class EmailPreferences(SQLModel, table=True):
     digest_day: int = Field(default=0)  # Day of week for weekly (0=Monday)
 
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)

@@ -206,10 +206,10 @@ class TestScrapeSingleCard:
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
 
-            # Mock snapshot
+            # Mock snapshot - use execute().scalars() chain
             mock_snapshot = Mock(spec=MarketSnapshot)
             mock_snapshot.card_id = card.id
-            mock_session.exec.return_value.first.return_value = mock_snapshot
+            mock_session.execute.return_value.scalars.return_value.first.return_value = mock_snapshot
 
             result = await scrape_single_card(card)
 
@@ -244,10 +244,10 @@ class TestScrapeSingleCard:
 
             mock_active.return_value = (1.50, 10, 1.00)
 
-            # Mock session with no snapshot
+            # Mock session with no snapshot - use execute().scalars() chain
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.first.return_value = None
+            mock_session.execute.return_value.scalars.return_value.first.return_value = None
 
             result = await scrape_single_card(card)
 
@@ -268,7 +268,7 @@ class TestScrapeSingleCard:
             mock_active.return_value = (1.50, 10, 1.00)
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.first.return_value = None
+            mock_session.execute.return_value.scalars.return_value.first.return_value = None
 
             await scrape_single_card(card)
 
@@ -301,7 +301,7 @@ class TestJobUpdateMarketData:
             # Mock session to return cards needing update
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.all.return_value = [mock_card]
+            mock_session.execute.return_value.all.return_value = [mock_card]
 
             mock_scrape.return_value = True
             mock_gather.return_value = [True]
@@ -330,8 +330,13 @@ class TestJobUpdateMarketData:
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
 
-            # First exec() returns no stale cards, second returns all cards
-            mock_session.exec.return_value.all.side_effect = [[], all_cards]
+            # First execute() returns no stale cards, second returns all cards via .scalars()
+            mock_execute = MagicMock()
+            mock_execute.all.return_value = []  # First call (no stale cards)
+            mock_scalars = MagicMock()
+            mock_scalars.all.return_value = all_cards  # Second call (.scalars().all())
+            mock_execute.scalars.return_value = mock_scalars
+            mock_session.execute.return_value = mock_execute
             mock_sample.return_value = [mock_card1]
             mock_scrape.return_value = True
 
@@ -362,7 +367,7 @@ class TestJobUpdateMarketData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.all.return_value = [Mock(spec=Card, id=1, name="Test")]
+            mock_session.execute.return_value.all.return_value = [Mock(spec=Card, id=1, name="Test")]
 
             await job_update_market_data()
 
@@ -387,7 +392,7 @@ class TestJobUpdateMarketData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.all.return_value = [Mock(spec=Card, id=1, name="Test")]
+            mock_session.execute.return_value.all.return_value = [Mock(spec=Card, id=1, name="Test")]
 
             await job_update_market_data()
 
@@ -414,7 +419,7 @@ class TestJobUpdateMarketData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.all.return_value = mock_cards
+            mock_session.execute.return_value.all.return_value = mock_cards
 
             # Mock gather to return successful results
             mock_gather.return_value = [True, True, True]
@@ -443,7 +448,7 @@ class TestJobUpdateMarketData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.all.return_value = mock_cards
+            mock_session.execute.return_value.all.return_value = mock_cards
 
             # Mix of successes, failures, and exceptions
             mock_gather.return_value = [
@@ -468,8 +473,13 @@ class TestJobUpdateMarketData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            # Both queries return empty
-            mock_session.exec.return_value.all.return_value = []
+            # Both queries return empty - mock execute().all() and execute().scalars().all()
+            mock_execute = MagicMock()
+            mock_execute.all.return_value = []  # First call
+            mock_scalars = MagicMock()
+            mock_scalars.all.return_value = []  # Second call (.scalars().all())
+            mock_execute.scalars.return_value = mock_scalars
+            mock_session.execute.return_value = mock_execute
 
             await job_update_market_data()
 
@@ -492,7 +502,7 @@ class TestJobUpdateMarketData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.all.return_value = [mock_card]
+            mock_session.execute.return_value.all.return_value = [mock_card]
             mock_scrape.return_value = True
 
             await job_update_market_data()
@@ -520,7 +530,7 @@ class TestJobUpdateMarketData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.all.return_value = [mock_card]
+            mock_session.execute.return_value.all.return_value = [mock_card]
 
             # Simulate exception during batch processing
             mock_gather.side_effect = Exception("Unexpected error")
@@ -558,7 +568,7 @@ class TestJobUpdateBlokpaxData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.first.return_value = None
+            mock_session.execute.return_value.scalars.return_value.first.return_value = None
 
             await job_update_blokpax_data()
 
@@ -594,7 +604,7 @@ class TestJobUpdateBlokpaxData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.first.return_value = None
+            mock_session.execute.return_value.scalars.return_value.first.return_value = None
 
             await job_update_blokpax_data()
 
@@ -630,7 +640,7 @@ class TestJobUpdateBlokpaxData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.first.return_value = mock_storefront
+            mock_session.execute.return_value.scalars.return_value.first.return_value = mock_storefront
 
             await job_update_blokpax_data()
 
@@ -672,7 +682,7 @@ class TestJobUpdateBlokpaxData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.first.return_value = None
+            mock_session.execute.return_value.scalars.return_value.first.return_value = None
 
             await job_update_blokpax_data()
 
@@ -704,7 +714,7 @@ class TestJobUpdateBlokpaxData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.first.return_value = None
+            mock_session.execute.return_value.scalars.return_value.first.return_value = None
 
             await job_update_blokpax_data()
 
@@ -739,7 +749,7 @@ class TestJobUpdateBlokpaxData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.first.return_value = None
+            mock_session.execute.return_value.scalars.return_value.first.return_value = None
 
             await job_update_blokpax_data()
 
@@ -771,7 +781,7 @@ class TestJobUpdateBlokpaxData:
 
             mock_session = MagicMock()
             mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.exec.return_value.first.return_value = None
+            mock_session.execute.return_value.scalars.return_value.first.return_value = None
 
             await job_update_blokpax_data()
 

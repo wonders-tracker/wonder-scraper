@@ -75,7 +75,7 @@ def get_current_user(
     except PyJWTError:
         raise credentials_exception
 
-    user = session.query(User).filter(User.email == token_data.email).first()
+    user = session.exec(select(User).where(User.email == token_data.email)).first()
     if user is None:
         raise credentials_exception
     return user
@@ -98,7 +98,7 @@ def get_current_user_optional(
         email: str = payload.get("sub")
         if email is None:
             return None
-        user = session.query(User).filter(User.email == email).first()
+        user = session.exec(select(User).where(User.email == email)).first()
         return user
     except PyJWTError:
         return None
@@ -243,7 +243,7 @@ def get_data_access(
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             email: str = payload.get("sub")
             if email:
-                user = session.query(User).filter(User.email == email).first()
+                user = session.exec(select(User).where(User.email == email)).first()
                 if user and user.is_active:
                     return user
         except PyJWTError:
@@ -279,7 +279,7 @@ def get_data_access_optional(
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             email: str = payload.get("sub")
             if email:
-                user = session.query(User).filter(User.email == email).first()
+                user = session.exec(select(User).where(User.email == email)).first()
                 if user and user.is_active:
                     return user
         except PyJWTError:

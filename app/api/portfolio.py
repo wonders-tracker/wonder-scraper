@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, func, desc
 
 from app.api import deps
+from app.core.typing import col, ensure_int
 from app.db import get_session
 from app.models.portfolio import PortfolioItem, PortfolioCard
 from app.models.card import Card, Rarity
@@ -86,7 +87,7 @@ def create_portfolio_item(
 
     # Return with card details (basic)
     return PortfolioItemOut(
-        id=item.id,
+        id=ensure_int(item.id),
         user_id=item.user_id,
         card_id=item.card_id,
         quantity=item.quantity,
@@ -122,7 +123,7 @@ def read_portfolio(
         gain_loss_percent = (gain_loss / cost_basis * 100) if cost_basis > 0 else 0.0
 
         out = PortfolioItemOut(
-            id=item.id,
+            id=ensure_int(item.id),
             user_id=item.user_id,
             card_id=item.card_id,
             quantity=item.quantity,
@@ -180,7 +181,7 @@ def update_portfolio_item(
     gain_loss_percent = (gain_loss / cost_basis * 100) if cost_basis > 0 else 0.0
 
     return PortfolioItemOut(
-        id=item.id,
+        id=ensure_int(item.id),
         user_id=item.user_id,
         card_id=item.card_id,
         quantity=item.quantity,
@@ -218,7 +219,7 @@ def delete_portfolio_item(
     # but we have what we need in the object before deletion or just basic fields.
     # Simpler to return basic info.
     return PortfolioItemOut(
-        id=item.id,
+        id=ensure_int(item.id),
         user_id=item.user_id,
         card_id=item.card_id,
         quantity=item.quantity,
@@ -257,11 +258,11 @@ def batch_get_treatment_market_prices(
 
     results = session.exec(
         select(MarketPrice.card_id, MarketPrice.treatment, func.avg(MarketPrice.price).label("avg_price"))
-        .where(MarketPrice.card_id.in_(card_ids))
-        .where(MarketPrice.treatment.in_(treatments))
+        .where(col(MarketPrice.card_id).in_(card_ids))
+        .where(col(MarketPrice.treatment).in_(treatments))
         .where(MarketPrice.listing_type == "sold")
         .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= cutoff)
-        .group_by(MarketPrice.card_id, MarketPrice.treatment)
+        .group_by(col(MarketPrice.card_id), col(MarketPrice.treatment))
     ).all()
 
     # Build lookup dict
@@ -283,10 +284,10 @@ def batch_get_treatment_market_prices(
         # Get all sold prices for missing combinations, ordered by date
         last_sales = session.exec(
             select(MarketPrice.card_id, MarketPrice.treatment, MarketPrice.price, MarketPrice.sold_date)
-            .where(MarketPrice.card_id.in_(missing_card_ids))
-            .where(MarketPrice.treatment.in_(missing_treatments))
+            .where(col(MarketPrice.card_id).in_(missing_card_ids))
+            .where(col(MarketPrice.treatment).in_(missing_treatments))
             .where(MarketPrice.listing_type == "sold")
-            .order_by(MarketPrice.card_id, MarketPrice.treatment, desc(MarketPrice.sold_date))
+            .order_by(col(MarketPrice.card_id), col(MarketPrice.treatment), col(MarketPrice.sold_date).desc())
         ).all()
 
         # Take first (most recent) for each card+treatment pair
@@ -306,9 +307,9 @@ def batch_get_treatment_market_prices(
         # Get latest sold price per card (any treatment) - SQLite compatible
         fallback_results = session.exec(
             select(MarketPrice.card_id, MarketPrice.price, MarketPrice.sold_date)
-            .where(MarketPrice.card_id.in_(still_missing_card_ids))
+            .where(col(MarketPrice.card_id).in_(still_missing_card_ids))
             .where(MarketPrice.listing_type == "sold")
-            .order_by(MarketPrice.card_id, desc(MarketPrice.sold_date))
+            .order_by(col(MarketPrice.card_id), col(MarketPrice.sold_date).desc())
         ).all()
 
         # Take first (most recent) for each card
@@ -340,7 +341,7 @@ def get_treatment_market_price(session: Session, card_id: int, treatment: str) -
         .where(MarketPrice.card_id == card_id)
         .where(MarketPrice.treatment == treatment)
         .where(MarketPrice.listing_type == "sold")
-        .where(MarketPrice.sold_date >= cutoff)
+        .where(col(MarketPrice.sold_date) >= cutoff)
     ).first()
 
     if treatment_avg and treatment_avg > 0:
@@ -364,7 +365,7 @@ def get_treatment_market_price(session: Session, card_id: int, treatment: str) -
 
 
 def build_portfolio_card_out(
-    session: Session, card: PortfolioCard, db_card: Card, rarity: Optional[Rarity],
+    session: Session, card: PortfolioCard, db_card: Optional[Card], rarity: Optional[Rarity],
     preloaded_market_price: Optional[float] = None
 ) -> PortfolioCardOut:
     """Build PortfolioCardOut with market data.
@@ -391,7 +392,7 @@ def build_portfolio_card_out(
             profit_loss_pct = 0.0
 
     return PortfolioCardOut(
-        id=card.id,
+        id=ensure_int(card.id),
         user_id=card.user_id,
         card_id=card.card_id,
         treatment=card.treatment,
@@ -445,8 +446,7 @@ def create_portfolio_card(
     # Validate purchase date is not in the future
     if card_in.purchase_date:
         today = datetime.now(timezone.utc).date()
-        purchase_date = card_in.purchase_date.date() if hasattr(card_in.purchase_date, 'date') else card_in.purchase_date
-        if purchase_date > today:
+        if card_in.purchase_date > today:
             raise HTTPException(status_code=400, detail="Purchase date cannot be in the future")
 
     # Create the specified quantity of cards
@@ -458,7 +458,7 @@ def create_portfolio_card(
             treatment=card_in.treatment,
             source=card_in.source,
             purchase_price=card_in.purchase_price,
-            purchase_date=card_in.purchase_date.date() if card_in.purchase_date else None,
+            purchase_date=card_in.purchase_date,
             grading=card_in.grading,
             notes=card_in.notes,
         )
@@ -499,7 +499,7 @@ def create_portfolio_cards_batch(
 
     # Validate all cards first
     card_ids = set(c.card_id for c in batch_in.cards)
-    db_cards = {c.id: c for c in session.exec(select(Card).where(Card.id.in_(card_ids))).all()}
+    db_cards = {c.id: c for c in session.exec(select(Card).where(col(Card.id).in_(card_ids))).all()}
 
     today = datetime.now(timezone.utc).date()
     for i, card_in in enumerate(batch_in.cards):
@@ -512,8 +512,7 @@ def create_portfolio_cards_batch(
             raise HTTPException(status_code=400, detail=f"Card at index {i}: Quantity must be at least 1")
         # Validate purchase date is not in the future
         if card_in.purchase_date:
-            purchase_date = card_in.purchase_date.date() if hasattr(card_in.purchase_date, 'date') else card_in.purchase_date
-            if purchase_date > today:
+            if card_in.purchase_date > today:
                 raise HTTPException(status_code=400, detail=f"Card at index {i}: Purchase date cannot be in the future")
 
     # Create all cards (respecting quantity)
@@ -527,7 +526,7 @@ def create_portfolio_cards_batch(
                 treatment=card_in.treatment,
                 source=card_in.source,
                 purchase_price=card_in.purchase_price,
-                purchase_date=card_in.purchase_date.date() if card_in.purchase_date else None,
+                purchase_date=card_in.purchase_date,
                 grading=card_in.grading,
                 notes=card_in.notes,
             )
@@ -560,7 +559,7 @@ def read_portfolio_cards(
     Get all portfolio cards for the current user with optional filters.
     """
     query = (
-        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(PortfolioCard.deleted_at.is_(None))
+        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(col(PortfolioCard.deleted_at).is_(None))
     )
 
     if treatment:
@@ -569,9 +568,9 @@ def read_portfolio_cards(
         query = query.where(PortfolioCard.source == source)
     if graded is not None:
         if graded:
-            query = query.where(PortfolioCard.grading.isnot(None))
+            query = query.where(col(PortfolioCard.grading).isnot(None))
         else:
-            query = query.where(PortfolioCard.grading.is_(None))
+            query = query.where(col(PortfolioCard.grading).is_(None))
     if card_id:
         query = query.where(PortfolioCard.card_id == card_id)
 
@@ -583,12 +582,12 @@ def read_portfolio_cards(
 
     # Batch fetch card details
     card_ids = set(c.card_id for c in cards)
-    db_cards = {c.id: c for c in session.exec(select(Card).where(Card.id.in_(card_ids))).all()} if card_ids else {}
+    db_cards = {c.id: c for c in session.exec(select(Card).where(col(Card.id).in_(card_ids))).all()} if card_ids else {}
 
     # Batch fetch rarities
     rarity_ids = set(c.rarity_id for c in db_cards.values() if c.rarity_id)
     rarities = (
-        {r.id: r for r in session.exec(select(Rarity).where(Rarity.id.in_(rarity_ids))).all()} if rarity_ids else {}
+        {r.id: r for r in session.exec(select(Rarity).where(col(Rarity.id).in_(rarity_ids))).all()} if rarity_ids else {}
     )
 
     # Batch fetch market prices (fixes N+1 query problem)
@@ -615,7 +614,7 @@ def read_portfolio_summary(
     Uses batch price fetching to avoid N+1 queries.
     """
     cards = session.exec(
-        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(PortfolioCard.deleted_at.is_(None))
+        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(col(PortfolioCard.deleted_at).is_(None))
     ).all()
 
     total_cards = len(cards)
@@ -728,10 +727,9 @@ def update_portfolio_card(
         # Validate purchase date is not in the future
         if card_in.purchase_date:
             today = datetime.now(timezone.utc).date()
-            purchase_date = card_in.purchase_date.date() if hasattr(card_in.purchase_date, 'date') else card_in.purchase_date
-            if purchase_date > today:
+            if card_in.purchase_date > today:
                 raise HTTPException(status_code=400, detail="Purchase date cannot be in the future")
-        card.purchase_date = card_in.purchase_date.date() if card_in.purchase_date else None
+        card.purchase_date = card_in.purchase_date
     if card_in.grading is not None:
         card.grading = card_in.grading if card_in.grading else None
     if card_in.notes is not None:
@@ -782,7 +780,7 @@ def get_available_treatments(
     """
     from sqlalchemy import text
 
-    result = session.execute(
+    result = session.exec(
         text("""
         SELECT DISTINCT treatment
         FROM marketprice
@@ -816,7 +814,7 @@ def get_portfolio_value_history(
 
     # Get all user's portfolio cards (including purchase dates)
     cards = session.exec(
-        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(PortfolioCard.deleted_at.is_(None))
+        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(col(PortfolioCard.deleted_at).is_(None))
     ).all()
 
     if not cards:
@@ -841,12 +839,12 @@ def get_portfolio_value_history(
             sale_date_col.label("sale_date"),
             func.avg(MarketPrice.price).label("avg_price")
         )
-        .where(MarketPrice.card_id.in_(card_ids))
-        .where(MarketPrice.treatment.in_(treatments))
+        .where(col(MarketPrice.card_id).in_(card_ids))
+        .where(col(MarketPrice.treatment).in_(treatments))
         .where(MarketPrice.listing_type == "sold")
         .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= start_date)
-        .group_by(MarketPrice.card_id, MarketPrice.treatment, sale_date_col)
-        .order_by(MarketPrice.card_id, MarketPrice.treatment, sale_date_col)
+        .group_by(col(MarketPrice.card_id), col(MarketPrice.treatment), sale_date_col)
+        .order_by(col(MarketPrice.card_id), col(MarketPrice.treatment), sale_date_col)
     ).all()
 
     # Build price lookup: {(card_id, treatment): {date: price}}

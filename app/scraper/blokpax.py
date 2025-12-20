@@ -112,8 +112,8 @@ class BlokpaxAsset:
     traits: List[Dict[str, str]]
     floor_price_bpx: Optional[float] = None
     floor_price_usd: Optional[float] = None
-    listings: List[BlokpaxListing] = None
-    offers: List[BlokpaxOffer] = None
+    listings: Optional[List[BlokpaxListing]] = None
+    offers: Optional[List[BlokpaxOffer]] = None
 
 
 async def get_bpx_price() -> float:
@@ -821,7 +821,6 @@ async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 
                     offer = BlokpaxOffer(
                         offer_id=offer_id,
                         asset_id=asset_id,
-                        asset_name=asset_name,
                         price_bpx=price_bpx,
                         price_usd=price_usd,
                         quantity=int(offer_data.get("quantity", 1)),

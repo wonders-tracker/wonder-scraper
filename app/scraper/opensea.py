@@ -4,7 +4,7 @@ Scraper for OpenSea collections using Pydoll and the OpenSea API.
 
 import asyncio
 import aiohttp
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from app.scraper.browser import get_page_content
@@ -56,7 +56,7 @@ async def scrape_opensea_collection(collection_url: str) -> Dict[str, Any]:
 
         soup = BeautifulSoup(html, "lxml")
 
-        stats = {
+        stats: Dict[str, Union[float, int, str]] = {
             "floor_price_eth": 0.0,
             "floor_price_usd": 0.0,
             "total_volume_eth": 0.0,
@@ -148,7 +148,7 @@ async def scrape_opensea_collection(collection_url: str) -> Dict[str, Any]:
                                             stats["total_volume_usd"] = float(volume_unit) * eth_price_usd
                                             print(f"Strategy 3 (URQL JSON) found Volume: {volume_unit} ETH")
 
-                                if stats["total_volume_eth"] > 0 and stats["owners"] > 0:
+                                if float(stats["total_volume_eth"]) > 0 and int(stats["owners"]) > 0:
                                     break
                 except Exception as e:
                     print(f"Strategy 3 JSON parse error: {e}")

@@ -46,14 +46,15 @@ def get_mode_info() -> dict:
 
     Returns a dict suitable for health check endpoints.
     """
-    info = {
+    features: dict[str, bool] = {
+        "billing": False,
+        "metering": False,
+        "webhooks": False,
+    }
+    info: dict[str, object] = {
         "mode": "saas" if SAAS_ENABLED else "oss",
         "saas_enabled": SAAS_ENABLED,
-        "features": {
-            "billing": False,
-            "metering": False,
-            "webhooks": False,
-        },
+        "features": features,
     }
 
     if SAAS_ENABLED:
@@ -61,21 +62,21 @@ def get_mode_info() -> dict:
         try:
             from app.api.billing import BILLING_AVAILABLE
 
-            info["features"]["billing"] = BILLING_AVAILABLE
+            features["billing"] = BILLING_AVAILABLE
         except ImportError:
             pass
 
         try:
             from app.middleware.metering import METERING_AVAILABLE
 
-            info["features"]["metering"] = METERING_AVAILABLE
+            features["metering"] = METERING_AVAILABLE
         except ImportError:
             pass
 
         try:
             from app.api.webhooks import WEBHOOKS_AVAILABLE
 
-            info["features"]["webhooks"] = WEBHOOKS_AVAILABLE
+            features["webhooks"] = WEBHOOKS_AVAILABLE
         except ImportError:
             pass
 

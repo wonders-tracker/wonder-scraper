@@ -23,8 +23,8 @@ def _send_log(
     title: str,
     description: str,
     color: int,
-    fields: list = None,
-    webhook_url: str = None,
+    fields: list | None = None,
+    webhook_url: str | None = None,
     username: str = "Wonders Logs",
 ) -> bool:
     """Send a log message to Discord webhook."""

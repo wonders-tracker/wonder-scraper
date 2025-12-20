@@ -6,6 +6,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 from sqlmodel import Session, select
 from sqlalchemy import func
+from app.core.typing import col, ensure_int
 from app.db import engine
 from app.models.card import Card
 from app.models.market import MarketSnapshot
@@ -41,23 +42,23 @@ async def scrape_single_card(card: Card):
         # Scrape sold data (creates snapshot)
         await scrape_sold_data(
             card_name=card.name,
-            card_id=card.id,
+            card_id=ensure_int(card.id),
             search_term=search_term,
             set_name=card.set_name,
             product_type=card.product_type if hasattr(card, "product_type") else "Single",
         )
 
         # Get active data
-        low_ask, inventory, high_bid = await scrape_active_data(card.name, card.id, search_term=search_term)
+        low_ask, inventory, high_bid = await scrape_active_data(card.name, ensure_int(card.id), search_term=search_term)
 
         # Update snapshot with active data
         with Session(engine) as session:
             statement = (
                 select(MarketSnapshot)
                 .where(MarketSnapshot.card_id == card.id)
-                .order_by(MarketSnapshot.timestamp.desc())
+                .order_by(col(MarketSnapshot.timestamp).desc())
             )
-            snapshot = session.exec(statement).first()
+            snapshot = session.execute(statement).scalars().first()
             if snapshot:
                 snapshot.lowest_ask = low_ask
                 snapshot.inventory = inventory
@@ -94,15 +95,15 @@ async def job_update_market_data():
         # Get cards needing updates
         cards_query = (
             select(Card)
-            .outerjoin(latest_snapshots, Card.id == latest_snapshots.c.card_id)
+            .outerjoin(latest_snapshots, col(Card.id) == latest_snapshots.c.card_id)
             .where((latest_snapshots.c.latest_timestamp < cutoff_time) | (latest_snapshots.c.latest_timestamp is None))
         )
 
-        cards_to_update = session.exec(cards_query).all()
+        cards_to_update = session.execute(cards_query).all()
 
         # If no stale cards, update a random sample
         if not cards_to_update:
-            all_cards = session.exec(select(Card)).all()
+            all_cards = session.execute(select(Card)).scalars().all()
             cards_to_update = random.sample(all_cards, min(10, len(all_cards)))
 
     if not cards_to_update:
@@ -233,7 +234,7 @@ async def job_update_blokpax_data():
                     session.add(snapshot)
 
                     # Update storefront record
-                    storefront = session.exec(select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)).first()
+                    storefront = session.execute(select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)).scalars().first()
                     if storefront:
                         storefront.floor_price_bpx = floor_bpx
                         storefront.floor_price_usd = floor_usd
@@ -289,16 +290,16 @@ async def job_update_blokpax_data():
             for collection_slug, card_name in OPENSEA_WOTF_COLLECTIONS.items():
                 try:
                     # Find the card in DB
-                    card = session.exec(
+                    card = session.execute(
                         select(Card).where(Card.name == card_name)
-                    ).first()
+                    ).scalars().first()
 
                     if not card:
                         print(f"[OpenSea] Card '{card_name}' not found in DB, skipping")
                         continue
 
                     scraped, saved = await scrape_opensea_listings_to_db(
-                        session, collection_slug, card.id, card_name
+                        session, collection_slug, ensure_int(card.id), card_name
                     )
                     opensea_listings += saved
 
@@ -343,7 +344,7 @@ async def job_send_daily_digests():
 
         with Session(engine) as session:
             # Get users who want daily digests
-            prefs = session.exec(select(EmailPreferences).where(EmailPreferences.daily_digest is True)).all()
+            prefs = session.execute(select(EmailPreferences).where(EmailPreferences.daily_digest == True)).scalars().all()
 
             if not prefs:
                 print("[Digest] No users subscribed to daily digest")
@@ -402,14 +403,14 @@ async def job_send_personal_welcome_emails():
             cutoff_start = now - timedelta(hours=48)  # Oldest eligible
             cutoff_end = now - timedelta(hours=24)    # Newest eligible
 
-            users = session.exec(
+            users = session.execute(
                 select(User).where(
                     User.created_at >= cutoff_start,
                     User.created_at <= cutoff_end,
                     User.personal_welcome_sent_at == None,  # noqa: E711
                     User.is_active == True,  # noqa: E712
                 )
-            ).all()
+            ).scalars().all()
 
             if not users:
                 print("[Personal Welcome] No eligible users")
@@ -449,7 +450,7 @@ async def job_send_weekly_reports():
 
         with Session(engine) as session:
             # Get users who want weekly reports
-            prefs = session.exec(select(EmailPreferences).where(EmailPreferences.weekly_report is True)).all()
+            prefs = session.execute(select(EmailPreferences).where(EmailPreferences.weekly_report == True)).scalars().all()
 
             if not prefs:
                 print("[Weekly] No users subscribed to weekly report")
@@ -513,11 +514,11 @@ async def job_check_price_alerts():
 
         with Session(engine) as session:
             # Get all active alerts with target prices
-            alerts = session.exec(
+            alerts = session.execute(
                 select(Watchlist).where(
-                    Watchlist.alert_enabled is True, Watchlist.target_price is not None, Watchlist.notify_email is True
+                    Watchlist.alert_enabled == True, Watchlist.target_price != None, Watchlist.notify_email == True
                 )
-            ).all()
+            ).scalars().all()
 
             if not alerts:
                 print("[Alerts] No active price alerts")
@@ -531,7 +532,10 @@ async def job_check_price_alerts():
                 if not card or not user:
                     continue
 
-                current_price = card.floor_price or card.latest_price or 0
+                # floor_price/latest_price are computed fields, not on Card model
+                # Use getattr to safely access (will return None if not present)
+                current_price: float = float(getattr(card, 'floor_price', None) or getattr(card, 'latest_price', None) or 0)
+                target_price: float = float(alert.target_price or 0)
 
                 # Skip if already alerted at this price
                 if alert.last_alerted_price and abs(current_price - alert.last_alerted_price) < 0.01:
@@ -539,9 +543,9 @@ async def job_check_price_alerts():
 
                 # Check if alert should trigger
                 should_alert = False
-                if alert.alert_type == "below" and current_price <= alert.target_price:
+                if alert.alert_type == "below" and current_price <= target_price:
                     should_alert = True
-                elif alert.alert_type == "above" and current_price >= alert.target_price:
+                elif alert.alert_type == "above" and current_price >= target_price:
                     should_alert = True
                 elif alert.alert_type == "any":
                     should_alert = True

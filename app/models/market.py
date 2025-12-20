@@ -2,7 +2,9 @@ from typing import Optional, List, Dict, Any
 from sqlmodel import Field, SQLModel
 from sqlalchemy import Index, Column
 from sqlalchemy.types import JSON
-from datetime import datetime
+from datetime import datetime, timezone
+
+from app.core.typing import utc_now
 
 
 class MarketSnapshot(SQLModel, table=True):
@@ -26,7 +28,7 @@ class MarketSnapshot(SQLModel, table=True):
 
     platform: str = Field(default="ebay")  # 'ebay', 'opensea'
 
-    timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
+    timestamp: datetime = Field(default_factory=utc_now, index=True)
 
     # Composite index for common query pattern: card_id + timestamp ORDER BY
     __table_args__ = (Index("ix_marketsnapshot_card_timestamp", "card_id", "timestamp"),)
@@ -75,7 +77,7 @@ class MarketPrice(SQLModel, table=True):
     # Format: [{"trait_type": "Hierarchy", "value": "Spell"}, {"trait_type": "Artist", "value": "Romall Smith"}, ...]
     traits: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON))
 
-    scraped_at: datetime = Field(default_factory=datetime.utcnow)
+    scraped_at: datetime = Field(default_factory=utc_now)
 
     # When listing was first seen (for active->sold tracking)
     # Set once when listing first appears, preserved when it sells
@@ -113,4 +115,14 @@ class ListingReport(SQLModel, table=True):
     resolution_notes: Optional[str] = Field(default=None)
     resolved_at: Optional[datetime] = Field(default=None)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+
+class Report(SQLModel, table=True):
+    """Stored CSV reports for market data exports."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    filename: str = Field(index=True)
+    report_type: str = Field(index=True)  # 'daily', 'weekly', 'monthly'
+    content: str  # CSV content stored as text
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)

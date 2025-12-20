@@ -5,7 +5,7 @@ Market stats calculation for Discord reports.
 import csv
 import io
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional, Sequence
 from dataclasses import dataclass
 
 from sqlmodel import Session, select, func, desc
@@ -34,11 +34,11 @@ class MarketStats:
     volume_trend_pct: float = 0.0
     sales_trend_pct: float = 0.0
     # Actionable insights
-    insights: List[Dict[str, Any]] = None
+    insights: Optional[List[Dict[str, Any]]] = None
     # Breakdown by product type
-    product_breakdown: Dict[str, Dict[str, Any]] = None  # {type: {count, volume, avg_price}}
+    product_breakdown: Optional[Dict[str, Dict[str, Any]]] = None  # {type: {count, volume, avg_price}}
     # Breakdown by treatment
-    treatment_breakdown: Dict[str, Dict[str, Any]] = None  # {treatment: {count, volume, avg_price}}
+    treatment_breakdown: Optional[Dict[str, Dict[str, Any]]] = None  # {treatment: {count, volume, avg_price}}
 
 
 def get_period_bounds(period: str) -> tuple[datetime, datetime]:
@@ -56,12 +56,12 @@ def get_period_bounds(period: str) -> tuple[datetime, datetime]:
 
 
 def _generate_insights(
-    session,
-    sales: List,
-    top_movers: List[Dict],
-    top_volume: List[Dict],
-    new_highs: List[Dict],
-    new_lows: List[Dict],
+    session: Session,
+    sales: Sequence[Any],
+    top_movers: List[Dict[str, Any]],
+    top_volume: List[Dict[str, Any]],
+    new_highs: List[Dict[str, Any]],
+    new_lows: List[Dict[str, Any]],
     avg_price: float,
     volume_trend_pct: float,
     sales_trend_pct: float,
@@ -158,7 +158,7 @@ def _generate_insights(
 
         # Use live lowest_ask, fallback to snapshot only if no active listings
         lowest_ask = live_lowest_ask if live_lowest_ask is not None else (snapshot.lowest_ask if snapshot else None)
-        avg_price = snapshot.avg_price if snapshot else None
+        avg_price: Optional[float] = snapshot.avg_price if snapshot else None
 
         if not lowest_ask or lowest_ask <= 0:
             continue

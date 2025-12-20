@@ -9,6 +9,7 @@ from sqlmodel import Session, select, desc
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 
+from app.core.typing import col
 from app.db import get_session
 from app.models.blokpax import (
     BlokpaxStorefront,
@@ -106,7 +107,7 @@ def list_storefronts(
     """
     List all WOTF storefronts with current floor prices.
     """
-    storefronts = session.exec(select(BlokpaxStorefront).order_by(BlokpaxStorefront.name)).all()
+    storefronts = session.exec(select(BlokpaxStorefront).order_by(col(BlokpaxStorefront.name))).all()
     return [BlokpaxStorefrontOut.model_validate(s) for s in storefronts]
 
 
@@ -147,7 +148,7 @@ def get_storefront_snapshots(
     snapshots = session.exec(
         select(BlokpaxSnapshot)
         .where(BlokpaxSnapshot.storefront_slug == slug)
-        .where(BlokpaxSnapshot.timestamp >= cutoff)
+        .where(col(BlokpaxSnapshot.timestamp) >= cutoff)
         .order_by(desc(BlokpaxSnapshot.timestamp), desc(BlokpaxSnapshot.id))
         .limit(limit)
     ).all()
@@ -215,7 +216,7 @@ def list_assets(
     if storefront_slug:
         query = query.where(BlokpaxAssetDB.storefront_slug == storefront_slug)
 
-    query = query.order_by(BlokpaxAssetDB.floor_price_usd.asc()).limit(limit)
+    query = query.order_by(col(BlokpaxAssetDB.floor_price_usd).asc()).limit(limit)
 
     assets = session.exec(query).all()
     return [BlokpaxAssetOut.model_validate(a) for a in assets]

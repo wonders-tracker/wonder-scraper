@@ -12,22 +12,60 @@ Usage:
         fmp = service.calculate_fmp(...)
 """
 
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from typing import Optional, Dict, Any, List, TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from sqlmodel import Session
 
+
+# Protocol defining the pricing service interface
+# Both the SaaS implementation and OSS stub must satisfy this interface
+@runtime_checkable
+class PricingServiceProtocol(Protocol):
+    """Protocol defining the FairMarketPriceService interface."""
+
+    def calculate_fmp(
+        self,
+        card_id: int,
+        set_name: str,
+        rarity_name: str,
+        treatment: str = "Classic Paper",
+        days: int = 30,
+        product_type: str = "Single",
+    ) -> Dict[str, Any]: ...
+
+    def calculate_fmp_simple(
+        self, card_id: int, set_name: str, rarity_name: str, days: int = 30
+    ) -> tuple[Optional[float], Optional[float]]: ...
+
+    def get_fmp_by_treatment(
+        self, card_id: int, set_name: str, rarity_name: str, days: int = 30, product_type: str = "Single"
+    ) -> List[Dict[str, Any]]: ...
+
+    def calculate_floor_price(self, card_id: int, num_sales: int = 4, days: int = 30) -> Optional[float]: ...
+
+    def get_median_price(self, card_id: int, days: int = 30) -> Optional[float]: ...
+
+
 # Try to import from saas module
 try:
     from saas.services.pricing import (
-        FairMarketPriceService,
-        get_pricing_service,
+        FairMarketPriceService as _SaaSFairMarketPriceService,
+        get_pricing_service as _saas_get_pricing_service,
         BASE_TREATMENTS,
         DEFAULT_RARITY_MULTIPLIERS,
         DEFAULT_TREATMENT_MULTIPLIERS,
     )
 
     FMP_AVAILABLE = True
+
+    # Re-export the SaaS class as FairMarketPriceService for backwards compatibility
+    FairMarketPriceService = _SaaSFairMarketPriceService
+
+    def get_pricing_service(session: "Session") -> PricingServiceProtocol:
+        """Factory function to create pricing service (SaaS mode)."""
+        return _saas_get_pricing_service(session)
+
 except ImportError:
     FMP_AVAILABLE = False
 
@@ -104,7 +142,7 @@ except ImportError:
             """Median price unavailable in OSS mode."""
             return None
 
-    def get_pricing_service(session: "Session") -> FairMarketPriceService:
+    def get_pricing_service(session: "Session") -> PricingServiceProtocol:
         """Factory function to create pricing service stub."""
         return FairMarketPriceService(session)
 
@@ -112,6 +150,7 @@ except ImportError:
 __all__ = [
     "FMP_AVAILABLE",
     "FairMarketPriceService",
+    "PricingServiceProtocol",
     "get_pricing_service",
     "BASE_TREATMENTS",
     "DEFAULT_RARITY_MULTIPLIERS",

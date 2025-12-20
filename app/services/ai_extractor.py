@@ -10,7 +10,7 @@ Uses GPT-4o-mini via OpenRouter to intelligently parse eBay listings for:
 - Structured extraction (card name, set, treatment, condition, grading)
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -428,7 +428,7 @@ class AIListingExtractor:
         self._title_cache[title_hash] = value
         self._cache_timestamps[title_hash] = datetime.now(timezone.utc).timestamp()
 
-    def get_metrics(self) -> Dict[str, int]:
+    def get_metrics(self) -> Dict[str, Union[int, float]]:
         """Get performance metrics."""
         return {
             **self._metrics,

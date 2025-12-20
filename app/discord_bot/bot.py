@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from app.core.typing import col
 from app.discord_bot.stats import calculate_market_stats, generate_csv_report, format_stats_embed
 from app.discord_bot.storage import upload_csv
 
@@ -39,10 +40,10 @@ class WondersBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
-        # Start scheduled tasks
+        # Start scheduled tasks (module-level task functions)
         if REPORT_CHANNEL_ID:
-            self.daily_report_task.start()
-            self.weekly_report_task.start()
+            daily_report_task.start()
+            weekly_report_task.start()
 
         # Sync slash commands
         await self.tree.sync()
@@ -149,7 +150,7 @@ async def price_command(interaction: discord.Interaction, card_name: str):
 
         with Session(engine) as session:
             # Find card (case-insensitive search)
-            card = session.exec(select(Card).where(Card.name.ilike(f"%{card_name}%"))).first()
+            card = session.exec(select(Card).where(col(Card.name).ilike(f"%{card_name}%"))).first()
 
             if not card:
                 await interaction.followup.send(f"Card '{card_name}' not found.", ephemeral=True)

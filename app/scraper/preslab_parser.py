@@ -18,6 +18,7 @@ from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from sqlmodel import Session, select
 
+from app.core.typing import col
 from app.models.card import Card, Rarity
 
 
@@ -125,7 +126,7 @@ def _load_cards_cache(session: Session) -> None:
     if _cards_loaded:
         return
 
-    stmt = select(Card, Rarity.name).join(Rarity, Card.rarity_id == Rarity.id).where(Rarity.name != "SEALED")
+    stmt = select(Card, Rarity.name).join(Rarity, col(Card.rarity_id) == col(Rarity.id)).where(Rarity.name != "SEALED")
     results = session.exec(stmt).all()
 
     for card, rarity_name in results:

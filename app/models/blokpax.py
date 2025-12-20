@@ -6,6 +6,8 @@ from typing import Optional, List
 from sqlmodel import Field, SQLModel, JSON, Column
 from datetime import datetime
 
+from app.core.typing import utc_now
+
 
 class BlokpaxStorefront(SQLModel, table=True):
     """
@@ -26,8 +28,8 @@ class BlokpaxStorefront(SQLModel, table=True):
     total_tokens: int = Field(default=0)
     listed_count: int = Field(default=0)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class BlokpaxAssetDB(SQLModel, table=True):
@@ -64,8 +66,8 @@ class BlokpaxAssetDB(SQLModel, table=True):
     # Link to our Card model (if this is a WOTF item we track)
     card_id: Optional[int] = Field(default=None, foreign_key="card.id", index=True)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class BlokpaxListing(SQLModel, table=True):
@@ -86,7 +88,7 @@ class BlokpaxListing(SQLModel, table=True):
 
     created_at: Optional[datetime] = None
     filled_at: Optional[datetime] = None
-    scraped_at: datetime = Field(default_factory=datetime.utcnow)
+    scraped_at: datetime = Field(default_factory=utc_now)
 
 
 class BlokpaxOffer(SQLModel, table=True):
@@ -106,7 +108,7 @@ class BlokpaxOffer(SQLModel, table=True):
     status: str = Field(default="open")  # 'open', 'filled', 'cancelled'
 
     created_at: Optional[datetime] = None
-    scraped_at: datetime = Field(default_factory=datetime.utcnow)
+    scraped_at: datetime = Field(default_factory=utc_now)
 
 
 class BlokpaxSale(SQLModel, table=True):
@@ -127,7 +129,7 @@ class BlokpaxSale(SQLModel, table=True):
     buyer_address: str
 
     filled_at: datetime = Field(index=True)
-    scraped_at: datetime = Field(default_factory=datetime.utcnow)
+    scraped_at: datetime = Field(default_factory=utc_now)
 
     # Link to our Card model (if this is a WOTF item we track)
     card_id: Optional[int] = Field(default=None, foreign_key="card.id", index=True)
@@ -157,7 +159,7 @@ class BlokpaxSnapshot(SQLModel, table=True):
     total_redeemed: int = Field(default=0)
     max_supply: int = Field(default=0)
 
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utc_now)
 
 
 class BlokpaxRedemption(SQLModel, table=True):
@@ -172,4 +174,4 @@ class BlokpaxRedemption(SQLModel, table=True):
     box_art: Optional[str] = None  # e.g. "Dragon", "First Form: Solfera"
     serial_number: Optional[str] = None  # e.g. "929/2699"
     redeemed_at: datetime = Field(index=True)
-    scraped_at: datetime = Field(default_factory=datetime.utcnow)
+    scraped_at: datetime = Field(default_factory=utc_now)

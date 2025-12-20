@@ -20,11 +20,11 @@ WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 
 def send_webhook_message(
-    content: str = None,
-    embeds: list = None,
+    content: str | None = None,
+    embeds: list | None = None,
     username: str = "Wonders Market Bot",
-    file_data: bytes = None,
-    filename: str = None,
+    file_data: bytes | None = None,
+    filename: str | None = None,
 ) -> bool:
     """
     Send a message via Discord webhook.

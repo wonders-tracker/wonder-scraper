@@ -34,6 +34,7 @@ pyyaml = "^6.0.3"
 user-agents = "^2.2.0"
 polar-sdk = "^0.28.0"
 alembic = "^1.17.2"
+discord-py = ">=2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.1"
@@ -41,6 +42,7 @@ pytest-asyncio = "^1.3.0"
 pytest-cov = "^7.0.0"
 argon2-cffi = "^25.1.0"
 ruff = "^0.8.0"
+ty = "^0.0.4"
 
 [tool.pytest.ini_options]
 markers = [
@@ -50,6 +52,13 @@ markers = [
 asyncio_mode = "strict"
 testpaths = ["tests", "saas/tests"]
 # SaaS tests are skipped if saas/ module not available (see conftest.py)
+
+[tool.ty.rules]
+# ty type checker configuration (Astral's fast Python type checker)
+# Suppress deprecated warning for session.execute() - it's correct for raw SQL with text()
+deprecated = "ignore"
+# Suppress possibly-missing-attribute for third-party libs (Discord, OpenAI) with union types
+possibly-missing-attribute = "ignore"
 
 [tool.ruff]
 line-length = 120

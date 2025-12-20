@@ -1,4 +1,5 @@
 from sqlmodel import Session, select
+from app.core.typing import col
 from app.db import engine
 from app.scraper.browser import get_page_content
 from app.scraper.utils import build_ebay_url
@@ -87,7 +88,7 @@ async def scrape_active_data(
                     # Check GLOBALLY (any card_id) to prevent duplicate key errors
                     # when the same eBay listing matches multiple cards
                     stmt = select(MarketPrice).where(
-                        MarketPrice.listing_type == "active", MarketPrice.external_id.isnot(None)
+                        MarketPrice.listing_type == "active", col(MarketPrice.external_id).isnot(None)
                     )
                     all_existing = session.exec(stmt).all()
 

@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel, Field, Column, JSON
 
+from app.core.typing import utc_now
+
 
 class PageView(SQLModel, table=True):
     """Track page views for analytics."""
@@ -19,7 +21,7 @@ class PageView(SQLModel, table=True):
     ip_hash: Optional[str] = Field(default=None)  # Hashed for privacy
     country: Optional[str] = Field(default=None)
     device_type: Optional[str] = Field(default=None)  # desktop, mobile, tablet
-    timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
+    timestamp: datetime = Field(default_factory=utc_now, index=True)
 
 
 class AnalyticsEvent(SQLModel, table=True):
@@ -41,4 +43,4 @@ class AnalyticsEvent(SQLModel, table=True):
     card_name: Optional[str] = Field(default=None)
     platform: Optional[str] = Field(default=None)  # ebay, blokpax, etc.
 
-    timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
+    timestamp: datetime = Field(default_factory=utc_now, index=True)

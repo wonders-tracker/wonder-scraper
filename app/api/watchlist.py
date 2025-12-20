@@ -100,7 +100,7 @@ def get_watchlist(
             out.card_name = card.name
             out.card_set = card.set_name
             out.card_slug = card.slug
-            out.current_price = card.floor_price  # Use floor_price as current
+            out.current_price = getattr(card, 'floor_price', None)  # floor_price is computed, not on model
         result.append(out)
 
     return result
@@ -136,7 +136,7 @@ def add_to_watchlist(
     out.card_name = card.name
     out.card_set = card.set_name
     out.card_slug = card.slug
-    out.current_price = card.floor_price
+    out.current_price = getattr(card, 'floor_price', None)
 
     return out
 
@@ -161,7 +161,7 @@ def get_watchlist_item(
         out.card_name = card.name
         out.card_set = card.set_name
         out.card_slug = card.slug
-        out.current_price = card.floor_price
+        out.current_price = getattr(card, 'floor_price', None)
 
     return out
 
@@ -196,7 +196,7 @@ def update_watchlist_item(
         out.card_name = card.name
         out.card_set = card.set_name
         out.card_slug = card.slug
-        out.current_price = card.floor_price
+        out.current_price = getattr(card, 'floor_price', None)
 
     return out
 

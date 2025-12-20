@@ -92,7 +92,7 @@ def login_access_token(
 
     rate_limiter.record_request(ip)
 
-    user = session.query(User).filter(User.email == form_data.username).first()
+    user = session.exec(select(User).where(User.email == form_data.username)).first()
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         # Record failed attempt for account lockout
         is_locked, remaining = rate_limiter.record_failed_login(ip)
@@ -177,7 +177,7 @@ def register_user(
 
     rate_limiter.record_request(ip)
 
-    user = session.query(User).filter(User.email == user_in.email).first()
+    user = session.exec(select(User).where(User.email == user_in.email)).first()
     if user:
         raise HTTPException(
             status_code=400,
@@ -328,7 +328,7 @@ def forgot_password(
 
     rate_limiter.record_request(ip)
 
-    user = session.query(User).filter(User.email == body.email).first()
+    user = session.exec(select(User).where(User.email == body.email)).first()
 
     if user:
         # Generate secure token
@@ -371,7 +371,7 @@ def reset_password(request: Request, body: ResetPasswordRequest, session: Sessio
         )
 
     # Find user by reset token
-    user = session.query(User).filter(User.password_reset_token == body.token).first()
+    user = session.exec(select(User).where(User.password_reset_token == body.token)).first()
 
     if not user:
         raise HTTPException(

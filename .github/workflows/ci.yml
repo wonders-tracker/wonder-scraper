@@ -132,6 +132,9 @@ jobs:
       - name: Run ruff format check
         run: poetry run ruff format app/ --check
 
+      - name: Run ty type check
+        run: poetry run ty check app/
+
   frontend-test:
     name: Frontend Tests
     runs-on: ubuntu-latest
