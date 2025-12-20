@@ -121,8 +121,13 @@ class TestPortfolioCardModel:
 
         assert card.created_at is not None
         assert card.updated_at is not None
-        assert before <= card.created_at <= after
-        assert before <= card.updated_at <= after
+        # SQLite may strip timezone info, so compare as naive datetimes
+        created_at = card.created_at.replace(tzinfo=None) if card.created_at.tzinfo else card.created_at
+        updated_at = card.updated_at.replace(tzinfo=None) if card.updated_at.tzinfo else card.updated_at
+        before_naive = before.replace(tzinfo=None)
+        after_naive = after.replace(tzinfo=None)
+        assert before_naive <= created_at <= after_naive
+        assert before_naive <= updated_at <= after_naive
 
     def test_soft_delete(self, test_session: Session, sample_user: User, sample_cards):
         """Test soft delete functionality."""

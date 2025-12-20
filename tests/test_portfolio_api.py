@@ -62,7 +62,8 @@ class TestPortfolioCardCreate:
         )
 
         assert response.status_code == 200
-        data = response.json()
+        # Endpoint returns a list (to support quantity > 1), so access first element
+        data = response.json()[0]
 
         assert data["card_id"] == sample_cards[0].id
         assert data["treatment"] == "Classic Paper"
@@ -89,7 +90,8 @@ class TestPortfolioCardCreate:
         )
 
         assert response.status_code == 200
-        data = response.json()
+        # Endpoint returns a list (to support quantity > 1), so access first element
+        data = response.json()[0]
         assert data["grading"] == "PSA 10"
 
     def test_create_portfolio_card_invalid_card_id(self, client, auth_headers):
