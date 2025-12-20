@@ -9,7 +9,7 @@ Tests cover:
 """
 
 import pytest
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from sqlmodel import Session, select
 
 from app.models.portfolio import PortfolioCard, PortfolioItem, PurchaseSource
@@ -106,7 +106,7 @@ class TestPortfolioCardModel:
 
     def test_timestamps_auto_set(self, test_session: Session, sample_user: User, sample_cards):
         """Test that created_at and updated_at are auto-set."""
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
 
         card = PortfolioCard(
             user_id=sample_user.id,
@@ -117,12 +117,17 @@ class TestPortfolioCardModel:
         test_session.commit()
         test_session.refresh(card)
 
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
 
         assert card.created_at is not None
         assert card.updated_at is not None
-        assert before <= card.created_at <= after
-        assert before <= card.updated_at <= after
+        # SQLite may strip timezone info, so compare as naive datetimes
+        created_at = card.created_at.replace(tzinfo=None) if card.created_at.tzinfo else card.created_at
+        updated_at = card.updated_at.replace(tzinfo=None) if card.updated_at.tzinfo else card.updated_at
+        before_naive = before.replace(tzinfo=None)
+        after_naive = after.replace(tzinfo=None)
+        assert before_naive <= created_at <= after_naive
+        assert before_naive <= updated_at <= after_naive
 
     def test_soft_delete(self, test_session: Session, sample_user: User, sample_cards):
         """Test soft delete functionality."""
@@ -138,7 +143,7 @@ class TestPortfolioCardModel:
         assert card.deleted_at is None
 
         # Soft delete
-        card.deleted_at = datetime.utcnow()
+        card.deleted_at = datetime.now(timezone.utc)
         test_session.add(card)
         test_session.commit()
         test_session.refresh(card)

@@ -1,4 +1,4 @@
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from typing import Any
 import httpx
 import secrets
@@ -53,7 +53,7 @@ class MessageResponse(BaseModel):
 # Cookie settings
 COOKIE_NAME = "access_token"
 COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
-COOKIE_SECURE = True  # Set to False for local dev without HTTPS
+COOKIE_SECURE = settings.COOKIE_SECURE  # From environment (False for local dev)
 COOKIE_SAMESITE = "lax"
 
 
@@ -92,7 +92,7 @@ def login_access_token(
 
     rate_limiter.record_request(ip)
 
-    user = session.query(User).filter(User.email == form_data.username).first()
+    user = session.exec(select(User).where(User.email == form_data.username)).first()
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         # Record failed attempt for account lockout
         is_locked, remaining = rate_limiter.record_failed_login(ip)
@@ -114,7 +114,7 @@ def login_access_token(
     rate_limiter.record_successful_login(ip)
 
     # Update last login timestamp
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     session.add(user)
     session.commit()
 
@@ -177,7 +177,7 @@ def register_user(
 
     rate_limiter.record_request(ip)
 
-    user = session.query(User).filter(User.email == user_in.email).first()
+    user = session.exec(select(User).where(User.email == user_in.email)).first()
     if user:
         raise HTTPException(
             status_code=400,
@@ -268,7 +268,7 @@ async def callback_discord(code: str, session: Session = Depends(get_session)):
                 # Link account and update last login
                 user.discord_id = discord_id
                 user.discord_handle = handle
-                user.last_login = datetime.utcnow()
+                user.last_login = datetime.now(timezone.utc)
                 session.add(user)
                 session.commit()
                 session.refresh(user)
@@ -282,14 +282,14 @@ async def callback_discord(code: str, session: Session = Depends(get_session)):
                 is_active=True,
                 discord_id=discord_id,
                 discord_handle=handle,
-                last_login=datetime.utcnow(),
+                last_login=datetime.now(timezone.utc),
             )
             session.add(user)
             session.commit()
             session.refresh(user)
         else:
             # Update last login for existing user
-            user.last_login = datetime.utcnow()
+            user.last_login = datetime.now(timezone.utc)
             session.add(user)
             session.commit()
 
@@ -328,13 +328,13 @@ def forgot_password(
 
     rate_limiter.record_request(ip)
 
-    user = session.query(User).filter(User.email == body.email).first()
+    user = session.exec(select(User).where(User.email == body.email)).first()
 
     if user:
         # Generate secure token
         reset_token = secrets.token_urlsafe(32)
         user.password_reset_token = reset_token
-        user.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
+        user.password_reset_expires = datetime.now(timezone.utc) + timedelta(hours=1)
         session.add(user)
         session.commit()
 
@@ -371,7 +371,7 @@ def reset_password(request: Request, body: ResetPasswordRequest, session: Sessio
         )
 
     # Find user by reset token
-    user = session.query(User).filter(User.password_reset_token == body.token).first()
+    user = session.exec(select(User).where(User.password_reset_token == body.token)).first()
 
     if not user:
         raise HTTPException(
@@ -380,7 +380,7 @@ def reset_password(request: Request, body: ResetPasswordRequest, session: Sessio
         )
 
     # Check if token is expired
-    if user.password_reset_expires and user.password_reset_expires < datetime.utcnow():
+    if user.password_reset_expires and user.password_reset_expires < datetime.now(timezone.utc):
         # Clear expired token
         user.password_reset_token = None
         user.password_reset_expires = None

@@ -5,7 +5,7 @@ Uses the same data and format as the market report script.
 Generates formatted reports for 2x daily Discord posts.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 from sqlmodel import Session
 from sqlalchemy import text
@@ -32,7 +32,7 @@ class MarketInsightsGenerator:
     def gather_market_data(self, days: int = 1) -> Dict[str, Any]:
         """Gather market data for the report."""
         with Session(engine) as session:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             period_start = now - timedelta(days=days)
             prev_period_start = period_start - timedelta(days=days)
 
@@ -45,16 +45,17 @@ class MarketInsightsGenerator:
 
             # Total sales this period
             # Use COALESCE(sold_date, scraped_at) to include sales with NULL sold_date
-            total = session.execute(
+            total_row = session.execute(
                 text("""
                 SELECT COUNT(*), COALESCE(SUM(price), 0), COALESCE(AVG(price), 0)
                 FROM marketprice WHERE listing_type = 'sold' AND COALESCE(sold_date, scraped_at) >= :start
             """),
                 {"start": period_start},
             ).first()
+            total = total_row if total_row else (0, 0.0, 0.0)
 
             # Previous period for comparison
-            prev_total = session.execute(
+            prev_total_row = session.execute(
                 text("""
                 SELECT COUNT(*), COALESCE(SUM(price), 0)
                 FROM marketprice WHERE listing_type = 'sold'
@@ -62,6 +63,7 @@ class MarketInsightsGenerator:
             """),
                 {"start": period_start, "prev_start": prev_period_start},
             ).first()
+            prev_total = prev_total_row if prev_total_row else (0, 0.0)
 
             data["summary"] = {
                 "total_sales": total[0],
@@ -197,18 +199,19 @@ class MarketInsightsGenerator:
             ]
 
             # Market health
-            active = session.execute(
+            active_row = session.execute(
                 text("""
                 SELECT COUNT(*), COALESCE(AVG(price), 0), COALESCE(MIN(price), 0), COALESCE(MAX(price), 0)
                 FROM marketprice WHERE listing_type = 'active'
             """)
             ).first()
+            active = active_row if active_row else (0, 0.0, 0.0, 0.0)
 
             unique_cards = session.execute(
                 text("""
                 SELECT COUNT(DISTINCT card_id) FROM marketprice WHERE listing_type = 'active'
             """)
-            ).scalar()
+            ).scalar() or 0
 
             data["market_health"] = {
                 "active_listings": active[0],

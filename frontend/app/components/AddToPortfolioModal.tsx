@@ -12,6 +12,7 @@ type CardInfo = {
     floor_price?: number
     latest_price?: number
     product_type?: string  // Single, Box, Pack, Bundle, Proof, Lot, NFT
+    image_url?: string  // Card thumbnail URL
 }
 
 type AddToPortfolioDrawerProps = {
@@ -28,6 +29,7 @@ type PortfolioCardCreate = {
     purchase_date: string | null
     grading: string | null
     notes: string | null
+    quantity?: number
 }
 
 type TreatmentPricing = {
@@ -151,7 +153,8 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
         purchase_price: 0,
         purchase_date: new Date().toISOString().split('T')[0],
         grading: '',
-        notes: ''
+        notes: '',
+        quantity: 1
     })
 
     // OpenSea URL state (for NFTs)
@@ -235,7 +238,8 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
             purchase_price: getSuggestedPrice(defaultTreatment),
             purchase_date: new Date().toISOString().split('T')[0],
             grading: '',
-            notes: ''
+            notes: '',
+            quantity: 1
         })
         setSplitCards([])
         setSplitMode(false)
@@ -251,7 +255,8 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
             purchase_price: form.purchase_price,
             purchase_date: form.purchase_date || null,
             grading: form.grading || null,
-            notes: form.notes || null
+            notes: form.notes || null,
+            quantity: form.quantity
         })
     }
 
@@ -268,10 +273,11 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
             purchase_price: form.purchase_price,
             purchase_date: form.purchase_date || null,
             grading: form.grading || null,
-            notes: form.notes || null
+            notes: form.notes || null,
+            quantity: form.quantity
         }])
-        // Reset only price for next entry (keep treatment/source)
-        setForm({ ...form, purchase_price: getSuggestedPrice(form.treatment), grading: '', notes: '' })
+        // Reset only price and quantity for next entry (keep treatment/source)
+        setForm({ ...form, purchase_price: getSuggestedPrice(form.treatment), grading: '', notes: '', quantity: 1 })
     }
 
     const removeSplitCard = (index: number) => {
@@ -295,22 +301,45 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                     isOpen ? "translate-x-0" : "translate-x-full"
                 )}
             >
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-border">
-                    <div className="flex items-center gap-3">
-                        <Wallet className="w-5 h-5 text-primary" />
-                        <div>
-                            <h2 className="text-lg font-bold uppercase tracking-tight">Add to Portfolio</h2>
-                            <p className="text-xs text-muted-foreground">{card.name}</p>
-                            <p className="text-[10px] text-muted-foreground">{card.set_name}</p>
+                {/* Header with Card Image */}
+                <div className="relative overflow-hidden border-b border-border">
+                    {/* Card Image Background */}
+                    {card.image_url && (
+                        <div className="absolute inset-0">
+                            <img
+                                src={card.image_url}
+                                alt=""
+                                className="w-full h-full object-cover object-top opacity-30 blur-sm scale-110"
+                            />
+                            {/* Gradient Scrim */}
+                            <div className="absolute inset-0 bg-gradient-to-b from-card/60 via-card/80 to-card" />
                         </div>
+                    )}
+                    {/* Header Content */}
+                    <div className="relative flex items-center justify-between p-6">
+                        <div className="flex items-center gap-3">
+                            {card.image_url ? (
+                                <img
+                                    src={card.image_url}
+                                    alt={card.name}
+                                    className="w-12 h-16 object-cover rounded border border-border/50 shadow-lg"
+                                />
+                            ) : (
+                                <Wallet className="w-5 h-5 text-primary" />
+                            )}
+                            <div>
+                                <h2 className="text-lg font-bold uppercase tracking-tight">Add to Portfolio</h2>
+                                <p className="text-xs text-muted-foreground">{card.name}</p>
+                                <p className="text-[10px] text-muted-foreground">{card.set_name}</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
                 </div>
 
                 {/* Mode Toggle */}
@@ -416,33 +445,53 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                         {/* Treatment-specific pricing hints */}
                         {(() => {
                             const treatmentPricing = getTreatmentPricing(form.treatment)
+
+                            // Has treatment-specific data - show it
                             if (treatmentPricing && treatmentPricing.sales_count > 0) {
                                 return (
                                     <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                                        <p className="text-brand-300">
+                                            {treatmentPricing.sales_count} {form.treatment} sale{treatmentPricing.sales_count !== 1 ? 's' : ''} found
+                                        </p>
                                         {treatmentPricing.floor_price != null && (
-                                            <p>Floor ({form.treatment}): <span className="font-mono">${treatmentPricing.floor_price.toFixed(2)}</span></p>
+                                            <p>Floor: <span className="font-mono font-bold">${treatmentPricing.floor_price.toFixed(2)}</span></p>
                                         )}
-                                        {treatmentPricing.median_price != null && (
-                                            <p>Median ({treatmentPricing.sales_count} sales): <span className="font-mono">${treatmentPricing.median_price.toFixed(2)}</span></p>
+                                        {treatmentPricing.median_price != null && treatmentPricing.median_price !== treatmentPricing.floor_price && (
+                                            <p>Median: <span className="font-mono">${treatmentPricing.median_price.toFixed(2)}</span></p>
                                         )}
-                                        {treatmentPricing.min_price != null && treatmentPricing.max_price != null && (
+                                        {treatmentPricing.min_price != null && treatmentPricing.max_price != null && treatmentPricing.min_price !== treatmentPricing.max_price && (
                                             <p>Range: <span className="font-mono">${treatmentPricing.min_price.toFixed(2)} - ${treatmentPricing.max_price.toFixed(2)}</span></p>
                                         )}
                                     </div>
                                 )
                             }
-                            // Fallback to card-level pricing
+
+                            // No treatment-specific data - show alternatives
+                            const treatmentsWithSales = pricingData?.by_treatment?.filter(t => t.sales_count > 0) || []
+                            const hasAlternatives = treatmentsWithSales.length > 0
+
                             return (
-                                <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
-                                    {pricingData?.floor_price != null && pricingData.floor_price > 0 ? (
-                                        <p>Floor (all treatments): <span className="font-mono">${pricingData.floor_price.toFixed(2)}</span></p>
-                                    ) : card.floor_price != null && card.floor_price > 0 ? (
-                                        <p>Floor price: <span className="font-mono">${card.floor_price.toFixed(2)}</span></p>
-                                    ) : null}
-                                    {card.latest_price != null && card.latest_price > 0 && (
-                                        <p>Last sold: <span className="font-mono">${card.latest_price.toFixed(2)}</span></p>
+                                <div className="text-[10px] mt-1 space-y-1">
+                                    <p className="text-amber-500">No {form.treatment} sales recorded yet</p>
+                                    {hasAlternatives ? (
+                                        <div className="text-muted-foreground">
+                                            <p className="mb-1">Treatments with sales data:</p>
+                                            {treatmentsWithSales.slice(0, 3).map(t => (
+                                                <p key={t.treatment} className="pl-2">
+                                                    • {t.treatment}: <span className="font-mono">${(t.floor_price || t.avg_price || 0).toFixed(2)}</span>
+                                                    <span className="text-muted-foreground/60"> ({t.sales_count} sale{t.sales_count !== 1 ? 's' : ''})</span>
+                                                </p>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-muted-foreground">
+                                            {card.floor_price ? (
+                                                <>Estimated: <span className="font-mono">${card.floor_price.toFixed(2)}</span> (card average)</>
+                                            ) : (
+                                                <>No pricing data available for this card</>
+                                            )}
+                                        </p>
                                     )}
-                                    <p className="text-amber-500 italic">No {form.treatment} sales data</p>
                                 </div>
                             )
                         })()}
@@ -489,16 +538,57 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                         />
                     </div>
 
+                    {/* Quantity */}
+                    <div>
+                        <label className="block text-xs uppercase font-bold text-muted-foreground mb-2">
+                            Quantity
+                        </label>
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setForm({ ...form, quantity: Math.max(1, form.quantity - 1) })}
+                                className="w-10 h-10 flex items-center justify-center bg-muted hover:bg-muted/80 rounded transition-colors"
+                                disabled={form.quantity <= 1}
+                            >
+                                <Minus className="w-4 h-4" />
+                            </button>
+                            <input
+                                type="number"
+                                min="1"
+                                max="100"
+                                value={form.quantity}
+                                onChange={(e) => setForm({ ...form, quantity: Math.max(1, Math.min(100, parseInt(e.target.value) || 1)) })}
+                                className="w-20 px-4 py-2 bg-background border border-border rounded font-mono text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setForm({ ...form, quantity: Math.min(100, form.quantity + 1) })}
+                                className="w-10 h-10 flex items-center justify-center bg-muted hover:bg-muted/80 rounded transition-colors"
+                                disabled={form.quantity >= 100}
+                            >
+                                <Plus className="w-4 h-4" />
+                            </button>
+                            {form.quantity > 1 && (
+                                <span className="text-xs text-muted-foreground">
+                                    Total: <span className="font-mono font-bold">${(form.purchase_price * form.quantity).toFixed(2)}</span>
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
                     {/* Split Mode: Added Cards List */}
                     {splitMode && splitCards.length > 0 && (
                         <div className="border border-border rounded p-4 bg-muted/10">
                             <div className="text-xs uppercase font-bold text-muted-foreground mb-3">
-                                Cards to Add ({splitCards.length})
+                                Cards to Add ({splitCards.reduce((acc, sc) => acc + (sc.quantity || 1), 0)} total)
                             </div>
                             <div className="space-y-2 max-h-40 overflow-y-auto">
                                 {splitCards.map((sc, idx) => (
                                     <div key={idx} className="flex items-center justify-between text-xs bg-background p-2 rounded border border-border/50">
                                         <div className="flex items-center gap-2">
+                                            {(sc.quantity || 1) > 1 && (
+                                                <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px] font-bold">x{sc.quantity}</span>
+                                            )}
                                             <span className="font-mono">${sc.purchase_price.toFixed(2)}</span>
                                             <span className="text-muted-foreground">{sc.treatment}</span>
                                             {sc.grading && <span className="text-amber-500">{sc.grading}</span>}
@@ -534,7 +624,7 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                                     onClick={addSplitCard}
                                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-primary text-primary rounded text-sm uppercase font-bold hover:bg-primary/10 transition-colors"
                                 >
-                                    <Plus className="w-4 h-4" /> Add Card
+                                    <Plus className="w-4 h-4" /> Add {form.quantity > 1 ? `${form.quantity} Cards` : 'Card'}
                                 </button>
                                 <button
                                     type="button"
@@ -542,7 +632,10 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                                     disabled={splitCards.length === 0 || addBatchMutation.isPending}
                                     className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded text-sm uppercase font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
                                 >
-                                    {addBatchMutation.isPending ? 'Saving...' : `Save ${splitCards.length} Card${splitCards.length !== 1 ? 's' : ''}`}
+                                    {addBatchMutation.isPending ? 'Saving...' : (() => {
+                                        const totalCards = splitCards.reduce((acc, sc) => acc + (sc.quantity || 1), 0)
+                                        return `Save ${totalCards} Card${totalCards !== 1 ? 's' : ''}`
+                                    })()}
                                 </button>
                             </>
                         ) : (
@@ -560,7 +653,7 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                                     disabled={addSingleMutation.isPending}
                                     className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded text-sm uppercase font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
                                 >
-                                    {addSingleMutation.isPending ? 'Adding...' : 'Add to Portfolio'}
+                                    {addSingleMutation.isPending ? 'Adding...' : form.quantity > 1 ? `Add ${form.quantity} Cards` : 'Add to Portfolio'}
                                 </button>
                             </>
                         )}

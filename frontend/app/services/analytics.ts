@@ -1,57 +1,144 @@
 /**
- * Analytics Service
+ * Hybrid Analytics Service (Google Analytics + Vercel Analytics + Backend)
  *
- * Uses Vercel Analytics for custom event tracking.
- * Falls back gracefully when analytics is unavailable.
+ * Extensible analytics factory for tracking custom events.
+ * Sends events to GA, Vercel Analytics, and our backend for redundancy.
+ *
+ * GA Measurement ID: G-28SPPTBF79
  *
  * Usage:
  *   import { analytics } from '~/services/analytics'
  *   analytics.trackSignup('email')
  *   analytics.trackLoginPageView()
- *
- * Vercel Analytics Constraints:
- * - Event names: max 255 characters
- * - Property keys: max 255 characters
- * - Property values: strings, numbers, booleans only (no nested objects)
- * - Requires Pro/Enterprise plan for custom events
  */
 
 import { track as vercelTrack } from '@vercel/analytics'
 
-// Type for event properties (Vercel Analytics constraints)
-type EventProperties = Record<string, string | number | boolean | undefined>
+// API base URL
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
-// Vercel Analytics allowed property values (no undefined)
-type VercelPropertyValues = string | number | boolean | null
+// Declare gtag on window
+declare global {
+  interface Window {
+    gtag: (...args: any[]) => void
+    dataLayer: any[]
+  }
+}
+
+// GA Measurement ID
+const GA_MEASUREMENT_ID = 'G-28SPPTBF79'
 
 /**
- * Core tracking function - wraps Vercel Analytics track()
- * Safely handles SSR and missing analytics
+ * Core tracking function - sends to both GA and Vercel Analytics
  */
-function track(eventName: string, params?: EventProperties) {
+function track(eventName: string, params?: Record<string, any>) {
   if (typeof window === 'undefined') return
 
-  try {
-    // Truncate event name to 255 chars (Vercel limit)
-    const safeEventName = eventName.slice(0, 255)
-
-    // Clean params: remove undefined values and truncate strings
-    const safeParams: Record<string, VercelPropertyValues> | undefined = params
-      ? Object.fromEntries(
-          Object.entries(params)
-            .filter((entry): entry is [string, string | number | boolean] => entry[1] !== undefined)
-            .map(([k, v]) => [
-              k.slice(0, 255),
-              typeof v === 'string' ? v.slice(0, 255) : v,
-            ])
-        )
-      : undefined
-
-    vercelTrack(safeEventName, safeParams)
-  } catch (error) {
-    // Silently fail - analytics shouldn't break the app
-    console.debug('[Analytics] Error tracking event:', error)
+  // Send to Google Analytics
+  if (window.gtag) {
+    try {
+      window.gtag('event', eventName, {
+        ...params,
+        send_to: GA_MEASUREMENT_ID,
+      })
+    } catch (error) {
+      console.error('[Analytics:GA] Error tracking event:', error)
+    }
   }
+
+  // Send to Vercel Analytics
+  try {
+    // Vercel Analytics has limitations: max 255 chars per key/value, no nested objects
+    // Clean params for Vercel compatibility
+    const vercelParams = params ? cleanParamsForVercel(params) : undefined
+    vercelTrack(eventName, vercelParams)
+  } catch (error) {
+    console.error('[Analytics:Vercel] Error tracking event:', error)
+  }
+}
+
+/**
+ * Clean params for Vercel Analytics compatibility
+ * - Removes nested objects
+ * - Truncates strings > 255 chars
+ * - Only allows strings, numbers, booleans, null
+ */
+function cleanParamsForVercel(params: Record<string, any>): Record<string, string | number | boolean | null> {
+  const cleaned: Record<string, string | number | boolean | null> = {}
+
+  for (const [key, value] of Object.entries(params)) {
+    // Skip nested objects/arrays
+    if (typeof value === 'object' && value !== null) continue
+
+    // Truncate long strings
+    if (typeof value === 'string') {
+      cleaned[key.slice(0, 255)] = value.slice(0, 255)
+    } else if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+      cleaned[key.slice(0, 255)] = value
+    }
+  }
+
+  return cleaned
+}
+
+// Session ID for correlating events
+let sessionId: string | null = null
+function getSessionId(): string {
+  if (typeof window === 'undefined') return ''
+  if (!sessionId) {
+    sessionId = sessionStorage.getItem('wt_session_id')
+    if (!sessionId) {
+      sessionId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+      sessionStorage.setItem('wt_session_id', sessionId)
+    }
+  }
+  return sessionId
+}
+
+/**
+ * Send event to backend analytics API
+ * Fire-and-forget, non-blocking
+ */
+function sendToBackend(eventName: string, properties?: Record<string, any>) {
+  if (typeof window === 'undefined') return
+
+  // Use navigator.sendBeacon for reliability (won't block page unload)
+  const payload = JSON.stringify({
+    event_name: eventName,
+    properties: properties || {},
+    session_id: getSessionId(),
+  })
+
+  try {
+    // Try sendBeacon first (better for page unloads)
+    if (navigator.sendBeacon) {
+      const blob = new Blob([payload], { type: 'application/json' })
+      navigator.sendBeacon(`${API_BASE}/api/v1/analytics/event`, blob)
+    } else {
+      // Fallback to fetch
+      fetch(`${API_BASE}/api/v1/analytics/event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        keepalive: true,
+      }).catch(() => {})
+    }
+  } catch {
+    // Silently fail - analytics should never break the app
+  }
+}
+
+/**
+ * Track page views (for SPAs)
+ */
+function trackPageView(path: string, title?: string) {
+  if (typeof window === 'undefined') return
+  if (!window.gtag) return
+
+  window.gtag('config', GA_MEASUREMENT_ID, {
+    page_path: path,
+    page_title: title,
+  })
 }
 
 // ============================================
@@ -63,7 +150,13 @@ function track(eventName: string, params?: EventProperties) {
  * Triggered when a user successfully creates an account
  */
 function trackSignup(method: 'email' | 'discord' = 'email') {
-  track('sign_up', { method })
+  const params = {
+    method,
+    event_category: 'engagement',
+    event_label: `signup_${method}`,
+  }
+  track('sign_up', params)
+  sendToBackend('sign_up', params)
 }
 
 /**
@@ -71,7 +164,10 @@ function trackSignup(method: 'email' | 'discord' = 'email') {
  * Triggered when a user visits the login page
  */
 function trackLoginPageView() {
-  track('login_page_view')
+  track('login_page_view', {
+    event_category: 'engagement',
+    event_label: 'viewed_login_page',
+  })
 }
 
 /**
@@ -79,7 +175,10 @@ function trackLoginPageView() {
  * Triggered when a user visits the signup page
  */
 function trackSignupPageView() {
-  track('signup_page_view')
+  track('signup_page_view', {
+    event_category: 'engagement',
+    event_label: 'viewed_signup_page',
+  })
 }
 
 /**
@@ -87,7 +186,10 @@ function trackSignupPageView() {
  * Triggered when a user starts the Discord OAuth flow from signup page
  */
 function trackDiscordSignupInitiated() {
-  track('discord_signup_initiated')
+  track('discord_signup_initiated', {
+    event_category: 'engagement',
+    event_label: 'started_discord_oauth_signup',
+  })
 }
 
 /**
@@ -95,7 +197,10 @@ function trackDiscordSignupInitiated() {
  * Triggered when a user accesses their profile page
  */
 function trackProfileAccess() {
-  track('profile_access')
+  track('profile_access', {
+    event_category: 'engagement',
+    event_label: 'accessed_profile',
+  })
 }
 
 /**
@@ -103,7 +208,10 @@ function trackProfileAccess() {
  * Triggered when a user accesses their portfolio page
  */
 function trackPortfolioAccess() {
-  track('portfolio_access')
+  track('portfolio_access', {
+    event_category: 'engagement',
+    event_label: 'accessed_portfolio',
+  })
 }
 
 /**
@@ -111,10 +219,14 @@ function trackPortfolioAccess() {
  * Triggered when a user views a card's detail page
  */
 function trackCardView(cardId: string | number, cardName?: string) {
-  track('view_item', {
-    card_id: String(cardId),
+  const params = {
+    event_category: 'engagement',
+    event_label: 'viewed_card_listing',
+    card_id: cardId,
     card_name: cardName,
-  })
+  }
+  track('view_item', params)
+  sendToBackend('card_view', params)
 }
 
 /**
@@ -122,7 +234,11 @@ function trackCardView(cardId: string | number, cardName?: string) {
  * Triggered when a user has viewed N+ card listings in a session
  */
 function trackMultipleListingsViewed(count: number) {
-  track('multiple_listings_viewed', { listings_count: count })
+  track('multiple_listings_viewed', {
+    event_category: 'engagement',
+    event_label: `viewed_${count}_listings`,
+    listings_count: count,
+  })
 }
 
 /**
@@ -130,10 +246,14 @@ function trackMultipleListingsViewed(count: number) {
  * Triggered when a user adds a card to their portfolio
  */
 function trackAddToPortfolio(cardId: string | number, cardName?: string) {
-  track('add_to_portfolio', {
-    card_id: String(cardId),
+  const params = {
+    event_category: 'engagement',
+    event_label: 'added_to_portfolio',
+    card_id: cardId,
     card_name: cardName,
-  })
+  }
+  track('add_to_portfolio', params)
+  sendToBackend('add_to_portfolio', params)
 }
 
 /**
@@ -141,65 +261,49 @@ function trackAddToPortfolio(cardId: string | number, cardName?: string) {
  * Triggered when a user performs a search
  */
 function trackSearch(searchTerm: string) {
-  track('search', { search_term: searchTerm })
+  const params = {
+    search_term: searchTerm,
+    event_category: 'engagement',
+  }
+  track('search', params)
+  sendToBackend('search', params)
 }
 
 /**
  * Event: Filter Applied
  * Triggered when a user applies a filter
- * Filter types: set, condition, printing, product_type, card_type, color, rarity, time_period
  */
 function trackFilterApplied(filterType: string, filterValue: string) {
   track('filter_applied', {
+    event_category: 'engagement',
     filter_type: filterType,
     filter_value: filterValue,
   })
-}
-
-/**
- * Event: Filter Removed
- * Triggered when a user removes a single filter (e.g., clicking X on a filter chip)
- */
-function trackFilterRemoved(filterType: string, filterValue: string) {
-  track('filter_removed', {
-    filter_type: filterType,
-    filter_value: filterValue,
-  })
-}
-
-/**
- * Event: Filters Cleared
- * Triggered when a user clears all filters at once
- */
-function trackFiltersCleared(filterCount: number) {
-  track('filters_cleared', { filter_count: filterCount })
 }
 
 /**
  * Event: External Link Click
  * Triggered when a user clicks an external link (e.g., eBay listing)
  */
-function trackExternalLinkClick(
-  platform: string,
-  cardId?: string | number,
-  listingTitle?: string
-) {
-  track('external_link_click', {
+function trackExternalLinkClick(platform: string, cardId?: string | number, listingTitle?: string) {
+  const params = {
+    event_category: 'conversion',
+    event_label: `clicked_${platform}_listing`,
     platform,
-    card_id: cardId ? String(cardId) : undefined,
+    card_id: cardId,
     listing_title: listingTitle,
-  })
+  }
+  track('external_link_click', params)
+  sendToBackend('external_link_click', params)
 }
 
 /**
  * Event: Chart Interaction
  * Triggered when a user interacts with a chart (time range, chart type)
  */
-function trackChartInteraction(
-  interactionType: 'time_range' | 'chart_type',
-  value: string
-) {
+function trackChartInteraction(interactionType: 'time_range' | 'chart_type', value: string) {
   track('chart_interaction', {
+    event_category: 'engagement',
     interaction_type: interactionType,
     value,
   })
@@ -210,7 +314,10 @@ function trackChartInteraction(
  * Triggered when a user views the market analysis page
  */
 function trackMarketPageView() {
-  track('market_page_view')
+  track('market_page_view', {
+    event_category: 'engagement',
+    event_label: 'viewed_market_analysis',
+  })
 }
 
 /**
@@ -218,7 +325,10 @@ function trackMarketPageView() {
  * Triggered when a user views the welcome/profile completion page
  */
 function trackWelcomePageView() {
-  track('welcome_page_view')
+  track('welcome_page_view', {
+    event_category: 'engagement',
+    event_label: 'viewed_welcome_page',
+  })
 }
 
 /**
@@ -227,6 +337,8 @@ function trackWelcomePageView() {
  */
 function trackProfileCompleted(hasUsername: boolean, hasDiscord: boolean) {
   track('profile_completed', {
+    event_category: 'engagement',
+    event_label: 'completed_profile',
     has_username: hasUsername,
     has_discord: hasDiscord,
   })
@@ -237,7 +349,10 @@ function trackProfileCompleted(hasUsername: boolean, hasDiscord: boolean) {
  * Triggered when a user skips profile completion on the welcome page
  */
 function trackProfileSkipped() {
-  track('profile_skipped')
+  track('profile_skipped', {
+    event_category: 'engagement',
+    event_label: 'skipped_profile_completion',
+  })
 }
 
 /**
@@ -245,7 +360,10 @@ function trackProfileSkipped() {
  * Triggered when a user views the upgrade/upsell page
  */
 function trackUpgradePageView() {
-  track('upgrade_page_view')
+  track('upgrade_page_view', {
+    event_category: 'engagement',
+    event_label: 'viewed_upgrade_page',
+  })
 }
 
 /**
@@ -253,7 +371,10 @@ function trackUpgradePageView() {
  * Triggered when a user clicks the upgrade button
  */
 function trackUpgradeInitiated() {
-  track('upgrade_initiated')
+  track('upgrade_initiated', {
+    event_category: 'conversion',
+    event_label: 'started_checkout',
+  })
 }
 
 /**
@@ -261,7 +382,10 @@ function trackUpgradeInitiated() {
  * Triggered when a user continues as free from the upgrade page
  */
 function trackUpgradeSkipped() {
-  track('upgrade_skipped')
+  track('upgrade_skipped', {
+    event_category: 'engagement',
+    event_label: 'skipped_upgrade',
+  })
 }
 
 /**
@@ -269,7 +393,10 @@ function trackUpgradeSkipped() {
  * Triggered when a user starts the Discord OAuth flow
  */
 function trackDiscordLoginInitiated() {
-  track('discord_login_initiated')
+  track('discord_login_initiated', {
+    event_category: 'engagement',
+    event_label: 'started_discord_oauth',
+  })
 }
 
 /**
@@ -277,7 +404,13 @@ function trackDiscordLoginInitiated() {
  * Triggered when a user successfully logs in
  */
 function trackLogin(method: 'email' | 'discord' = 'email') {
-  track('login', { method })
+  const params = {
+    method,
+    event_category: 'engagement',
+    event_label: `login_${method}`,
+  }
+  track('login', params)
+  sendToBackend('login', params)
 }
 
 // ============================================
@@ -325,6 +458,7 @@ function trackCardViewWithSession(cardId: string | number, cardName?: string) {
 export const analytics = {
   // Core
   track,
+  trackPageView,
 
   // Auth Events
   trackSignup,
@@ -356,16 +490,13 @@ export const analytics = {
   // Discovery Events
   trackSearch,
   trackFilterApplied,
-  trackFilterRemoved,
-  trackFiltersCleared,
 
   // Market Events
   trackMarketPageView,
   trackChartInteraction,
 
   // Utility: Custom event
-  custom: (eventName: string, params?: EventProperties) =>
-    track(eventName, params),
+  custom: (eventName: string, params?: Record<string, any>) => track(eventName, params),
 }
 
 export default analytics

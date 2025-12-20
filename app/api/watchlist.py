@@ -6,7 +6,7 @@ from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.api import deps
 from app.db import get_session
@@ -100,7 +100,7 @@ def get_watchlist(
             out.card_name = card.name
             out.card_set = card.set_name
             out.card_slug = card.slug
-            out.current_price = card.floor_price  # Use floor_price as current
+            out.current_price = getattr(card, 'floor_price', None)  # floor_price is computed, not on model
         result.append(out)
 
     return result
@@ -136,7 +136,7 @@ def add_to_watchlist(
     out.card_name = card.name
     out.card_set = card.set_name
     out.card_slug = card.slug
-    out.current_price = card.floor_price
+    out.current_price = getattr(card, 'floor_price', None)
 
     return out
 
@@ -161,7 +161,7 @@ def get_watchlist_item(
         out.card_name = card.name
         out.card_set = card.set_name
         out.card_slug = card.slug
-        out.current_price = card.floor_price
+        out.current_price = getattr(card, 'floor_price', None)
 
     return out
 
@@ -185,7 +185,7 @@ def update_watchlist_item(
     for key, value in update_data.items():
         setattr(item, key, value)
 
-    item.updated_at = datetime.utcnow()
+    item.updated_at = datetime.now(timezone.utc)
     session.add(item)
     session.commit()
     session.refresh(item)
@@ -196,7 +196,7 @@ def update_watchlist_item(
         out.card_name = card.name
         out.card_set = card.set_name
         out.card_slug = card.slug
-        out.current_price = card.floor_price
+        out.current_price = getattr(card, 'floor_price', None)
 
     return out
 
@@ -264,7 +264,7 @@ def update_email_preferences(
     for key, value in update_data.items():
         setattr(prefs, key, value)
 
-    prefs.updated_at = datetime.utcnow()
+    prefs.updated_at = datetime.now(timezone.utc)
     session.add(prefs)
     session.commit()
     session.refresh(prefs)

@@ -129,7 +129,7 @@ def rate_limit(
 
     def decorator(func: Callable):
         @wraps(func)
-        async def wrapper(*args, request: Request = None, **kwargs):
+        async def wrapper(*args, request: Request | None = None, **kwargs):
             # Find request in args or kwargs
             if request is None:
                 for arg in args:

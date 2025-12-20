@@ -1,6 +1,6 @@
 import asyncio
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlmodel import Session, select
 from app.db import engine
@@ -101,7 +101,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
         print("No active data from scrape. Checking existing DB records...")
         with Session(engine) as fallback_session:
             # MarketPrice already imported at top of file
-            cutoff = datetime.now() - timedelta(hours=24)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
             existing_active = fallback_session.exec(
                 select(MarketPrice)
                 .where(MarketPrice.card_id == card_id, MarketPrice.listing_type == "active")
@@ -236,7 +236,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
         if card_id > 0:
             with Session(engine) as fallback_session:
                 # First try 30-day records, then fall back to ALL records
-                cutoff = datetime.now() - timedelta(days=30)
+                cutoff = datetime.now(timezone.utc) - timedelta(days=30)
                 existing_prices = fallback_session.exec(
                     select(MarketPrice)
                     .where(MarketPrice.card_id == card_id, MarketPrice.listing_type == "sold")
@@ -320,7 +320,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                             active_listing.listing_type = "sold"
                             active_listing.sold_date = price.sold_date
                             active_listing.price = price.price  # May have changed
-                            active_listing.scraped_at = datetime.utcnow()
+                            active_listing.scraped_at = datetime.now(timezone.utc)
                             # listed_at preserved from when it was first seen as active
                             session.add(active_listing)
                             session.flush()

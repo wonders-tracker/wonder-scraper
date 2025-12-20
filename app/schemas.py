@@ -1,6 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 
 
 class MarketSnapshotBase(BaseModel):
@@ -196,21 +196,30 @@ class PortfolioCardBase(BaseModel):
     treatment: str = "Classic Paper"
     source: str = "Other"  # eBay, Blokpax, TCGPlayer, LGS, Trade, Pack Pull, Other
     purchase_price: float
-    purchase_date: Optional[datetime] = None
+    purchase_date: Optional[date] = None
     grading: Optional[str] = None  # e.g., "PSA 10", "BGS 9.5", null for raw
     notes: Optional[str] = None
 
 
 class PortfolioCardCreate(PortfolioCardBase):
-    """Create a single card in portfolio."""
+    """Create a single card in portfolio.
 
-    pass
+    Use quantity > 1 to create multiple identical cards at once.
+    """
+
+    quantity: int = 1  # Number of cards to create (defaults to 1)
+
+
+class PortfolioCardBatchItem(PortfolioCardBase):
+    """Single item in a batch create, with optional quantity."""
+
+    quantity: int = 1  # Number of cards to create (defaults to 1)
 
 
 class PortfolioCardBatchCreate(BaseModel):
     """Create multiple cards at once (split entry)."""
 
-    cards: List[PortfolioCardBase]
+    cards: List[PortfolioCardBatchItem]
 
 
 class PortfolioCardUpdate(BaseModel):
@@ -219,7 +228,7 @@ class PortfolioCardUpdate(BaseModel):
     treatment: Optional[str] = None
     source: Optional[str] = None
     purchase_price: Optional[float] = None
-    purchase_date: Optional[datetime] = None
+    purchase_date: Optional[date] = None
     grading: Optional[str] = None
     notes: Optional[str] = None
 

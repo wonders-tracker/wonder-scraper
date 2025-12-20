@@ -4,7 +4,7 @@ EBAY_BASE_URL = "https://www.ebay.com/sch/i.html"
 TCG_CATEGORY_ID = "183454"  # CCG Individual Cards
 
 
-def build_ebay_url(card_name: str, set_name: str = None, sold_only: bool = True, page: int = 1) -> str:
+def build_ebay_url(card_name: str, set_name: str | None = None, sold_only: bool = True, page: int = 1) -> str:
     """
     Constructs an eBay search URL for a given card name.
 

@@ -4,9 +4,9 @@ Scraper for OpenSea collections using Pydoll and the OpenSea API.
 
 import asyncio
 import aiohttp
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from app.scraper.browser import get_page_content
 from bs4 import BeautifulSoup
 import re
@@ -56,7 +56,7 @@ async def scrape_opensea_collection(collection_url: str) -> Dict[str, Any]:
 
         soup = BeautifulSoup(html, "lxml")
 
-        stats = {
+        stats: Dict[str, Union[float, int, str]] = {
             "floor_price_eth": 0.0,
             "floor_price_usd": 0.0,
             "total_volume_eth": 0.0,
@@ -148,7 +148,7 @@ async def scrape_opensea_collection(collection_url: str) -> Dict[str, Any]:
                                             stats["total_volume_usd"] = float(volume_unit) * eth_price_usd
                                             print(f"Strategy 3 (URQL JSON) found Volume: {volume_unit} ETH")
 
-                                if stats["total_volume_eth"] > 0 and stats["owners"] > 0:
+                                if float(stats["total_volume_eth"]) > 0 and int(stats["owners"]) > 0:
                                     break
                 except Exception as e:
                     print(f"Strategy 3 JSON parse error: {e}")
@@ -307,7 +307,7 @@ async def scrape_opensea_sales(collection_slug: str, limit: int = 50, event_type
                         sold_at = (
                             datetime.fromisoformat(event_timestamp.replace("Z", "+00:00"))
                             if event_timestamp
-                            else datetime.utcnow()
+                            else datetime.now(timezone.utc)
                         )
 
                         # Extract seller/buyer
@@ -401,7 +401,7 @@ async def _scrape_opensea_sales_web(collection_slug: str, eth_price_usd: float, 
                                 try:
                                     sold_at = datetime.fromisoformat(event_time.replace("Z", "+00:00"))
                                 except (ValueError, TypeError, AttributeError):
-                                    sold_at = datetime.utcnow()
+                                    sold_at = datetime.now(timezone.utc)
 
                                 # Extract transaction hash
                                 tx_hash = item.get("transactionHash", "")
@@ -595,7 +595,7 @@ async def scrape_opensea_listings(
 
                         # Get listing timestamp
                         start_time = parameters.get("startTime")
-                        listed_at = datetime.fromtimestamp(int(start_time)) if start_time else None
+                        listed_at = datetime.fromtimestamp(int(start_time), tz=timezone.utc) if start_time else None
 
                         listing = OpenSeaListing(
                             token_id=str(token_id),
@@ -798,7 +798,7 @@ async def scrape_opensea_listings_to_db(
                 # Update price if changed
                 if existing.price != round(listing.price_usd, 2):
                     existing.price = round(listing.price_usd, 2)
-                    existing.scraped_at = datetime.now()
+                    existing.scraped_at = datetime.now(timezone.utc)
                     session.add(existing)
                     listings_saved += 1
                 continue
@@ -818,7 +818,7 @@ async def scrape_opensea_listings_to_db(
                 url=listing.listing_url,
                 image_url=listing.image_url,
                 listed_at=listing.listed_at,
-                scraped_at=datetime.now(),
+                scraped_at=datetime.now(timezone.utc),
             )
 
             session.add(mp)
@@ -826,6 +826,11 @@ async def scrape_opensea_listings_to_db(
 
         except Exception as e:
             print(f"[OpenSea] Error saving listing {listing.token_id}: {e}")
+            # Rollback failed transaction to allow subsequent operations
+            try:
+                session.rollback()
+            except Exception:
+                pass
             continue
 
     if save_to_db:

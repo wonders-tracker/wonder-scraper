@@ -25,21 +25,41 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Disable modulepreload for large chunks to improve initial load
+    modulePreload: {
+      resolveDependencies: (filename, deps) => {
+        // Don't preload charts - they're lazy loaded
+        return deps.filter(dep => !dep.includes('charts'))
+      }
+    },
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Vendor chunk - core React libraries
-          'vendor-react': ['react', 'react-dom'],
-          // Router chunk
-          'vendor-router': ['@tanstack/react-router'],
-          // Query chunk
-          'vendor-query': ['@tanstack/react-query'],
-          // Table chunk - only needed on dashboard/market pages
-          'vendor-table': ['@tanstack/react-table'],
-          // Charts chunk - heavy (~200KB), only needed on market/card detail
-          'vendor-charts': ['recharts'],
-          // Icons chunk
-          'vendor-icons': ['lucide-react'],
+        manualChunks(id) {
+          // Core React - always needed
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
+            return 'vendor-react'
+          }
+          // Router - always needed
+          if (id.includes('@tanstack/react-router')) {
+            return 'vendor-router'
+          }
+          // Query - always needed
+          if (id.includes('@tanstack/react-query')) {
+            return 'vendor-query'
+          }
+          // Table - needed on market/admin pages
+          if (id.includes('@tanstack/react-table')) {
+            return 'vendor-table'
+          }
+          // Icons - frequently used
+          if (id.includes('lucide-react')) {
+            return 'vendor-icons'
+          }
+          // CHARTS - 376KB, lazy load separately
+          // Only loads when user visits chart-heavy pages
+          if (id.includes('recharts') || id.includes('d3-')) {
+            return 'vendor-charts-lazy'
+          }
         }
       }
     }

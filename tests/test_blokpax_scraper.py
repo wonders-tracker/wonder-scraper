@@ -276,14 +276,14 @@ class TestAssetParsing:
                             "id": "101",
                             "price": 100000000000000,  # 100,000 BPX
                             "quantity": 1,
-                            "seller": {"address": "0xseller1"},
+                            "seller": {"username": "0xseller1"},
                             "created_at": "2025-10-30T05:56:30.000000Z"
                         },
                         {
                             "id": "102",
                             "price": 150000000000000,  # 150,000 BPX
                             "quantity": 2,
-                            "seller": {"address": "0xseller2"},
+                            "seller": {"username": "0xseller2"},
                             "created_at": "2025-10-31T10:00:00.000000Z"
                         }
                     ],

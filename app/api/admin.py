@@ -7,9 +7,10 @@ import asyncio
 from typing import Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Depends
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.api import deps
+from app.core.typing import col
 from app.models.user import User
 
 router = APIRouter()
@@ -45,32 +46,40 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
 
     _running_jobs[job_id] = {
         "status": "running",
-        "started": datetime.utcnow(),
+        "started": datetime.now(timezone.utc),
         "processed": 0,
         "errors": 0,
         "new_listings": 0,
     }
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
 
     try:
         with Session(engine) as session:
-            all_cards = session.exec(select(Card)).all()
+            all_cards = session.execute(select(Card)).scalars().all()
 
             cards_to_scrape = []
-            cutoff_time = datetime.utcnow() - timedelta(hours=4)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=4)
 
             for card in all_cards:
                 if force_all:
                     cards_to_scrape.append(card)
                 else:
-                    snapshot = session.exec(
+                    snapshot = session.execute(
                         select(MarketSnapshot)
                         .where(MarketSnapshot.card_id == card.id)
-                        .order_by(MarketSnapshot.timestamp.desc())
+                        .order_by(col(MarketSnapshot.timestamp).desc(), col(MarketSnapshot.id).desc())
                         .limit(1)
-                    ).first()
+                    ).scalars().first()
 
-                    if not snapshot or snapshot.timestamp < cutoff_time:
+                    # Handle both naive and aware timestamps
+                    if not snapshot:
+                        cards_to_scrape.append(card)
+                        continue
+                    snapshot_ts = snapshot.timestamp
+                    compare_cutoff = cutoff_time
+                    if snapshot_ts.tzinfo is None:
+                        compare_cutoff = cutoff_time.replace(tzinfo=None)
+                    if snapshot_ts < compare_cutoff:
                         cards_to_scrape.append(card)
 
                 if len(cards_to_scrape) >= limit:
@@ -112,10 +121,10 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
             await BrowserManager.close()
 
         _running_jobs[job_id]["status"] = "completed"
-        _running_jobs[job_id]["finished"] = datetime.utcnow()
+        _running_jobs[job_id]["finished"] = datetime.now(timezone.utc)
 
         # Log scrape completion to Discord
-        duration = (datetime.utcnow() - start_time).total_seconds()
+        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
         log_scrape_complete(
             cards_processed=_running_jobs[job_id]["processed"],
             new_listings=_running_jobs[job_id].get("new_listings", 0),
@@ -153,7 +162,7 @@ async def trigger_backfill(
             )
 
     # Create new job
-    job_id = f"backfill_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    job_id = f"backfill_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
     # Start background task
     background_tasks.add_task(run_backfill_job, job_id, request.limit, request.force_all, request.is_backfill)
@@ -162,7 +171,7 @@ async def trigger_backfill(
         status="started",
         message=f"Backfill job started with limit={request.limit}, force_all={request.force_all}",
         job_id=job_id,
-        started_at=datetime.utcnow().isoformat(),
+        started_at=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -204,24 +213,44 @@ async def get_admin_stats(
     from app.models.card import Card
     from app.models.market import MarketPrice, MarketSnapshot
     from app.models.portfolio import PortfolioCard
-    from app.models.analytics import PageView
     from datetime import timedelta
 
     with Session(engine) as session:
         # User stats
-        total_users = session.exec(select(func.count(UserModel.id))).one()
+        total_users = session.execute(select(func.count(UserModel.id))).scalar_one()
         active_users_24h = (
-            session.exec(
-                select(func.count(UserModel.id)).where(UserModel.last_login >= datetime.utcnow() - timedelta(hours=24))
-            ).one()
+            session.execute(
+                select(func.count(UserModel.id)).where(col(UserModel.last_login) >= datetime.now(timezone.utc) - timedelta(hours=24))
+            ).scalar_one()
             if hasattr(UserModel, "last_login")
             else 0
         )
 
-        # Get all users with details
-        all_users = session.exec(select(UserModel).order_by(UserModel.created_at.desc())).all()
+        # Get all users with details and activity data
+        all_users = session.execute(select(UserModel).order_by(col(UserModel.created_at).desc())).scalars().all()
+
+        # Get user activity stats in bulk for efficiency
+        user_activity_result = session.execute(
+            text("""
+                SELECT
+                    user_id,
+                    MAX(timestamp) as last_active,
+                    COUNT(*) as pageview_count,
+                    COUNT(DISTINCT path) as unique_pages
+                FROM pageview
+                WHERE user_id IS NOT NULL
+                GROUP BY user_id
+            """)
+        ).all()
+        user_activity_map = {
+            row[0]: {"last_active": row[1], "pageview_count": row[2], "unique_pages": row[3]}
+            for row in user_activity_result
+        }
+
         users_list = []
         for u in all_users:
+            activity = user_activity_map.get(u.id, {})
+            last_active = activity.get("last_active")
             users_list.append(
                 {
                     "id": u.id,
@@ -232,39 +261,42 @@ async def get_admin_stats(
                     "is_active": u.is_active,
                     "created_at": u.created_at.isoformat() if u.created_at else None,
                     "last_login": u.last_login.isoformat() if hasattr(u, "last_login") and u.last_login else None,
+                    "last_active": last_active.isoformat() if last_active else None,
+                    "pageview_count": activity.get("pageview_count", 0),
+                    "unique_pages": activity.get("unique_pages", 0),
                 }
             )
 
         # Card stats
-        total_cards = session.exec(select(func.count(Card.id))).one()
+        total_cards = session.execute(select(func.count(Card.id))).scalar_one()
 
         # Market data stats
-        total_listings = session.exec(select(func.count(MarketPrice.id))).one()
-        sold_listings = session.exec(select(func.count(MarketPrice.id)).where(MarketPrice.listing_type == "sold")).one()
-        active_listings = session.exec(
+        total_listings = session.execute(select(func.count(MarketPrice.id))).scalar_one()
+        sold_listings = session.execute(select(func.count(MarketPrice.id)).where(MarketPrice.listing_type == "sold")).scalar_one()
+        active_listings = session.execute(
             select(func.count(MarketPrice.id)).where(MarketPrice.listing_type == "active")
-        ).one()
+        ).scalar_one()
 
         # Listings in last 24h
-        listings_24h = session.exec(
-            select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.utcnow() - timedelta(hours=24))
-        ).one()
+        listings_24h = session.execute(
+            select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.now(timezone.utc) - timedelta(hours=24))
+        ).scalar_one()
 
         # Listings in last 7d
-        listings_7d = session.exec(
-            select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.utcnow() - timedelta(days=7))
-        ).one()
+        listings_7d = session.execute(
+            select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.now(timezone.utc) - timedelta(days=7))
+        ).scalar_one()
 
         # Portfolio stats
-        total_portfolio_cards = session.exec(
-            select(func.count(PortfolioCard.id)).where(PortfolioCard.deleted_at.is_(None))
-        ).one()
+        total_portfolio_cards = session.execute(
+            select(func.count(PortfolioCard.id)).where(col(PortfolioCard.deleted_at).is_(None))
+        ).scalar_one()
 
         # Snapshot stats
-        total_snapshots = session.exec(select(func.count(MarketSnapshot.id))).one()
-        latest_snapshot = session.exec(
-            select(MarketSnapshot).order_by(MarketSnapshot.timestamp.desc()).limit(1)
-        ).first()
+        total_snapshots = session.execute(select(func.count(MarketSnapshot.id))).scalar_one()
+        latest_snapshot = session.execute(
+            select(MarketSnapshot).order_by(col(MarketSnapshot.timestamp).desc(), col(MarketSnapshot.id).desc()).limit(1)
+        ).scalars().first()
 
         # Database size (PostgreSQL)
         try:
@@ -301,21 +333,52 @@ async def get_admin_stats(
         daily_volume = [{"date": str(row[0]), "count": row[1]} for row in daily_volume_result]
 
         # Analytics - Page views
+        # Filter out: admin users (superusers) and localhost traffic
         try:
-            total_pageviews = session.exec(select(func.count(PageView.id))).one()
-            pageviews_24h = session.exec(
-                select(func.count(PageView.id)).where(PageView.timestamp >= datetime.utcnow() - timedelta(hours=24))
-            ).one()
-            pageviews_7d = session.exec(
-                select(func.count(PageView.id)).where(PageView.timestamp >= datetime.utcnow() - timedelta(days=7))
-            ).one()
+            # Get superuser IDs to exclude
+            superuser_ids = session.execute(
+                select(UserModel.id).where(col(UserModel.is_superuser).is_(True))
+            ).all()
+            superuser_ids_list = list(superuser_ids) if superuser_ids else []
+
+            # Base filter: exclude admin users and localhost referrers
+            def exclude_admin_localhost_pv(query_text: str) -> str:
+                """Add WHERE clause to exclude admin/localhost from pageview queries."""
+                exclusions = []
+                if superuser_ids_list:
+                    ids_str = ",".join(str(id) for id in superuser_ids_list)
+                    exclusions.append(f"(user_id IS NULL OR user_id NOT IN ({ids_str}))")
+                exclusions.append("(referrer IS NULL OR referrer NOT LIKE '%localhost%')")
+                exclusions.append("path NOT LIKE '%/auth/callback%'")
+                return " AND ".join(exclusions)
+
+            def exclude_admin_localhost_ev(query_text: str) -> str:
+                """Add WHERE clause to exclude admin/localhost from event queries."""
+                exclusions = []
+                if superuser_ids_list:
+                    ids_str = ",".join(str(id) for id in superuser_ids_list)
+                    exclusions.append(f"(user_id IS NULL OR user_id NOT IN ({ids_str}))")
+                return " AND ".join(exclusions) if exclusions else "1=1"
+
+            pv_filter = exclude_admin_localhost_pv("")
+            ev_filter = exclude_admin_localhost_ev("")
+
+            total_pageviews = session.execute(
+                text(f"SELECT COUNT(*) FROM pageview WHERE {pv_filter}")
+            ).scalar() or 0
+            pageviews_24h = session.execute(
+                text(f"SELECT COUNT(*) FROM pageview WHERE timestamp >= NOW() - INTERVAL '24 hours' AND {pv_filter}")
+            ).scalar() or 0
+            pageviews_7d = session.execute(
+                text(f"SELECT COUNT(*) FROM pageview WHERE timestamp >= NOW() - INTERVAL '7 days' AND {pv_filter}")
+            ).scalar() or 0
 
             # Unique visitors (by ip_hash) in 24h
             unique_visitors_24h = (
                 session.execute(
-                    text("""
+                    text(f"""
                 SELECT COUNT(DISTINCT ip_hash) FROM pageview
-                WHERE timestamp >= NOW() - INTERVAL '24 hours'
+                WHERE timestamp >= NOW() - INTERVAL '24 hours' AND {pv_filter}
             """)
                 ).scalar()
                 or 0
@@ -324,9 +387,9 @@ async def get_admin_stats(
             # Unique visitors in 7d
             unique_visitors_7d = (
                 session.execute(
-                    text("""
+                    text(f"""
                 SELECT COUNT(DISTINCT ip_hash) FROM pageview
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {pv_filter}
             """)
                 ).scalar()
                 or 0
@@ -334,10 +397,10 @@ async def get_admin_stats(
 
             # Top pages (last 7 days)
             top_pages_result = session.execute(
-                text("""
+                text(f"""
                 SELECT path, COUNT(*) as views
                 FROM pageview
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {pv_filter}
                 GROUP BY path
                 ORDER BY views DESC
                 LIMIT 10
@@ -347,10 +410,10 @@ async def get_admin_stats(
 
             # Traffic by device type
             device_breakdown_result = session.execute(
-                text("""
+                text(f"""
                 SELECT device_type, COUNT(*) as count
                 FROM pageview
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {pv_filter}
                 GROUP BY device_type
                 ORDER BY count DESC
             """)
@@ -359,30 +422,120 @@ async def get_admin_stats(
 
             # Daily pageviews (last 7 days)
             daily_pageviews_result = session.execute(
-                text("""
+                text(f"""
                 SELECT DATE(timestamp) as date, COUNT(*) as count
                 FROM pageview
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {pv_filter}
                 GROUP BY DATE(timestamp)
                 ORDER BY date DESC
             """)
             ).all()
             daily_pageviews = [{"date": str(row[0]), "count": row[1]} for row in daily_pageviews_result]
 
-            # Top referrers
+            # Top referrers (exclude localhost)
             top_referrers_result = session.execute(
-                text("""
+                text(f"""
                 SELECT referrer, COUNT(*) as count
                 FROM pageview
                 WHERE timestamp >= NOW() - INTERVAL '7 days'
                   AND referrer IS NOT NULL
                   AND referrer != ''
+                  AND referrer NOT LIKE '%localhost%'
+                  AND {pv_filter}
                 GROUP BY referrer
                 ORDER BY count DESC
                 LIMIT 10
             """)
             ).all()
             top_referrers = [{"referrer": row[0], "count": row[1]} for row in top_referrers_result]
+
+            # Popular cards (from pageviews to /cards/{id} routes)
+            popular_cards_result = session.execute(
+                text(f"""
+                SELECT
+                    pv.path,
+                    c.id as card_id,
+                    c.name as card_name,
+                    c.image_url,
+                    COUNT(*) as views
+                FROM pageview pv
+                LEFT JOIN card c ON c.id = CAST(
+                    CASE
+                        WHEN pv.path ~ '^/cards/[0-9]+$'
+                        THEN regexp_replace(pv.path, '^/cards/', '')
+                        ELSE NULL
+                    END AS INTEGER
+                )
+                WHERE pv.timestamp >= NOW() - INTERVAL '7 days'
+                  AND pv.path ~ '^/cards/[0-9]+$'
+                  AND {pv_filter}
+                GROUP BY pv.path, c.id, c.name, c.image_url
+                ORDER BY views DESC
+                LIMIT 10
+            """)
+            ).all()
+            popular_cards = [
+                {
+                    "path": row[0],
+                    "card_id": row[1],
+                    "card_name": row[2],
+                    "image_url": row[3],
+                    "views": row[4],
+                }
+                for row in popular_cards_result
+            ]
+
+            # Events summary (exclude admin users)
+            total_events = session.execute(
+                text(f"SELECT COUNT(*) FROM analytics_event WHERE {ev_filter}")
+            ).scalar() or 0
+            events_24h = session.execute(
+                text(f"SELECT COUNT(*) FROM analytics_event WHERE timestamp >= NOW() - INTERVAL '24 hours' AND {ev_filter}")
+            ).scalar() or 0
+            events_7d = session.execute(
+                text(f"SELECT COUNT(*) FROM analytics_event WHERE timestamp >= NOW() - INTERVAL '7 days' AND {ev_filter}")
+            ).scalar() or 0
+
+            # Top events by name (exclude admin users)
+            top_events_result = session.execute(
+                text(f"""
+                SELECT event_name, COUNT(*) as count
+                FROM analytics_event
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {ev_filter}
+                GROUP BY event_name
+                ORDER BY count DESC
+                LIMIT 10
+            """)
+            ).all()
+            top_events = [{"event_name": row[0], "count": row[1]} for row in top_events_result]
+
+            # Daily events (last 7 days, exclude admin users)
+            daily_events_result = session.execute(
+                text(f"""
+                SELECT DATE(timestamp) as date, COUNT(*) as count
+                FROM analytics_event
+                WHERE timestamp >= NOW() - INTERVAL '7 days' AND {ev_filter}
+                GROUP BY DATE(timestamp)
+                ORDER BY date DESC
+            """)
+            ).all()
+            daily_events = [{"date": str(row[0]), "count": row[1]} for row in daily_events_result]
+
+            # Top external link clicks by platform (exclude admin users)
+            external_clicks_result = session.execute(
+                text(f"""
+                SELECT platform, COUNT(*) as count
+                FROM analytics_event
+                WHERE event_name = 'external_link_click'
+                  AND timestamp >= NOW() - INTERVAL '7 days'
+                  AND platform IS NOT NULL
+                  AND {ev_filter}
+                GROUP BY platform
+                ORDER BY count DESC
+                LIMIT 5
+            """)
+            ).all()
+            external_clicks = [{"platform": row[0], "count": row[1]} for row in external_clicks_result]
 
             analytics_data = {
                 "total_pageviews": total_pageviews,
@@ -394,6 +547,13 @@ async def get_admin_stats(
                 "device_breakdown": device_breakdown,
                 "daily_pageviews": daily_pageviews,
                 "top_referrers": top_referrers,
+                "popular_cards": popular_cards,
+                "total_events": total_events,
+                "events_24h": events_24h,
+                "events_7d": events_7d,
+                "top_events": top_events,
+                "daily_events": daily_events,
+                "external_clicks": external_clicks,
             }
         except Exception as e:
             # Table might not exist yet
@@ -407,6 +567,13 @@ async def get_admin_stats(
                 "device_breakdown": [],
                 "daily_pageviews": [],
                 "top_referrers": [],
+                "popular_cards": [],
+                "total_events": 0,
+                "events_24h": 0,
+                "events_7d": 0,
+                "top_events": [],
+                "daily_events": [],
+                "external_clicks": [],
                 "error": str(e),
             }
 
@@ -467,6 +634,87 @@ async def get_scheduler_status(
     }
 
 
+# ============== USER ACTIVITY (Admin) ==============
+
+
+@router.get("/users/{user_id}/activity")
+async def get_user_activity(
+    user_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    current_user: User = Depends(deps.get_current_superuser),
+):
+    """Get detailed activity for a specific user."""
+    from sqlmodel import Session, select, text
+    from app.db import engine
+    from app.models.user import User as UserModel
+    from app.models.analytics import PageView
+
+    with Session(engine) as session:
+        # Verify user exists
+        user = session.get(UserModel, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get recent page views
+        pageviews = session.execute(
+            select(PageView)
+            .where(PageView.user_id == user_id)
+            .order_by(col(PageView.timestamp).desc())
+            .limit(limit)
+        ).all()
+
+        # Get top pages for this user
+        top_pages_result = session.execute(
+            text("""
+                SELECT path, COUNT(*) as views
+                FROM pageview
+                WHERE user_id = :user_id
+                GROUP BY path
+                ORDER BY views DESC
+                LIMIT 10
+            """),
+            {"user_id": user_id}
+        ).all()
+
+        # Get activity by day (last 30 days)
+        daily_activity_result = session.execute(
+            text("""
+                SELECT DATE(timestamp) as date, COUNT(*) as views
+                FROM pageview
+                WHERE user_id = :user_id
+                AND timestamp >= NOW() - INTERVAL '30 days'
+                GROUP BY DATE(timestamp)
+                ORDER BY date DESC
+            """),
+            {"user_id": user_id}
+        ).all()
+
+        return {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "username": getattr(user, "username", None),
+            },
+            "recent_pageviews": [
+                {
+                    "path": pv.path,
+                    "timestamp": pv.timestamp.isoformat(),
+                    "device_type": pv.device_type,
+                    "referrer": pv.referrer,
+                }
+                for pv in pageviews
+            ],
+            "top_pages": [
+                {"path": row[0], "views": row[1]}
+                for row in top_pages_result
+            ],
+            "daily_activity": [
+                {"date": str(row[0]), "views": row[1]}
+                for row in daily_activity_result
+            ],
+        }
+
+
 # ============== API KEY MANAGEMENT (Admin) ==============
 
 
@@ -482,7 +730,7 @@ async def list_all_api_keys(
 
     with Session(engine) as session:
         # Get all API keys with user info
-        keys = session.exec(select(APIKey).order_by(APIKey.created_at.desc())).all()
+        keys = session.execute(select(APIKey).order_by(col(APIKey.created_at).desc())).scalars().all()
 
         result = []
         for key in keys:
@@ -520,19 +768,19 @@ async def get_api_key_stats(
 
     with Session(engine) as session:
         # Total keys
-        total_keys = session.exec(select(func.count(APIKey.id))).one()
+        total_keys = session.execute(select(func.count(APIKey.id))).scalar_one()
 
         # Active keys
-        active_keys = session.exec(select(func.count(APIKey.id)).where(APIKey.is_active is True)).one()
+        active_keys = session.execute(select(func.count(APIKey.id)).where(APIKey.is_active is True)).scalar_one()
 
         # Keys used today
-        keys_used_today = session.exec(select(func.count(APIKey.id)).where(APIKey.requests_today > 0)).one()
+        keys_used_today = session.execute(select(func.count(APIKey.id)).where(APIKey.requests_today > 0)).scalar_one()
 
         # Total requests today
-        total_requests_today = session.exec(select(func.sum(APIKey.requests_today))).one() or 0
+        total_requests_today = session.execute(select(func.sum(APIKey.requests_today))).scalar_one() or 0
 
         # Total requests all time
-        total_requests_all = session.exec(select(func.sum(APIKey.requests_total))).one() or 0
+        total_requests_all = session.execute(select(func.sum(APIKey.requests_total))).scalar_one() or 0
 
         # Top users by API usage
         top_users_result = session.execute(
@@ -653,7 +901,7 @@ async def admin_reset_daily_counts(
         )
         session.commit()
 
-        return {"message": "Daily counts reset for all API keys", "keys_affected": result.rowcount}
+        return {"message": "Daily counts reset for all API keys", "keys_affected": getattr(result, 'rowcount', 0)}
 
 
 @router.get("/blocked-ips")

@@ -12,6 +12,26 @@ import { useTimePeriod } from '../context/TimePeriodContext'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
 
+// Card thumbnail that only renders if src provided and loads successfully (prevents layout shift)
+function CardThumbnail({ src, alt, className }: { src?: string; alt: string; className: string }) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+
+  // Don't render anything if no src or error
+  if (!src || error) return null
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      className={clsx(className, !loaded && 'hidden')}
+      onLoad={() => setLoaded(true)}
+      onError={() => setError(true)}
+    />
+  )
+}
+
 // Truncate treatment for display if too long
 function simplifyTreatmentForDisplay(treatment: string): string {
     if (!treatment) return ''
@@ -53,6 +73,7 @@ type Card = {
 
   // === METADATA ===
   last_treatment?: string // Treatment of last sale (e.g., "Classic Foil")
+  image_url?: string // Card thumbnail URL from blob storage
 
   // === DEPRECATED (backwards compat) ===
   volume_30d?: number // @deprecated: use 'volume'
@@ -72,6 +93,7 @@ type Listing = {
   card_id: number
   card_name: string
   card_slug?: string
+  card_image_url?: string // Card thumbnail from blob storage
   product_type: string
   title: string
   price: number
@@ -116,7 +138,6 @@ function Home() {
   const { timePeriod, setTimePeriod } = useTimePeriod()
   const [productType, setProductType] = useState<string>('all')
   const [platform, setPlatform] = useState<string>('all')
-  const [hideLowSignal, setHideLowSignal] = useState<boolean>(true)  // Hide low signal cards by default
   const [trackingCard, setTrackingCard] = useState<Card | null>(null)
   const [activeTab, setActiveTab] = useState<DashboardTab>('products')
   // Listings tab state
@@ -128,6 +149,8 @@ function Home() {
   const [listingSearch, setListingSearch] = useState<string>('')
   const [listingSortBy, setListingSortBy] = useState<string>('scraped_at')
   const [listingSortOrder, setListingSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [listingPage, setListingPage] = useState<number>(0)
+  const LISTINGS_PER_PAGE = 100
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -177,19 +200,19 @@ function Home() {
       }))
       .filter(c => (c.latest_price && c.latest_price > 0) || ((c.volume ?? c.volume_30d ?? 0) > 0) || (c.lowest_ask && c.lowest_ask > 0)) // Filter out items with no data
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh
-    gcTime: 30 * 60 * 1000, // 30 minutes - cache persists (renamed from cacheTime in v5)
+    staleTime: 2 * 60 * 1000, // 2 minutes - fresher feel while respecting 15min scrape interval
+    gcTime: 30 * 60 * 1000, // 30 minutes - cache persists
     refetchOnWindowFocus: false, // Don't refetch on tab focus
-    refetchOnMount: false, // Don't refetch on component mount if data exists
   })
 
-  // Listings query for the Listings tab
-  const { data: listingsData, isLoading: listingsLoading } = useQuery({
-    queryKey: ['listings', listingType, listingPlatform, listingProductType, listingTreatment, listingTimePeriod, listingSearch, listingSortBy, listingSortOrder],
+  // Listings query for the Listings tab (server-side pagination)
+  const { data: listingsData, isLoading: listingsLoading, isFetching: listingsFetching } = useQuery({
+    queryKey: ['listings', listingType, listingPlatform, listingProductType, listingTreatment, listingTimePeriod, listingSearch, listingSortBy, listingSortOrder, listingPage],
     queryFn: async () => {
       const params = new URLSearchParams()
       params.set('listing_type', listingType)
-      params.set('limit', '200')
+      params.set('limit', String(LISTINGS_PER_PAGE))
+      params.set('offset', String(listingPage * LISTINGS_PER_PAGE))
       params.set('sort_by', listingSortBy)
       params.set('sort_order', listingSortOrder)
       if (listingPlatform !== 'all') params.set('platform', listingPlatform)
@@ -203,7 +226,22 @@ function Home() {
     enabled: activeTab === 'listings', // Only fetch when Listings tab is active
     staleTime: 2 * 60 * 1000, // 2 minutes - listings change more frequently
     refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev, // Keep previous data while fetching new page
   })
+
+  // Reset to page 0 when filters change
+  useEffect(() => {
+    setListingPage(0)
+  }, [listingType, listingPlatform, listingProductType, listingTreatment, listingTimePeriod, listingSearch, listingSortBy, listingSortOrder])
+
+  // Update default sort when listing type changes
+  useEffect(() => {
+    if (listingType === 'sold') {
+      setListingSortBy('sold_date')
+    } else if (listingType === 'active') {
+      setListingSortBy('listed_at')
+    }
+  }, [listingType])
 
   // Helper to toggle listing sort
   const toggleListingSort = (column: string) => {
@@ -243,19 +281,16 @@ function Home() {
           : null
 
         return (
-          <div className="flex items-center gap-1.5 sm:gap-2">
-              <img
-                  src={`https://byhenwreijyrx2ww.public.blob.vercel-storage.com/cards/${row.original.id}-thumb.webp`}
+          <div className="flex items-center gap-1.5 sm:gap-2 max-w-[140px] sm:max-w-[180px] md:max-w-[250px] lg:max-w-none">
+              <CardThumbnail
+                  src={row.original.image_url}
                   alt={row.getValue('name')}
                   className="w-6 h-8 sm:w-8 sm:h-11 lg:w-10 lg:h-14 rounded object-cover bg-muted shrink-0"
-                  onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                  }}
               />
-              <div className="max-w-[100px] sm:max-w-[140px] md:max-w-none min-w-0">
+              <div className="min-w-0 overflow-hidden flex-1">
                   <div className="flex items-center gap-1 sm:gap-1.5">
                     <Tooltip content={row.getValue('name')}>
-                        <span className="font-bold text-foreground truncate text-xs sm:text-sm lg:text-base">{row.getValue('name')}</span>
+                        <span className="font-bold text-foreground text-xs sm:text-sm lg:text-base truncate block max-w-[80px] sm:max-w-[120px] md:max-w-[180px] lg:max-w-none">{row.getValue('name')}</span>
                     </Tooltip>
                     {isSingle && rarity && (
                       <Tooltip content={rarity}>
@@ -552,13 +587,11 @@ function Home() {
     }
   ], [user])
 
-  // Filter out low signal cards (no confirmed sales, only ask prices)
+  // Cards data (no filtering)
   const filteredCards = useMemo(() => {
     if (!cards) return []
-    if (!hideLowSignal) return cards
-    // Low signal = volume is 0 (no confirmed sales in selected period)
-    return cards.filter(c => (c.volume ?? c.volume_30d ?? 0) > 0)
-  }, [cards, hideLowSignal])
+    return cards
+  }, [cards])
 
   const table = useReactTable({
     data: filteredCards,
@@ -727,18 +760,6 @@ function Home() {
                                   className="flex-1 sm:w-[100px]"
                                   triggerClassName="uppercase font-mono text-xs"
                               />
-                              {/* Low Signal Filter */}
-                              <Tooltip content="Hide cards with no confirmed sales (only asking prices)">
-                                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                                      <input
-                                          type="checkbox"
-                                          checked={hideLowSignal}
-                                          onChange={e => setHideLowSignal(e.target.checked)}
-                                          className="w-3.5 h-3.5 rounded border-border bg-background text-primary focus:ring-1 focus:ring-primary cursor-pointer"
-                                      />
-                                      <span className="text-xs text-muted-foreground whitespace-nowrap">Hide Low Signal</span>
-                                  </label>
-                              </Tooltip>
                           </div>
                       </div>
                     ) : (
@@ -1010,13 +1031,10 @@ function Home() {
                                                   {/* Card with thumbnail */}
                                                   <td className="px-2 py-1.5">
                                                       <div className="flex items-center gap-2">
-                                                          <img
-                                                              src={`https://byhenwreijyrx2ww.public.blob.vercel-storage.com/cards/${listing.card_id}-thumb.webp`}
+                                                          <CardThumbnail
+                                                              src={listing.card_image_url}
                                                               alt={listing.card_name}
                                                               className="w-8 h-11 lg:w-10 lg:h-14 rounded object-cover bg-muted shrink-0"
-                                                              onError={(e) => {
-                                                                  e.currentTarget.style.display = 'none'
-                                                              }}
                                                           />
                                                           <div className="min-w-0">
                                                               <div className="font-bold text-sm lg:text-base truncate max-w-[120px] md:max-w-none">{listing.card_name}</div>
@@ -1175,7 +1193,27 @@ function Home() {
                           {/* Listings count footer */}
                           <div className="border-t border-border px-3 py-2 flex items-center justify-between bg-muted/20">
                               <div className="text-xs text-muted-foreground">
-                                  Showing {listingsData?.items.length || 0} of {listingsData?.total || 0} listings
+                                  Showing {listingPage * LISTINGS_PER_PAGE + 1} to {Math.min((listingPage + 1) * LISTINGS_PER_PAGE, listingsData?.total || 0)} of {listingsData?.total || 0} listings
+                                  {listingsFetching && <span className="ml-2 text-primary">Loading...</span>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                  <button
+                                      onClick={() => setListingPage(p => Math.max(0, p - 1))}
+                                      disabled={listingPage === 0}
+                                      className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                                  >
+                                      <ChevronLeft className="w-4 h-4" />
+                                  </button>
+                                  <span className="text-xs text-muted-foreground">
+                                      Page {listingPage + 1} of {Math.ceil((listingsData?.total || 0) / LISTINGS_PER_PAGE)}
+                                  </span>
+                                  <button
+                                      onClick={() => setListingPage(p => p + 1)}
+                                      disabled={!listingsData?.hasMore}
+                                      className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                                  >
+                                      <ChevronRight className="w-4 h-4" />
+                                  </button>
                               </div>
                           </div>
                       </>

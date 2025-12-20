@@ -1,10 +1,11 @@
 from bs4 import BeautifulSoup
 from typing import List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dateutil import parser
 import re
 import difflib
 from sqlmodel import Session, select
+from app.core.typing import col
 from app.models.market import MarketPrice
 from app.services.ai_extractor import get_ai_extractor
 from app.db import engine
@@ -186,9 +187,9 @@ def _bulk_check_indexed(
         if external_ids:
             if check_global:
                 # Check if external_id exists for ANY card
-                all_existing = session.exec(
+                all_existing = session.execute(
                     select(MarketPrice.external_id, MarketPrice.card_id, MarketPrice.id).where(
-                        MarketPrice.external_id.in_(external_ids)
+                        col(MarketPrice.external_id).in_(external_ids)
                     )
                 ).all()
 
@@ -215,7 +216,7 @@ def _bulk_check_indexed(
                             title = listing.get("title", "")
 
                             # Get the other card's details
-                            other_card = session.exec(select(Card).where(Card.id == other_card_id)).first()
+                            other_card = session.execute(select(Card).where(Card.id == other_card_id)).scalars().first()
 
                             if other_card:
                                 # Score current card vs the existing card
@@ -242,9 +243,9 @@ def _bulk_check_indexed(
                             indexed_indices.add(i)
             else:
                 # Original behavior: only check this card_id
-                existing_ids = session.exec(
+                existing_ids = session.execute(
                     select(MarketPrice.external_id).where(
-                        MarketPrice.external_id.in_(external_ids), MarketPrice.card_id == card_id
+                        col(MarketPrice.external_id).in_(external_ids), MarketPrice.card_id == card_id
                     )
                 ).all()
                 existing_ids_set = set(existing_ids)
@@ -264,17 +265,17 @@ def _bulk_check_indexed(
         for i, listing in enumerate(listings_data):
             if i not in indexed_indices:  # Not already found by external_id
                 condition = and_(
-                    MarketPrice.card_id == card_id,
-                    MarketPrice.title == listing["title"],
-                    MarketPrice.price == listing["price"],
-                    MarketPrice.sold_date == listing["sold_date"],
+                    col(MarketPrice.card_id) == card_id,
+                    col(MarketPrice.title) == listing["title"],
+                    col(MarketPrice.price) == listing["price"],
+                    col(MarketPrice.sold_date) == listing["sold_date"],
                 )
                 composite_conditions.append(condition)
                 composite_index_map[len(composite_conditions) - 1] = i
 
         if composite_conditions:
             # Query with OR of all composite conditions
-            existing_composites = session.exec(
+            existing_composites = session.execute(
                 select(MarketPrice.title, MarketPrice.price, MarketPrice.sold_date)
                 .where(or_(*composite_conditions))
                 .distinct()
@@ -1040,8 +1041,9 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
 def _extract_bid_count(item) -> int:
     """
     Extracts the bid count from an item element.
+    Supports both old .s-item format and new .s-card format.
     """
-    # Try standard bid count selector
+    # Try standard bid count selectors (old format)
     bid_elem = item.select_one(".s-item__bidCount, .s-item__bids, .s-item__details .s-item__bidCount")
     if bid_elem:
         text = bid_elem.get_text(strip=True)
@@ -1049,7 +1051,94 @@ def _extract_bid_count(item) -> int:
         if match:
             return int(match.group(1))
 
+    # New s-card format: bid count appears as "X bids" in span elements
+    # Search all text for bid pattern
+    item_text = item.get_text(strip=True)
+    match = re.search(r"(\d+)\s*bids?", item_text, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+
     return 0
+
+
+def _extract_listing_format(item, bid_count: int = 0) -> Optional[str]:
+    """
+    Extracts the listing format from an eBay item element.
+
+    Returns:
+        'auction' - Auction listing (has bids or shows auction indicators)
+        'buy_it_now' - Fixed price Buy It Now listing
+        'best_offer' - Buy It Now with Best Offer option
+        None - Unknown format
+
+    Detection logic:
+    1. If bid_count > 0, it's definitely an auction
+    2. Look for "Buy It Now" text/buttons
+    3. Look for "or Best Offer" text
+    4. Look for auction indicators (time left, place bid)
+    """
+    # Get all text content for searching
+    item_text = item.get_text(strip=True).lower()
+
+    # If there are bids, it's definitely an auction
+    if bid_count > 0:
+        return "auction"
+
+    # Check for Buy It Now indicators
+    buy_it_now_indicators = [
+        ".s-item__buyItNowOption",
+        ".s-item__dynamic.s-item__buyItNowOption",
+        "[class*='buyItNow']",
+        "[class*='buy-it-now']",
+    ]
+    for selector in buy_it_now_indicators:
+        if item.select_one(selector):
+            # Check if also has Best Offer
+            if "best offer" in item_text or "or best offer" in item_text:
+                return "best_offer"
+            return "buy_it_now"
+
+    # Check text content for Buy It Now
+    if "buy it now" in item_text:
+        if "or best offer" in item_text:
+            return "best_offer"
+        return "buy_it_now"
+
+    # Check for auction indicators (both old .s-item and new .s-card formats)
+    auction_indicators = [
+        ".s-item__time-left",  # Old format: Time countdown
+        ".s-item__time-end",
+        ".s-item__bidCount",
+        ".s-card__time-left",  # New format: Time left
+        ".s-card__time",       # New format: Time container
+        "[class*='timeLeft']",
+        "[class*='time-left']",
+    ]
+    for selector in auction_indicators:
+        if item.select_one(selector):
+            return "auction"
+
+    # Check text for auction indicators
+    auction_text_patterns = [
+        r"\d+\s*bids?",
+        r"place bid",
+        r"time left",
+        r"\d+[hmd]\s*\d*[hmd]?\s*left",  # e.g., "2h 30m left", "1d left"
+    ]
+    for pattern in auction_text_patterns:
+        if re.search(pattern, item_text, re.IGNORECASE):
+            return "auction"
+
+    # If we found price info but no format indicators, assume Buy It Now
+    # (Most eBay listings without explicit auction indicators are BIN)
+    price_elem = item.select_one(".s-item__price, .s-card__price")
+    if price_elem:
+        price_text = price_elem.get_text(strip=True).lower()
+        # If price doesn't contain "bid" language, likely BIN
+        if "bid" not in price_text:
+            return "buy_it_now"
+
+    return None
 
 
 def _extract_seller_info(item) -> Tuple[Optional[str], Optional[int], Optional[float]]:
@@ -1259,7 +1348,8 @@ def _parse_generic_results(
     all_listings_data = []
 
     for item in items:
-        if "s-item__header" in item.get("class", []) or "s-card__header" in item.get("class", []):
+        item_classes = item.get("class") or []
+        if "s-item__header" in item_classes or "s-card__header" in item_classes:
             continue
 
         title_elem = item.select_one(".s-item__title, .s-card__title")
@@ -1312,6 +1402,9 @@ def _parse_generic_results(
         # Extract additional metadata
         bid_count = _extract_bid_count(item)
 
+        # Extract listing format (auction, buy_it_now, best_offer)
+        listing_format = _extract_listing_format(item, bid_count)
+
         # Extract seller info
         seller_name, seller_feedback_score, seller_feedback_percent = _extract_seller_info(item)
 
@@ -1336,6 +1429,7 @@ def _parse_generic_results(
                 "sold_date": sold_date,
                 "url": url,
                 "bid_count": bid_count,
+                "listing_format": listing_format,
                 "image_url": image_url,
                 "seller_name": seller_name,
                 "seller_feedback_score": seller_feedback_score,
@@ -1427,6 +1521,7 @@ def _parse_generic_results(
             product_subtype=product_subtype,
             sold_date=metadata["sold_date"],
             listing_type=listing_type,
+            listing_format=metadata.get("listing_format"),  # auction, buy_it_now, best_offer
             treatment=treatment,
             bid_count=metadata["bid_count"],
             external_id=metadata["external_id"],
@@ -1441,7 +1536,7 @@ def _parse_generic_results(
             condition=metadata.get("condition"),
             shipping_cost=metadata.get("shipping_cost"),
             grading=grading,
-            scraped_at=datetime.utcnow(),
+            scraped_at=datetime.now(timezone.utc),
         )
 
         results.append(mp)
@@ -1470,7 +1565,7 @@ def _parse_date(date_str: str) -> Optional[datetime]:
 
     Examples:
     - "Sold Oct 4, 2025" -> datetime(2025, 10, 4)
-    - "Sold 3 days ago" -> datetime.utcnow() - 3 days
+    - "Sold 3 days ago" -> datetime.now(timezone.utc) - 3 days
     - "Sold Dec 1" -> datetime(current_year, 12, 1)
     """
     if not date_str:
@@ -1484,7 +1579,7 @@ def _parse_date(date_str: str) -> Optional[datetime]:
         quantity = int(relative_match.group(1))
         unit = relative_match.group(2)
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if unit == "day":
             return now - timedelta(days=quantity)
         elif unit == "week":
@@ -1498,21 +1593,21 @@ def _parse_date(date_str: str) -> Optional[datetime]:
 
     # Handle special relative terms
     if "just now" in clean_str or "just ended" in clean_str:
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
     if "yesterday" in clean_str:
-        return datetime.utcnow() - timedelta(days=1)
+        return datetime.now(timezone.utc) - timedelta(days=1)
     if "today" in clean_str:
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
 
     # Try standard date parsing for absolute dates like "Oct 4, 2025" or "Dec 1"
     try:
         # Use current year as default if year not specified
-        parsed = parser.parse(clean_str, default=datetime(datetime.utcnow().year, 1, 1))
+        parsed = parser.parse(clean_str, default=datetime(datetime.now(timezone.utc).year, 1, 1))
 
         # Sanity check: sold_date shouldn't be in future
-        if parsed > datetime.utcnow() + timedelta(days=1):
+        if parsed > datetime.now(timezone.utc) + timedelta(days=1):
             # If parsed date is in future, try previous year
-            parsed = parser.parse(clean_str, default=datetime(datetime.utcnow().year - 1, 1, 1))
+            parsed = parser.parse(clean_str, default=datetime(datetime.now(timezone.utc).year - 1, 1, 1))
 
         # Sanity check: shouldn't be too old (before 2023 for this TCG)
         if parsed.year < 2023:

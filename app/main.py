@@ -1,4 +1,5 @@
 import logging
+from typing import Any, cast
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -47,21 +48,21 @@ origins = list(set([o for o in origins if o]))
 
 # CRITICAL: Add ProxyHeadersMiddleware FIRST to trust X-Forwarded-* headers from Railway
 # This prevents FastAPI from redirecting HTTPS requests to HTTP
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+app.add_middleware(cast(Any, ProxyHeadersMiddleware), trusted_hosts=["*"])
 
 # Anti-scraping middleware - detects bots, headless browsers, rate limits
 # Protects /api/v1/cards, /api/v1/market, /api/v1/blokpax endpoints
-app.add_middleware(AntiScrapingMiddleware, enabled=True)
+app.add_middleware(cast(Any, AntiScrapingMiddleware), enabled=True)
 
 # API metering middleware - tracks usage for billing (only when SaaS enabled)
 # This is a no-op pass-through when saas/ module is not available
-app.add_middleware(APIMeteringMiddleware)
+app.add_middleware(cast(Any, APIMeteringMiddleware))
 
 # GZip compression for responses > 1KB (80-90% bandwidth reduction)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(cast(Any, GZipMiddleware), minimum_size=1000)
 
 app.add_middleware(
-    CORSMiddleware,
+    cast(Any, CORSMiddleware),
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],

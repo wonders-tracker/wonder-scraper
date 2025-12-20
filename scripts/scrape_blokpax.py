@@ -13,7 +13,7 @@ Usage:
 import asyncio
 import argparse
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 from sqlmodel import Session, select
@@ -73,7 +73,7 @@ async def scrape_storefront_metadata(slug: str) -> dict:
                 existing.description = description
                 existing.image_url = image_url
                 existing.network_id = network_id
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(timezone.utc)
                 session.add(existing)
             else:
                 storefront = BlokpaxStorefront(
@@ -167,7 +167,7 @@ async def scrape_floor_prices(slugs: List[str] = None, deep_scan: bool = False):
                     storefront.floor_price_usd = floor_usd
                     storefront.listed_count = listed
                     storefront.total_tokens = total
-                    storefront.updated_at = datetime.utcnow()
+                    storefront.updated_at = datetime.now(timezone.utc)
                     session.add(storefront)
 
                 session.commit()
@@ -288,7 +288,7 @@ async def scrape_offers(slugs: List[str] = None, max_pages: int = 200):
                         existing.price_usd = offer.price_usd
                         existing.quantity = offer.quantity
                         existing.status = offer.status
-                        existing.scraped_at = datetime.utcnow()
+                        existing.scraped_at = datetime.now(timezone.utc)
                         session.add(existing)
                         continue
 
@@ -440,7 +440,7 @@ async def scrape_all_assets(slug: str, max_pages: int = 10):
                 existing.floor_price_bpx = asset.floor_price_bpx
                 existing.floor_price_usd = asset.floor_price_usd
                 existing.owner_count = asset.owner_count
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(timezone.utc)
                 session.add(existing)
             else:
                 # Create new

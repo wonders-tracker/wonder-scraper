@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter, useSearch } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { analytics } from '~/services/analytics'
 import { api } from '~/utils/auth'
@@ -23,7 +23,7 @@ interface UserProfile {
 
 function AuthCallback() {
   const search = useSearch({ from: Route.id })
-  const router = useRouter()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handleAuth = async () => {
@@ -39,22 +39,22 @@ function AuthCallback() {
           const profile = await api.get('auth/me').json<UserProfile>()
           if (profile.onboarding_completed) {
             // Already onboarded, go to home
-            window.location.href = '/'
+            navigate({ to: '/' })
           } else {
             // New user or hasn't completed onboarding
-            window.location.href = '/welcome'
+            navigate({ to: '/welcome' })
           }
         } catch (e) {
           // If we can't check, default to welcome
-          window.location.href = '/welcome'
+          navigate({ to: '/welcome' })
         }
       } else {
         // No token? Redirect to login
-        router.navigate({ to: '/login' })
+        navigate({ to: '/login' })
       }
     }
     handleAuth()
-  }, [search.token, router])
+  }, [search.token, navigate])
 
   return (
     <div className="flex min-h-screen items-center justify-center">

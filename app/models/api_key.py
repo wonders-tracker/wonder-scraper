@@ -7,6 +7,8 @@ from sqlmodel import Field, SQLModel
 from datetime import datetime
 import secrets
 
+from app.core.typing import utc_now
+
 
 class APIKey(SQLModel, table=True):
     """API keys for authenticated API access."""
@@ -33,7 +35,7 @@ class APIKey(SQLModel, table=True):
     last_reset_date: Optional[datetime] = Field(default=None)  # For daily reset
 
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
     expires_at: Optional[datetime] = Field(default=None)  # Optional expiration
 
     @staticmethod

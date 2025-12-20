@@ -14,7 +14,7 @@ Usage:
 import sys
 import os
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -83,8 +83,8 @@ def migrate_portfolio_items(session: Session, dry_run: bool = True) -> dict:
                     purchase_date=item.acquired_at.date() if item.acquired_at else None,
                     grading=None,  # Raw by default
                     notes=f"Migrated from legacy portfolio (original qty: {item.quantity})" if i == 0 else None,
-                    created_at=item.acquired_at or datetime.utcnow(),
-                    updated_at=datetime.utcnow(),
+                    created_at=item.acquired_at or datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
                 )
 
                 if not dry_run:

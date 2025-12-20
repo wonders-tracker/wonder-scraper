@@ -6,9 +6,10 @@ Provides access to WOTF storefront data, floor prices, and sales history.
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, desc
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 
+from app.core.typing import col
 from app.db import get_session
 from app.models.blokpax import (
     BlokpaxStorefront,
@@ -106,7 +107,7 @@ def list_storefronts(
     """
     List all WOTF storefronts with current floor prices.
     """
-    storefronts = session.exec(select(BlokpaxStorefront).order_by(BlokpaxStorefront.name)).all()
+    storefronts = session.exec(select(BlokpaxStorefront).order_by(col(BlokpaxStorefront.name))).all()
     return [BlokpaxStorefrontOut.model_validate(s) for s in storefronts]
 
 
@@ -142,13 +143,13 @@ def get_storefront_snapshots(
     if not storefront:
         raise HTTPException(status_code=404, detail="Storefront not found")
 
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     snapshots = session.exec(
         select(BlokpaxSnapshot)
         .where(BlokpaxSnapshot.storefront_slug == slug)
-        .where(BlokpaxSnapshot.timestamp >= cutoff)
-        .order_by(desc(BlokpaxSnapshot.timestamp))
+        .where(col(BlokpaxSnapshot.timestamp) >= cutoff)
+        .order_by(desc(BlokpaxSnapshot.timestamp), desc(BlokpaxSnapshot.id))
         .limit(limit)
     ).all()
 
@@ -168,7 +169,7 @@ def get_storefront_sales(
     # For reward-room, we filter WOTF assets in the scraper
     # For dedicated storefronts, all sales are WOTF
 
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     # Get sales that match assets in this storefront
     # Since BlokpaxSale doesn't have storefront_slug, we need to join through assets
@@ -192,7 +193,7 @@ def list_all_sales(
     """
     Get recent sales across all WOTF storefronts.
     """
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     sales = session.exec(
         select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff).order_by(desc(BlokpaxSale.filled_at)).limit(limit)
@@ -215,7 +216,7 @@ def list_assets(
     if storefront_slug:
         query = query.where(BlokpaxAssetDB.storefront_slug == storefront_slug)
 
-    query = query.order_by(BlokpaxAssetDB.floor_price_usd.asc()).limit(limit)
+    query = query.order_by(col(BlokpaxAssetDB.floor_price_usd).asc()).limit(limit)
 
     assets = session.exec(query).all()
     return [BlokpaxAssetOut.model_validate(a) for a in assets]
@@ -239,11 +240,11 @@ def get_blokpax_summary(
     lowest_floor = min(floors) if floors else None
 
     # Get recent sales count (last 24h)
-    cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
     recent_sales = len(session.exec(select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_24h)).all())
 
     # Get total sales volume (last 7d)
-    cutoff_7d = datetime.utcnow() - timedelta(days=7)
+    cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
     week_sales = session.exec(select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_7d)).all()
     volume_7d_usd = sum(s.price_usd * s.quantity for s in week_sales)
 

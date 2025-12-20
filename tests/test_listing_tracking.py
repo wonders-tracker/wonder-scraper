@@ -13,7 +13,7 @@ Note: Tests marked with @pytest.mark.integration require PostgreSQL
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlmodel import Session, select
 
 from app.models.market import MarketPrice
@@ -53,7 +53,7 @@ class TestListedAtFieldBehavior:
 
     def test_listed_at_can_be_set(self):
         """listed_at should be settable."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         mp = MarketPrice(
             card_id=1,
             price=10.0,
@@ -67,8 +67,8 @@ class TestListedAtFieldBehavior:
 
     def test_listed_at_independent_of_scraped_at(self):
         """listed_at and scraped_at should be independent."""
-        listed_time = datetime.utcnow() - timedelta(days=5)
-        scraped_time = datetime.utcnow()
+        listed_time = datetime.now(timezone.utc) - timedelta(days=5)
+        scraped_time = datetime.now(timezone.utc)
 
         mp = MarketPrice(
             card_id=1,
@@ -91,8 +91,8 @@ class TestDaysOnMarketCalculation:
 
     def test_days_on_market_simple(self):
         """Calculate days on market from listed_at to sold_date."""
-        listed_time = datetime.utcnow() - timedelta(days=10)
-        sold_time = datetime.utcnow() - timedelta(days=2)
+        listed_time = datetime.now(timezone.utc) - timedelta(days=10)
+        sold_time = datetime.now(timezone.utc) - timedelta(days=2)
 
         mp = MarketPrice(
             card_id=1,
@@ -110,7 +110,7 @@ class TestDaysOnMarketCalculation:
 
     def test_days_on_market_same_day(self):
         """Same day listing and sale."""
-        same_time = datetime.utcnow()
+        same_time = datetime.now(timezone.utc)
 
         mp = MarketPrice(
             card_id=1,
@@ -128,8 +128,8 @@ class TestDaysOnMarketCalculation:
 
     def test_days_on_market_long_listing(self):
         """Long-running listing."""
-        listed_time = datetime.utcnow() - timedelta(days=45)
-        sold_time = datetime.utcnow() - timedelta(days=1)
+        listed_time = datetime.now(timezone.utc) - timedelta(days=45)
+        sold_time = datetime.now(timezone.utc) - timedelta(days=1)
 
         mp = MarketPrice(
             card_id=1,
@@ -148,8 +148,8 @@ class TestDaysOnMarketCalculation:
     def test_days_on_market_hours_precision(self):
         """Days calculation should use day boundaries."""
         # Listed 25 hours ago
-        listed_time = datetime.utcnow() - timedelta(hours=25)
-        sold_time = datetime.utcnow()
+        listed_time = datetime.now(timezone.utc) - timedelta(hours=25)
+        sold_time = datetime.now(timezone.utc)
 
         mp = MarketPrice(
             card_id=1,
@@ -178,7 +178,7 @@ class TestListingTypeBehavior:
             listing_type="active",
             treatment="Classic Paper",
             platform="ebay",
-            listed_at=datetime.utcnow(),
+            listed_at=datetime.now(timezone.utc),
             sold_date=None,
         )
 
@@ -188,8 +188,8 @@ class TestListingTypeBehavior:
 
     def test_sold_listing_has_both_dates(self):
         """Sold listings should have both listed_at and sold_date."""
-        listed = datetime.utcnow() - timedelta(days=5)
-        sold = datetime.utcnow() - timedelta(days=1)
+        listed = datetime.now(timezone.utc) - timedelta(days=5)
+        sold = datetime.now(timezone.utc) - timedelta(days=1)
 
         mp = MarketPrice(
             card_id=1,
@@ -209,7 +209,7 @@ class TestListingTypeBehavior:
 
     def test_sold_without_active_tracking(self):
         """Sold listing without prior active tracking uses sold_date as listed_at."""
-        sold = datetime.utcnow() - timedelta(days=3)
+        sold = datetime.now(timezone.utc) - timedelta(days=3)
 
         mp = MarketPrice(
             card_id=1,
@@ -230,7 +230,7 @@ class TestRetentionPolicyLogic:
 
     def test_30_day_cutoff_calculation(self):
         """Calculate 30-day cutoff correctly."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now - timedelta(days=30)
 
         # Listing from 25 days ago - should be retained
@@ -260,7 +260,7 @@ class TestRetentionPolicyLogic:
 
     def test_edge_case_exactly_30_days(self):
         """Listing exactly 30 days old."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now - timedelta(days=30)
 
         mp = MarketPrice(
@@ -290,7 +290,7 @@ class TestPlatformBehavior:
             treatment="Classic Paper",
             platform="ebay",
             external_id="ebay_123",
-            listed_at=datetime.utcnow(),
+            listed_at=datetime.now(timezone.utc),
         )
         assert mp.platform == "ebay"
         assert mp.listed_at is not None
@@ -304,8 +304,8 @@ class TestPlatformBehavior:
             listing_type="sold",
             treatment="NFT",
             platform="opensea",
-            listed_at=datetime.utcnow() - timedelta(days=3),
-            sold_date=datetime.utcnow(),
+            listed_at=datetime.now(timezone.utc) - timedelta(days=3),
+            sold_date=datetime.now(timezone.utc),
         )
         assert mp.platform == "opensea"
         assert mp.listed_at is not None
@@ -319,8 +319,8 @@ class TestPlatformBehavior:
             listing_type="sold",
             treatment="Sealed",
             platform="blokpax",
-            listed_at=datetime.utcnow() - timedelta(hours=12),
-            sold_date=datetime.utcnow(),
+            listed_at=datetime.now(timezone.utc) - timedelta(hours=12),
+            sold_date=datetime.now(timezone.utc),
         )
         assert mp.platform == "blokpax"
         assert mp.listed_at is not None
@@ -339,7 +339,7 @@ class TestExternalIdBehavior:
             treatment="Classic Paper",
             platform="ebay",
             external_id="ebay_12345",
-            listed_at=datetime.utcnow(),
+            listed_at=datetime.now(timezone.utc),
         )
         assert mp.external_id == "ebay_12345"
 
@@ -353,7 +353,7 @@ class TestExternalIdBehavior:
             treatment="Classic Paper",
             platform="ebay",
             external_id=None,
-            listed_at=datetime.utcnow(),
+            listed_at=datetime.now(timezone.utc),
         )
         assert mp.external_id is None
 
@@ -363,8 +363,8 @@ class TestDataValidation:
 
     def test_listed_at_before_sold_date(self):
         """listed_at should be before sold_date."""
-        listed = datetime.utcnow() - timedelta(days=5)
-        sold = datetime.utcnow() - timedelta(days=2)
+        listed = datetime.now(timezone.utc) - timedelta(days=5)
+        sold = datetime.now(timezone.utc) - timedelta(days=2)
 
         mp = MarketPrice(
             card_id=1,
@@ -381,7 +381,7 @@ class TestDataValidation:
 
     def test_listed_at_equals_sold_date_valid(self):
         """listed_at can equal sold_date (same-day sale)."""
-        same_time = datetime.utcnow()
+        same_time = datetime.now(timezone.utc)
 
         mp = MarketPrice(
             card_id=1,
@@ -407,7 +407,7 @@ class TestDatabasePersistence:
 
     def test_listed_at_persists(self, integration_session: Session):
         """listed_at should persist to PostgreSQL."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         card = integration_session.exec(select(Card).limit(1)).first()
         if not card:
@@ -431,7 +431,10 @@ class TestDatabasePersistence:
             fetched = integration_session.get(MarketPrice, mp.id)
             assert fetched is not None
             assert fetched.listed_at is not None
-            assert abs((fetched.listed_at - now).total_seconds()) < 1
+            # Handle both naive and aware datetimes from database
+            fetched_ts = fetched.listed_at
+            compare_now = now.replace(tzinfo=None) if fetched_ts.tzinfo is None else now
+            assert abs((fetched_ts - compare_now).total_seconds()) < 1
         finally:
             integration_session.delete(mp)
             integration_session.commit()
@@ -442,8 +445,8 @@ class TestDatabasePersistence:
         if not card:
             pytest.skip("No cards in database")
 
-        listed_time = datetime.utcnow() - timedelta(days=7)
-        now = datetime.utcnow()
+        listed_time = datetime.now(timezone.utc) - timedelta(days=7)
+        now = datetime.now(timezone.utc)
 
         # Create active listing
         mp = MarketPrice(
@@ -473,8 +476,10 @@ class TestDatabasePersistence:
             fetched = integration_session.get(MarketPrice, mp_id)
             assert fetched.listing_type == "sold"
             assert fetched.sold_date is not None
-            # listed_at should be preserved
-            assert abs((fetched.listed_at - listed_time).total_seconds()) < 1
+            # listed_at should be preserved - handle naive/aware
+            fetched_ts = fetched.listed_at
+            compare_time = listed_time.replace(tzinfo=None) if fetched_ts.tzinfo is None else listed_time
+            assert abs((fetched_ts - compare_time).total_seconds()) < 1
         finally:
             integration_session.delete(mp)
             integration_session.commit()
@@ -485,7 +490,7 @@ class TestDatabasePersistence:
         if not card:
             pytest.skip("No cards in database")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         created = []
 
         try:
@@ -534,7 +539,7 @@ class TestDatabasePersistence:
         if not card:
             pytest.skip("No cards in database")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         external_id = f"test_match_{now.timestamp()}"
 
         mp = MarketPrice(
@@ -573,7 +578,7 @@ class TestDatabasePersistence:
         if not card:
             pytest.skip("No cards in database")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         created = []
 
         try:
@@ -638,7 +643,7 @@ class TestActiveToSoldConversionLogic:
         if not card:
             pytest.skip("No cards in database")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         created = []
         external_ids = []
 
@@ -687,7 +692,7 @@ class TestActiveToSoldConversionLogic:
         if not card:
             pytest.skip("No cards in database")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         original_listed_at = now - timedelta(days=7)
 
         mp = MarketPrice(
@@ -712,10 +717,12 @@ class TestActiveToSoldConversionLogic:
             integration_session.add(mp)
             integration_session.commit()
 
-            # Verify listed_at preserved
+            # Verify listed_at preserved - handle naive/aware
             fetched = integration_session.get(MarketPrice, mp_id)
             assert fetched.price == 15.0
-            assert abs((fetched.listed_at - original_listed_at).total_seconds()) < 1
+            fetched_ts = fetched.listed_at
+            compare_time = original_listed_at.replace(tzinfo=None) if fetched_ts.tzinfo is None else original_listed_at
+            assert abs((fetched_ts - compare_time).total_seconds()) < 1
 
         finally:
             integration_session.delete(mp)

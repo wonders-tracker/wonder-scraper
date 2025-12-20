@@ -1,6 +1,6 @@
 import asyncio
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlmodel import Session, select
 from app.db import engine
 from app.models.card import Card
@@ -22,7 +22,7 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
         all_cards = session.exec(select(Card)).all()
         
         cards_to_scrape = []
-        cutoff_time = datetime.utcnow() - timedelta(hours=24)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
         
         for card in all_cards:
             if force_all:

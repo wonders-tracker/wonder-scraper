@@ -1,4 +1,5 @@
 from sqlmodel import Session, select
+from app.core.typing import col
 from app.db import engine
 from app.scraper.browser import get_page_content
 from app.scraper.utils import build_ebay_url
@@ -67,12 +68,12 @@ async def scrape_active_data(
         if save_to_db and card_id > 0:
             try:
                 with Session(engine) as session:
-                    from datetime import datetime, timedelta
+                    from datetime import datetime, timedelta, timezone
                     from app.models.market import MarketPrice
 
                     # Delete stale active listings (older than 30 days)
                     # Keep listings long enough to track active->sold transitions
-                    cutoff = datetime.utcnow() - timedelta(days=30)
+                    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
                     stmt = select(MarketPrice).where(
                         MarketPrice.card_id == card_id,
                         MarketPrice.listing_type == "active",
@@ -87,7 +88,7 @@ async def scrape_active_data(
                     # Check GLOBALLY (any card_id) to prevent duplicate key errors
                     # when the same eBay listing matches multiple cards
                     stmt = select(MarketPrice).where(
-                        MarketPrice.listing_type == "active", MarketPrice.external_id.isnot(None)
+                        MarketPrice.listing_type == "active", col(MarketPrice.external_id).isnot(None)
                     )
                     all_existing = session.exec(stmt).all()
 
@@ -124,7 +125,7 @@ async def scrape_active_data(
                             existing.price = item.price
                             existing.title = item.title
                             existing.url = item.url
-                            existing.scraped_at = datetime.utcnow()
+                            existing.scraped_at = datetime.now(timezone.utc)
                             # Don't update listed_at - preserve original "first seen" time
                             existing.image_url = getattr(item, "image_url", existing.image_url)
                             existing.seller_name = getattr(item, "seller_name", existing.seller_name)
@@ -134,7 +135,7 @@ async def scrape_active_data(
                             updated_count += 1
                         else:
                             # Add new listing - set listed_at to track when first seen
-                            item.listed_at = datetime.utcnow()
+                            item.listed_at = datetime.now(timezone.utc)
                             try:
                                 session.add(item)
                                 session.flush()  # Force immediate insert to catch constraint violations

@@ -14,13 +14,45 @@ Marketing/digest emails:
 """
 
 import resend
-from typing import Optional, Dict, Any
+import time
+from typing import Optional, Dict, Any, Callable, cast
+from functools import wraps
 from app.core.config import settings
 
 # Initialize Resend
 resend.api_key = settings.RESEND_API_KEY
 
 
+def _send_email(params: Dict[str, Any]) -> Any:
+    """Wrapper for resend.Emails.send with proper typing."""
+    return resend.Emails.send(cast(Any, params))
+
+
+def with_retry(max_attempts: int = 3, base_delay: float = 1.0):
+    """
+    Decorator that retries a function with exponential backoff.
+    For transient email delivery failures (network issues, rate limits).
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    if attempt < max_attempts - 1:
+                        delay = base_delay * (2 ** attempt)  # Exponential backoff
+                        print(f"[Email] Attempt {attempt + 1} failed, retrying in {delay}s: {e}")
+                        time.sleep(delay)
+            print(f"[Email] All {max_attempts} attempts failed: {last_exception}")
+            return False
+        return wrapper
+    return decorator
+
+
+@with_retry(max_attempts=3)
 def send_welcome_email(to_email: str, user_name: Optional[str] = None) -> bool:
     """
     Send welcome email to new users.
@@ -33,8 +65,7 @@ def send_welcome_email(to_email: str, user_name: Optional[str] = None) -> bool:
     name = user_name or to_email.split("@")[0]
 
     try:
-        resend.Emails.send(
-            {
+        _send_email({
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
                 "subject": "Welcome to WondersTracker!",
@@ -99,6 +130,7 @@ def send_welcome_email(to_email: str, user_name: Optional[str] = None) -> bool:
         return False
 
 
+@with_retry(max_attempts=3)
 def send_personal_welcome_email(to_email: str, user_name: Optional[str] = None) -> bool:
     """
     Send a personal welcome email from Cody Robertson 1 day after signup.
@@ -112,7 +144,7 @@ def send_personal_welcome_email(to_email: str, user_name: Optional[str] = None) 
     name = user_name or to_email.split("@")[0]
 
     try:
-        resend.Emails.send(
+        _send_email(
             {
                 "from": "Cody Robertson <cody@wonderstracker.com>",
                 "reply_to": "cody@wonderstracker.com",
@@ -204,6 +236,7 @@ def send_personal_welcome_email(to_email: str, user_name: Optional[str] = None) 
         return False
 
 
+@with_retry(max_attempts=3)
 def send_password_reset_email(to_email: str, reset_token: str) -> bool:
     """
     Send password reset email with reset link.
@@ -216,7 +249,7 @@ def send_password_reset_email(to_email: str, reset_token: str) -> bool:
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
 
     try:
-        resend.Emails.send(
+        _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
@@ -293,7 +326,7 @@ def send_api_access_request_email(
     admin_email = settings.ADMIN_EMAIL or settings.FROM_EMAIL
 
     try:
-        resend.Emails.send(
+        _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [admin_email],
@@ -374,7 +407,7 @@ async def send_api_access_approved_email(to_email: str, user_name: str) -> bool:
     checkout_url = f"{settings.FRONTEND_URL}/upgrade?product=api"
 
     try:
-        resend.Emails.send(
+        _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
@@ -445,6 +478,7 @@ async def send_api_access_approved_email(to_email: str, user_name: str) -> bool:
         return False
 
 
+@with_retry(max_attempts=3)
 def send_api_key_approved_email(to_email: str, user_name: str, api_key: str) -> bool:
     """
     Send email to user when their API access is approved with their new key.
@@ -455,7 +489,7 @@ def send_api_key_approved_email(to_email: str, user_name: str, api_key: str) -> 
         return False
 
     try:
-        resend.Emails.send(
+        _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
@@ -590,7 +624,7 @@ def send_daily_market_digest(to_email: str, user_name: str, market_data: Dict[st
     sentiment_icon = "📈" if sentiment == "bullish" else "📉" if sentiment == "bearish" else "➡️"
 
     try:
-        resend.Emails.send(
+        _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
@@ -768,7 +802,7 @@ def send_weekly_market_report(to_email: str, user_name: str, report_data: Dict[s
     vol_arrow = "↑" if volume_change > 0 else "↓" if volume_change < 0 else ""
 
     try:
-        resend.Emails.send(
+        _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
@@ -920,7 +954,7 @@ def send_price_alert(to_email: str, user_name: str, alert_data: Dict[str, Any]) 
     card_url = f"{settings.FRONTEND_URL}/cards/{alert_data.get('card_slug', '')}"
 
     try:
-        resend.Emails.send(
+        _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
@@ -1038,7 +1072,7 @@ def send_portfolio_summary(to_email: str, user_name: str, portfolio_data: Dict[s
         """
 
     try:
-        resend.Emails.send(
+        _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
