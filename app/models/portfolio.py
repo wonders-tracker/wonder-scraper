@@ -1,7 +1,7 @@
 from typing import Optional
 from enum import Enum
 from sqlmodel import Field, SQLModel, Index
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 
 class PurchaseSource(str, Enum):
@@ -34,9 +34,9 @@ class PortfolioCard(SQLModel, table=True):
     grading: Optional[str] = Field(default=None)  # e.g., "PSA 10", "BGS 9.5", null for raw
     notes: Optional[str] = Field(default=None)
 
-    # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    # Timestamps (timezone-aware)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     deleted_at: Optional[datetime] = Field(default=None, index=True)  # Soft delete
 
     __table_args__ = (
@@ -59,4 +59,4 @@ class PortfolioItem(SQLModel, table=True):
 
     quantity: int = Field(default=1)
     purchase_price: float = Field(default=0.0)
-    acquired_at: datetime = Field(default_factory=datetime.utcnow)
+    acquired_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

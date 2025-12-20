@@ -198,6 +198,7 @@ async def job_update_blokpax_data():
 
     errors = 0
     total_sales = 0
+    total_listings = 0  # Initialize outside try block to avoid UnboundLocalError
 
     try:
         bpx_price = await get_bpx_price()
@@ -266,7 +267,6 @@ async def job_update_blokpax_data():
             errors += 1
 
         # Scrape preslab active listings and sync to marketprice
-        total_listings = 0
         try:
             with Session(engine) as session:
                 processed, matched, saved = await scrape_preslab_listings(session, save_to_db=True)

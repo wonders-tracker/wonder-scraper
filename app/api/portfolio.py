@@ -252,25 +252,24 @@ def batch_get_treatment_market_prices(
     treatments = list(set(pair[1] for pair in card_treatment_pairs))
 
     # Batch query: Get VWAP for all card+treatment combinations in one query
-    price_query = text("""
-        SELECT card_id, treatment, AVG(price) as avg_price
-        FROM marketprice
-        WHERE card_id = ANY(:card_ids)
-          AND treatment = ANY(:treatments)
-          AND listing_type = 'sold'
-          AND COALESCE(sold_date, scraped_at) >= :cutoff
-        GROUP BY card_id, treatment
-    """)
+    # Use SQLAlchemy ORM instead of raw SQL for SQLite compatibility (tests use SQLite)
+    from sqlalchemy import and_
 
-    results = session.execute(
-        price_query,
-        {"card_ids": card_ids, "treatments": treatments, "cutoff": cutoff}
+    results = session.exec(
+        select(MarketPrice.card_id, MarketPrice.treatment, func.avg(MarketPrice.price).label("avg_price"))
+        .where(MarketPrice.card_id.in_(card_ids))
+        .where(MarketPrice.treatment.in_(treatments))
+        .where(MarketPrice.listing_type == "sold")
+        .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= cutoff)
+        .group_by(MarketPrice.card_id, MarketPrice.treatment)
     ).all()
 
     # Build lookup dict
     prices: dict[tuple[int, str], float] = {}
     for row in results:
-        prices[(row.card_id, row.treatment)] = float(row.avg_price)
+        # Access tuple elements by index for SQLAlchemy compatibility
+        card_id, treatment, avg_price = row[0], row[1], row[2]
+        prices[(card_id, treatment)] = float(avg_price)
 
     # For pairs without recent sales, try to get last sale (any time)
     missing_pairs = [p for p in card_treatment_pairs if p not in prices]
@@ -278,44 +277,46 @@ def batch_get_treatment_market_prices(
         missing_card_ids = list(set(p[0] for p in missing_pairs))
         missing_treatments = list(set(p[1] for p in missing_pairs))
 
-        last_sale_query = text("""
-            SELECT DISTINCT ON (card_id, treatment) card_id, treatment, price
-            FROM marketprice
-            WHERE card_id = ANY(:card_ids)
-              AND treatment = ANY(:treatments)
-              AND listing_type = 'sold'
-            ORDER BY card_id, treatment, sold_date DESC NULLS LAST
-        """)
+        # Use subquery approach for getting last sale per card+treatment (SQLite compatible)
+        from sqlalchemy import tuple_
 
-        last_sales = session.execute(
-            last_sale_query,
-            {"card_ids": missing_card_ids, "treatments": missing_treatments}
+        # Get all sold prices for missing combinations, ordered by date
+        last_sales = session.exec(
+            select(MarketPrice.card_id, MarketPrice.treatment, MarketPrice.price, MarketPrice.sold_date)
+            .where(MarketPrice.card_id.in_(missing_card_ids))
+            .where(MarketPrice.treatment.in_(missing_treatments))
+            .where(MarketPrice.listing_type == "sold")
+            .order_by(MarketPrice.card_id, MarketPrice.treatment, desc(MarketPrice.sold_date))
         ).all()
 
+        # Take first (most recent) for each card+treatment pair
+        seen_keys = set()
         for row in last_sales:
-            key = (row.card_id, row.treatment)
-            if key not in prices:
-                prices[key] = float(row.price)
+            card_id, treatment, price = row[0], row[1], row[2]
+            key = (card_id, treatment)
+            if key not in prices and key not in seen_keys:
+                seen_keys.add(key)
+                prices[key] = float(price)
 
     # Final fallback: get card-level prices for anything still missing
     still_missing = [p for p in card_treatment_pairs if p not in prices]
     if still_missing:
         still_missing_card_ids = list(set(p[0] for p in still_missing))
 
-        # Get latest sold price per card (any treatment)
-        fallback_query = text("""
-            SELECT DISTINCT ON (card_id) card_id, price
-            FROM marketprice
-            WHERE card_id = ANY(:card_ids)
-              AND listing_type = 'sold'
-            ORDER BY card_id, sold_date DESC NULLS LAST
-        """)
-
-        fallback_results = session.execute(
-            fallback_query, {"card_ids": still_missing_card_ids}
+        # Get latest sold price per card (any treatment) - SQLite compatible
+        fallback_results = session.exec(
+            select(MarketPrice.card_id, MarketPrice.price, MarketPrice.sold_date)
+            .where(MarketPrice.card_id.in_(still_missing_card_ids))
+            .where(MarketPrice.listing_type == "sold")
+            .order_by(MarketPrice.card_id, desc(MarketPrice.sold_date))
         ).all()
 
-        fallback_prices = {row.card_id: float(row.price) for row in fallback_results}
+        # Take first (most recent) for each card
+        fallback_prices: dict[int, float] = {}
+        for row in fallback_results:
+            cid, price = row[0], row[1]
+            if cid not in fallback_prices:
+                fallback_prices[cid] = float(price)
 
         for card_id, treatment in still_missing:
             if card_id in fallback_prices:
@@ -830,34 +831,35 @@ def get_portfolio_value_history(
     treatments = list(set(c.treatment for c in cards))
 
     # Get historical prices for all cards WITH treatment-specific pricing
-    # This query gets the average sold price per card+treatment per day
-    price_query = text("""
-        SELECT
-            card_id,
-            treatment,
-            DATE(COALESCE(sold_date, scraped_at)) as sale_date,
-            AVG(price) as avg_price
-        FROM marketprice
-        WHERE card_id = ANY(:card_ids)
-          AND treatment = ANY(:treatments)
-          AND listing_type = 'sold'
-          AND COALESCE(sold_date, scraped_at) >= :start_date
-        GROUP BY card_id, treatment, DATE(COALESCE(sold_date, scraped_at))
-        ORDER BY card_id, treatment, sale_date
-    """)
+    # Use SQLAlchemy ORM for SQLite compatibility
+    sale_date_col = func.date(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at))
 
-    price_results = session.execute(
-        price_query,
-        {"card_ids": card_ids, "treatments": treatments, "start_date": start_date}
+    price_results = session.exec(
+        select(
+            MarketPrice.card_id,
+            MarketPrice.treatment,
+            sale_date_col.label("sale_date"),
+            func.avg(MarketPrice.price).label("avg_price")
+        )
+        .where(MarketPrice.card_id.in_(card_ids))
+        .where(MarketPrice.treatment.in_(treatments))
+        .where(MarketPrice.listing_type == "sold")
+        .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= start_date)
+        .group_by(MarketPrice.card_id, MarketPrice.treatment, sale_date_col)
+        .order_by(MarketPrice.card_id, MarketPrice.treatment, sale_date_col)
     ).all()
 
     # Build price lookup: {(card_id, treatment): {date: price}}
     price_by_card_treatment_date: dict[tuple[int, str], dict] = {}
     for row in price_results:
-        cid, treatment, sale_date, avg_price = row
+        cid, treatment, sale_date, avg_price = row[0], row[1], row[2], row[3]
         key = (cid, treatment)
         if key not in price_by_card_treatment_date:
             price_by_card_treatment_date[key] = {}
+        # Handle both date objects and strings from different DBs
+        if isinstance(sale_date, str):
+            from datetime import date as date_type
+            sale_date = date_type.fromisoformat(sale_date)
         price_by_card_treatment_date[key][sale_date] = float(avg_price)
 
     # Get current prices as fallback using batch fetch

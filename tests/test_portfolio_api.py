@@ -544,8 +544,9 @@ class TestTreatmentAwarePricing:
         assert paper_response.status_code == 200
         assert foil_response.status_code == 200
 
-        paper_data = paper_response.json()
-        foil_data = foil_response.json()
+        # Endpoint returns a list (to support quantity > 1), so access first element
+        paper_data = paper_response.json()[0]
+        foil_data = foil_response.json()[0]
 
         # Market prices should differ (Foil is more expensive in fixture)
         # Note: This depends on sample_market_prices fixture having different prices
@@ -570,7 +571,8 @@ class TestTreatmentAwarePricing:
         )
 
         assert response.status_code == 200
-        data = response.json()
+        # Endpoint returns a list (to support quantity > 1), so access first element
+        data = response.json()[0]
 
         if data["market_price"] is not None:
             expected_pl = data["market_price"] - purchase_price
