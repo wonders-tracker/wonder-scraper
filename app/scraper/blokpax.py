@@ -1222,6 +1222,11 @@ async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> 
 
             except Exception as e:
                 print(f"[Blokpax] Error processing listing {listing.listing_id}: {e}")
+                # Rollback failed transaction to allow subsequent operations
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
                 continue
 
     if save_to_db:

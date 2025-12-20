@@ -826,6 +826,11 @@ async def scrape_opensea_listings_to_db(
 
         except Exception as e:
             print(f"[OpenSea] Error saving listing {listing.token_id}: {e}")
+            # Rollback failed transaction to allow subsequent operations
+            try:
+                session.rollback()
+            except Exception:
+                pass
             continue
 
     if save_to_db:
