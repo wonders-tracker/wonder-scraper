@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 
 from app.api import deps
+from app.core.typing import col
 from app.models.user import User
 
 router = APIRouter()
@@ -54,7 +55,7 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
 
     try:
         with Session(engine) as session:
-            all_cards = session.exec(select(Card)).all()
+            all_cards = session.execute(select(Card)).scalars().all()
 
             cards_to_scrape = []
             cutoff_time = datetime.now(timezone.utc) - timedelta(hours=4)
@@ -63,14 +64,22 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
                 if force_all:
                     cards_to_scrape.append(card)
                 else:
-                    snapshot = session.exec(
+                    snapshot = session.execute(
                         select(MarketSnapshot)
                         .where(MarketSnapshot.card_id == card.id)
-                        .order_by(MarketSnapshot.timestamp.desc(), MarketSnapshot.id.desc())
+                        .order_by(col(MarketSnapshot.timestamp).desc(), col(MarketSnapshot.id).desc())
                         .limit(1)
-                    ).first()
+                    ).scalars().first()
 
-                    if not snapshot or snapshot.timestamp < cutoff_time:
+                    # Handle both naive and aware timestamps
+                    if not snapshot:
+                        cards_to_scrape.append(card)
+                        continue
+                    snapshot_ts = snapshot.timestamp
+                    compare_cutoff = cutoff_time
+                    if snapshot_ts.tzinfo is None:
+                        compare_cutoff = cutoff_time.replace(tzinfo=None)
+                    if snapshot_ts < compare_cutoff:
                         cards_to_scrape.append(card)
 
                 if len(cards_to_scrape) >= limit:
@@ -208,17 +217,17 @@ async def get_admin_stats(
 
     with Session(engine) as session:
         # User stats
-        total_users = session.exec(select(func.count(UserModel.id))).one()
+        total_users = session.execute(select(func.count(UserModel.id))).scalar_one()
         active_users_24h = (
-            session.exec(
-                select(func.count(UserModel.id)).where(UserModel.last_login >= datetime.now(timezone.utc) - timedelta(hours=24))
-            ).one()
+            session.execute(
+                select(func.count(UserModel.id)).where(col(UserModel.last_login) >= datetime.now(timezone.utc) - timedelta(hours=24))
+            ).scalar_one()
             if hasattr(UserModel, "last_login")
             else 0
         )
 
         # Get all users with details and activity data
-        all_users = session.exec(select(UserModel).order_by(UserModel.created_at.desc())).all()
+        all_users = session.execute(select(UserModel).order_by(col(UserModel.created_at).desc())).scalars().all()
 
         # Get user activity stats in bulk for efficiency
         user_activity_result = session.execute(
@@ -259,35 +268,35 @@ async def get_admin_stats(
             )
 
         # Card stats
-        total_cards = session.exec(select(func.count(Card.id))).one()
+        total_cards = session.execute(select(func.count(Card.id))).scalar_one()
 
         # Market data stats
-        total_listings = session.exec(select(func.count(MarketPrice.id))).one()
-        sold_listings = session.exec(select(func.count(MarketPrice.id)).where(MarketPrice.listing_type == "sold")).one()
-        active_listings = session.exec(
+        total_listings = session.execute(select(func.count(MarketPrice.id))).scalar_one()
+        sold_listings = session.execute(select(func.count(MarketPrice.id)).where(MarketPrice.listing_type == "sold")).scalar_one()
+        active_listings = session.execute(
             select(func.count(MarketPrice.id)).where(MarketPrice.listing_type == "active")
-        ).one()
+        ).scalar_one()
 
         # Listings in last 24h
-        listings_24h = session.exec(
+        listings_24h = session.execute(
             select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.now(timezone.utc) - timedelta(hours=24))
-        ).one()
+        ).scalar_one()
 
         # Listings in last 7d
-        listings_7d = session.exec(
+        listings_7d = session.execute(
             select(func.count(MarketPrice.id)).where(MarketPrice.scraped_at >= datetime.now(timezone.utc) - timedelta(days=7))
-        ).one()
+        ).scalar_one()
 
         # Portfolio stats
-        total_portfolio_cards = session.exec(
-            select(func.count(PortfolioCard.id)).where(PortfolioCard.deleted_at.is_(None))
-        ).one()
+        total_portfolio_cards = session.execute(
+            select(func.count(PortfolioCard.id)).where(col(PortfolioCard.deleted_at).is_(None))
+        ).scalar_one()
 
         # Snapshot stats
-        total_snapshots = session.exec(select(func.count(MarketSnapshot.id))).one()
-        latest_snapshot = session.exec(
-            select(MarketSnapshot).order_by(MarketSnapshot.timestamp.desc(), MarketSnapshot.id.desc()).limit(1)
-        ).first()
+        total_snapshots = session.execute(select(func.count(MarketSnapshot.id))).scalar_one()
+        latest_snapshot = session.execute(
+            select(MarketSnapshot).order_by(col(MarketSnapshot.timestamp).desc(), col(MarketSnapshot.id).desc()).limit(1)
+        ).scalars().first()
 
         # Database size (PostgreSQL)
         try:
@@ -327,8 +336,8 @@ async def get_admin_stats(
         # Filter out: admin users (superusers) and localhost traffic
         try:
             # Get superuser IDs to exclude
-            superuser_ids = session.exec(
-                select(UserModel.id).where(UserModel.is_superuser.is_(True))
+            superuser_ids = session.execute(
+                select(UserModel.id).where(col(UserModel.is_superuser).is_(True))
             ).all()
             superuser_ids_list = list(superuser_ids) if superuser_ids else []
 
@@ -647,10 +656,10 @@ async def get_user_activity(
             raise HTTPException(status_code=404, detail="User not found")
 
         # Get recent page views
-        pageviews = session.exec(
+        pageviews = session.execute(
             select(PageView)
             .where(PageView.user_id == user_id)
-            .order_by(PageView.timestamp.desc())
+            .order_by(col(PageView.timestamp).desc())
             .limit(limit)
         ).all()
 
@@ -721,7 +730,7 @@ async def list_all_api_keys(
 
     with Session(engine) as session:
         # Get all API keys with user info
-        keys = session.exec(select(APIKey).order_by(APIKey.created_at.desc())).all()
+        keys = session.execute(select(APIKey).order_by(col(APIKey.created_at).desc())).scalars().all()
 
         result = []
         for key in keys:
@@ -759,19 +768,19 @@ async def get_api_key_stats(
 
     with Session(engine) as session:
         # Total keys
-        total_keys = session.exec(select(func.count(APIKey.id))).one()
+        total_keys = session.execute(select(func.count(APIKey.id))).scalar_one()
 
         # Active keys
-        active_keys = session.exec(select(func.count(APIKey.id)).where(APIKey.is_active is True)).one()
+        active_keys = session.execute(select(func.count(APIKey.id)).where(APIKey.is_active is True)).scalar_one()
 
         # Keys used today
-        keys_used_today = session.exec(select(func.count(APIKey.id)).where(APIKey.requests_today > 0)).one()
+        keys_used_today = session.execute(select(func.count(APIKey.id)).where(APIKey.requests_today > 0)).scalar_one()
 
         # Total requests today
-        total_requests_today = session.exec(select(func.sum(APIKey.requests_today))).one() or 0
+        total_requests_today = session.execute(select(func.sum(APIKey.requests_today))).scalar_one() or 0
 
         # Total requests all time
-        total_requests_all = session.exec(select(func.sum(APIKey.requests_total))).one() or 0
+        total_requests_all = session.execute(select(func.sum(APIKey.requests_total))).scalar_one() or 0
 
         # Top users by API usage
         top_users_result = session.execute(
@@ -892,7 +901,7 @@ async def admin_reset_daily_counts(
         )
         session.commit()
 
-        return {"message": "Daily counts reset for all API keys", "keys_affected": result.rowcount}
+        return {"message": "Daily counts reset for all API keys", "keys_affected": getattr(result, 'rowcount', 0)}
 
 
 @router.get("/blocked-ips")

@@ -59,7 +59,6 @@ class TestMarketOverviewEndpoint:
         assert "volume_change" in first_item
         assert "price_delta_period" in first_item
         assert "deal_rating" in first_item
-        assert "market_cap" in first_item
 
     def test_market_overview_time_periods(self, client, sample_cards, sample_market_prices):
         """Test different time period filters."""

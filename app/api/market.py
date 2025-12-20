@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, cast
 import threading
 import time
 import logging
@@ -8,6 +8,7 @@ from sqlmodel import Session, select, desc
 from datetime import datetime, timedelta, timezone
 from cachetools import TTLCache
 
+from app.core.typing import col
 from app.db import get_session
 from app.models.card import Card
 from app.models.market import MarketSnapshot, MarketPrice
@@ -64,7 +65,7 @@ def read_treatments(
         GROUP BY treatment
         ORDER BY treatment
     """)
-    results = session.exec(query).all()
+    results = session.execute(query).all()
     data = [{"name": row[0], "min_price": float(row[1]), "count": int(row[2])} for row in results]
 
     # Cache result
@@ -101,18 +102,18 @@ def read_market_overview(
     cutoff_time = datetime.now(timezone.utc) - cutoff_delta if cutoff_delta else None
 
     # Fetch all cards
-    cards = session.exec(select(Card)).all()
+    cards = session.execute(select(Card)).scalars().all()
     if not cards:
         return []
 
     card_ids = [c.id for c in cards]
 
     # Batch fetch snapshots
-    snapshot_query = select(MarketSnapshot).where(MarketSnapshot.card_id.in_(card_ids))
+    snapshot_query = select(MarketSnapshot).where(col(MarketSnapshot.card_id).in_(card_ids))
     if cutoff_time:
-        snapshot_query = snapshot_query.where(MarketSnapshot.timestamp >= cutoff_time)
-    snapshot_query = snapshot_query.order_by(MarketSnapshot.card_id, desc(MarketSnapshot.timestamp))
-    all_snapshots = session.exec(snapshot_query).all()
+        snapshot_query = snapshot_query.where(col(MarketSnapshot.timestamp) >= cutoff_time)
+    snapshot_query = snapshot_query.order_by(col(MarketSnapshot.card_id), col(MarketSnapshot.timestamp).desc())
+    all_snapshots = session.execute(snapshot_query).scalars().all()
 
     snapshots_by_card = {}
     for snap in all_snapshots:
@@ -310,7 +311,7 @@ def read_market_activity(
         .order_by(desc(MarketPrice.sold_date))
         .limit(limit)
     )
-    results = session.exec(query).all()
+    results = session.execute(query).all()
 
     activity_data = []
     for sale, card_name, card_id in results:
@@ -363,7 +364,8 @@ def read_market_listings(
     cutoff_time = datetime.now(timezone.utc) - cutoff_delta if cutoff_delta else None
 
     # Build base query with join to Card for product info
-    query = select(MarketPrice, Card.name, Card.slug, Card.product_type, Card.image_url).join(Card, MarketPrice.card_id == Card.id)
+    # Select both full models for type-safe tuple unpacking
+    query = select(MarketPrice, Card).join(Card, col(MarketPrice.card_id) == col(Card.id))
 
     # Apply listing type filter
     if listing_type and listing_type != "all":
@@ -375,11 +377,11 @@ def read_market_listings(
 
     # Apply product type filter (on Card)
     if product_type:
-        query = query.where(Card.product_type.ilike(product_type))
+        query = query.where(col(Card.product_type).ilike(product_type))
 
     # Apply treatment filter
     if treatment:
-        query = query.where(MarketPrice.treatment.ilike(f"%{treatment}%"))
+        query = query.where(col(MarketPrice.treatment).ilike(f"%{treatment}%"))
 
     # Apply time period filter - smart behavior based on listing type
     # Active listings: filter by listed_at (when seller posted it)
@@ -412,40 +414,42 @@ def read_market_listings(
         search_pattern = f"%{search}%"
         query = query.where(
             or_(
-                MarketPrice.title.ilike(search_pattern),
-                Card.name.ilike(search_pattern),
+                col(MarketPrice.title).ilike(search_pattern),
+                col(Card.name).ilike(search_pattern),
             )
         )
 
     # Get total count before pagination
     count_query = select(func.count()).select_from(query.subquery())
-    total = session.exec(count_query).one()
+    total = session.execute(count_query).one()
 
-    # Apply sorting
-    sort_column = {
-        "price": MarketPrice.price,
-        "scraped_at": MarketPrice.scraped_at,
+    # Apply sorting - use explicit Any typing for SQLAlchemy column expressions
+    sort_key = sort_by if sort_by else "scraped_at"
+    sort_column_map: dict[str, Any] = {
+        "price": col(MarketPrice.price),
+        "scraped_at": col(MarketPrice.scraped_at),
         "listed_at": func.coalesce(MarketPrice.listed_at, MarketPrice.scraped_at),
         "sold_date": func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at),
-    }.get(sort_by, MarketPrice.scraped_at)
+    }
+    sort_column: Any = sort_column_map.get(sort_key, col(MarketPrice.scraped_at))
 
     # For active listings default to listed_at (more meaningful than scraped_at)
-    if sort_by == "scraped_at" and listing_type == "active":
+    if sort_key == "scraped_at" and listing_type == "active":
         sort_column = func.coalesce(MarketPrice.listed_at, MarketPrice.scraped_at)
 
     # Add secondary sort by id for deterministic ordering when primary sort values are equal
     if sort_order == "asc":
-        query = query.order_by(sort_column, MarketPrice.id)
+        query = query.order_by(sort_column, col(MarketPrice.id))
     else:
-        query = query.order_by(desc(sort_column), desc(MarketPrice.id))
+        query = query.order_by(desc(sort_column), col(MarketPrice.id).desc())
 
     # Apply pagination
     query = query.offset(offset).limit(limit)
 
-    results = session.exec(query).all()
+    results = session.execute(query).all()
 
     # Get unique card IDs to batch fetch floor prices and VWAP
-    card_ids = list(set(listing.card_id for listing, _, _, _, _ in results))
+    card_ids = list(set(listing.card_id for listing, _ in results))
     floor_price_map = {}
     vwap_map = {}
 
@@ -510,7 +514,11 @@ def read_market_listings(
 
     # Format results
     listings = []
-    for listing, card_name, card_slug, card_product_type, card_image_url in results:
+    for listing, card in results:
+        card_name = card.name
+        card_slug = card.slug
+        card_product_type = card.product_type
+        card_image_url = card.image_url
         # Get treatment-specific floor price if available
         # Determine variant key: use product_subtype for sealed, treatment for singles
         # Use lowercase for case-insensitive matching
@@ -637,7 +645,7 @@ def get_listing_reports(
         query = query.where(ListingReport.status == status)
 
     query = query.limit(limit)
-    reports = session.exec(query).all()
+    reports = session.execute(query).scalars().all()
 
     return [
         {

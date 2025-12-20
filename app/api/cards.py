@@ -8,6 +8,7 @@ from sqlmodel import Session, select, func, desc
 from datetime import datetime, timedelta, timezone
 from cachetools import TTLCache
 
+from app.core.typing import col, ensure_int
 from app.db import get_session
 from app.models.card import Card, Rarity
 from app.models.market import MarketSnapshot, MarketPrice
@@ -88,30 +89,30 @@ def read_cards(
     # Build base query with filters
     base_query = select(Card)
     if search:
-        base_query = base_query.where(Card.name.ilike(f"%{search}%"))
+        base_query = base_query.where(col(Card.name).ilike(f"%{search}%"))
     if product_type:
-        base_query = base_query.where(Card.product_type.ilike(product_type))
+        base_query = base_query.where(col(Card.product_type).ilike(product_type))
 
     # Get total count if requested (adds ~10ms overhead)
     total = None
     if include_total:
         count_query = select(func.count()).select_from(base_query.subquery())
-        total = session.exec(count_query).one()
+        total = session.execute(count_query).scalar_one()
 
     # Fetch paginated cards with deterministic ordering
-    card_query = base_query.order_by(Card.name, Card.id).offset(skip).limit(limit)
-    cards = session.exec(card_query).all()
+    card_query = base_query.order_by(col(Card.name), col(Card.id)).offset(skip).limit(limit)
+    cards = session.execute(card_query).scalars().all()
 
     if not cards:
         return []
 
     # Batch fetch ALL snapshots for these cards in ONE query
     card_ids = [c.id for c in cards]
-    snapshot_query = select(MarketSnapshot).where(MarketSnapshot.card_id.in_(card_ids))
+    snapshot_query = select(MarketSnapshot).where(col(MarketSnapshot.card_id).in_(card_ids))
     if cutoff_time:
-        snapshot_query = snapshot_query.where(MarketSnapshot.timestamp >= cutoff_time)
-    snapshot_query = snapshot_query.order_by(MarketSnapshot.card_id, desc(MarketSnapshot.timestamp))
-    all_snapshots = session.exec(snapshot_query).all()
+        snapshot_query = snapshot_query.where(col(MarketSnapshot.timestamp) >= cutoff_time)
+    snapshot_query = snapshot_query.order_by(col(MarketSnapshot.card_id), desc(MarketSnapshot.timestamp))
+    all_snapshots = session.execute(snapshot_query).scalars().all()
 
     # Group snapshots by card_id
     snapshots_by_card = {}
@@ -134,7 +135,7 @@ def read_cards(
         snapshots_by_card[snap.card_id].append(snap)
 
     # Batch fetch rarities
-    rarities = session.exec(select(Rarity)).all()
+    rarities = session.execute(select(Rarity)).scalars().all()
     rarity_map = {r.id: r.name for r in rarities}
 
     # Build card_id -> product_type map for variant field selection
@@ -431,11 +432,11 @@ def read_cards(
             floor_delta = round(((last_price - card_floor_price) / card_floor_price) * 100, 1)
 
         c_out = CardOut(
-            id=card.id,
+            id=ensure_int(card.id),
             name=card.name,
             set_name=card.set_name,
-            rarity_id=card.rarity_id,
-            rarity_name=rarity_map.get(card.rarity_id, "Unknown"),
+            rarity_id=ensure_int(card.rarity_id),
+            rarity_name=rarity_map.get(card.rarity_id or 0, "Unknown"),
             product_type=card.product_type if hasattr(card, "product_type") else "Single",
             # Prices
             floor_price=card_floor_price,
@@ -514,7 +515,7 @@ def get_card_by_id_or_slug(session: Session, card_identifier: str) -> Card:
         if card:
             return card
     # Try slug lookup
-    card = session.exec(select(Card).where(Card.slug == card_identifier)).first()
+    card = session.execute(select(Card).where(Card.slug == card_identifier)).scalars().first()
     if card:
         return card
     raise HTTPException(status_code=404, detail="Card not found")
@@ -550,7 +551,7 @@ def read_card(
         .order_by(desc(MarketSnapshot.timestamp), desc(MarketSnapshot.id))
         .limit(50)
     )
-    snapshots = session.exec(stmt).all()
+    snapshots = session.execute(stmt).scalars().all()
 
     latest_snap = snapshots[0] if snapshots else None
     # Rough approximation for "oldest in recent history" since we don't have time_period param here easily
@@ -681,7 +682,7 @@ def read_card(
     try:
         pricing_service = FairMarketPriceService(session)
         fmp_result = pricing_service.calculate_fmp(
-            card_id=card.id, set_name=card.set_name, rarity_name=rarity_name, product_type=product_type
+            card_id=ensure_int(card.id), set_name=card.set_name, rarity_name=rarity_name, product_type=product_type
         )
         fair_market_price = fmp_result.get("fair_market_price")
         floor_price = fmp_result.get("floor_price")
@@ -762,11 +763,11 @@ def read_card(
         print(f"Error calculating variant prices for card {card.id}: {e}")
 
     c_out = CardOut(
-        id=card.id,
+        id=ensure_int(card.id),
         slug=card.slug,
         name=card.name,
         set_name=card.set_name,
-        rarity_id=card.rarity_id,
+        rarity_id=ensure_int(card.rarity_id),
         rarity_name=rarity_name,
         latest_price=real_price,
         volume_30d=volume_30d,
@@ -803,9 +804,9 @@ def read_market_data(
     """
     card = get_card_by_id_or_slug(session, card_id)
     statement = (
-        select(MarketSnapshot).where(MarketSnapshot.card_id == card.id).order_by(MarketSnapshot.timestamp.desc(), MarketSnapshot.id.desc())
+        select(MarketSnapshot).where(MarketSnapshot.card_id == card.id).order_by(col(MarketSnapshot.timestamp).desc(), col(MarketSnapshot.id).desc())
     )
-    snapshot = session.exec(statement).first()
+    snapshot = session.execute(statement).scalars().first()
 
     if not snapshot:
         raise HTTPException(status_code=404, detail="Market data not found for this card")
@@ -838,7 +839,7 @@ def read_sales_history(
         .offset(offset)
         .limit(limit)
     )
-    prices = session.exec(statement).all()
+    prices = session.execute(statement).scalars().all()
 
     # Convert to output schema
     prices_out = [MarketPriceOut.model_validate(p) for p in prices]
@@ -851,7 +852,7 @@ def read_sales_history(
     count_stmt = select(func.count(MarketPrice.id)).where(
         MarketPrice.card_id == card.id, MarketPrice.listing_type == "sold"
     )
-    total = session.exec(count_stmt).one()
+    total = session.execute(count_stmt).scalar_one()
 
     return {
         "items": prices_out,
@@ -878,7 +879,7 @@ def read_active_listings(
         .order_by(desc(MarketPrice.scraped_at))
         .limit(limit)
     )
-    active = session.exec(statement).all()
+    active = session.execute(statement).scalars().all()
     return [MarketPriceOut.model_validate(a) for a in active]
 
 
@@ -912,12 +913,12 @@ def read_card_pricing(
 
     # Get FMP breakdown by treatment/variant
     treatment_fmps = pricing_service.get_fmp_by_treatment(
-        card_id=card.id, set_name=card.set_name, rarity_name=rarity_name, product_type=product_type
+        card_id=ensure_int(card.id), set_name=card.set_name, rarity_name=rarity_name, product_type=product_type
     )
 
     # Also get overall FMP and floor
     fmp_result = pricing_service.calculate_fmp(
-        card_id=card.id, set_name=card.set_name, rarity_name=rarity_name, product_type=product_type
+        card_id=ensure_int(card.id), set_name=card.set_name, rarity_name=rarity_name, product_type=product_type
     )
 
     return {
@@ -950,10 +951,10 @@ def read_snapshot_history(
 
     statement = (
         select(MarketSnapshot)
-        .where(MarketSnapshot.card_id == card.id, MarketSnapshot.timestamp >= cutoff)
+        .where(MarketSnapshot.card_id == card.id, col(MarketSnapshot.timestamp) >= cutoff)
         .order_by(desc(MarketSnapshot.timestamp), desc(MarketSnapshot.id))
         .limit(limit)
     )
 
-    snapshots = session.exec(statement).all()
+    snapshots = session.execute(statement).scalars().all()
     return [MarketSnapshotOut.model_validate(s) for s in snapshots]

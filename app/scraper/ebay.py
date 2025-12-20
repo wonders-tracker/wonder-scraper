@@ -5,6 +5,7 @@ from dateutil import parser
 import re
 import difflib
 from sqlmodel import Session, select
+from app.core.typing import col
 from app.models.market import MarketPrice
 from app.services.ai_extractor import get_ai_extractor
 from app.db import engine
@@ -186,9 +187,9 @@ def _bulk_check_indexed(
         if external_ids:
             if check_global:
                 # Check if external_id exists for ANY card
-                all_existing = session.exec(
+                all_existing = session.execute(
                     select(MarketPrice.external_id, MarketPrice.card_id, MarketPrice.id).where(
-                        MarketPrice.external_id.in_(external_ids)
+                        col(MarketPrice.external_id).in_(external_ids)
                     )
                 ).all()
 
@@ -215,7 +216,7 @@ def _bulk_check_indexed(
                             title = listing.get("title", "")
 
                             # Get the other card's details
-                            other_card = session.exec(select(Card).where(Card.id == other_card_id)).first()
+                            other_card = session.execute(select(Card).where(Card.id == other_card_id)).scalars().first()
 
                             if other_card:
                                 # Score current card vs the existing card
@@ -242,9 +243,9 @@ def _bulk_check_indexed(
                             indexed_indices.add(i)
             else:
                 # Original behavior: only check this card_id
-                existing_ids = session.exec(
+                existing_ids = session.execute(
                     select(MarketPrice.external_id).where(
-                        MarketPrice.external_id.in_(external_ids), MarketPrice.card_id == card_id
+                        col(MarketPrice.external_id).in_(external_ids), MarketPrice.card_id == card_id
                     )
                 ).all()
                 existing_ids_set = set(existing_ids)
@@ -264,17 +265,17 @@ def _bulk_check_indexed(
         for i, listing in enumerate(listings_data):
             if i not in indexed_indices:  # Not already found by external_id
                 condition = and_(
-                    MarketPrice.card_id == card_id,
-                    MarketPrice.title == listing["title"],
-                    MarketPrice.price == listing["price"],
-                    MarketPrice.sold_date == listing["sold_date"],
+                    col(MarketPrice.card_id) == card_id,
+                    col(MarketPrice.title) == listing["title"],
+                    col(MarketPrice.price) == listing["price"],
+                    col(MarketPrice.sold_date) == listing["sold_date"],
                 )
                 composite_conditions.append(condition)
                 composite_index_map[len(composite_conditions) - 1] = i
 
         if composite_conditions:
             # Query with OR of all composite conditions
-            existing_composites = session.exec(
+            existing_composites = session.execute(
                 select(MarketPrice.title, MarketPrice.price, MarketPrice.sold_date)
                 .where(or_(*composite_conditions))
                 .distinct()
@@ -1347,7 +1348,8 @@ def _parse_generic_results(
     all_listings_data = []
 
     for item in items:
-        if "s-item__header" in item.get("class", []) or "s-card__header" in item.get("class", []):
+        item_classes = item.get("class") or []
+        if "s-item__header" in item_classes or "s-card__header" in item_classes:
             continue
 
         title_elem = item.select_one(".s-item__title, .s-card__title")

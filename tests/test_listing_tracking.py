@@ -431,7 +431,10 @@ class TestDatabasePersistence:
             fetched = integration_session.get(MarketPrice, mp.id)
             assert fetched is not None
             assert fetched.listed_at is not None
-            assert abs((fetched.listed_at - now).total_seconds()) < 1
+            # Handle both naive and aware datetimes from database
+            fetched_ts = fetched.listed_at
+            compare_now = now.replace(tzinfo=None) if fetched_ts.tzinfo is None else now
+            assert abs((fetched_ts - compare_now).total_seconds()) < 1
         finally:
             integration_session.delete(mp)
             integration_session.commit()
@@ -473,8 +476,10 @@ class TestDatabasePersistence:
             fetched = integration_session.get(MarketPrice, mp_id)
             assert fetched.listing_type == "sold"
             assert fetched.sold_date is not None
-            # listed_at should be preserved
-            assert abs((fetched.listed_at - listed_time).total_seconds()) < 1
+            # listed_at should be preserved - handle naive/aware
+            fetched_ts = fetched.listed_at
+            compare_time = listed_time.replace(tzinfo=None) if fetched_ts.tzinfo is None else listed_time
+            assert abs((fetched_ts - compare_time).total_seconds()) < 1
         finally:
             integration_session.delete(mp)
             integration_session.commit()
@@ -712,10 +717,12 @@ class TestActiveToSoldConversionLogic:
             integration_session.add(mp)
             integration_session.commit()
 
-            # Verify listed_at preserved
+            # Verify listed_at preserved - handle naive/aware
             fetched = integration_session.get(MarketPrice, mp_id)
             assert fetched.price == 15.0
-            assert abs((fetched.listed_at - original_listed_at).total_seconds()) < 1
+            fetched_ts = fetched.listed_at
+            compare_time = original_listed_at.replace(tzinfo=None) if fetched_ts.tzinfo is None else original_listed_at
+            assert abs((fetched_ts - compare_time).total_seconds()) < 1
 
         finally:
             integration_session.delete(mp)
