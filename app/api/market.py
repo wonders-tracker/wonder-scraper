@@ -421,7 +421,7 @@ def read_market_listings(
 
     # Get total count before pagination
     count_query = select(func.count()).select_from(query.subquery())
-    total = session.execute(count_query).one()
+    total = session.execute(count_query).scalar_one()
 
     # Apply sorting - use explicit Any typing for SQLAlchemy column expressions
     sort_key = sort_by if sort_by else "scraped_at"
