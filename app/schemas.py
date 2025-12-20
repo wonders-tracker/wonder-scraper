@@ -84,6 +84,7 @@ class CardOut(CardBase):
     # === METADATA ===
     last_treatment: Optional[str] = None  # Treatment of last sale (e.g., "Classic Foil")
     last_updated: Optional[datetime] = None  # When market data was last scraped
+    image_url: Optional[str] = None  # Card thumbnail URL from blob storage
 
     # === DEPRECATED (keep for backwards compat, remove later) ===
     volume_30d: Optional[int] = None  # @deprecated: use 'volume'
@@ -114,6 +115,8 @@ class CardListItem(BaseModel):
     price_delta: Optional[float] = None
     # Treatment for display
     last_treatment: Optional[str] = None
+    # Image
+    image_url: Optional[str] = None  # Card thumbnail URL
 
     model_config = {"from_attributes": True}
 

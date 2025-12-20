@@ -457,6 +457,7 @@ def read_cards(
             # Metadata
             last_treatment=last_treatment,
             last_updated=latest_snap.timestamp if latest_snap else None,
+            image_url=card.image_url if hasattr(card, "image_url") else None,
             # Deprecated fields (backwards compat)
             volume_30d=card_volume,
             price_delta_24h=price_delta,
@@ -483,6 +484,7 @@ def read_cards(
                 inventory=r.inventory,
                 price_delta=r.price_delta,
                 last_treatment=r.last_treatment,
+                image_url=r.image_url,
             ).model_dump(mode="json")
             for r in results
         ]
