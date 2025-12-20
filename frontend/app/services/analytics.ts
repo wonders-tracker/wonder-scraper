@@ -1,57 +1,57 @@
 /**
- * Google Analytics Service
+ * Analytics Service
  *
- * Extensible analytics factory for tracking custom events.
- * Measurement ID: G-28SPPTBF79
+ * Uses Vercel Analytics for custom event tracking.
+ * Falls back gracefully when analytics is unavailable.
  *
  * Usage:
  *   import { analytics } from '~/services/analytics'
  *   analytics.trackSignup('email')
  *   analytics.trackLoginPageView()
+ *
+ * Vercel Analytics Constraints:
+ * - Event names: max 255 characters
+ * - Property keys: max 255 characters
+ * - Property values: strings, numbers, booleans only (no nested objects)
+ * - Requires Pro/Enterprise plan for custom events
  */
 
-// Declare gtag on window
-declare global {
-  interface Window {
-    gtag: (...args: any[]) => void
-    dataLayer: any[]
-  }
-}
+import { track as vercelTrack } from '@vercel/analytics'
 
-// GA Measurement ID
-const GA_MEASUREMENT_ID = 'G-28SPPTBF79'
+// Type for event properties (Vercel Analytics constraints)
+type EventProperties = Record<string, string | number | boolean | undefined>
+
+// Vercel Analytics allowed property values (no undefined)
+type VercelPropertyValues = string | number | boolean | null
 
 /**
- * Core tracking function - wraps gtag for safety
+ * Core tracking function - wraps Vercel Analytics track()
+ * Safely handles SSR and missing analytics
  */
-function track(eventName: string, params?: Record<string, any>) {
+function track(eventName: string, params?: EventProperties) {
   if (typeof window === 'undefined') return
-  if (!window.gtag) {
-    console.warn('[Analytics] gtag not loaded')
-    return
-  }
 
   try {
-    window.gtag('event', eventName, {
-      ...params,
-      send_to: GA_MEASUREMENT_ID,
-    })
+    // Truncate event name to 255 chars (Vercel limit)
+    const safeEventName = eventName.slice(0, 255)
+
+    // Clean params: remove undefined values and truncate strings
+    const safeParams: Record<string, VercelPropertyValues> | undefined = params
+      ? Object.fromEntries(
+          Object.entries(params)
+            .filter((entry): entry is [string, string | number | boolean] => entry[1] !== undefined)
+            .map(([k, v]) => [
+              k.slice(0, 255),
+              typeof v === 'string' ? v.slice(0, 255) : v,
+            ])
+        )
+      : undefined
+
+    vercelTrack(safeEventName, safeParams)
   } catch (error) {
-    console.error('[Analytics] Error tracking event:', error)
+    // Silently fail - analytics shouldn't break the app
+    console.debug('[Analytics] Error tracking event:', error)
   }
-}
-
-/**
- * Track page views (for SPAs)
- */
-function trackPageView(path: string, title?: string) {
-  if (typeof window === 'undefined') return
-  if (!window.gtag) return
-
-  window.gtag('config', GA_MEASUREMENT_ID, {
-    page_path: path,
-    page_title: title,
-  })
 }
 
 // ============================================
@@ -63,11 +63,7 @@ function trackPageView(path: string, title?: string) {
  * Triggered when a user successfully creates an account
  */
 function trackSignup(method: 'email' | 'discord' = 'email') {
-  track('sign_up', {
-    method,
-    event_category: 'engagement',
-    event_label: `signup_${method}`,
-  })
+  track('sign_up', { method })
 }
 
 /**
@@ -75,10 +71,7 @@ function trackSignup(method: 'email' | 'discord' = 'email') {
  * Triggered when a user visits the login page
  */
 function trackLoginPageView() {
-  track('login_page_view', {
-    event_category: 'engagement',
-    event_label: 'viewed_login_page',
-  })
+  track('login_page_view')
 }
 
 /**
@@ -86,10 +79,7 @@ function trackLoginPageView() {
  * Triggered when a user visits the signup page
  */
 function trackSignupPageView() {
-  track('signup_page_view', {
-    event_category: 'engagement',
-    event_label: 'viewed_signup_page',
-  })
+  track('signup_page_view')
 }
 
 /**
@@ -97,10 +87,7 @@ function trackSignupPageView() {
  * Triggered when a user starts the Discord OAuth flow from signup page
  */
 function trackDiscordSignupInitiated() {
-  track('discord_signup_initiated', {
-    event_category: 'engagement',
-    event_label: 'started_discord_oauth_signup',
-  })
+  track('discord_signup_initiated')
 }
 
 /**
@@ -108,10 +95,7 @@ function trackDiscordSignupInitiated() {
  * Triggered when a user accesses their profile page
  */
 function trackProfileAccess() {
-  track('profile_access', {
-    event_category: 'engagement',
-    event_label: 'accessed_profile',
-  })
+  track('profile_access')
 }
 
 /**
@@ -119,10 +103,7 @@ function trackProfileAccess() {
  * Triggered when a user accesses their portfolio page
  */
 function trackPortfolioAccess() {
-  track('portfolio_access', {
-    event_category: 'engagement',
-    event_label: 'accessed_portfolio',
-  })
+  track('portfolio_access')
 }
 
 /**
@@ -131,9 +112,7 @@ function trackPortfolioAccess() {
  */
 function trackCardView(cardId: string | number, cardName?: string) {
   track('view_item', {
-    event_category: 'engagement',
-    event_label: 'viewed_card_listing',
-    card_id: cardId,
+    card_id: String(cardId),
     card_name: cardName,
   })
 }
@@ -143,11 +122,7 @@ function trackCardView(cardId: string | number, cardName?: string) {
  * Triggered when a user has viewed N+ card listings in a session
  */
 function trackMultipleListingsViewed(count: number) {
-  track('multiple_listings_viewed', {
-    event_category: 'engagement',
-    event_label: `viewed_${count}_listings`,
-    listings_count: count,
-  })
+  track('multiple_listings_viewed', { listings_count: count })
 }
 
 /**
@@ -156,9 +131,7 @@ function trackMultipleListingsViewed(count: number) {
  */
 function trackAddToPortfolio(cardId: string | number, cardName?: string) {
   track('add_to_portfolio', {
-    event_category: 'engagement',
-    event_label: 'added_to_portfolio',
-    card_id: cardId,
+    card_id: String(cardId),
     card_name: cardName,
   })
 }
@@ -168,34 +141,52 @@ function trackAddToPortfolio(cardId: string | number, cardName?: string) {
  * Triggered when a user performs a search
  */
 function trackSearch(searchTerm: string) {
-  track('search', {
-    search_term: searchTerm,
-    event_category: 'engagement',
-  })
+  track('search', { search_term: searchTerm })
 }
 
 /**
  * Event: Filter Applied
  * Triggered when a user applies a filter
+ * Filter types: set, condition, printing, product_type, card_type, color, rarity, time_period
  */
 function trackFilterApplied(filterType: string, filterValue: string) {
   track('filter_applied', {
-    event_category: 'engagement',
     filter_type: filterType,
     filter_value: filterValue,
   })
 }
 
 /**
+ * Event: Filter Removed
+ * Triggered when a user removes a single filter (e.g., clicking X on a filter chip)
+ */
+function trackFilterRemoved(filterType: string, filterValue: string) {
+  track('filter_removed', {
+    filter_type: filterType,
+    filter_value: filterValue,
+  })
+}
+
+/**
+ * Event: Filters Cleared
+ * Triggered when a user clears all filters at once
+ */
+function trackFiltersCleared(filterCount: number) {
+  track('filters_cleared', { filter_count: filterCount })
+}
+
+/**
  * Event: External Link Click
  * Triggered when a user clicks an external link (e.g., eBay listing)
  */
-function trackExternalLinkClick(platform: string, cardId?: string | number, listingTitle?: string) {
+function trackExternalLinkClick(
+  platform: string,
+  cardId?: string | number,
+  listingTitle?: string
+) {
   track('external_link_click', {
-    event_category: 'conversion',
-    event_label: `clicked_${platform}_listing`,
     platform,
-    card_id: cardId,
+    card_id: cardId ? String(cardId) : undefined,
     listing_title: listingTitle,
   })
 }
@@ -204,9 +195,11 @@ function trackExternalLinkClick(platform: string, cardId?: string | number, list
  * Event: Chart Interaction
  * Triggered when a user interacts with a chart (time range, chart type)
  */
-function trackChartInteraction(interactionType: 'time_range' | 'chart_type', value: string) {
+function trackChartInteraction(
+  interactionType: 'time_range' | 'chart_type',
+  value: string
+) {
   track('chart_interaction', {
-    event_category: 'engagement',
     interaction_type: interactionType,
     value,
   })
@@ -217,10 +210,7 @@ function trackChartInteraction(interactionType: 'time_range' | 'chart_type', val
  * Triggered when a user views the market analysis page
  */
 function trackMarketPageView() {
-  track('market_page_view', {
-    event_category: 'engagement',
-    event_label: 'viewed_market_analysis',
-  })
+  track('market_page_view')
 }
 
 /**
@@ -228,10 +218,7 @@ function trackMarketPageView() {
  * Triggered when a user views the welcome/profile completion page
  */
 function trackWelcomePageView() {
-  track('welcome_page_view', {
-    event_category: 'engagement',
-    event_label: 'viewed_welcome_page',
-  })
+  track('welcome_page_view')
 }
 
 /**
@@ -240,8 +227,6 @@ function trackWelcomePageView() {
  */
 function trackProfileCompleted(hasUsername: boolean, hasDiscord: boolean) {
   track('profile_completed', {
-    event_category: 'engagement',
-    event_label: 'completed_profile',
     has_username: hasUsername,
     has_discord: hasDiscord,
   })
@@ -252,10 +237,7 @@ function trackProfileCompleted(hasUsername: boolean, hasDiscord: boolean) {
  * Triggered when a user skips profile completion on the welcome page
  */
 function trackProfileSkipped() {
-  track('profile_skipped', {
-    event_category: 'engagement',
-    event_label: 'skipped_profile_completion',
-  })
+  track('profile_skipped')
 }
 
 /**
@@ -263,10 +245,7 @@ function trackProfileSkipped() {
  * Triggered when a user views the upgrade/upsell page
  */
 function trackUpgradePageView() {
-  track('upgrade_page_view', {
-    event_category: 'engagement',
-    event_label: 'viewed_upgrade_page',
-  })
+  track('upgrade_page_view')
 }
 
 /**
@@ -274,10 +253,7 @@ function trackUpgradePageView() {
  * Triggered when a user clicks the upgrade button
  */
 function trackUpgradeInitiated() {
-  track('upgrade_initiated', {
-    event_category: 'conversion',
-    event_label: 'started_checkout',
-  })
+  track('upgrade_initiated')
 }
 
 /**
@@ -285,10 +261,7 @@ function trackUpgradeInitiated() {
  * Triggered when a user continues as free from the upgrade page
  */
 function trackUpgradeSkipped() {
-  track('upgrade_skipped', {
-    event_category: 'engagement',
-    event_label: 'skipped_upgrade',
-  })
+  track('upgrade_skipped')
 }
 
 /**
@@ -296,10 +269,7 @@ function trackUpgradeSkipped() {
  * Triggered when a user starts the Discord OAuth flow
  */
 function trackDiscordLoginInitiated() {
-  track('discord_login_initiated', {
-    event_category: 'engagement',
-    event_label: 'started_discord_oauth',
-  })
+  track('discord_login_initiated')
 }
 
 /**
@@ -307,11 +277,7 @@ function trackDiscordLoginInitiated() {
  * Triggered when a user successfully logs in
  */
 function trackLogin(method: 'email' | 'discord' = 'email') {
-  track('login', {
-    method,
-    event_category: 'engagement',
-    event_label: `login_${method}`,
-  })
+  track('login', { method })
 }
 
 // ============================================
@@ -359,7 +325,6 @@ function trackCardViewWithSession(cardId: string | number, cardName?: string) {
 export const analytics = {
   // Core
   track,
-  trackPageView,
 
   // Auth Events
   trackSignup,
@@ -391,13 +356,16 @@ export const analytics = {
   // Discovery Events
   trackSearch,
   trackFilterApplied,
+  trackFilterRemoved,
+  trackFiltersCleared,
 
   // Market Events
   trackMarketPageView,
   trackChartInteraction,
 
   // Utility: Custom event
-  custom: (eventName: string, params?: Record<string, any>) => track(eventName, params),
+  custom: (eventName: string, params?: EventProperties) =>
+    track(eventName, params),
 }
 
 export default analytics

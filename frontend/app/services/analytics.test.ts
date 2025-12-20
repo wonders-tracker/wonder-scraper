@@ -1,41 +1,61 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { analytics } from './analytics'
 
-// Get the mock gtag from setup
-const mockGtag = vi.fn()
+// Mock @vercel/analytics
+vi.mock('@vercel/analytics', () => ({
+  track: vi.fn(),
+}))
+
+// Get the mocked track function
+import { track as vercelTrack } from '@vercel/analytics'
+const mockedTrack = vi.mocked(vercelTrack)
 
 beforeEach(() => {
-  // Reset gtag mock before each test
-  mockGtag.mockClear()
-  window.gtag = mockGtag
+  mockedTrack.mockClear()
   sessionStorage.clear()
 })
 
 describe('Analytics Service', () => {
   describe('Core Tracking', () => {
-    it('should call gtag with correct event name and params', () => {
+    it('should call vercel track with correct event name and params', () => {
       analytics.track('test_event', { foo: 'bar' })
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'test_event', {
-        foo: 'bar',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('test_event', { foo: 'bar' })
     })
 
-    it('should handle missing gtag gracefully', () => {
-      // @ts-ignore - testing undefined gtag
-      window.gtag = undefined
+    it('should handle errors gracefully', () => {
+      const consoleSpy = vi.spyOn(console, 'debug').mockImplementation(() => {})
+      mockedTrack.mockImplementation(() => {
+        throw new Error('track error')
+      })
 
       // Should not throw
       expect(() => analytics.track('test_event')).not.toThrow()
+
+      consoleSpy.mockRestore()
     })
 
-    it('should track page views with config call', () => {
-      analytics.trackPageView('/test-page', 'Test Page')
+    it('should truncate long event names to 255 chars', () => {
+      const longName = 'a'.repeat(300)
+      analytics.track(longName)
 
-      expect(mockGtag).toHaveBeenCalledWith('config', 'G-28SPPTBF79', {
-        page_path: '/test-page',
-        page_title: 'Test Page',
+      expect(mockedTrack).toHaveBeenCalledWith('a'.repeat(255), undefined)
+    })
+
+    it('should truncate long string values to 255 chars', () => {
+      const longValue = 'b'.repeat(300)
+      analytics.track('test_event', { data: longValue })
+
+      expect(mockedTrack).toHaveBeenCalledWith('test_event', {
+        data: 'b'.repeat(255),
+      })
+    })
+
+    it('should remove undefined values from params', () => {
+      analytics.track('test_event', { defined: 'yes', notDefined: undefined })
+
+      expect(mockedTrack).toHaveBeenCalledWith('test_event', {
+        defined: 'yes',
       })
     })
   })
@@ -44,65 +64,44 @@ describe('Analytics Service', () => {
     it('should track email signup', () => {
       analytics.trackSignup('email')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'sign_up', {
-        method: 'email',
-        event_category: 'engagement',
-        event_label: 'signup_email',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('sign_up', { method: 'email' })
     })
 
     it('should track Discord signup', () => {
       analytics.trackSignup('discord')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'sign_up', {
+      expect(mockedTrack).toHaveBeenCalledWith('sign_up', {
         method: 'discord',
-        event_category: 'engagement',
-        event_label: 'signup_discord',
-        send_to: 'G-28SPPTBF79',
       })
     })
 
     it('should track email login', () => {
       analytics.trackLogin('email')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'login', {
-        method: 'email',
-        event_category: 'engagement',
-        event_label: 'login_email',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('login', { method: 'email' })
     })
 
     it('should track Discord login', () => {
       analytics.trackLogin('discord')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'login', {
+      expect(mockedTrack).toHaveBeenCalledWith('login', {
         method: 'discord',
-        event_category: 'engagement',
-        event_label: 'login_discord',
-        send_to: 'G-28SPPTBF79',
       })
     })
 
     it('should track login page view', () => {
       analytics.trackLoginPageView()
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'login_page_view', {
-        event_category: 'engagement',
-        event_label: 'viewed_login_page',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('login_page_view', undefined)
     })
 
     it('should track Discord login initiated', () => {
       analytics.trackDiscordLoginInitiated()
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'discord_login_initiated', {
-        event_category: 'engagement',
-        event_label: 'started_discord_oauth',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith(
+        'discord_login_initiated',
+        undefined
+      )
     })
   })
 
@@ -110,21 +109,13 @@ describe('Analytics Service', () => {
     it('should track profile access', () => {
       analytics.trackProfileAccess()
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'profile_access', {
-        event_category: 'engagement',
-        event_label: 'accessed_profile',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('profile_access', undefined)
     })
 
     it('should track portfolio access', () => {
       analytics.trackPortfolioAccess()
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'portfolio_access', {
-        event_category: 'engagement',
-        event_label: 'accessed_portfolio',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('portfolio_access', undefined)
     })
   })
 
@@ -132,35 +123,26 @@ describe('Analytics Service', () => {
     it('should track card view', () => {
       analytics.trackCardView(123, 'Test Card')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'view_item', {
-        event_category: 'engagement',
-        event_label: 'viewed_card_listing',
-        card_id: 123,
+      expect(mockedTrack).toHaveBeenCalledWith('view_item', {
+        card_id: '123',
         card_name: 'Test Card',
-        send_to: 'G-28SPPTBF79',
       })
     })
 
     it('should track card view with string ID', () => {
       analytics.trackCardView('test-slug', 'Test Card')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'view_item', {
-        event_category: 'engagement',
-        event_label: 'viewed_card_listing',
+      expect(mockedTrack).toHaveBeenCalledWith('view_item', {
         card_id: 'test-slug',
         card_name: 'Test Card',
-        send_to: 'G-28SPPTBF79',
       })
     })
 
     it('should track multiple listings viewed milestone', () => {
       analytics.trackMultipleListingsViewed(3)
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'multiple_listings_viewed', {
-        event_category: 'engagement',
-        event_label: 'viewed_3_listings',
+      expect(mockedTrack).toHaveBeenCalledWith('multiple_listings_viewed', {
         listings_count: 3,
-        send_to: 'G-28SPPTBF79',
       })
     })
 
@@ -171,14 +153,14 @@ describe('Analytics Service', () => {
       analytics.trackCardViewWithSession(3, 'Card 3')
 
       // Should have called view_item 3 times
-      const viewItemCalls = mockGtag.mock.calls.filter(
-        (call) => call[1] === 'view_item'
+      const viewItemCalls = mockedTrack.mock.calls.filter(
+        (call) => call[0] === 'view_item'
       )
       expect(viewItemCalls).toHaveLength(3)
 
       // Should have triggered multiple_listings_viewed once
-      const milestoneCalls = mockGtag.mock.calls.filter(
-        (call) => call[1] === 'multiple_listings_viewed'
+      const milestoneCalls = mockedTrack.mock.calls.filter(
+        (call) => call[0] === 'multiple_listings_viewed'
       )
       expect(milestoneCalls).toHaveLength(1)
     })
@@ -190,7 +172,9 @@ describe('Analytics Service', () => {
       analytics.trackCardViewWithSession(2, 'Card 2')
 
       // Session storage should only have 2 unique cards
-      const stored = JSON.parse(sessionStorage.getItem('wt_viewed_cards') || '[]')
+      const stored = JSON.parse(
+        sessionStorage.getItem('wt_viewed_cards') || '[]'
+      )
       expect(stored).toHaveLength(2)
       expect(stored).toContain('1')
       expect(stored).toContain('2')
@@ -199,25 +183,19 @@ describe('Analytics Service', () => {
     it('should track add to portfolio', () => {
       analytics.trackAddToPortfolio(456, 'Dragon Card')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'add_to_portfolio', {
-        event_category: 'engagement',
-        event_label: 'added_to_portfolio',
-        card_id: 456,
+      expect(mockedTrack).toHaveBeenCalledWith('add_to_portfolio', {
+        card_id: '456',
         card_name: 'Dragon Card',
-        send_to: 'G-28SPPTBF79',
       })
     })
 
     it('should track external link click', () => {
       analytics.trackExternalLinkClick('ebay', 123, 'Test Listing')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'external_link_click', {
-        event_category: 'conversion',
-        event_label: 'clicked_ebay_listing',
+      expect(mockedTrack).toHaveBeenCalledWith('external_link_click', {
         platform: 'ebay',
-        card_id: 123,
+        card_id: '123',
         listing_title: 'Test Listing',
-        send_to: 'G-28SPPTBF79',
       })
     })
   })
@@ -226,32 +204,120 @@ describe('Analytics Service', () => {
     it('should track search', () => {
       analytics.trackSearch('dragon mythic')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'search', {
+      expect(mockedTrack).toHaveBeenCalledWith('search', {
         search_term: 'dragon mythic',
-        event_category: 'engagement',
-        send_to: 'G-28SPPTBF79',
       })
     })
 
-    it('should track filter applied', () => {
-      analytics.trackFilterApplied('time_period', '30d')
+    describe('Filter Applied', () => {
+      it('should track time_period filter', () => {
+        analytics.trackFilterApplied('time_period', '30d')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'filter_applied', {
-        event_category: 'engagement',
-        filter_type: 'time_period',
-        filter_value: '30d',
-        send_to: 'G-28SPPTBF79',
+        expect(mockedTrack).toHaveBeenCalledWith('filter_applied', {
+          filter_type: 'time_period',
+          filter_value: '30d',
+        })
+      })
+
+      it('should track product_type filter', () => {
+        analytics.trackFilterApplied('product_type', 'Box')
+
+        expect(mockedTrack).toHaveBeenCalledWith('filter_applied', {
+          filter_type: 'product_type',
+          filter_value: 'Box',
+        })
+      })
+
+      it('should track set filter', () => {
+        analytics.trackFilterApplied('set', 'Star Wars: Destiny')
+
+        expect(mockedTrack).toHaveBeenCalledWith('filter_applied', {
+          filter_type: 'set',
+          filter_value: 'Star Wars: Destiny',
+        })
+      })
+
+      it('should track condition filter', () => {
+        analytics.trackFilterApplied('condition', 'Near Mint')
+
+        expect(mockedTrack).toHaveBeenCalledWith('filter_applied', {
+          filter_type: 'condition',
+          filter_value: 'Near Mint',
+        })
+      })
+
+      it('should track printing filter', () => {
+        analytics.trackFilterApplied('printing', 'First Edition')
+
+        expect(mockedTrack).toHaveBeenCalledWith('filter_applied', {
+          filter_type: 'printing',
+          filter_value: 'First Edition',
+        })
+      })
+
+      it('should track card_type filter', () => {
+        analytics.trackFilterApplied('card_type', 'Character')
+
+        expect(mockedTrack).toHaveBeenCalledWith('filter_applied', {
+          filter_type: 'card_type',
+          filter_value: 'Character',
+        })
+      })
+
+      it('should track color filter', () => {
+        analytics.trackFilterApplied('color', 'Blue')
+
+        expect(mockedTrack).toHaveBeenCalledWith('filter_applied', {
+          filter_type: 'color',
+          filter_value: 'Blue',
+        })
+      })
+
+      it('should track rarity filter', () => {
+        analytics.trackFilterApplied('rarity', 'Legendary')
+
+        expect(mockedTrack).toHaveBeenCalledWith('filter_applied', {
+          filter_type: 'rarity',
+          filter_value: 'Legendary',
+        })
       })
     })
 
-    it('should track product type filter', () => {
-      analytics.trackFilterApplied('product_type', 'Box')
+    describe('Filter Removed', () => {
+      it('should track single filter removal', () => {
+        analytics.trackFilterRemoved('set', 'Star Wars: Destiny')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'filter_applied', {
-        event_category: 'engagement',
-        filter_type: 'product_type',
-        filter_value: 'Box',
-        send_to: 'G-28SPPTBF79',
+        expect(mockedTrack).toHaveBeenCalledWith('filter_removed', {
+          filter_type: 'set',
+          filter_value: 'Star Wars: Destiny',
+        })
+      })
+
+      it('should track rarity filter removal', () => {
+        analytics.trackFilterRemoved('rarity', 'Mythic')
+
+        expect(mockedTrack).toHaveBeenCalledWith('filter_removed', {
+          filter_type: 'rarity',
+          filter_value: 'Mythic',
+        })
+      })
+    })
+
+    describe('Filters Cleared', () => {
+      it('should track clearing all filters with count', () => {
+        analytics.trackFiltersCleared(3)
+
+        expect(mockedTrack).toHaveBeenCalledWith('filters_cleared', {
+          filter_count: 3,
+        })
+      })
+
+      it('should track clearing single filter', () => {
+        analytics.trackFiltersCleared(1)
+
+        expect(mockedTrack).toHaveBeenCalledWith('filters_cleared', {
+          filter_count: 1,
+        })
       })
     })
   })
@@ -260,32 +326,24 @@ describe('Analytics Service', () => {
     it('should track market page view', () => {
       analytics.trackMarketPageView()
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'market_page_view', {
-        event_category: 'engagement',
-        event_label: 'viewed_market_analysis',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('market_page_view', undefined)
     })
 
     it('should track chart time range interaction', () => {
       analytics.trackChartInteraction('time_range', '7d')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'chart_interaction', {
-        event_category: 'engagement',
+      expect(mockedTrack).toHaveBeenCalledWith('chart_interaction', {
         interaction_type: 'time_range',
         value: '7d',
-        send_to: 'G-28SPPTBF79',
       })
     })
 
     it('should track chart type interaction', () => {
       analytics.trackChartInteraction('chart_type', 'scatter')
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'chart_interaction', {
-        event_category: 'engagement',
+      expect(mockedTrack).toHaveBeenCalledWith('chart_interaction', {
         interaction_type: 'chart_type',
         value: 'scatter',
-        send_to: 'G-28SPPTBF79',
       })
     })
   })
@@ -294,113 +352,63 @@ describe('Analytics Service', () => {
     it('should track welcome page view', () => {
       analytics.trackWelcomePageView()
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'welcome_page_view', {
-        event_category: 'engagement',
-        event_label: 'viewed_welcome_page',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('welcome_page_view', undefined)
     })
 
     it('should track profile completed with username and discord', () => {
       analytics.trackProfileCompleted(true, true)
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'profile_completed', {
-        event_category: 'engagement',
-        event_label: 'completed_profile',
+      expect(mockedTrack).toHaveBeenCalledWith('profile_completed', {
         has_username: true,
         has_discord: true,
-        send_to: 'G-28SPPTBF79',
       })
     })
 
     it('should track profile completed without optional fields', () => {
       analytics.trackProfileCompleted(false, false)
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'profile_completed', {
-        event_category: 'engagement',
-        event_label: 'completed_profile',
+      expect(mockedTrack).toHaveBeenCalledWith('profile_completed', {
         has_username: false,
         has_discord: false,
-        send_to: 'G-28SPPTBF79',
       })
     })
 
     it('should track profile skipped', () => {
       analytics.trackProfileSkipped()
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'profile_skipped', {
-        event_category: 'engagement',
-        event_label: 'skipped_profile_completion',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('profile_skipped', undefined)
     })
 
     it('should track upgrade page view', () => {
       analytics.trackUpgradePageView()
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'upgrade_page_view', {
-        event_category: 'engagement',
-        event_label: 'viewed_upgrade_page',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('upgrade_page_view', undefined)
     })
 
     it('should track upgrade initiated', () => {
       analytics.trackUpgradeInitiated()
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'upgrade_initiated', {
-        event_category: 'conversion',
-        event_label: 'started_checkout',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('upgrade_initiated', undefined)
     })
 
     it('should track upgrade skipped', () => {
       analytics.trackUpgradeSkipped()
 
-      expect(mockGtag).toHaveBeenCalledWith('event', 'upgrade_skipped', {
-        event_category: 'engagement',
-        event_label: 'skipped_upgrade',
-        send_to: 'G-28SPPTBF79',
-      })
+      expect(mockedTrack).toHaveBeenCalledWith('upgrade_skipped', undefined)
     })
   })
 
   describe('Custom Events', () => {
     it('should allow custom events via analytics.custom()', () => {
-      analytics.custom('promo_clicked', { campaign: 'holiday_2025', position: 'header' })
-
-      expect(mockGtag).toHaveBeenCalledWith('event', 'promo_clicked', {
+      analytics.custom('promo_clicked', {
         campaign: 'holiday_2025',
         position: 'header',
-        send_to: 'G-28SPPTBF79',
-      })
-    })
-  })
-
-  describe('Error Handling', () => {
-    it('should handle gtag throwing an error gracefully', () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      mockGtag.mockImplementation(() => {
-        throw new Error('gtag error')
       })
 
-      // Should not throw
-      expect(() => analytics.trackSearch('test')).not.toThrow()
-      expect(consoleSpy).toHaveBeenCalled()
-
-      consoleSpy.mockRestore()
-    })
-
-    it('should warn when gtag is not loaded', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      // @ts-ignore
-      window.gtag = undefined
-
-      analytics.track('test_event')
-
-      expect(consoleSpy).toHaveBeenCalledWith('[Analytics] gtag not loaded')
-      consoleSpy.mockRestore()
+      expect(mockedTrack).toHaveBeenCalledWith('promo_clicked', {
+        campaign: 'holiday_2025',
+        position: 'header',
+      })
     })
   })
 })
