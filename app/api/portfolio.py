@@ -361,8 +361,11 @@ def get_treatment_market_price(session: Session, card_id: int, treatment: str) -
 
 
 def build_portfolio_card_out(
-    session: Session, card: PortfolioCard, db_card: Optional[Card], rarity: Optional[Rarity],
-    preloaded_market_price: Optional[float] = None
+    session: Session,
+    card: PortfolioCard,
+    db_card: Optional[Card],
+    rarity: Optional[Rarity],
+    preloaded_market_price: Optional[float] = None,
 ) -> PortfolioCardOut:
     """Build PortfolioCardOut with market data.
 
@@ -370,7 +373,11 @@ def build_portfolio_card_out(
         preloaded_market_price: If provided, skip the DB query and use this price.
                                Used for batch operations to avoid N+1 queries.
     """
-    market_price = preloaded_market_price if preloaded_market_price is not None else get_treatment_market_price(session, card.card_id, card.treatment)
+    market_price = (
+        preloaded_market_price
+        if preloaded_market_price is not None
+        else get_treatment_market_price(session, card.card_id, card.treatment)
+    )
 
     # Handle null/zero market prices gracefully
     if market_price is None or market_price == 0:
@@ -555,7 +562,9 @@ def read_portfolio_cards(
     Get all portfolio cards for the current user with optional filters.
     """
     query = (
-        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(col(PortfolioCard.deleted_at).is_(None))
+        select(PortfolioCard)
+        .where(PortfolioCard.user_id == current_user.id)
+        .where(col(PortfolioCard.deleted_at).is_(None))
     )
 
     if treatment:
@@ -583,7 +592,9 @@ def read_portfolio_cards(
     # Batch fetch rarities
     rarity_ids = set(c.rarity_id for c in db_cards.values() if c.rarity_id)
     rarities = (
-        {r.id: r for r in session.exec(select(Rarity).where(col(Rarity.id).in_(rarity_ids))).all()} if rarity_ids else {}
+        {r.id: r for r in session.exec(select(Rarity).where(col(Rarity.id).in_(rarity_ids))).all()}
+        if rarity_ids
+        else {}
     )
 
     # Batch fetch market prices (fixes N+1 query problem)
@@ -610,7 +621,9 @@ def read_portfolio_summary(
     Uses batch price fetching to avoid N+1 queries.
     """
     cards = session.exec(
-        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(col(PortfolioCard.deleted_at).is_(None))
+        select(PortfolioCard)
+        .where(PortfolioCard.user_id == current_user.id)
+        .where(col(PortfolioCard.deleted_at).is_(None))
     ).all()
 
     total_cards = len(cards)
@@ -809,7 +822,9 @@ def get_portfolio_value_history(
 
     # Get all user's portfolio cards (including purchase dates)
     cards = session.exec(
-        select(PortfolioCard).where(PortfolioCard.user_id == current_user.id).where(col(PortfolioCard.deleted_at).is_(None))
+        select(PortfolioCard)
+        .where(PortfolioCard.user_id == current_user.id)
+        .where(col(PortfolioCard.deleted_at).is_(None))
     ).all()
 
     if not cards:
@@ -832,7 +847,7 @@ def get_portfolio_value_history(
             MarketPrice.card_id,
             MarketPrice.treatment,
             sale_date_col.label("sale_date"),
-            func.avg(MarketPrice.price).label("avg_price")
+            func.avg(MarketPrice.price).label("avg_price"),
         )
         .where(col(MarketPrice.card_id).in_(card_ids))
         .where(col(MarketPrice.treatment).in_(treatments))
@@ -852,6 +867,7 @@ def get_portfolio_value_history(
         # Handle both date objects and strings from different DBs
         if isinstance(sale_date, str):
             from datetime import date as date_type
+
             sale_date = date_type.fromisoformat(sale_date)
         price_by_card_treatment_date[key][sale_date] = float(avg_price)
 

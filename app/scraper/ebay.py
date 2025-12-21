@@ -796,8 +796,16 @@ def _is_valid_match(title: str, card_name: str, target_rarity: str = "") -> bool
 
     # CRITICAL: For generic card names (Lot, Treasure Map, The Prisoner, etc.),
     # REQUIRE a WOTF identifier to avoid matching other TCGs
-    generic_card_names = ["lot", "the prisoner", "treasure map", "catch", "the awakening",
-                         "eye of the maelstrom", "dragon's gold", "2-player starter"]
+    generic_card_names = [
+        "lot",
+        "the prisoner",
+        "treasure map",
+        "catch",
+        "the awakening",
+        "eye of the maelstrom",
+        "dragon's gold",
+        "2-player starter",
+    ]
     is_generic_name = any(generic in name_lower for generic in generic_card_names)
     if is_generic_name and not has_wonders_identifier:
         return False
@@ -1110,7 +1118,7 @@ def _extract_listing_format(item, bid_count: int = 0) -> Optional[str]:
         ".s-item__time-end",
         ".s-item__bidCount",
         ".s-card__time-left",  # New format: Time left
-        ".s-card__time",       # New format: Time container
+        ".s-card__time",  # New format: Time container
         "[class*='timeLeft']",
         "[class*='time-left']",
     ]

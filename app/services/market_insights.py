@@ -207,11 +207,14 @@ class MarketInsightsGenerator:
             ).first()
             active = active_row if active_row else (0, 0.0, 0.0, 0.0)
 
-            unique_cards = session.execute(
-                text("""
+            unique_cards = (
+                session.execute(
+                    text("""
                 SELECT COUNT(DISTINCT card_id) FROM marketprice WHERE listing_type = 'active'
             """)
-            ).scalar() or 0
+                ).scalar()
+                or 0
+            )
 
             data["market_health"] = {
                 "active_listings": active[0],

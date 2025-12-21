@@ -303,9 +303,7 @@ def read_cards(
                         floor_price_map[card_id] = floor_price
 
             # Fetch lowest ask by variant (active listings)
-            lowest_ask_variant_results = session.execute(
-                lowest_ask_by_variant_query, {"card_ids": card_ids}
-            ).all()
+            lowest_ask_variant_results = session.execute(lowest_ask_by_variant_query, {"card_ids": card_ids}).all()
             for row in lowest_ask_variant_results:
                 card_id, variant, lowest_ask = row[0], row[1], round(float(row[2]), 2)
                 if card_id not in lowest_ask_by_variant_map:
@@ -721,9 +719,7 @@ def read_card(
             GROUP BY variant
             ORDER BY floor_price ASC
         """)
-        floor_variant_results = session.execute(
-            floor_variant_query, {"card_id": card.id, "cutoff": floor_cutoff}
-        ).all()
+        floor_variant_results = session.execute(floor_variant_query, {"card_id": card.id, "cutoff": floor_cutoff}).all()
 
         if floor_variant_results:
             floor_by_variant = {row[0]: round(float(row[1]), 2) for row in floor_variant_results}
@@ -752,9 +748,7 @@ def read_card(
                 END
             ORDER BY lowest_ask ASC
         """)
-        lowest_ask_variant_results = session.execute(
-            lowest_ask_variant_query, {"card_id": card.id}
-        ).all()
+        lowest_ask_variant_results = session.execute(lowest_ask_variant_query, {"card_id": card.id}).all()
 
         if lowest_ask_variant_results:
             lowest_ask_by_variant = {row[0]: round(float(row[1]), 2) for row in lowest_ask_variant_results}
@@ -803,7 +797,9 @@ def read_market_data(
     """
     card = get_card_by_id_or_slug(session, card_id)
     statement = (
-        select(MarketSnapshot).where(MarketSnapshot.card_id == card.id).order_by(col(MarketSnapshot.timestamp).desc(), col(MarketSnapshot.id).desc())
+        select(MarketSnapshot)
+        .where(MarketSnapshot.card_id == card.id)
+        .order_by(col(MarketSnapshot.timestamp).desc(), col(MarketSnapshot.id).desc())
     )
     snapshot = session.execute(statement).scalars().first()
 

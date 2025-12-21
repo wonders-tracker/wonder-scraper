@@ -33,6 +33,7 @@ def with_retry(max_attempts: int = 3, base_delay: float = 1.0):
     Decorator that retries a function with exponential backoff.
     For transient email delivery failures (network issues, rate limits).
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -43,12 +44,14 @@ def with_retry(max_attempts: int = 3, base_delay: float = 1.0):
                 except Exception as e:
                     last_exception = e
                     if attempt < max_attempts - 1:
-                        delay = base_delay * (2 ** attempt)  # Exponential backoff
+                        delay = base_delay * (2**attempt)  # Exponential backoff
                         print(f"[Email] Attempt {attempt + 1} failed, retrying in {delay}s: {e}")
                         time.sleep(delay)
             print(f"[Email] All {max_attempts} attempts failed: {last_exception}")
             return False
+
         return wrapper
+
     return decorator
 
 
@@ -65,7 +68,8 @@ def send_welcome_email(to_email: str, user_name: Optional[str] = None) -> bool:
     name = user_name or to_email.split("@")[0]
 
     try:
-        _send_email({
+        _send_email(
+            {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
                 "subject": "Welcome to WondersTracker!",

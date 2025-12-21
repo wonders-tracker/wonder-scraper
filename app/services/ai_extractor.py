@@ -497,7 +497,9 @@ class AIListingExtractor:
         """Export feedback log to JSON file for analysis."""
         if filepath is None:
             self.FEEDBACK_LOG_DIR.mkdir(parents=True, exist_ok=True)
-            filepath = str(self.FEEDBACK_LOG_DIR / f"decisions_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json")
+            filepath = str(
+                self.FEEDBACK_LOG_DIR / f"decisions_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+            )
 
         with open(filepath, "w") as f:
             json.dump(self._feedback_log, f, indent=2)

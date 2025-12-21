@@ -194,7 +194,10 @@ def read_market_overview(
             sales_count_results = session.execute(
                 sales_count_query, {"card_ids": card_ids, "period_start": period_start}
             ).all()
-            sales_count_map = {row[0]: {"count": row[1], "unique_days": row[2], "total_value": float(row[3]) if row[3] else 0} for row in sales_count_results}
+            sales_count_map = {
+                row[0]: {"count": row[1], "unique_days": row[2], "total_value": float(row[3]) if row[3] else 0}
+                for row in sales_count_results
+            }
 
             # Calculate floor prices (avg of 4 lowest sales per card in period)
             floor_query = text("""
@@ -396,11 +399,7 @@ def read_market_listings(
         else:
             # "all" - use appropriate date for each type
             query = query.where(
-                func.coalesce(
-                    MarketPrice.sold_date,
-                    MarketPrice.listed_at,
-                    MarketPrice.scraped_at
-                ) >= cutoff_time
+                func.coalesce(MarketPrice.sold_date, MarketPrice.listed_at, MarketPrice.scraped_at) >= cutoff_time
             )
 
     # Apply price range filters
@@ -495,7 +494,7 @@ def read_market_listings(
             if card_id not in floor_by_variant_map:
                 floor_by_variant_map[card_id] = {}
             # Store with lowercase key for case-insensitive lookup
-            floor_by_variant_map[card_id][variant.lower() if variant else 'unknown'] = price
+            floor_by_variant_map[card_id][variant.lower() if variant else "unknown"] = price
         # Also build overall floor map (cheapest variant)
         for card_id, variants in floor_by_variant_map.items():
             floor_price_map[card_id] = min(variants.values())
@@ -523,42 +522,44 @@ def read_market_listings(
         # Determine variant key: use product_subtype for sealed, treatment for singles
         # Use lowercase for case-insensitive matching
         raw_variant = listing.product_subtype if listing.product_subtype else listing.treatment
-        variant_key = raw_variant.lower().strip() if raw_variant else 'unknown'
+        variant_key = raw_variant.lower().strip() if raw_variant else "unknown"
         card_variants = floor_by_variant_map.get(listing.card_id, {})
         # Only use treatment-specific floor - don't fall back to other variants
         # This prevents comparing a Classic Paper listing to a Stonefoil floor
         variant_floor = card_variants.get(variant_key)
         floor_price = variant_floor  # No fallback - must match treatment
 
-        listings.append({
-            "id": listing.id,
-            "card_id": listing.card_id,
-            "card_name": card_name,
-            "card_slug": card_slug,
-            "card_image_url": card_image_url,
-            "product_type": card_product_type or "Single",
-            "title": listing.title,
-            "price": listing.price,
-            "floor_price": floor_price,
-            "vwap": vwap_map.get(listing.card_id),
-            "platform": listing.platform,
-            "treatment": listing.treatment,
-            "listing_type": listing.listing_type,
-            "listing_format": listing.listing_format,  # auction, buy_it_now, best_offer
-            "condition": listing.condition,
-            "bid_count": listing.bid_count,
-            "seller_name": listing.seller_name,
-            "seller_feedback_score": listing.seller_feedback_score,
-            "seller_feedback_percent": listing.seller_feedback_percent,
-            "shipping_cost": listing.shipping_cost,
-            "grading": listing.grading,
-            "traits": listing.traits,
-            "url": listing.url,
-            "image_url": listing.image_url,
-            "sold_date": listing.sold_date.isoformat() if listing.sold_date else None,
-            "scraped_at": listing.scraped_at.isoformat() if listing.scraped_at else None,
-            "listed_at": listing.listed_at.isoformat() if listing.listed_at else None,
-        })
+        listings.append(
+            {
+                "id": listing.id,
+                "card_id": listing.card_id,
+                "card_name": card_name,
+                "card_slug": card_slug,
+                "card_image_url": card_image_url,
+                "product_type": card_product_type or "Single",
+                "title": listing.title,
+                "price": listing.price,
+                "floor_price": floor_price,
+                "vwap": vwap_map.get(listing.card_id),
+                "platform": listing.platform,
+                "treatment": listing.treatment,
+                "listing_type": listing.listing_type,
+                "listing_format": listing.listing_format,  # auction, buy_it_now, best_offer
+                "condition": listing.condition,
+                "bid_count": listing.bid_count,
+                "seller_name": listing.seller_name,
+                "seller_feedback_score": listing.seller_feedback_score,
+                "seller_feedback_percent": listing.seller_feedback_percent,
+                "shipping_cost": listing.shipping_cost,
+                "grading": listing.grading,
+                "traits": listing.traits,
+                "url": listing.url,
+                "image_url": listing.image_url,
+                "sold_date": listing.sold_date.isoformat() if listing.sold_date else None,
+                "scraped_at": listing.scraped_at.isoformat() if listing.scraped_at else None,
+                "listed_at": listing.listed_at.isoformat() if listing.listed_at else None,
+            }
+        )
 
     # Log slow queries for performance monitoring
     log_query_time(f"listings(type={listing_type}, platform={platform})", start_time)

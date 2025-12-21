@@ -234,7 +234,11 @@ async def job_update_blokpax_data():
                     session.add(snapshot)
 
                     # Update storefront record
-                    storefront = session.execute(select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)).scalars().first()
+                    storefront = (
+                        session.execute(select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug))
+                        .scalars()
+                        .first()
+                    )
                     if storefront:
                         storefront.floor_price_bpx = floor_bpx
                         storefront.floor_price_usd = floor_usd
@@ -290,9 +294,7 @@ async def job_update_blokpax_data():
             for collection_slug, card_name in OPENSEA_WOTF_COLLECTIONS.items():
                 try:
                     # Find the card in DB
-                    card = session.execute(
-                        select(Card).where(Card.name == card_name)
-                    ).scalars().first()
+                    card = session.execute(select(Card).where(Card.name == card_name)).scalars().first()
 
                     if not card:
                         print(f"[OpenSea] Card '{card_name}' not found in DB, skipping")
@@ -326,7 +328,9 @@ async def job_update_blokpax_data():
         errors=errors,
     )
 
-    print(f"[{datetime.now(timezone.utc)}] NFT Update Complete. Duration: {duration:.1f}s, Listings: {total_listings}, Sales: {total_sales}")
+    print(
+        f"[{datetime.now(timezone.utc)}] NFT Update Complete. Duration: {duration:.1f}s, Listings: {total_listings}, Sales: {total_sales}"
+    )
 
 
 async def job_send_daily_digests():
@@ -344,7 +348,9 @@ async def job_send_daily_digests():
 
         with Session(engine) as session:
             # Get users who want daily digests
-            prefs = session.execute(select(EmailPreferences).where(EmailPreferences.daily_digest.is_(True))).scalars().all()
+            prefs = (
+                session.execute(select(EmailPreferences).where(EmailPreferences.daily_digest == True)).scalars().all()
+            )
 
             if not prefs:
                 print("[Digest] No users subscribed to daily digest")
@@ -401,16 +407,20 @@ async def job_send_personal_welcome_emails():
             # Find users who signed up 24-48 hours ago and haven't received the personal welcome
             now = datetime.now(timezone.utc)
             cutoff_start = now - timedelta(hours=48)  # Oldest eligible
-            cutoff_end = now - timedelta(hours=24)    # Newest eligible
+            cutoff_end = now - timedelta(hours=24)  # Newest eligible
 
-            users = session.execute(
-                select(User).where(
-                    User.created_at >= cutoff_start,
-                    User.created_at <= cutoff_end,
-                    User.personal_welcome_sent_at == None,  # noqa: E711
-                    User.is_active == True,  # noqa: E712
+            users = (
+                session.execute(
+                    select(User).where(
+                        User.created_at >= cutoff_start,
+                        User.created_at <= cutoff_end,
+                        User.personal_welcome_sent_at == None,  # noqa: E711
+                        User.is_active == True,  # noqa: E712
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             if not users:
                 print("[Personal Welcome] No eligible users")
@@ -450,7 +460,9 @@ async def job_send_weekly_reports():
 
         with Session(engine) as session:
             # Get users who want weekly reports
-            prefs = session.execute(select(EmailPreferences).where(EmailPreferences.weekly_report.is_(True))).scalars().all()
+            prefs = (
+                session.execute(select(EmailPreferences).where(EmailPreferences.weekly_report == True)).scalars().all()
+            )
 
             if not prefs:
                 print("[Weekly] No users subscribed to weekly report")
@@ -514,13 +526,17 @@ async def job_check_price_alerts():
 
         with Session(engine) as session:
             # Get all active alerts with target prices
-            alerts = session.execute(
-                select(Watchlist).where(
-                    Watchlist.alert_enabled.is_(True),
-                    Watchlist.target_price.is_not(None),
-                    Watchlist.notify_email.is_(True)
+            alerts = (
+                session.execute(
+                    select(Watchlist).where(
+                        Watchlist.alert_enabled == True,
+                        Watchlist.target_price != None,
+                        Watchlist.notify_email == True,
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             if not alerts:
                 print("[Alerts] No active price alerts")
@@ -536,7 +552,9 @@ async def job_check_price_alerts():
 
                 # floor_price/latest_price are computed fields, not on Card model
                 # Use getattr to safely access (will return None if not present)
-                current_price: float = float(getattr(card, 'floor_price', None) or getattr(card, 'latest_price', None) or 0)
+                current_price: float = float(
+                    getattr(card, "floor_price", None) or getattr(card, "latest_price", None) or 0
+                )
                 target_price: float = float(alert.target_price or 0)
 
                 # Skip if already alerted at this price

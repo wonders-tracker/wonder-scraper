@@ -507,9 +507,7 @@ OPENSEA_WOTF_COLLECTIONS = {
 }
 
 
-async def scrape_opensea_listings(
-    collection_slug: str, limit: int = 100
-) -> List[OpenSeaListing]:
+async def scrape_opensea_listings(collection_slug: str, limit: int = 100) -> List[OpenSeaListing]:
     """
     Scrape active listings from OpenSea using their API (with web fallback).
 

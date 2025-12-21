@@ -121,6 +121,7 @@ def unpack_row(row: Tuple[T1, T2, T3]) -> Tuple[T1, T2, T3]: ...
 @overload
 def unpack_row(row: Any) -> Tuple[Any, ...]: ...
 
+
 def unpack_row(row: Any) -> Any:
     """
     Type helper for unpacking SQLAlchemy result rows.
