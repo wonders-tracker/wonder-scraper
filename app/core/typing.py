@@ -9,13 +9,11 @@ Type checkers (mypy, ty) see them as plain Python types and report errors when
 column methods are called. This module provides helpers to bridge that gap.
 """
 
-from typing import TYPE_CHECKING, Any, TypeVar, Union, Tuple, List, Optional, overload, Sequence
+from typing import TYPE_CHECKING, Any, TypeVar, Tuple, List, Optional, overload, Sequence
 from datetime import datetime, timezone
 
 if TYPE_CHECKING:
     from sqlalchemy.orm.attributes import InstrumentedAttribute
-    from sqlalchemy.sql.elements import ColumnElement
-    from sqlalchemy.engine import Result, CursorResult
 
 T = TypeVar("T")
 T1 = TypeVar("T1")

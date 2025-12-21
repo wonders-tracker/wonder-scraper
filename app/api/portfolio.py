@@ -16,7 +16,6 @@ from app.schemas import (
     PortfolioItemUpdate,
     PortfolioCardCreate,
     PortfolioCardBatchCreate,
-    PortfolioCardBatchItem,
     PortfolioCardUpdate,
     PortfolioCardOut,
     PortfolioSummary,
@@ -241,7 +240,6 @@ def batch_get_treatment_market_prices(
     Returns a dict of (card_id, treatment) -> price.
     Much more efficient than calling get_treatment_market_price in a loop.
     """
-    from sqlalchemy import text
 
     if not card_treatment_pairs:
         return {}
@@ -254,7 +252,6 @@ def batch_get_treatment_market_prices(
 
     # Batch query: Get VWAP for all card+treatment combinations in one query
     # Use SQLAlchemy ORM instead of raw SQL for SQLite compatibility (tests use SQLite)
-    from sqlalchemy import and_
 
     results = session.exec(
         select(MarketPrice.card_id, MarketPrice.treatment, func.avg(MarketPrice.price).label("avg_price"))
@@ -279,7 +276,6 @@ def batch_get_treatment_market_prices(
         missing_treatments = list(set(p[1] for p in missing_pairs))
 
         # Use subquery approach for getting last sale per card+treatment (SQLite compatible)
-        from sqlalchemy import tuple_
 
         # Get all sold prices for missing combinations, ordered by date
         last_sales = session.exec(
@@ -810,7 +806,6 @@ def get_portfolio_value_history(
     Returns daily portfolio value based on cards owned at each date.
     Now uses treatment-specific pricing for accurate historical values.
     """
-    from sqlalchemy import text
 
     # Get all user's portfolio cards (including purchase dates)
     cards = session.exec(

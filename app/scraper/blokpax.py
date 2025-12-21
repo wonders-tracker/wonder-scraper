@@ -806,7 +806,6 @@ async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 
 
                 offers = []
                 offer_list = asset_data.get("offers", [])
-                asset_name = asset_data.get("name", "Unknown")
 
                 for offer_data in offer_list:
                     offer_id = str(offer_data.get("id", ""))

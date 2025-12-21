@@ -138,9 +138,6 @@ def read_cards(
     rarities = session.execute(select(Rarity)).scalars().all()
     rarity_map = {r.id: r.name for r in rarities}
 
-    # Build card_id -> product_type map for variant field selection
-    card_product_type_map = {c.id: (c.product_type if hasattr(c, "product_type") else "Single") for c in cards}
-
     # Batch fetch actual LAST SALE price (Postgres DISTINCT ON)
     last_sale_map = {}
     vwap_map = {}

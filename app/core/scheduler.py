@@ -344,7 +344,7 @@ async def job_send_daily_digests():
 
         with Session(engine) as session:
             # Get users who want daily digests
-            prefs = session.execute(select(EmailPreferences).where(EmailPreferences.daily_digest == True)).scalars().all()
+            prefs = session.execute(select(EmailPreferences).where(EmailPreferences.daily_digest.is_(True))).scalars().all()
 
             if not prefs:
                 print("[Digest] No users subscribed to daily digest")
@@ -450,7 +450,7 @@ async def job_send_weekly_reports():
 
         with Session(engine) as session:
             # Get users who want weekly reports
-            prefs = session.execute(select(EmailPreferences).where(EmailPreferences.weekly_report == True)).scalars().all()
+            prefs = session.execute(select(EmailPreferences).where(EmailPreferences.weekly_report.is_(True))).scalars().all()
 
             if not prefs:
                 print("[Weekly] No users subscribed to weekly report")
@@ -516,7 +516,9 @@ async def job_check_price_alerts():
             # Get all active alerts with target prices
             alerts = session.execute(
                 select(Watchlist).where(
-                    Watchlist.alert_enabled == True, Watchlist.target_price != None, Watchlist.notify_email == True
+                    Watchlist.alert_enabled.is_(True),
+                    Watchlist.target_price.is_not(None),
+                    Watchlist.notify_email.is_(True)
                 )
             ).scalars().all()
 
