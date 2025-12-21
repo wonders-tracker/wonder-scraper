@@ -12,7 +12,8 @@ import { useTimePeriod } from '../context/TimePeriodContext'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
 
-// Card thumbnail that only renders if src provided and loads successfully (prevents layout shift)
+// Card thumbnail that only renders if src provided and loads successfully
+// Uses image_url from API response (blob storage URLs with hash)
 function CardThumbnail({ src, alt, className }: { src?: string; alt: string; className: string }) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
