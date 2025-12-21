@@ -59,6 +59,8 @@ testpaths = ["tests", "saas/tests"]
 deprecated = "ignore"
 # Suppress possibly-missing-attribute for third-party libs (Discord, OpenAI) with union types
 possibly-missing-attribute = "ignore"
+# Suppress unresolved-import for optional saas module (uses try/except pattern)
+unresolved-import = "ignore"
 
 [tool.ruff]
 line-length = 120
