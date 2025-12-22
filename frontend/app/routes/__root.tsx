@@ -474,13 +474,13 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto bg-background scrollbar-hide">
+          <div className="flex-1 overflow-y-auto bg-background scrollbar-hide pb-14">
             <Outlet />
           </div>
         </div>
 
-        {/* Footer - Sticky to bottom */}
-        <footer className="border-t border-border bg-muted/30 py-3 px-4 sticky bottom-0 z-40">
+        {/* Footer - Fixed to bottom */}
+        <footer className="border-t border-border bg-background py-3 px-4 fixed bottom-0 left-0 right-0 z-40">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-4">
               <span className="font-bold">WondersTracker</span>
