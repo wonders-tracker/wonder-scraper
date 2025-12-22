@@ -354,7 +354,9 @@ async def get_admin_stats(
         # Filter out: admin users (superusers) and localhost traffic
         try:
             # Get superuser IDs to exclude
-            superuser_ids = session.execute(select(UserModel.id).where(col(UserModel.is_superuser).is_(True))).all()
+            superuser_ids = (
+                session.execute(select(UserModel.id).where(col(UserModel.is_superuser).is_(True))).scalars().all()
+            )
             superuser_ids_list = list(superuser_ids) if superuser_ids else []
 
             # Base filter: exclude admin users and localhost referrers
