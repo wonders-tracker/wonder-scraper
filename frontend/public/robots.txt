@@ -1,13 +1,37 @@
+# WondersTracker Robots.txt
+# https://wonderstracker.com
+
 User-agent: *
+
+# Allow main content
 Allow: /
 Allow: /cards/
 Allow: /market
+Allow: /methodology
+Allow: /blog/
 
+# Allow OG images for social sharing previews
+Allow: /api/og/
+
+# Block authentication and user-specific pages
 Disallow: /login
 Disallow: /signup
 Disallow: /profile
 Disallow: /portfolio
 Disallow: /auth/
-Disallow: /api/
+Disallow: /admin/
+Disallow: /settings
 
+# Block API endpoints (except OG images)
+Disallow: /api/v1/
+
+# Block query parameters that create duplicate content
+Disallow: /*?sort=
+Disallow: /*?filter=
+Disallow: /*?page=
+
+# Crawl delay (seconds) - be polite to our servers
+Crawl-delay: 1
+
+# Sitemap location
 Sitemap: https://wonderstracker.com/sitemap.xml

@@ -5,7 +5,9 @@ export const config = {
 }
 
 // API URL for edge function (calls Railway directly since this runs server-side)
-const API_URL = 'https://wonder-scraper-production.up.railway.app/api/v1'
+const API_BASE = process.env.API_URL || 'https://wonder-scraper-production.up.railway.app'
+const API_URL = `${API_BASE}/api/v1`
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://wonderstracker.com'
 
 export default async function handler(req: Request) {
   try {
@@ -19,26 +21,50 @@ export default async function handler(req: Request) {
     let cardData: any
     let historyData: any[] = []
 
+    // Common fetch options to avoid bot detection
+    const fetchOptions = {
+      headers: {
+        'User-Agent': 'WondersTracker-OG/1.0',
+        'Accept': 'application/json',
+      },
+    }
+
+    // Fetch card basic info
     try {
-      // Fetch card basic info
-      const cardRes = await fetch(`${API_URL}/cards/${cardId}`)
+      const cardRes = await fetch(`${API_URL}/cards/${cardId}`, fetchOptions)
+      if (!cardRes.ok) {
+        return new Response(`Card API error: ${cardRes.status}`, { status: 404 })
+      }
       const basicCard = await cardRes.json()
 
       // Fetch market data
-      const marketRes = await fetch(`${API_URL}/cards/${cardId}/market`)
-      const marketData = await marketRes.json()
+      const marketRes = await fetch(`${API_URL}/cards/${cardId}/market`, fetchOptions)
+      const marketData = marketRes.ok ? await marketRes.json() : {}
 
       cardData = {
         ...basicCard,
-        latest_price: marketData.avg_price,
-        volume_30d: marketData.volume,
+        latest_price: marketData.avg_price || basicCard.latest_price,
+        volume_30d: marketData.volume || basicCard.volume_30d,
       }
+    } catch (e: any) {
+      return new Response(`Failed to fetch card: ${e.message}`, { status: 500 })
+    }
 
-      // Fetch price history for chart
-      const historyRes = await fetch(`${API_URL}/cards/${cardId}/history?limit=30`)
-      historyData = await historyRes.json()
+    // Fetch price history for chart (optional - continue if fails)
+    try {
+      const historyRes = await fetch(`${API_URL}/cards/${cardId}/history?limit=30`, fetchOptions)
+      if (historyRes.ok) {
+        const historyJson = await historyRes.json()
+        historyData = Array.isArray(historyJson) ? historyJson : (historyJson.data || [])
+      }
     } catch (e) {
-      return new Response('Failed to fetch card data', { status: 500 })
+      // Continue with empty history
+      historyData = []
+    }
+
+    // Ensure we have card data
+    if (!cardData || !cardData.name) {
+      return new Response('Card not found', { status: 404 })
     }
 
     // Prepare chart data (last 10 points for simplicity)
@@ -152,7 +178,7 @@ export default async function handler(req: Request) {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ color: '#10b981' }}>▶</div>
-              <div>Track Real-Time TCG Prices at wonderstracker.com</div>
+              <div>Track Real-Time TCG Prices at {SITE_URL.replace('https://', '')}</div>
             </div>
           </div>
         </div>

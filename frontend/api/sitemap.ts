@@ -2,8 +2,8 @@ export const config = {
   runtime: 'edge',
 }
 
-const SITE_URL = 'https://wonderstracker.com'
-const API_URL = 'https://wonderstracker.com'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://wonderstracker.com'
+const API_URL = process.env.API_URL || 'https://wonder-scraper-production.up.railway.app'
 
 interface Card {
   id: number
@@ -12,11 +12,33 @@ interface Card {
   set_name: string
 }
 
+interface WeekSummary {
+  date: string
+  week_start: string
+  week_end: string
+}
+
 export default async function handler(request: Request) {
   try {
-    // Fetch all cards from the API
-    const response = await fetch(`${API_URL}/api/v1/cards`)
-    const cards: Card[] = await response.json()
+    // Fetch all cards and weekly movers in parallel
+    const [cardsRes, weeklyRes] = await Promise.all([
+      fetch(`${API_URL}/api/v1/cards/`, {
+        headers: { 'User-Agent': 'WondersTracker-Sitemap/1.0' },
+      }),
+      fetch(`${API_URL}/api/v1/blog/weekly-movers?limit=52`, {
+        headers: { 'User-Agent': 'WondersTracker-Sitemap/1.0' },
+      }),
+    ])
+
+    if (!cardsRes.ok) {
+      throw new Error(`Cards API returned ${cardsRes.status}`)
+    }
+    const cards: Card[] = await cardsRes.json()
+
+    let weeklyMovers: WeekSummary[] = []
+    if (weeklyRes.ok) {
+      weeklyMovers = await weeklyRes.json()
+    }
 
     const today = new Date().toISOString().split('T')[0]
 
@@ -35,6 +57,32 @@ export default async function handler(request: Request) {
         priority: '0.9',
         lastmod: today,
       },
+      {
+        loc: `${SITE_URL}/methodology`,
+        changefreq: 'monthly',
+        priority: '0.6',
+        lastmod: today,
+      },
+      // Blog pages
+      {
+        loc: `${SITE_URL}/blog`,
+        changefreq: 'daily',
+        priority: '0.8',
+        lastmod: today,
+      },
+      {
+        loc: `${SITE_URL}/blog/weekly-movers`,
+        changefreq: 'weekly',
+        priority: '0.7',
+        lastmod: today,
+      },
+      // Weekly movers archive
+      ...weeklyMovers.map((week) => ({
+        loc: `${SITE_URL}/blog/weekly-movers/${week.date}`,
+        changefreq: 'monthly',
+        priority: '0.6',
+        lastmod: week.date,
+      })),
       // Dynamic card pages - use slug for SEO-friendly URLs
       ...cards.map((card) => ({
         loc: `${SITE_URL}/cards/${card.slug || card.id}`,
@@ -77,6 +125,14 @@ ${urls
   <url>
     <loc>${SITE_URL}/market</loc>
     <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>${SITE_URL}/blog</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${SITE_URL}/methodology</loc>
+    <priority>0.6</priority>
   </url>
 </urlset>`
 

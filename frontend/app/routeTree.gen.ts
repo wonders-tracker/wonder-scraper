@@ -15,15 +15,19 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
+import { Route as MethodologyRouteImport } from './routes/methodology'
 import { Route as MarketRouteImport } from './routes/market'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DocsRouteImport } from './routes/docs'
+import { Route as BlogRouteImport } from './routes/blog'
 import { Route as ApiRouteImport } from './routes/api'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
+import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as MethodologyHeadRouteImport } from './routes/methodology.head'
 import { Route as MarketHeadRouteImport } from './routes/market.head'
 import { Route as IndexHeadRouteImport } from './routes/index.head'
 import { Route as DocsMarketTreatmentsRouteImport } from './routes/docs.market-treatments'
@@ -39,13 +43,18 @@ import { Route as DocsBlokpaxSalesRouteImport } from './routes/docs.blokpax-sale
 import { Route as DocsBlokpaxOffersRouteImport } from './routes/docs.blokpax-offers'
 import { Route as DocsAuthenticationRouteImport } from './routes/docs.authentication'
 import { Route as CardsCardIdRouteImport } from './routes/cards.$cardId'
+import { Route as BlogWeeklyMoversRouteImport } from './routes/blog.weekly-movers'
+import { Route as BlogHeadRouteImport } from './routes/blog.head'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminScrapersRouteImport } from './routes/admin.scrapers'
 import { Route as AdminMarketRouteImport } from './routes/admin.market'
 import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
+import { Route as BlogWeeklyMoversIndexRouteImport } from './routes/blog.weekly-movers.index'
 import { Route as CardsCardIdHeadRouteImport } from './routes/cards.$cardId.head'
+import { Route as BlogWeeklyMoversDateRouteImport } from './routes/blog.weekly-movers.$date'
+import { Route as BlogWeeklyMoversDateHeadRouteImport } from './routes/blog.weekly-movers.$date.head'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -77,6 +86,11 @@ const PortfolioRoute = PortfolioRouteImport.update({
   path: '/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MethodologyRoute = MethodologyRouteImport.update({
+  id: '/methodology',
+  path: '/methodology',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MarketRoute = MarketRouteImport.update({
   id: '/market',
   path: '/market',
@@ -95,6 +109,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const DocsRoute = DocsRouteImport.update({
   id: '/docs',
   path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BlogRoute = BlogRouteImport.update({
+  id: '/blog',
+  path: '/blog',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRoute = ApiRouteImport.update({
@@ -117,10 +136,20 @@ const DocsIndexRoute = DocsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DocsRoute,
 } as any)
+const BlogIndexRoute = BlogIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => BlogRoute,
+} as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AdminRoute,
+} as any)
+const MethodologyHeadRoute = MethodologyHeadRouteImport.update({
+  id: '/head',
+  path: '/head',
+  getParentRoute: () => MethodologyRoute,
 } as any)
 const MarketHeadRoute = MarketHeadRouteImport.update({
   id: '/head',
@@ -197,6 +226,16 @@ const CardsCardIdRoute = CardsCardIdRouteImport.update({
   path: '/cards/$cardId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BlogWeeklyMoversRoute = BlogWeeklyMoversRouteImport.update({
+  id: '/weekly-movers',
+  path: '/weekly-movers',
+  getParentRoute: () => BlogRoute,
+} as any)
+const BlogHeadRoute = BlogHeadRouteImport.update({
+  id: '/head',
+  path: '/head',
+  getParentRoute: () => BlogRoute,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
@@ -227,20 +266,38 @@ const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AdminRoute,
 } as any)
+const BlogWeeklyMoversIndexRoute = BlogWeeklyMoversIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => BlogWeeklyMoversRoute,
+} as any)
 const CardsCardIdHeadRoute = CardsCardIdHeadRouteImport.update({
   id: '/head',
   path: '/head',
   getParentRoute: () => CardsCardIdRoute,
 } as any)
+const BlogWeeklyMoversDateRoute = BlogWeeklyMoversDateRouteImport.update({
+  id: '/$date',
+  path: '/$date',
+  getParentRoute: () => BlogWeeklyMoversRoute,
+} as any)
+const BlogWeeklyMoversDateHeadRoute =
+  BlogWeeklyMoversDateHeadRouteImport.update({
+    id: '/head',
+    path: '/head',
+    getParentRoute: () => BlogWeeklyMoversDateRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/api': typeof ApiRoute
+  '/blog': typeof BlogRouteWithChildren
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/market': typeof MarketRouteWithChildren
+  '/methodology': typeof MethodologyRouteWithChildren
   '/portfolio': typeof PortfolioRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -253,6 +310,8 @@ export interface FileRoutesByFullPath {
   '/admin/scrapers': typeof AdminScrapersRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/blog/head': typeof BlogHeadRoute
+  '/blog/weekly-movers': typeof BlogWeeklyMoversRouteWithChildren
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
   '/docs/authentication': typeof DocsAuthenticationRoute
   '/docs/blokpax-offers': typeof DocsBlokpaxOffersRoute
@@ -268,9 +327,14 @@ export interface FileRoutesByFullPath {
   '/docs/market-treatments': typeof DocsMarketTreatmentsRoute
   '/index/head': typeof IndexHeadRoute
   '/market/head': typeof MarketHeadRoute
+  '/methodology/head': typeof MethodologyHeadRoute
   '/admin/': typeof AdminIndexRoute
+  '/blog/': typeof BlogIndexRoute
   '/docs/': typeof DocsIndexRoute
+  '/blog/weekly-movers/$date': typeof BlogWeeklyMoversDateRouteWithChildren
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
+  '/blog/weekly-movers/': typeof BlogWeeklyMoversIndexRoute
+  '/blog/weekly-movers/$date/head': typeof BlogWeeklyMoversDateHeadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -278,6 +342,7 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/market': typeof MarketRouteWithChildren
+  '/methodology': typeof MethodologyRouteWithChildren
   '/portfolio': typeof PortfolioRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -290,6 +355,7 @@ export interface FileRoutesByTo {
   '/admin/scrapers': typeof AdminScrapersRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/blog/head': typeof BlogHeadRoute
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
   '/docs/authentication': typeof DocsAuthenticationRoute
   '/docs/blokpax-offers': typeof DocsBlokpaxOffersRoute
@@ -305,19 +371,26 @@ export interface FileRoutesByTo {
   '/docs/market-treatments': typeof DocsMarketTreatmentsRoute
   '/index/head': typeof IndexHeadRoute
   '/market/head': typeof MarketHeadRoute
+  '/methodology/head': typeof MethodologyHeadRoute
   '/admin': typeof AdminIndexRoute
+  '/blog': typeof BlogIndexRoute
   '/docs': typeof DocsIndexRoute
+  '/blog/weekly-movers/$date': typeof BlogWeeklyMoversDateRouteWithChildren
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
+  '/blog/weekly-movers': typeof BlogWeeklyMoversIndexRoute
+  '/blog/weekly-movers/$date/head': typeof BlogWeeklyMoversDateHeadRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/api': typeof ApiRoute
+  '/blog': typeof BlogRouteWithChildren
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/market': typeof MarketRouteWithChildren
+  '/methodology': typeof MethodologyRouteWithChildren
   '/portfolio': typeof PortfolioRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -330,6 +403,8 @@ export interface FileRoutesById {
   '/admin/scrapers': typeof AdminScrapersRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/blog/head': typeof BlogHeadRoute
+  '/blog/weekly-movers': typeof BlogWeeklyMoversRouteWithChildren
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
   '/docs/authentication': typeof DocsAuthenticationRoute
   '/docs/blokpax-offers': typeof DocsBlokpaxOffersRoute
@@ -345,9 +420,14 @@ export interface FileRoutesById {
   '/docs/market-treatments': typeof DocsMarketTreatmentsRoute
   '/index/head': typeof IndexHeadRoute
   '/market/head': typeof MarketHeadRoute
+  '/methodology/head': typeof MethodologyHeadRoute
   '/admin/': typeof AdminIndexRoute
+  '/blog/': typeof BlogIndexRoute
   '/docs/': typeof DocsIndexRoute
+  '/blog/weekly-movers/$date': typeof BlogWeeklyMoversDateRouteWithChildren
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
+  '/blog/weekly-movers/': typeof BlogWeeklyMoversIndexRoute
+  '/blog/weekly-movers/$date/head': typeof BlogWeeklyMoversDateHeadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -355,10 +435,12 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/api'
+    | '/blog'
     | '/docs'
     | '/forgot-password'
     | '/login'
     | '/market'
+    | '/methodology'
     | '/portfolio'
     | '/profile'
     | '/reset-password'
@@ -371,6 +453,8 @@ export interface FileRouteTypes {
     | '/admin/scrapers'
     | '/admin/users'
     | '/auth/callback'
+    | '/blog/head'
+    | '/blog/weekly-movers'
     | '/cards/$cardId'
     | '/docs/authentication'
     | '/docs/blokpax-offers'
@@ -386,9 +470,14 @@ export interface FileRouteTypes {
     | '/docs/market-treatments'
     | '/index/head'
     | '/market/head'
+    | '/methodology/head'
     | '/admin/'
+    | '/blog/'
     | '/docs/'
+    | '/blog/weekly-movers/$date'
     | '/cards/$cardId/head'
+    | '/blog/weekly-movers/'
+    | '/blog/weekly-movers/$date/head'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -396,6 +485,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/login'
     | '/market'
+    | '/methodology'
     | '/portfolio'
     | '/profile'
     | '/reset-password'
@@ -408,6 +498,7 @@ export interface FileRouteTypes {
     | '/admin/scrapers'
     | '/admin/users'
     | '/auth/callback'
+    | '/blog/head'
     | '/cards/$cardId'
     | '/docs/authentication'
     | '/docs/blokpax-offers'
@@ -423,18 +514,25 @@ export interface FileRouteTypes {
     | '/docs/market-treatments'
     | '/index/head'
     | '/market/head'
+    | '/methodology/head'
     | '/admin'
+    | '/blog'
     | '/docs'
+    | '/blog/weekly-movers/$date'
     | '/cards/$cardId/head'
+    | '/blog/weekly-movers'
+    | '/blog/weekly-movers/$date/head'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/api'
+    | '/blog'
     | '/docs'
     | '/forgot-password'
     | '/login'
     | '/market'
+    | '/methodology'
     | '/portfolio'
     | '/profile'
     | '/reset-password'
@@ -447,6 +545,8 @@ export interface FileRouteTypes {
     | '/admin/scrapers'
     | '/admin/users'
     | '/auth/callback'
+    | '/blog/head'
+    | '/blog/weekly-movers'
     | '/cards/$cardId'
     | '/docs/authentication'
     | '/docs/blokpax-offers'
@@ -462,19 +562,26 @@ export interface FileRouteTypes {
     | '/docs/market-treatments'
     | '/index/head'
     | '/market/head'
+    | '/methodology/head'
     | '/admin/'
+    | '/blog/'
     | '/docs/'
+    | '/blog/weekly-movers/$date'
     | '/cards/$cardId/head'
+    | '/blog/weekly-movers/'
+    | '/blog/weekly-movers/$date/head'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
   ApiRoute: typeof ApiRoute
+  BlogRoute: typeof BlogRouteWithChildren
   DocsRoute: typeof DocsRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   MarketRoute: typeof MarketRouteWithChildren
+  MethodologyRoute: typeof MethodologyRouteWithChildren
   PortfolioRoute: typeof PortfolioRoute
   ProfileRoute: typeof ProfileRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
@@ -530,6 +637,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/methodology': {
+      id: '/methodology'
+      path: '/methodology'
+      fullPath: '/methodology'
+      preLoaderRoute: typeof MethodologyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/market': {
       id: '/market'
       path: '/market'
@@ -556,6 +670,13 @@ declare module '@tanstack/react-router' {
       path: '/docs'
       fullPath: '/docs'
       preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/blog': {
+      id: '/blog'
+      path: '/blog'
+      fullPath: '/blog'
+      preLoaderRoute: typeof BlogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api': {
@@ -586,12 +707,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsIndexRouteImport
       parentRoute: typeof DocsRoute
     }
+    '/blog/': {
+      id: '/blog/'
+      path: '/'
+      fullPath: '/blog/'
+      preLoaderRoute: typeof BlogIndexRouteImport
+      parentRoute: typeof BlogRoute
+    }
     '/admin/': {
       id: '/admin/'
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/methodology/head': {
+      id: '/methodology/head'
+      path: '/head'
+      fullPath: '/methodology/head'
+      preLoaderRoute: typeof MethodologyHeadRouteImport
+      parentRoute: typeof MethodologyRoute
     }
     '/market/head': {
       id: '/market/head'
@@ -698,6 +833,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CardsCardIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/blog/weekly-movers': {
+      id: '/blog/weekly-movers'
+      path: '/weekly-movers'
+      fullPath: '/blog/weekly-movers'
+      preLoaderRoute: typeof BlogWeeklyMoversRouteImport
+      parentRoute: typeof BlogRoute
+    }
+    '/blog/head': {
+      id: '/blog/head'
+      path: '/head'
+      fullPath: '/blog/head'
+      preLoaderRoute: typeof BlogHeadRouteImport
+      parentRoute: typeof BlogRoute
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/auth/callback'
@@ -740,12 +889,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAnalyticsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/blog/weekly-movers/': {
+      id: '/blog/weekly-movers/'
+      path: '/'
+      fullPath: '/blog/weekly-movers/'
+      preLoaderRoute: typeof BlogWeeklyMoversIndexRouteImport
+      parentRoute: typeof BlogWeeklyMoversRoute
+    }
     '/cards/$cardId/head': {
       id: '/cards/$cardId/head'
       path: '/head'
       fullPath: '/cards/$cardId/head'
       preLoaderRoute: typeof CardsCardIdHeadRouteImport
       parentRoute: typeof CardsCardIdRoute
+    }
+    '/blog/weekly-movers/$date': {
+      id: '/blog/weekly-movers/$date'
+      path: '/$date'
+      fullPath: '/blog/weekly-movers/$date'
+      preLoaderRoute: typeof BlogWeeklyMoversDateRouteImport
+      parentRoute: typeof BlogWeeklyMoversRoute
+    }
+    '/blog/weekly-movers/$date/head': {
+      id: '/blog/weekly-movers/$date/head'
+      path: '/head'
+      fullPath: '/blog/weekly-movers/$date/head'
+      preLoaderRoute: typeof BlogWeeklyMoversDateHeadRouteImport
+      parentRoute: typeof BlogWeeklyMoversDateRoute
     }
   }
 }
@@ -769,6 +939,44 @@ const AdminRouteChildren: AdminRouteChildren = {
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface BlogWeeklyMoversDateRouteChildren {
+  BlogWeeklyMoversDateHeadRoute: typeof BlogWeeklyMoversDateHeadRoute
+}
+
+const BlogWeeklyMoversDateRouteChildren: BlogWeeklyMoversDateRouteChildren = {
+  BlogWeeklyMoversDateHeadRoute: BlogWeeklyMoversDateHeadRoute,
+}
+
+const BlogWeeklyMoversDateRouteWithChildren =
+  BlogWeeklyMoversDateRoute._addFileChildren(BlogWeeklyMoversDateRouteChildren)
+
+interface BlogWeeklyMoversRouteChildren {
+  BlogWeeklyMoversDateRoute: typeof BlogWeeklyMoversDateRouteWithChildren
+  BlogWeeklyMoversIndexRoute: typeof BlogWeeklyMoversIndexRoute
+}
+
+const BlogWeeklyMoversRouteChildren: BlogWeeklyMoversRouteChildren = {
+  BlogWeeklyMoversDateRoute: BlogWeeklyMoversDateRouteWithChildren,
+  BlogWeeklyMoversIndexRoute: BlogWeeklyMoversIndexRoute,
+}
+
+const BlogWeeklyMoversRouteWithChildren =
+  BlogWeeklyMoversRoute._addFileChildren(BlogWeeklyMoversRouteChildren)
+
+interface BlogRouteChildren {
+  BlogHeadRoute: typeof BlogHeadRoute
+  BlogWeeklyMoversRoute: typeof BlogWeeklyMoversRouteWithChildren
+  BlogIndexRoute: typeof BlogIndexRoute
+}
+
+const BlogRouteChildren: BlogRouteChildren = {
+  BlogHeadRoute: BlogHeadRoute,
+  BlogWeeklyMoversRoute: BlogWeeklyMoversRouteWithChildren,
+  BlogIndexRoute: BlogIndexRoute,
+}
+
+const BlogRouteWithChildren = BlogRoute._addFileChildren(BlogRouteChildren)
 
 interface DocsRouteChildren {
   DocsAuthenticationRoute: typeof DocsAuthenticationRoute
@@ -815,6 +1023,18 @@ const MarketRouteChildren: MarketRouteChildren = {
 const MarketRouteWithChildren =
   MarketRoute._addFileChildren(MarketRouteChildren)
 
+interface MethodologyRouteChildren {
+  MethodologyHeadRoute: typeof MethodologyHeadRoute
+}
+
+const MethodologyRouteChildren: MethodologyRouteChildren = {
+  MethodologyHeadRoute: MethodologyHeadRoute,
+}
+
+const MethodologyRouteWithChildren = MethodologyRoute._addFileChildren(
+  MethodologyRouteChildren,
+)
+
 interface CardsCardIdRouteChildren {
   CardsCardIdHeadRoute: typeof CardsCardIdHeadRoute
 }
@@ -831,10 +1051,12 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   ApiRoute: ApiRoute,
+  BlogRoute: BlogRouteWithChildren,
   DocsRoute: DocsRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   MarketRoute: MarketRouteWithChildren,
+  MethodologyRoute: MethodologyRouteWithChildren,
   PortfolioRoute: PortfolioRoute,
   ProfileRoute: ProfileRoute,
   ResetPasswordRoute: ResetPasswordRoute,

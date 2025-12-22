@@ -1,5 +1,5 @@
 import { Outlet, createRootRoute, Link, useNavigate, redirect, useLocation } from '@tanstack/react-router'
-import { LayoutDashboard, LineChart, Wallet, User, Server, LogOut, Menu, X, Shield, ChevronDown, Settings, Sparkles } from 'lucide-react'
+import { LayoutDashboard, LineChart, Wallet, User, Server, LogOut, Menu, X, Shield, ChevronDown, Settings, Sparkles, Newspaper } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { useState, useMemo, useRef, useEffect } from 'react'
@@ -302,6 +302,10 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
                 <LineChart className="w-3.5 h-3.5" />
                 <span>Market</span>
               </Link>
+              <Link to="/blog" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
+                <Newspaper className="w-3.5 h-3.5" />
+                <span>Blog</span>
+              </Link>
               <Link to="/portfolio" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
                 <Wallet className="w-3.5 h-3.5" />
                 <span>Portfolio</span>
@@ -372,6 +376,14 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
               >
                 <LineChart className="w-4 h-4" />
                 <span>Market</span>
+              </Link>
+              <Link
+                to="/blog"
+                className="flex items-center gap-3 px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors text-sm font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Newspaper className="w-4 h-4" />
+                <span>Blog</span>
               </Link>
               <Link
                 to="/portfolio"
@@ -474,16 +486,16 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto bg-background scrollbar-hide">
+          <div className="flex-1 overflow-y-auto bg-background scrollbar-hide pb-14">
             <Outlet />
           </div>
         </div>
 
-        {/* Footer */}
-        <footer className="border-t border-border bg-muted/30 py-4 px-4">
+        {/* Footer - Fixed to bottom */}
+        <footer className="border-t border-border bg-background py-3 px-4 fixed bottom-0 left-0 right-0 z-40">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-4">
-              <span>WondersTracker</span>
+              <span className="font-bold">WondersTracker</span>
               <a
                 href="https://discord.gg/Kx4fFj7V"
                 target="_blank"
@@ -504,6 +516,12 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
                   <path d="M12 19h8" />
                 </svg>
                 <span>API</span>
+              </Link>
+              <Link
+                to="/methodology"
+                className="hover:text-foreground transition-colors"
+              >
+                Methodology
               </Link>
             </div>
             <div className="text-[10px]">
