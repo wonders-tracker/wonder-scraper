@@ -1,0 +1,16 @@
+{
+  "cody": {
+    "name": "Cody",
+    "role": "Founder",
+    "avatar": "/avatars/cody.png",
+    "twitter": "wonderstracker",
+    "bio": "Creator of WondersTracker. Passionate about the Wonders of the First TCG and building tools for the community."
+  },
+  "wonderstracker": {
+    "name": "WondersTracker Team",
+    "role": "Market Analysis",
+    "avatar": "/logo.png",
+    "twitter": "wonderstracker",
+    "bio": "Automated market insights and analysis from WondersTracker."
+  }
+}

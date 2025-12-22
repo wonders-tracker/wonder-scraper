@@ -1,18 +1,33 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { TrendingUp, TrendingDown, Calendar, ArrowRight } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
+import { ArrowRight, Calendar, TrendingUp, TrendingDown, BookOpen } from 'lucide-react'
 import { siteConfig } from '~/config/site'
+import { MarketStatsRow } from '~/components/blog/MarketStatsRow'
+import { MoversTable } from '~/components/blog/MoversTable'
 
 const { apiUrl: API_URL } = siteConfig
+
+interface BlogPost {
+  slug: string
+  title: string
+  description: string
+  publishedAt: string
+  author: string
+  category: string
+  tags: string[]
+}
 
 export const Route = createFileRoute('/blog/')({
   component: BlogIndexPage,
 })
 
-interface WeeklyMoversData {
+interface WeeklyData {
   date: string
   week_start: string
   week_end: string
+  total_sales: number
+  total_volume: number
+  avg_sale_price: number
   gainers: Array<{
     card_id: number
     name: string
@@ -27,170 +42,209 @@ interface WeeklyMoversData {
     prev_price: number
     pct_change: number
   }>
-  total_volume: number
+}
+
+interface WeekSummary {
+  date: string
+  week_start: string
+  week_end: string
   total_sales: number
+  total_volume: number
 }
 
 function BlogIndexPage() {
-  // Fetch latest weekly movers
-  const { data: latestWeekly, isLoading } = useQuery<WeeklyMoversData>({
+  // Fetch latest market data
+  const { data: latest, isLoading } = useQuery<WeeklyData>({
     queryKey: ['weekly-movers', 'latest'],
     queryFn: async () => {
       const res = await fetch(`${API_URL}/api/v1/blog/weekly-movers/latest`)
       if (!res.ok) return null
       return res.json()
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   })
+
+  // Fetch archive
+  const { data: archive } = useQuery<WeekSummary[]>({
+    queryKey: ['weekly-movers', 'archive'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/api/v1/blog/weekly-movers?limit=5`)
+      if (!res.ok) return []
+      return res.json()
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Fetch blog posts
+  const { data: posts } = useQuery<BlogPost[]>({
+    queryKey: ['blog-posts'],
+    queryFn: async () => {
+      const res = await fetch('/blog-manifest.json')
+      if (!res.ok) return []
+      return res.json()
+    },
+    staleTime: 60 * 60 * 1000, // Cache for 1 hour
+  })
+
+  const weekStart = latest ? new Date(latest.week_start).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  }) : ''
+  const weekEnd = latest ? new Date(latest.week_end).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }) : ''
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold mb-2">WondersTracker Blog</h1>
-        <p className="text-muted-foreground">
-          Market analysis, price trends, and guides for Wonders of the First TCG
-        </p>
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-4xl md:text-5xl font-bold mb-2">Market Insights</h1>
+          <p className="text-muted-foreground">
+            Weekly market reports for Wonders of the First TCG
+          </p>
+        </div>
       </div>
 
-      {/* Featured: Latest Weekly Movers */}
-      <section className="bg-card border border-border rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-brand-400" />
-            Weekly Market Movers
-          </h2>
-          <Link
-            to="/blog/weekly-movers"
-            className="text-sm text-brand-400 hover:underline flex items-center gap-1"
-          >
-            View Archive <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-
-        {isLoading ? (
-          <div className="animate-pulse space-y-4">
-            <div className="h-4 bg-muted rounded w-1/3" />
-            <div className="grid grid-cols-2 gap-4">
-              <div className="h-24 bg-muted rounded" />
-              <div className="h-24 bg-muted rounded" />
-            </div>
+      {isLoading ? (
+        <div className="space-y-6 animate-pulse">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-24 bg-muted rounded-xl" />
+            ))}
           </div>
-        ) : latestWeekly ? (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="h-80 bg-muted rounded-xl" />
+            <div className="h-80 bg-muted rounded-xl" />
+          </div>
+        </div>
+      ) : latest ? (
+        <>
+          {/* Date */}
+          <div className="flex items-center justify-between">
+            <p className="text-muted-foreground flex items-center gap-2">
               <Calendar className="w-4 h-4" />
-              Week of {new Date(latestWeekly.week_start).toLocaleDateString()} - {new Date(latestWeekly.week_end).toLocaleDateString()}
+              {weekStart} — {weekEnd}
             </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Top Gainers */}
-              <div className="bg-green-500/10 rounded-lg p-4">
-                <h3 className="text-sm font-bold text-green-500 mb-3 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4" />
-                  Top Gainers
-                </h3>
-                <div className="space-y-2">
-                  {latestWeekly.gainers?.slice(0, 3).map((card) => (
-                    <Link
-                      key={card.card_id}
-                      to="/cards/$cardId"
-                      params={{ cardId: String(card.card_id) }}
-                      className="flex items-center justify-between text-sm hover:bg-green-500/10 rounded px-2 py-1 -mx-2"
-                    >
-                      <span className="truncate">{card.name}</span>
-                      <span className="text-green-500 font-medium">
-                        +{card.pct_change.toFixed(1)}%
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              {/* Top Losers */}
-              <div className="bg-red-500/10 rounded-lg p-4">
-                <h3 className="text-sm font-bold text-red-500 mb-3 flex items-center gap-2">
-                  <TrendingDown className="w-4 h-4" />
-                  Top Losers
-                </h3>
-                <div className="space-y-2">
-                  {latestWeekly.losers?.slice(0, 3).map((card) => (
-                    <Link
-                      key={card.card_id}
-                      to="/cards/$cardId"
-                      params={{ cardId: String(card.card_id) }}
-                      className="flex items-center justify-between text-sm hover:bg-red-500/10 rounded px-2 py-1 -mx-2"
-                    >
-                      <span className="truncate">{card.name}</span>
-                      <span className="text-red-500 font-medium">
-                        {card.pct_change.toFixed(1)}%
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-
             <Link
               to="/blog/weekly-movers/$date"
-              params={{ date: latestWeekly.date }}
-              className="inline-flex items-center gap-2 text-sm text-brand-400 hover:underline mt-2"
+              params={{ date: latest.date }}
+              className="text-sm text-brand-400 hover:underline flex items-center gap-1"
+            >
+              Full Report <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          {/* Stats */}
+          <MarketStatsRow
+            totalVolume={latest.total_volume}
+            totalSales={latest.total_sales}
+            avgPrice={latest.avg_sale_price}
+          />
+
+          {/* Movers */}
+          <div className="grid md:grid-cols-2 gap-6">
+            <MoversTable
+              title="Top Gainers"
+              movers={latest.gainers.slice(0, 5)}
+              type="gainers"
+            />
+            <MoversTable
+              title="Top Losers"
+              movers={latest.losers.slice(0, 5)}
+              type="losers"
+            />
+          </div>
+
+          {/* CTA */}
+          <div className="text-center">
+            <Link
+              to="/blog/weekly-movers/$date"
+              params={{ date: latest.date }}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-400 text-black font-semibold rounded-lg hover:bg-brand-300 transition-colors"
             >
               View Full Report <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
-        ) : (
-          <p className="text-muted-foreground text-sm">
-            Weekly movers data coming soon. Check back after the first week of market tracking.
-          </p>
-        )}
-      </section>
-
-      {/* Blog Posts Section - Placeholder for now */}
-      <section>
-        <h2 className="text-xl font-bold mb-4">Latest Posts</h2>
-        <div className="text-muted-foreground text-sm bg-muted/30 rounded-lg p-6 text-center">
-          <p>Blog posts coming soon!</p>
-          <p className="mt-2">We're working on market analysis, guides, and news updates.</p>
+        </>
+      ) : (
+        <div className="text-center py-12 text-muted-foreground">
+          <p>Market data coming soon.</p>
         </div>
-      </section>
+      )}
 
-      {/* Categories */}
-      <section>
-        <h2 className="text-xl font-bold mb-4">Browse by Category</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link
-            to="/blog"
-            search={{ category: 'analysis' }}
-            className="bg-card border border-border rounded-lg p-4 hover:border-brand-400 transition-colors"
-          >
-            <h3 className="font-bold mb-1">Market Analysis</h3>
-            <p className="text-sm text-muted-foreground">
-              Deep dives into price trends, treatment analysis, and market forecasts
-            </p>
-          </Link>
-          <Link
-            to="/blog"
-            search={{ category: 'news' }}
-            className="bg-card border border-border rounded-lg p-4 hover:border-brand-400 transition-colors"
-          >
-            <h3 className="font-bold mb-1">News & Updates</h3>
-            <p className="text-sm text-muted-foreground">
-              Site updates, new features, and TCG news
-            </p>
-          </Link>
-          <Link
-            to="/blog"
-            search={{ category: 'guide' }}
-            className="bg-card border border-border rounded-lg p-4 hover:border-brand-400 transition-colors"
-          >
-            <h3 className="font-bold mb-1">Guides</h3>
-            <p className="text-sm text-muted-foreground">
-              How to use the tracker, investment strategies, and tips
-            </p>
-          </Link>
+      {/* Archive */}
+      {archive && archive.length > 1 && (
+        <div className="border-t border-border pt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold">Previous Reports</h2>
+            <Link
+              to="/blog/weekly-movers"
+              className="text-sm text-brand-400 hover:underline flex items-center gap-1"
+            >
+              View All <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="grid gap-3">
+            {archive.slice(1, 4).map((week) => {
+              const start = new Date(week.week_start).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+              })
+              const end = new Date(week.week_end).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+              })
+              return (
+                <Link
+                  key={week.date}
+                  to="/blog/weekly-movers/$date"
+                  params={{ date: week.date }}
+                  className="flex items-center justify-between p-4 bg-card border border-border rounded-lg hover:border-brand-400 transition-colors"
+                >
+                  <div>
+                    <div className="font-medium">Week of {start} — {end}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {week.total_sales} sales · ${week.total_volume.toLocaleString(undefined, { maximumFractionDigits: 0 })} volume
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                </Link>
+              )
+            })}
+          </div>
         </div>
-      </section>
+      )}
+
+      {/* Blog Posts */}
+      {posts && posts.length > 0 && (
+        <div className="border-t border-border pt-8">
+          <div className="flex items-center gap-2 mb-4">
+            <BookOpen className="w-5 h-5 text-brand-400" />
+            <h2 className="text-xl font-bold">Guides & Analysis</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {posts.map((post) => (
+              <Link
+                key={post.slug}
+                to="/blog/$slug"
+                params={{ slug: post.slug }}
+                className="group p-5 bg-card border border-border rounded-xl hover:border-brand-400 transition-colors"
+              >
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                  <span className="px-2 py-0.5 bg-muted rounded-full capitalize">{post.category}</span>
+                  <span>·</span>
+                  <span>{new Date(post.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                </div>
+                <h3 className="font-semibold mb-2 group-hover:text-brand-400 transition-colors">{post.title}</h3>
+                <p className="text-sm text-muted-foreground line-clamp-2">{post.description}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
