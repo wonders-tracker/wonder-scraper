@@ -479,11 +479,11 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
           </div>
         </div>
 
-        {/* Footer */}
-        <footer className="border-t border-border bg-muted/30 py-4 px-4">
+        {/* Footer - Sticky to bottom */}
+        <footer className="border-t border-border bg-muted/30 py-3 px-4 sticky bottom-0 z-40">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-4">
-              <span>WondersTracker</span>
+              <span className="font-bold">WondersTracker</span>
               <a
                 href="https://discord.gg/Kx4fFj7V"
                 target="_blank"
@@ -504,6 +504,12 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
                   <path d="M12 19h8" />
                 </svg>
                 <span>API</span>
+              </Link>
+              <Link
+                to="/methodology"
+                className="hover:text-foreground transition-colors"
+              >
+                Methodology
               </Link>
             </div>
             <div className="text-[10px]">
