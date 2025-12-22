@@ -21,16 +21,24 @@ export default async function handler(req: Request) {
     let cardData: any
     let historyData: any[] = []
 
+    // Common fetch options to avoid bot detection
+    const fetchOptions = {
+      headers: {
+        'User-Agent': 'WondersTracker-OG/1.0',
+        'Accept': 'application/json',
+      },
+    }
+
     // Fetch card basic info
     try {
-      const cardRes = await fetch(`${API_URL}/cards/${cardId}`)
+      const cardRes = await fetch(`${API_URL}/cards/${cardId}`, fetchOptions)
       if (!cardRes.ok) {
         return new Response(`Card API error: ${cardRes.status}`, { status: 404 })
       }
       const basicCard = await cardRes.json()
 
       // Fetch market data
-      const marketRes = await fetch(`${API_URL}/cards/${cardId}/market`)
+      const marketRes = await fetch(`${API_URL}/cards/${cardId}/market`, fetchOptions)
       const marketData = marketRes.ok ? await marketRes.json() : {}
 
       cardData = {
@@ -44,7 +52,7 @@ export default async function handler(req: Request) {
 
     // Fetch price history for chart (optional - continue if fails)
     try {
-      const historyRes = await fetch(`${API_URL}/cards/${cardId}/history?limit=30`)
+      const historyRes = await fetch(`${API_URL}/cards/${cardId}/history?limit=30`, fetchOptions)
       if (historyRes.ok) {
         const historyJson = await historyRes.json()
         historyData = Array.isArray(historyJson) ? historyJson : (historyJson.data || [])
