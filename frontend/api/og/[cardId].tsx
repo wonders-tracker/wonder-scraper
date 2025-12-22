@@ -38,9 +38,17 @@ export default async function handler(req: Request) {
 
       // Fetch price history for chart
       const historyRes = await fetch(`${API_URL}/cards/${cardId}/history?limit=30`)
-      historyData = await historyRes.json()
+      const historyJson = await historyRes.json()
+      // Handle both array and object responses
+      historyData = Array.isArray(historyJson) ? historyJson : (historyJson.data || [])
     } catch (e) {
-      return new Response('Failed to fetch card data', { status: 500 })
+      // Continue with empty history - we can still show basic card info
+      historyData = []
+    }
+
+    // Ensure we have card data
+    if (!cardData || !cardData.name) {
+      return new Response('Card not found', { status: 404 })
     }
 
     // Prepare chart data (last 10 points for simplicity)
