@@ -688,9 +688,16 @@ async def get_user_activity(
             raise HTTPException(status_code=404, detail="User not found")
 
         # Get recent page views
-        pageviews = session.execute(
-            select(PageView).where(PageView.user_id == user_id).order_by(col(PageView.timestamp).desc()).limit(limit)
-        ).all()
+        pageviews = (
+            session.execute(
+                select(PageView)
+                .where(PageView.user_id == user_id)
+                .order_by(col(PageView.timestamp).desc())
+                .limit(limit)
+            )
+            .scalars()
+            .all()
+        )
 
         # Get top pages for this user
         top_pages_result = session.execute(
