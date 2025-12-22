@@ -21,28 +21,36 @@ export default async function handler(req: Request) {
     let cardData: any
     let historyData: any[] = []
 
+    // Fetch card basic info
     try {
-      // Fetch card basic info
       const cardRes = await fetch(`${API_URL}/cards/${cardId}`)
+      if (!cardRes.ok) {
+        return new Response(`Card API error: ${cardRes.status}`, { status: 404 })
+      }
       const basicCard = await cardRes.json()
 
       // Fetch market data
       const marketRes = await fetch(`${API_URL}/cards/${cardId}/market`)
-      const marketData = await marketRes.json()
+      const marketData = marketRes.ok ? await marketRes.json() : {}
 
       cardData = {
         ...basicCard,
-        latest_price: marketData.avg_price,
-        volume_30d: marketData.volume,
+        latest_price: marketData.avg_price || basicCard.latest_price,
+        volume_30d: marketData.volume || basicCard.volume_30d,
       }
+    } catch (e: any) {
+      return new Response(`Failed to fetch card: ${e.message}`, { status: 500 })
+    }
 
-      // Fetch price history for chart
+    // Fetch price history for chart (optional - continue if fails)
+    try {
       const historyRes = await fetch(`${API_URL}/cards/${cardId}/history?limit=30`)
-      const historyJson = await historyRes.json()
-      // Handle both array and object responses
-      historyData = Array.isArray(historyJson) ? historyJson : (historyJson.data || [])
+      if (historyRes.ok) {
+        const historyJson = await historyRes.json()
+        historyData = Array.isArray(historyJson) ? historyJson : (historyJson.data || [])
+      }
     } catch (e) {
-      // Continue with empty history - we can still show basic card info
+      // Continue with empty history
       historyData = []
     }
 
