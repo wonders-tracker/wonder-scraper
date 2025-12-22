@@ -44,7 +44,9 @@ import { Route as DocsBlokpaxOffersRouteImport } from './routes/docs.blokpax-off
 import { Route as DocsAuthenticationRouteImport } from './routes/docs.authentication'
 import { Route as CardsCardIdRouteImport } from './routes/cards.$cardId'
 import { Route as BlogWeeklyMoversRouteImport } from './routes/blog.weekly-movers'
+import { Route as BlogMarketInsightsRouteImport } from './routes/blog.market-insights'
 import { Route as BlogHeadRouteImport } from './routes/blog.head'
+import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminScrapersRouteImport } from './routes/admin.scrapers'
@@ -54,6 +56,7 @@ import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as BlogWeeklyMoversIndexRouteImport } from './routes/blog.weekly-movers.index'
 import { Route as CardsCardIdHeadRouteImport } from './routes/cards.$cardId.head'
 import { Route as BlogWeeklyMoversDateRouteImport } from './routes/blog.weekly-movers.$date'
+import { Route as BlogSlugHeadRouteImport } from './routes/blog.$slug.head'
 import { Route as BlogWeeklyMoversDateHeadRouteImport } from './routes/blog.weekly-movers.$date.head'
 
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -231,9 +234,19 @@ const BlogWeeklyMoversRoute = BlogWeeklyMoversRouteImport.update({
   path: '/weekly-movers',
   getParentRoute: () => BlogRoute,
 } as any)
+const BlogMarketInsightsRoute = BlogMarketInsightsRouteImport.update({
+  id: '/market-insights',
+  path: '/market-insights',
+  getParentRoute: () => BlogRoute,
+} as any)
 const BlogHeadRoute = BlogHeadRouteImport.update({
   id: '/head',
   path: '/head',
+  getParentRoute: () => BlogRoute,
+} as any)
+const BlogSlugRoute = BlogSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
   getParentRoute: () => BlogRoute,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -281,6 +294,11 @@ const BlogWeeklyMoversDateRoute = BlogWeeklyMoversDateRouteImport.update({
   path: '/$date',
   getParentRoute: () => BlogWeeklyMoversRoute,
 } as any)
+const BlogSlugHeadRoute = BlogSlugHeadRouteImport.update({
+  id: '/head',
+  path: '/head',
+  getParentRoute: () => BlogSlugRoute,
+} as any)
 const BlogWeeklyMoversDateHeadRoute =
   BlogWeeklyMoversDateHeadRouteImport.update({
     id: '/head',
@@ -310,7 +328,9 @@ export interface FileRoutesByFullPath {
   '/admin/scrapers': typeof AdminScrapersRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/blog/$slug': typeof BlogSlugRouteWithChildren
   '/blog/head': typeof BlogHeadRoute
+  '/blog/market-insights': typeof BlogMarketInsightsRoute
   '/blog/weekly-movers': typeof BlogWeeklyMoversRouteWithChildren
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -331,6 +351,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AdminIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/docs/': typeof DocsIndexRoute
+  '/blog/$slug/head': typeof BlogSlugHeadRoute
   '/blog/weekly-movers/$date': typeof BlogWeeklyMoversDateRouteWithChildren
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
   '/blog/weekly-movers/': typeof BlogWeeklyMoversIndexRoute
@@ -355,7 +376,9 @@ export interface FileRoutesByTo {
   '/admin/scrapers': typeof AdminScrapersRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/blog/$slug': typeof BlogSlugRouteWithChildren
   '/blog/head': typeof BlogHeadRoute
+  '/blog/market-insights': typeof BlogMarketInsightsRoute
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
   '/docs/authentication': typeof DocsAuthenticationRoute
   '/docs/blokpax-offers': typeof DocsBlokpaxOffersRoute
@@ -375,6 +398,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminIndexRoute
   '/blog': typeof BlogIndexRoute
   '/docs': typeof DocsIndexRoute
+  '/blog/$slug/head': typeof BlogSlugHeadRoute
   '/blog/weekly-movers/$date': typeof BlogWeeklyMoversDateRouteWithChildren
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
   '/blog/weekly-movers': typeof BlogWeeklyMoversIndexRoute
@@ -403,7 +427,9 @@ export interface FileRoutesById {
   '/admin/scrapers': typeof AdminScrapersRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/blog/$slug': typeof BlogSlugRouteWithChildren
   '/blog/head': typeof BlogHeadRoute
+  '/blog/market-insights': typeof BlogMarketInsightsRoute
   '/blog/weekly-movers': typeof BlogWeeklyMoversRouteWithChildren
   '/cards/$cardId': typeof CardsCardIdRouteWithChildren
   '/docs/authentication': typeof DocsAuthenticationRoute
@@ -424,6 +450,7 @@ export interface FileRoutesById {
   '/admin/': typeof AdminIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/docs/': typeof DocsIndexRoute
+  '/blog/$slug/head': typeof BlogSlugHeadRoute
   '/blog/weekly-movers/$date': typeof BlogWeeklyMoversDateRouteWithChildren
   '/cards/$cardId/head': typeof CardsCardIdHeadRoute
   '/blog/weekly-movers/': typeof BlogWeeklyMoversIndexRoute
@@ -453,7 +480,9 @@ export interface FileRouteTypes {
     | '/admin/scrapers'
     | '/admin/users'
     | '/auth/callback'
+    | '/blog/$slug'
     | '/blog/head'
+    | '/blog/market-insights'
     | '/blog/weekly-movers'
     | '/cards/$cardId'
     | '/docs/authentication'
@@ -474,6 +503,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/blog/'
     | '/docs/'
+    | '/blog/$slug/head'
     | '/blog/weekly-movers/$date'
     | '/cards/$cardId/head'
     | '/blog/weekly-movers/'
@@ -498,7 +528,9 @@ export interface FileRouteTypes {
     | '/admin/scrapers'
     | '/admin/users'
     | '/auth/callback'
+    | '/blog/$slug'
     | '/blog/head'
+    | '/blog/market-insights'
     | '/cards/$cardId'
     | '/docs/authentication'
     | '/docs/blokpax-offers'
@@ -518,6 +550,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/blog'
     | '/docs'
+    | '/blog/$slug/head'
     | '/blog/weekly-movers/$date'
     | '/cards/$cardId/head'
     | '/blog/weekly-movers'
@@ -545,7 +578,9 @@ export interface FileRouteTypes {
     | '/admin/scrapers'
     | '/admin/users'
     | '/auth/callback'
+    | '/blog/$slug'
     | '/blog/head'
+    | '/blog/market-insights'
     | '/blog/weekly-movers'
     | '/cards/$cardId'
     | '/docs/authentication'
@@ -566,6 +601,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/blog/'
     | '/docs/'
+    | '/blog/$slug/head'
     | '/blog/weekly-movers/$date'
     | '/cards/$cardId/head'
     | '/blog/weekly-movers/'
@@ -840,11 +876,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BlogWeeklyMoversRouteImport
       parentRoute: typeof BlogRoute
     }
+    '/blog/market-insights': {
+      id: '/blog/market-insights'
+      path: '/market-insights'
+      fullPath: '/blog/market-insights'
+      preLoaderRoute: typeof BlogMarketInsightsRouteImport
+      parentRoute: typeof BlogRoute
+    }
     '/blog/head': {
       id: '/blog/head'
       path: '/head'
       fullPath: '/blog/head'
       preLoaderRoute: typeof BlogHeadRouteImport
+      parentRoute: typeof BlogRoute
+    }
+    '/blog/$slug': {
+      id: '/blog/$slug'
+      path: '/$slug'
+      fullPath: '/blog/$slug'
+      preLoaderRoute: typeof BlogSlugRouteImport
       parentRoute: typeof BlogRoute
     }
     '/auth/callback': {
@@ -910,6 +960,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BlogWeeklyMoversDateRouteImport
       parentRoute: typeof BlogWeeklyMoversRoute
     }
+    '/blog/$slug/head': {
+      id: '/blog/$slug/head'
+      path: '/head'
+      fullPath: '/blog/$slug/head'
+      preLoaderRoute: typeof BlogSlugHeadRouteImport
+      parentRoute: typeof BlogSlugRoute
+    }
     '/blog/weekly-movers/$date/head': {
       id: '/blog/weekly-movers/$date/head'
       path: '/head'
@@ -940,6 +997,18 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface BlogSlugRouteChildren {
+  BlogSlugHeadRoute: typeof BlogSlugHeadRoute
+}
+
+const BlogSlugRouteChildren: BlogSlugRouteChildren = {
+  BlogSlugHeadRoute: BlogSlugHeadRoute,
+}
+
+const BlogSlugRouteWithChildren = BlogSlugRoute._addFileChildren(
+  BlogSlugRouteChildren,
+)
+
 interface BlogWeeklyMoversDateRouteChildren {
   BlogWeeklyMoversDateHeadRoute: typeof BlogWeeklyMoversDateHeadRoute
 }
@@ -965,13 +1034,17 @@ const BlogWeeklyMoversRouteWithChildren =
   BlogWeeklyMoversRoute._addFileChildren(BlogWeeklyMoversRouteChildren)
 
 interface BlogRouteChildren {
+  BlogSlugRoute: typeof BlogSlugRouteWithChildren
   BlogHeadRoute: typeof BlogHeadRoute
+  BlogMarketInsightsRoute: typeof BlogMarketInsightsRoute
   BlogWeeklyMoversRoute: typeof BlogWeeklyMoversRouteWithChildren
   BlogIndexRoute: typeof BlogIndexRoute
 }
 
 const BlogRouteChildren: BlogRouteChildren = {
+  BlogSlugRoute: BlogSlugRouteWithChildren,
   BlogHeadRoute: BlogHeadRoute,
+  BlogMarketInsightsRoute: BlogMarketInsightsRoute,
   BlogWeeklyMoversRoute: BlogWeeklyMoversRouteWithChildren,
   BlogIndexRoute: BlogIndexRoute,
 }

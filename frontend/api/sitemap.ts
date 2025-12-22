@@ -18,14 +18,28 @@ interface WeekSummary {
   week_end: string
 }
 
+interface BlogPost {
+  slug: string
+  title: string
+  description: string
+  publishedAt: string
+  author: string
+  category: string
+  tags: string[]
+  image?: string
+}
+
 export default async function handler(request: Request) {
   try {
-    // Fetch all cards and weekly movers in parallel
-    const [cardsRes, weeklyRes] = await Promise.all([
+    // Fetch all cards, weekly movers, and blog manifest in parallel
+    const [cardsRes, weeklyRes, blogRes] = await Promise.all([
       fetch(`${API_URL}/api/v1/cards/`, {
         headers: { 'User-Agent': 'WondersTracker-Sitemap/1.0' },
       }),
       fetch(`${API_URL}/api/v1/blog/weekly-movers?limit=52`, {
+        headers: { 'User-Agent': 'WondersTracker-Sitemap/1.0' },
+      }),
+      fetch(`${SITE_URL}/blog-manifest.json`, {
         headers: { 'User-Agent': 'WondersTracker-Sitemap/1.0' },
       }),
     ])
@@ -38,6 +52,11 @@ export default async function handler(request: Request) {
     let weeklyMovers: WeekSummary[] = []
     if (weeklyRes.ok) {
       weeklyMovers = await weeklyRes.json()
+    }
+
+    let blogPosts: BlogPost[] = []
+    if (blogRes.ok) {
+      blogPosts = await blogRes.json()
     }
 
     const today = new Date().toISOString().split('T')[0]
@@ -82,6 +101,13 @@ export default async function handler(request: Request) {
         changefreq: 'monthly',
         priority: '0.6',
         lastmod: week.date,
+      })),
+      // Blog posts (MDX articles)
+      ...blogPosts.map((post) => ({
+        loc: `${SITE_URL}/blog/${post.slug}`,
+        changefreq: 'monthly',
+        priority: '0.7',
+        lastmod: post.publishedAt.split('T')[0],
       })),
       // Dynamic card pages - use slug for SEO-friendly URLs
       ...cards.map((card) => ({
