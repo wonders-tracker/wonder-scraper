@@ -351,7 +351,17 @@ def read_market_listings(
     """
     Get marketplace listings across all cards with comprehensive filtering.
     Returns individual listings from MarketPrice table with card details including floor price.
+    Cached for 2 minutes to improve performance.
     """
+    # Normalize search for cache key (strip and lowercase)
+    search_normalized = search.strip().lower() if search and len(search.strip()) >= 3 else None
+
+    # Build cache key from all filter parameters
+    cache_key = f"listings_{listing_type}_{platform}_{product_type}_{treatment}_{time_period}_{min_price}_{max_price}_{search_normalized}_{sort_by}_{sort_order}_{limit}_{offset}"
+    cached = get_market_cache(cache_key)
+    if cached:
+        return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
+
     start_time = time.time()
     from sqlalchemy import func, or_, text
     from app.models.market import MarketPrice
@@ -408,9 +418,9 @@ def read_market_listings(
     if max_price is not None:
         query = query.where(MarketPrice.price <= max_price)
 
-    # Apply search filter
-    if search:
-        search_pattern = f"%{search}%"
+    # Apply search filter (minimum 3 characters to avoid expensive ILIKE on short strings)
+    if search and len(search.strip()) >= 3:
+        search_pattern = f"%{search.strip()}%"
         query = query.where(
             or_(
                 col(MarketPrice.title).ilike(search_pattern),
@@ -564,13 +574,18 @@ def read_market_listings(
     # Log slow queries for performance monitoring
     log_query_time(f"listings(type={listing_type}, platform={platform})", start_time)
 
-    return {
+    result = {
         "items": listings,
         "total": total,
         "offset": offset,
         "limit": limit,
         "hasMore": offset + len(listings) < total,
     }
+
+    # Cache the result for 2 minutes
+    set_market_cache(cache_key, result)
+
+    return JSONResponse(content=result, headers={"X-Cache": "MISS"})
 
 
 # ============== LISTING REPORTS ==============

@@ -148,6 +148,7 @@ function Home() {
   const [listingTreatment, setListingTreatment] = useState<string>('all')
   const [listingTimePeriod, setListingTimePeriod] = useState<string>('all')
   const [listingSearch, setListingSearch] = useState<string>('')
+  const [debouncedListingSearch, setDebouncedListingSearch] = useState<string>('')
   const [listingSortBy, setListingSortBy] = useState<string>('scraped_at')
   const [listingSortOrder, setListingSortOrder] = useState<'asc' | 'desc'>('desc')
   const [listingPage, setListingPage] = useState<number>(0)
@@ -163,6 +164,20 @@ function Home() {
     }, 1000) // Track after 1s of no typing
     return () => clearTimeout(timer)
   }, [globalFilter])
+
+  // Debounced listing search - immediate UI feedback, delayed API call
+  useEffect(() => {
+    // If search is cleared, update immediately
+    if (!listingSearch) {
+      setDebouncedListingSearch('')
+      return
+    }
+    // Debounce search queries by 300ms
+    const timer = setTimeout(() => {
+      setDebouncedListingSearch(listingSearch)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [listingSearch])
 
   // User profile is fetched in root layout and cached
   // We just read from cache here (staleTime in root ensures it's fresh)
@@ -207,8 +222,9 @@ function Home() {
   })
 
   // Listings query for the Listings tab (server-side pagination)
+  // Uses debouncedListingSearch to avoid firing requests on every keystroke
   const { data: listingsData, isLoading: listingsLoading, isFetching: listingsFetching } = useQuery({
-    queryKey: ['listings', listingType, listingPlatform, listingProductType, listingTreatment, listingTimePeriod, listingSearch, listingSortBy, listingSortOrder, listingPage],
+    queryKey: ['listings', listingType, listingPlatform, listingProductType, listingTreatment, listingTimePeriod, debouncedListingSearch, listingSortBy, listingSortOrder, listingPage],
     queryFn: async () => {
       const params = new URLSearchParams()
       params.set('listing_type', listingType)
@@ -220,7 +236,7 @@ function Home() {
       if (listingProductType !== 'all') params.set('product_type', listingProductType)
       if (listingTreatment !== 'all') params.set('treatment', listingTreatment)
       if (listingTimePeriod !== 'all') params.set('time_period', listingTimePeriod)
-      if (listingSearch) params.set('search', listingSearch)
+      if (debouncedListingSearch) params.set('search', debouncedListingSearch)
       const data = await api.get(`market/listings?${params.toString()}`).json<ListingsResponse>()
       return data
     },
