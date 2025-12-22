@@ -39,6 +39,46 @@ export const Route = createFileRoute('/index/head')({
       ],
     }
 
+    // FAQ JSON-LD schema for rich snippets
+    const faqJsonLd = {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: [
+        {
+          '@type': 'Question',
+          name: 'What is WondersTracker?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'WondersTracker is a real-time price tracking platform for Wonders of the First TCG. We aggregate sales data from eBay and Blokpax to provide accurate market values, price trends, and deal ratings for every card in the game.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'How often are prices updated?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Prices are updated continuously throughout the day. eBay sales data is refreshed every 15 minutes, and Blokpax listings are updated every 30 minutes to ensure you always have the most current market information.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'Where does the price data come from?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Our price data is sourced from actual completed sales on eBay and active listings on Blokpax. We track sold prices, not just asking prices, to give you accurate market values based on real transactions.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'Is WondersTracker free to use?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Yes, WondersTracker is free to use. You can browse all card prices, view market trends, and track price history without creating an account. Premium features like portfolio tracking are available for registered users.',
+          },
+        },
+      ],
+    }
+
     return {
       meta: [
         { title: pageTitle },
@@ -77,6 +117,10 @@ export const Route = createFileRoute('/index/head')({
         {
           type: 'application/ld+json',
           children: JSON.stringify(organizationJsonLd),
+        },
+        {
+          type: 'application/ld+json',
+          children: JSON.stringify(faqJsonLd),
         },
       ],
     }
