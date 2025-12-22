@@ -5,6 +5,7 @@ export default {
     extend: {
       fontFamily: {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
+        serif: ['"Noto Serif"', 'Georgia', 'Cambria', '"Times New Roman"', 'Times', 'serif'],
       },
       colors: {
         border: "hsl(var(--border))",

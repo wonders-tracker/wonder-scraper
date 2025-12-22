@@ -37,6 +37,12 @@ type CardDetail = {
   floor_by_variant?: Record<string, number> // Floor price per variant {treatment/subtype: price}
   fair_market_price?: number // FMP calculated from formula
   vwap?: number // Volume-weighted average price
+  // Carde.io data
+  card_type?: string // Wonder, Item, Spell, Land, Token, Tracker
+  orbital?: string // Heliosynth, Thalwind, Petraia, Solfera, Boundless, Umbrathene
+  orbital_color?: string // Hex color e.g., #a07836
+  card_number?: string // e.g., "143"
+  cardeio_image_url?: string // Official high-res card image
   // Calculated fields for display
   market_cap?: number
 }
@@ -715,14 +721,46 @@ function CardDetail() {
                         />
                     </div>
                     
-                    {/* Header Section */}
-                    <div className="mb-10 border-b border-border pb-8">
+                    {/* Header Section with Background Image */}
+                    <div className="mb-10 border-b border-border pb-8 relative overflow-hidden rounded-lg -mx-6 px-6">
+                        {/* Background Image with Gradient Scrim */}
+                        {card.cardeio_image_url && (
+                            <>
+                                <div
+                                    className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-50"
+                                    style={{ backgroundImage: `url(${card.cardeio_image_url})` }}
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-r from-background via-background/90 to-background/60" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/30" />
+                            </>
+                        )}
+
+                        {/* Content */}
+                        <div className="relative z-10">
                         {/* Title Section */}
                         <div className="mb-6">
                             <div className="flex items-center gap-3 mb-2 flex-wrap">
                                 <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
                                     ID: {card.id.toString().padStart(4, '0')}
                                 </span>
+                                {/* Orbital Badge with dynamic color */}
+                                {card.orbital && (
+                                    <span
+                                        className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider text-white border"
+                                        style={{
+                                            backgroundColor: card.orbital_color ? `${card.orbital_color}40` : undefined,
+                                            borderColor: card.orbital_color || 'transparent'
+                                        }}
+                                    >
+                                        {card.orbital}
+                                    </span>
+                                )}
+                                {/* Card Type Badge */}
+                                {card.card_type && (
+                                    <span className="bg-zinc-800/80 text-zinc-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-zinc-700">
+                                        {card.card_type}
+                                    </span>
+                                )}
                                 {/* Show different badges for NFT vs regular products */}
                                 {card.product_type === 'Proof' || card.name?.toLowerCase().includes('proof') || card.name?.toLowerCase().includes('collector box') ? (
                                     <>
@@ -740,12 +778,15 @@ function CardDetail() {
                                             </Tooltip>
                                         </>
                                     ) : (
-                                        <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-zinc-700">
+                                        <span className="bg-zinc-800/80 text-zinc-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-zinc-700">
                                             Rarity: {card.rarity_name || card.rarity_id}
                                         </span>
                                     )}
                             </div>
-                            <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter mb-2">{card.name}</h1>
+                            <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter mb-2">
+                                {card.card_number && <span className="text-muted-foreground">#{card.card_number} </span>}
+                                {card.name}
+                            </h1>
                             <div className="text-sm text-muted-foreground uppercase tracking-[0.2em] flex items-center gap-2">
                                 <span className="w-2 h-2 bg-primary rounded-full"></span>
                                 {card.set_name}
@@ -818,6 +859,7 @@ function CardDetail() {
                             {/* Is Meta - only for single cards, not sealed products */}
                             {!isSealed && <MetaVote cardId={card.id} />}
                         </div>
+                        </div>{/* Close z-10 content wrapper */}
                     </div>
 
                     {/* Stats Grid - Compact inline layout */}

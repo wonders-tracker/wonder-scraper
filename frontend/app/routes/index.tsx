@@ -76,6 +76,10 @@ type Card = {
   last_treatment?: string // Treatment of last sale (e.g., "Classic Foil")
   image_url?: string // Card thumbnail URL from blob storage
 
+  // === CARDE.IO DATA ===
+  orbital?: string // Heliosynth, Thalwind, Petraia, Solfera, Boundless, Umbrathene
+  orbital_color?: string // Hex color e.g., #a07836
+
   // === DEPRECATED (backwards compat) ===
   volume_30d?: number // @deprecated: use 'volume'
   price_delta_24h?: number // @deprecated: use 'price_delta'
@@ -321,6 +325,20 @@ function Home() {
                             'text-zinc-900 bg-zinc-400'
                           )}>
                             {rarity}
+                          </span>
+                      </Tooltip>
+                    )}
+                    {isSingle && row.original.orbital && (
+                      <Tooltip content={row.original.orbital}>
+                          <span
+                            className="shrink-0 text-[8px] lg:text-[10px] font-bold uppercase px-1 py-0.5 rounded border hidden sm:inline-block"
+                            style={{
+                              backgroundColor: row.original.orbital_color ? `${row.original.orbital_color}30` : undefined,
+                              borderColor: row.original.orbital_color || 'transparent',
+                              color: row.original.orbital_color || undefined
+                            }}
+                          >
+                            {row.original.orbital.substring(0, 4)}
                           </span>
                       </Tooltip>
                     )}

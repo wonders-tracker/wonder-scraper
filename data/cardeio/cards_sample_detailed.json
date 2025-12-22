@@ -1,0 +1,89 @@
+{
+  "sample": [
+    {
+      "id": "6705c51ac914ba982db98fcf",
+      "name": "A-90 Plasma Detonator",
+      "slug": "Existence_143",
+      "dbs": 3,
+      "imageUrl": "https://storage.googleapis.com/cardeio-images/wonders-of-the-first/cards/small/Existence_143.webp",
+      "cardType": {
+        "_id": "6705905f38f8d1a318ebbc7e",
+        "name": "Item"
+      },
+      "orbital": {
+        "_id": "6705935d1c3cebe7814b6124",
+        "name": "Heliosynth",
+        "hexColor": "#a07836",
+        "iconUrl": "https://storage.googleapis.com/cardeio-images/wonders-of-the-first/icons/heliosynth.webp"
+      }
+    },
+    {
+      "id": "6705c51ac914ba982db98fd0",
+      "name": "Abyssal Sand Leviathan",
+      "slug": "Existence_227",
+      "dbs": 4,
+      "imageUrl": "https://storage.googleapis.com/cardeio-images/wonders-of-the-first/cards/small/Existence_227.webp",
+      "cardType": {
+        "_id": "6705905f38f8d1a318ebbc7f",
+        "name": "Wonder"
+      },
+      "orbital": {
+        "_id": "6705935d1c3cebe7814b6125",
+        "name": "Thalwind",
+        "hexColor": "#309eba",
+        "iconUrl": "https://storage.googleapis.com/cardeio-images/wonders-of-the-first/icons/thalwind.webp"
+      }
+    },
+    {
+      "id": "6705c51ac914ba982db98fd2",
+      "name": "Adorable Vermin",
+      "slug": "Existence_071",
+      "dbs": 4,
+      "imageUrl": "https://storage.googleapis.com/cardeio-images/wonders-of-the-first/cards/small/Existence_071.webp",
+      "cardType": {
+        "_id": "6705905f38f8d1a318ebbc7f",
+        "name": "Wonder"
+      },
+      "orbital": {
+        "_id": "6705935d1c3cebe7814b6126",
+        "name": "Petraia",
+        "hexColor": "#377d23",
+        "iconUrl": "https://storage.googleapis.com/cardeio-images/wonders-of-the-first/icons/petraia.webp"
+      }
+    },
+    {
+      "id": "6705c51ac914ba982db98fd4",
+      "name": "Aerius of Thalwind",
+      "slug": "Existence_002",
+      "dbs": 5,
+      "imageUrl": "https://storage.googleapis.com/cardeio-images/wonders-of-the-first/cards/small/Existence_002.webp",
+      "cardType": {
+        "_id": "6705905f38f8d1a318ebbc7f",
+        "name": "Wonder"
+      },
+      "orbital": {
+        "_id": "6705935d1c3cebe7814b6125",
+        "name": "Thalwind",
+        "hexColor": "#309eba",
+        "iconUrl": "https://storage.googleapis.com/cardeio-images/wonders-of-the-first/icons/thalwind.webp"
+      }
+    },
+    {
+      "id": "6705c51ac914ba982db98fd5",
+      "name": "Aether",
+      "slug": "Existence_T-033",
+      "dbs": 0,
+      "imageUrl": "https://storage.googleapis.com/cardeio-images/wonders-of-the-first/cards/small/Existence_T-033.webp",
+      "cardType": {
+        "_id": "6705905f38f8d1a318ebbc80",
+        "name": "Token"
+      },
+      "orbital": {
+        "_id": "6705935d1c3cebe7814b6127",
+        "name": "Boundless",
+        "hexColor": "#7e7e7e",
+        "iconUrl": "https://storage.googleapis.com/cardeio-images/wonders-of-the-first/icons/boundless.webp"
+      }
+    }
+  ]
+}

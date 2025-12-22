@@ -86,6 +86,13 @@ class CardOut(CardBase):
     last_updated: Optional[datetime] = None  # When market data was last scraped
     image_url: Optional[str] = None  # Card thumbnail URL from blob storage
 
+    # === CARDE.IO DATA ===
+    card_type: Optional[str] = None  # Wonder, Item, Spell, Land, Token, Tracker
+    orbital: Optional[str] = None  # Heliosynth, Thalwind, Petraia, Solfera, Boundless, Umbrathene
+    orbital_color: Optional[str] = None  # Hex color e.g., #a07836
+    card_number: Optional[str] = None  # e.g., "143" from Existence_143
+    cardeio_image_url: Optional[str] = None  # Official high-res card image
+
     # === DEPRECATED (keep for backwards compat, remove later) ===
     volume_30d: Optional[int] = None  # @deprecated: use 'volume'
     price_delta_24h: Optional[float] = None  # @deprecated: use 'price_delta'
@@ -117,6 +124,9 @@ class CardListItem(BaseModel):
     last_treatment: Optional[str] = None
     # Image
     image_url: Optional[str] = None  # Card thumbnail URL
+    # Carde.io data
+    orbital: Optional[str] = None  # Heliosynth, Thalwind, etc.
+    orbital_color: Optional[str] = None  # Hex color
 
     model_config = {"from_attributes": True}
 

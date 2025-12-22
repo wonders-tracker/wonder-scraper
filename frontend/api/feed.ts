@@ -23,22 +23,44 @@ interface WeekSummary {
   total_volume: number
 }
 
+interface BlogPost {
+  slug: string
+  title: string
+  description: string
+  publishedAt: string
+  author: string
+  category: string
+  tags: string[]
+  image?: string
+}
+
 export default async function handler(request: Request) {
   try {
-    // Fetch weekly movers for RSS feed
-    const weeklyRes = await fetch(`${API_URL}/api/v1/blog/weekly-movers?limit=20`, {
-      headers: {
-        'User-Agent': 'WondersTracker-RSS/1.0',
-        Accept: 'application/json',
-      },
-    })
+    // Fetch weekly movers and blog manifest in parallel
+    const [weeklyRes, blogRes] = await Promise.all([
+      fetch(`${API_URL}/api/v1/blog/weekly-movers?limit=20`, {
+        headers: {
+          'User-Agent': 'WondersTracker-RSS/1.0',
+          Accept: 'application/json',
+        },
+      }),
+      fetch(`${SITE_URL}/blog-manifest.json`, {
+        headers: { 'User-Agent': 'WondersTracker-RSS/1.0' },
+      }),
+    ])
 
     let weeklyItems: WeekSummary[] = []
     if (weeklyRes.ok) {
       weeklyItems = await weeklyRes.json()
     }
 
-    const items = weeklyItems.map((week) => {
+    let blogPosts: BlogPost[] = []
+    if (blogRes.ok) {
+      blogPosts = await blogRes.json()
+    }
+
+    // Build items from weekly movers
+    const weeklyRssItems = weeklyItems.map((week) => {
       const weekStart = new Date(week.week_start).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -55,8 +77,24 @@ export default async function handler(request: Request) {
         description: `Wonders of the First TCG weekly market report. ${week.total_sales} sales totaling $${week.total_volume.toLocaleString()}.`,
         pubDate: new Date(week.date).toUTCString(),
         guid: `${SITE_URL}/blog/weekly-movers/${week.date}`,
+        sortDate: new Date(week.date).getTime(),
       }
     })
+
+    // Build items from blog posts
+    const blogRssItems = blogPosts.map((post) => ({
+      title: post.title,
+      link: `${SITE_URL}/blog/${post.slug}`,
+      description: post.description,
+      pubDate: new Date(post.publishedAt).toUTCString(),
+      guid: `${SITE_URL}/blog/${post.slug}`,
+      sortDate: new Date(post.publishedAt).getTime(),
+    }))
+
+    // Combine and sort by date (newest first)
+    const items = [...weeklyRssItems, ...blogRssItems].sort(
+      (a, b) => b.sortDate - a.sortDate
+    )
 
     const rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
