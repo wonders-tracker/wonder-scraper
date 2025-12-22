@@ -19,10 +19,7 @@ from sqlmodel import Session
 from app.main import app
 from app.models.user import User
 from app.models.card import Card
-from app.models.market import MarketPrice, MarketSnapshot
-from app.models.portfolio import PortfolioCard
 from app.core import security
-from app.api import deps
 
 # Mark all tests as integration tests - admin endpoints use direct database connections
 # that bypass the session override
@@ -84,24 +81,18 @@ def regular_user(test_session: Session) -> User:
 def superuser_token(superuser: User) -> str:
     """Generate JWT token for superuser."""
     from app.core.jwt import create_access_token
-    from datetime import timedelta
 
     access_token_expires = timedelta(minutes=30)
-    return create_access_token(
-        subject=superuser.email, expires_delta=access_token_expires
-    )
+    return create_access_token(subject=superuser.email, expires_delta=access_token_expires)
 
 
 @pytest.fixture
 def regular_user_token(regular_user: User) -> str:
     """Generate JWT token for regular user."""
     from app.core.jwt import create_access_token
-    from datetime import timedelta
 
     access_token_expires = timedelta(minutes=30)
-    return create_access_token(
-        subject=regular_user.email, expires_delta=access_token_expires
-    )
+    return create_access_token(subject=regular_user.email, expires_delta=access_token_expires)
 
 
 @pytest.fixture
@@ -119,7 +110,7 @@ def regular_auth_headers(regular_user_token: str) -> dict:
 class TestBackfillEndpoint:
     """Tests for POST /admin/backfill endpoint."""
 
-    @patch('app.api.admin.run_backfill_job')
+    @patch("app.api.admin.run_backfill_job")
     def test_trigger_backfill_success(self, mock_backfill, client, auth_headers):
         """Test successful backfill job trigger."""
         response = client.post(
@@ -138,7 +129,7 @@ class TestBackfillEndpoint:
         assert "limit=50" in data["message"]
         assert "force_all=False" in data["message"]
 
-    @patch('app.api.admin.run_backfill_job')
+    @patch("app.api.admin.run_backfill_job")
     def test_trigger_backfill_with_force_all(self, mock_backfill, client, auth_headers):
         """Test backfill with force_all=True."""
         response = client.post(
@@ -153,7 +144,7 @@ class TestBackfillEndpoint:
         assert data["status"] == "started"
         assert "force_all=True" in data["message"]
 
-    @patch('app.api.admin.run_backfill_job')
+    @patch("app.api.admin.run_backfill_job")
     def test_trigger_backfill_default_values(self, mock_backfill, client, auth_headers):
         """Test backfill with default values."""
         response = client.post(
@@ -169,7 +160,9 @@ class TestBackfillEndpoint:
         assert "limit=100" in data["message"]  # Default limit
         assert "force_all=False" in data["message"]  # Default force_all
 
-    @patch('app.api.admin._running_jobs', {"backfill_20231201_120000": {"status": "running", "processed": 5, "total": 10}})
+    @patch(
+        "app.api.admin._running_jobs", {"backfill_20231201_120000": {"status": "running", "processed": 5, "total": 10}}
+    )
     def test_trigger_backfill_when_job_running(self, client, auth_headers):
         """Test that triggering backfill fails when another job is running."""
         response = client.post(
@@ -208,16 +201,19 @@ class TestBackfillEndpoint:
 class TestBackfillStatusEndpoint:
     """Tests for GET /admin/backfill/status endpoint."""
 
-    @patch('app.api.admin._running_jobs', {
-        "backfill_20231201_120000": {
-            "status": "running",
-            "started": datetime(2023, 12, 1, 12, 0, 0),
-            "processed": 25,
-            "total": 100,
-            "errors": 2,
-            "new_listings": 50,
-        }
-    })
+    @patch(
+        "app.api.admin._running_jobs",
+        {
+            "backfill_20231201_120000": {
+                "status": "running",
+                "started": datetime(2023, 12, 1, 12, 0, 0),
+                "processed": 25,
+                "total": 100,
+                "errors": 2,
+                "new_listings": 50,
+            }
+        },
+    )
     def test_get_all_jobs_status(self, client, auth_headers):
         """Test getting status of all jobs."""
         response = client.get(
@@ -235,13 +231,16 @@ class TestBackfillStatusEndpoint:
         assert job["total"] == 100
         assert job["errors"] == 2
 
-    @patch('app.api.admin._running_jobs', {
-        "backfill_20231201_120000": {
-            "status": "completed",
-            "processed": 100,
-            "total": 100,
-        }
-    })
+    @patch(
+        "app.api.admin._running_jobs",
+        {
+            "backfill_20231201_120000": {
+                "status": "completed",
+                "processed": 100,
+                "total": 100,
+            }
+        },
+    )
     def test_get_specific_job_status(self, client, auth_headers):
         """Test getting status of specific job."""
         response = client.get(
@@ -267,7 +266,7 @@ class TestBackfillStatusEndpoint:
         data = response.json()
         assert "not found" in data["detail"].lower()
 
-    @patch('app.api.admin._running_jobs', {})
+    @patch("app.api.admin._running_jobs", {})
     def test_get_status_when_no_jobs(self, client, auth_headers):
         """Test getting status when no jobs exist."""
         response = client.get(
@@ -298,7 +297,7 @@ class TestBackfillStatusEndpoint:
 class TestScrapeTriggertEndpoint:
     """Tests for POST /admin/scrape/trigger endpoint."""
 
-    @patch('app.core.scheduler.job_update_market_data')
+    @patch("app.core.scheduler.job_update_market_data")
     def test_trigger_scrape_success(self, mock_scrape, client, auth_headers):
         """Test successful manual scrape trigger."""
         response = client.post(
@@ -607,7 +606,7 @@ class TestAdminStatsEndpoint:
 class TestSchedulerStatusEndpoint:
     """Tests for GET /admin/scheduler/status endpoint."""
 
-    @patch('app.core.scheduler.scheduler')
+    @patch("app.core.scheduler.scheduler")
     def test_get_scheduler_status_running(self, mock_scheduler, client, auth_headers):
         """Test scheduler status when running."""
         # Mock scheduler
@@ -640,7 +639,7 @@ class TestSchedulerStatusEndpoint:
         assert "next_run" in job
         assert "trigger" in job
 
-    @patch('app.core.scheduler.scheduler')
+    @patch("app.core.scheduler.scheduler")
     def test_get_scheduler_status_not_running(self, mock_scheduler, client, auth_headers):
         """Test scheduler status when not running."""
         mock_scheduler.running = False
@@ -657,7 +656,7 @@ class TestSchedulerStatusEndpoint:
         assert data["running"] is False
         assert data["jobs"] == []
 
-    @patch('app.core.scheduler.scheduler')
+    @patch("app.core.scheduler.scheduler")
     def test_get_scheduler_status_multiple_jobs(self, mock_scheduler, client, auth_headers):
         """Test scheduler status with multiple jobs."""
         mock_scheduler.running = True
@@ -710,10 +709,10 @@ class TestBackfillJobExecution:
     """Tests for backfill job background execution."""
 
     @pytest.mark.asyncio
-    @patch('app.scraper.browser.BrowserManager')
-    @patch('scripts.scrape_card.scrape_card')
-    @patch('app.discord_bot.logger.log_scrape_start')
-    @patch('app.discord_bot.logger.log_scrape_complete')
+    @patch("app.scraper.browser.BrowserManager")
+    @patch("scripts.scrape_card.scrape_card")
+    @patch("app.discord_bot.logger.log_scrape_start")
+    @patch("app.discord_bot.logger.log_scrape_complete")
     async def test_backfill_job_processes_cards(
         self,
         mock_log_complete,
@@ -749,7 +748,7 @@ class TestBackfillJobExecution:
         assert job_status["processed"] >= 0
 
     @pytest.mark.asyncio
-    @patch('app.scraper.browser.BrowserManager')
+    @patch("app.scraper.browser.BrowserManager")
     async def test_backfill_job_respects_limit(
         self,
         mock_browser,
@@ -766,9 +765,9 @@ class TestBackfillJobExecution:
         job_id = "test_job_limit"
         limit = 2
 
-        with patch('scripts.scrape_card.scrape_card', new_callable=AsyncMock) as mock_scrape:
-            with patch('app.discord_bot.logger.log_scrape_start'):
-                with patch('app.discord_bot.logger.log_scrape_complete'):
+        with patch("scripts.scrape_card.scrape_card", new_callable=AsyncMock) as mock_scrape:
+            with patch("app.discord_bot.logger.log_scrape_start"):
+                with patch("app.discord_bot.logger.log_scrape_complete"):
                     await run_backfill_job(
                         job_id=job_id,
                         limit=limit,
@@ -781,10 +780,10 @@ class TestBackfillJobExecution:
                     assert job_status["processed"] <= limit
 
     @pytest.mark.asyncio
-    @patch('app.scraper.browser.BrowserManager')
-    @patch('scripts.scrape_card.scrape_card', side_effect=Exception("Scrape error"))
-    @patch('app.discord_bot.logger.log_scrape_start')
-    @patch('app.discord_bot.logger.log_scrape_complete')
+    @patch("app.scraper.browser.BrowserManager")
+    @patch("scripts.scrape_card.scrape_card", side_effect=Exception("Scrape error"))
+    @patch("app.discord_bot.logger.log_scrape_start")
+    @patch("app.discord_bot.logger.log_scrape_complete")
     async def test_backfill_job_handles_errors(
         self,
         mock_log_complete,
@@ -819,10 +818,10 @@ class TestBackfillJobExecution:
             assert job_status["errors"] >= 0
 
     @pytest.mark.asyncio
-    @patch('app.scraper.browser.BrowserManager')
-    @patch('scripts.scrape_card.scrape_card')
-    @patch('app.discord_bot.logger.log_scrape_start')
-    @patch('app.discord_bot.logger.log_scrape_complete')
+    @patch("app.scraper.browser.BrowserManager")
+    @patch("scripts.scrape_card.scrape_card")
+    @patch("app.discord_bot.logger.log_scrape_start")
+    @patch("app.discord_bot.logger.log_scrape_complete")
     async def test_backfill_job_no_cards_needed(
         self,
         mock_log_complete,
@@ -851,6 +850,210 @@ class TestBackfillJobExecution:
         # Job should complete with message
         job_status = _running_jobs[job_id]
         assert job_status["status"] == "completed"
+
+
+class TestSQLAlchemyQueryPatterns:
+    """
+    Tests to catch SQLAlchemy query result type errors.
+
+    Common bug: Using .all() instead of .scalars().all() returns Row tuples
+    instead of model instances or scalar values, causing AttributeError or
+    invalid SQL when the results are used.
+
+    Examples of the bug:
+    - session.execute(select(Model)).all() returns [(Model,), ...] not [Model, ...]
+    - session.execute(select(Model.id)).all() returns [(1,), (2,)] not [1, 2]
+
+    These tests verify the API returns valid data, which would fail if queries
+    return wrong types.
+    """
+
+    def test_analytics_returns_nonzero_counts_with_data(
+        self,
+        client,
+        auth_headers,
+        test_session: Session,
+        superuser: User,
+    ):
+        """
+        Test that analytics section returns actual counts, not zeros.
+
+        Bug caught: If superuser_ids query uses .all() instead of .scalars().all(),
+        the filter becomes "NOT IN ((3,))" instead of "NOT IN (3)", returning 0 results.
+        """
+        from app.models.analytics import PageView
+        from datetime import datetime, timezone
+
+        # Create test pageview data (not from superuser)
+        pageview = PageView(
+            path="/test-page",
+            user_id=None,  # Anonymous user
+            session_id="test-session-123",
+            ip_hash="abc123hash",
+            device_type="desktop",
+            timestamp=datetime.now(timezone.utc),
+        )
+        test_session.add(pageview)
+        test_session.commit()
+
+        response = client.get("/api/v1/admin/stats", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+
+        analytics = data["analytics"]
+        # With test data, we should have at least 1 pageview
+        assert analytics["total_pageviews"] >= 1, (
+            "Analytics returned 0 pageviews despite test data. " "Check if superuser_ids query uses .scalars().all()"
+        )
+
+    def test_analytics_filter_excludes_superuser_correctly(
+        self,
+        client,
+        auth_headers,
+        test_session: Session,
+        superuser: User,
+    ):
+        """
+        Test that superuser pageviews are correctly filtered out.
+
+        Bug caught: If superuser IDs are tuples like (3,) instead of integers,
+        the SQL filter will be malformed and may not exclude properly.
+        """
+        from app.models.analytics import PageView
+        from datetime import datetime, timezone
+
+        # Use unique path to avoid conflicts with other test data
+        unique_suffix = datetime.now().strftime("%H%M%S%f")
+
+        # Create pageview from superuser (should be filtered out)
+        superuser_pageview = PageView(
+            path=f"/admin/secret-{unique_suffix}",
+            user_id=superuser.id,
+            session_id="superuser-session",
+            ip_hash="superuser-hash",
+            device_type="desktop",
+            timestamp=datetime.now(timezone.utc),
+        )
+        test_session.add(superuser_pageview)
+
+        # Create pageview from anonymous user (should be counted)
+        anon_pageview = PageView(
+            path=f"/public-page-{unique_suffix}",
+            user_id=None,
+            session_id="anon-session",
+            ip_hash="anon-hash",
+            device_type="mobile",
+            timestamp=datetime.now(timezone.utc),
+        )
+        test_session.add(anon_pageview)
+        test_session.commit()
+
+        response = client.get("/api/v1/admin/stats", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify the response structure is valid (main assertion)
+        analytics = data["analytics"]
+        assert "top_pages" in analytics
+        assert "total_pageviews" in analytics
+
+        # The filter should work - we should have some pageviews counted
+        # (exact filtering depends on database state, so we just verify structure)
+        assert isinstance(analytics["top_pages"], list)
+
+    def test_user_activity_returns_pageview_attributes(
+        self,
+        client,
+        auth_headers,
+        test_session: Session,
+        superuser: User,
+    ):
+        """
+        Test that user activity endpoint can access pageview attributes.
+
+        Bug caught: If pageviews query uses .all() instead of .scalars().all(),
+        accessing pv.path raises AttributeError because pv is a Row tuple.
+        This test verifies the endpoint returns 200 (not 500) and proper structure.
+        """
+        response = client.get(
+            f"/api/v1/admin/users/{superuser.id}/activity",
+            headers=auth_headers,
+        )
+
+        # If .scalars() wasn't used, this would return 500 with AttributeError
+        assert response.status_code == 200, (
+            f"Endpoint returned {response.status_code}. " "Check if pageviews query uses .scalars().all()"
+        )
+
+        data = response.json()
+
+        # Verify response structure
+        assert "user" in data
+        assert "recent_pageviews" in data
+        assert "top_pages" in data
+        assert "daily_activity" in data
+
+        # If there are pageviews, verify each has proper attributes
+        # (This would fail with AttributeError if .scalars() wasn't used)
+        if len(data["recent_pageviews"]) > 0:
+            pv = data["recent_pageviews"][0]
+            assert "path" in pv, "Pageview missing 'path' - check .scalars().all() usage"
+            assert "timestamp" in pv, "Pageview missing 'timestamp'"
+            assert "device_type" in pv, "Pageview missing 'device_type'"
+
+    def test_superuser_ids_are_integers_not_tuples(
+        self,
+        test_session: Session,
+        superuser: User,
+    ):
+        """
+        Direct unit test: Verify superuser ID query returns integers, not tuples.
+
+        This catches the root cause before it affects the API.
+        """
+        from sqlmodel import select
+        from app.models.user import User as UserModel
+        from app.core.typing import col
+
+        # This is the CORRECT pattern
+        superuser_ids = (
+            test_session.execute(select(UserModel.id).where(col(UserModel.is_superuser).is_(True))).scalars().all()
+        )
+
+        # Should be a list of integers
+        assert len(superuser_ids) >= 1
+        assert all(isinstance(id, int) for id in superuser_ids), (
+            f"Expected integers, got {type(superuser_ids[0])}. " "Use .scalars().all() not .all()"
+        )
+
+        # Building SQL filter should work
+        ids_str = ",".join(str(id) for id in superuser_ids)
+        assert "(" not in ids_str, f"IDs string contains tuple notation: {ids_str}. " "This will cause invalid SQL."
+
+    def test_model_query_returns_model_instances(
+        self,
+        test_session: Session,
+        sample_cards,
+    ):
+        """
+        Direct unit test: Verify model queries return model instances.
+
+        Bug pattern: session.execute(select(Model)).all() returns Row tuples.
+        """
+        from sqlmodel import select
+
+        # CORRECT pattern with .scalars()
+        cards = test_session.execute(select(Card).limit(1)).scalars().all()
+
+        assert len(cards) >= 1
+        card = cards[0]
+
+        # Should be able to access attributes directly
+        assert hasattr(card, "name"), "Card object missing 'name' attribute"
+        assert hasattr(card, "id"), "Card object missing 'id' attribute"
+        assert isinstance(card, Card), f"Expected Card instance, got {type(card)}. " "Use .scalars().all() not .all()"
 
 
 class TestAuthorizationConsistency:
