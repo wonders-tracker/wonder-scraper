@@ -1,9 +1,4 @@
 {
-  "buildCommand": "cd frontend && rm -rf node_modules/.vite && npm install && npm run build:vercel",
-  "outputDirectory": "frontend/dist",
-  "installCommand": "npm install",
-  "framework": null,
-  "trailingSlash": false,
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/api/og/:cardId", "destination": "/api/og/[cardId]" },

@@ -55,11 +55,8 @@ export default defineConfig({
           if (id.includes('lucide-react')) {
             return 'vendor-icons'
           }
-          // CHARTS - 376KB, lazy load separately
-          // Only loads when user visits chart-heavy pages
-          if (id.includes('recharts') || id.includes('d3-')) {
-            return 'vendor-charts-lazy'
-          }
+          // NOTE: Charts (recharts) removed from manual chunks - Vite handles it better
+          // with mixed lazy/direct imports across components
         }
       }
     }

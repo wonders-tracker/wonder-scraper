@@ -84,3 +84,7 @@ public/
 # For maintainers: Clone the private repo as a submodule (see docs/architecture/saas-setup.md)
 # Note: Do NOT add saas/ here if using submodules - Git handles submodule tracking.
 # This entry is for cases where saas/ is created locally for development without submodule setup.
+
+# Vercel build output (prevents stale cache issues)
+.vercel/output
+.vercel/builders
