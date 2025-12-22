@@ -1,9 +1,10 @@
 {
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/feed.xml", "destination": "/api/feed" },
     { "source": "/robots.txt", "destination": "/robots.txt" },
     { "source": "/api/og/:cardId", "destination": "/api/og/[cardId]?cardId=:cardId" },
     { "source": "/api/v1/:path(.*)", "destination": "https://wonder-scraper-production.up.railway.app/api/v1/:path" },
-    { "source": "/((?!api/|sitemap\\.xml|robots\\.txt).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|sitemap\\.xml|feed\\.xml|robots\\.txt).*)", "destination": "/index.html" }
   ]
 }

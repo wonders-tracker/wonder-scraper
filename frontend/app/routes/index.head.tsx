@@ -1,8 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { siteConfig } from '~/config/site'
 
-const SITE_NAME = 'WondersTracker'
-const SITE_URL = 'https://wonderstracker.com'
-const TWITTER_HANDLE = '@WondersTracker'
+const { name: SITE_NAME, url: SITE_URL, twitter: TWITTER_HANDLE } = siteConfig
 
 export const Route = createFileRoute('/index/head')({
   head: () => {

@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { siteConfig } from '~/config/site'
 
-const SITE_NAME = 'WondersTracker'
-const SITE_URL = 'https://wonderstracker.com'
+const { name: SITE_NAME, url: SITE_URL } = siteConfig
 
 export const Route = createFileRoute('/methodology/head')({
   head: () => {

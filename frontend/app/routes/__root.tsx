@@ -1,5 +1,5 @@
 import { Outlet, createRootRoute, Link, useNavigate, redirect, useLocation } from '@tanstack/react-router'
-import { LayoutDashboard, LineChart, Wallet, User, Server, LogOut, Menu, X, Shield, ChevronDown, Settings, Sparkles } from 'lucide-react'
+import { LayoutDashboard, LineChart, Wallet, User, Server, LogOut, Menu, X, Shield, ChevronDown, Settings, Sparkles, Newspaper } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { useState, useMemo, useRef, useEffect } from 'react'
@@ -302,6 +302,10 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
                 <LineChart className="w-3.5 h-3.5" />
                 <span>Market</span>
               </Link>
+              <Link to="/blog" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
+                <Newspaper className="w-3.5 h-3.5" />
+                <span>Blog</span>
+              </Link>
               <Link to="/portfolio" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
                 <Wallet className="w-3.5 h-3.5" />
                 <span>Portfolio</span>
@@ -372,6 +376,14 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
               >
                 <LineChart className="w-4 h-4" />
                 <span>Market</span>
+              </Link>
+              <Link
+                to="/blog"
+                className="flex items-center gap-3 px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors text-sm font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Newspaper className="w-4 h-4" />
+                <span>Blog</span>
               </Link>
               <Link
                 to="/portfolio"

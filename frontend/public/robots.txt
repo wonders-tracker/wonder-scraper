@@ -8,7 +8,7 @@ Allow: /
 Allow: /cards/
 Allow: /market
 Allow: /methodology
-Allow: /weekly-movers
+Allow: /blog/
 
 # Allow OG images for social sharing previews
 Allow: /api/og/
