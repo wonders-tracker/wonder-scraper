@@ -59,6 +59,50 @@ log_market_insights(insights)
 "
 ```
 
+### Frontend Deployment
+
+Use the deploy script for reliable Vercel deployments:
+
+```bash
+# Deploy to production
+./scripts/deploy-frontend.sh
+
+# Deploy to staging
+./scripts/deploy-frontend.sh --staging
+
+# Preview deployment
+./scripts/deploy-frontend.sh --preview
+
+# Validate build without deploying
+./scripts/deploy-frontend.sh --dry-run
+
+# Skip build (use existing dist)
+./scripts/deploy-frontend.sh --skip-build
+```
+
+**What the script does:**
+1. Cleans stale `.vercel/output` and `.vercel/builders` directories
+2. Runs TypeScript type check
+3. Builds the frontend with Vite
+4. Validates bundle integrity (React chunks, syntax check)
+5. Deploys to Vercel
+
+**Important:** Never commit `.vercel/output` - it causes Vercel to skip builds and serve stale content. This is already in `.gitignore`.
+
+## CI/CD
+
+GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push to main/staging/preview:
+
+- **backend-test**: Runs pytest with PostgreSQL
+- **backend-lint**: Runs ruff check/format and ty type check
+- **frontend-test**: Runs typecheck, lint, and build
+- **frontend-bundle-integrity**: Validates production bundle structure:
+  - React vendor chunk exists and contains runtime
+  - Router and main entry chunks exist
+  - All JS files pass syntax validation
+  - Reports bundle sizes
+- **security-scan**: Trivy vulnerability scanner
+
 ## Key Directories
 
 - `app/` - Backend FastAPI application
