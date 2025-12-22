@@ -1,7 +1,7 @@
 {
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
-    { "source": "/api/og/:cardId", "destination": "/api/og/[cardId]" },
+    { "source": "/api/og/:cardId", "destination": "/api/og/[cardId]?cardId=:cardId" },
     { "source": "/api/v1/:path(.*)", "destination": "https://wonder-scraper-production.up.railway.app/api/v1/:path" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]

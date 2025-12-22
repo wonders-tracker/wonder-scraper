@@ -5,7 +5,9 @@ export const config = {
 }
 
 // API URL for edge function (calls Railway directly since this runs server-side)
-const API_URL = 'https://wonder-scraper-production.up.railway.app/api/v1'
+const API_BASE = process.env.API_URL || 'https://wonder-scraper-production.up.railway.app'
+const API_URL = `${API_BASE}/api/v1`
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://wonderstracker.com'
 
 export default async function handler(req: Request) {
   try {
@@ -152,7 +154,7 @@ export default async function handler(req: Request) {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ color: '#10b981' }}>▶</div>
-              <div>Track Real-Time TCG Prices at wonderstracker.com</div>
+              <div>Track Real-Time TCG Prices at {SITE_URL.replace('https://', '')}</div>
             </div>
           </div>
         </div>

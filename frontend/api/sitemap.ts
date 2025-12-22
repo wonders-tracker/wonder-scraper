@@ -2,8 +2,8 @@ export const config = {
   runtime: 'edge',
 }
 
-const SITE_URL = 'https://wonderstracker.com'
-const API_URL = 'https://wonderstracker.com'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://wonderstracker.com'
+const API_URL = process.env.API_URL || 'https://wonder-scraper-production.up.railway.app'
 
 interface Card {
   id: number
