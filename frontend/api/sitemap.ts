@@ -14,8 +14,15 @@ interface Card {
 
 export default async function handler(request: Request) {
   try {
-    // Fetch all cards from the API
-    const response = await fetch(`${API_URL}/api/v1/cards`)
+    // Fetch all cards from the API (trailing slash required)
+    const response = await fetch(`${API_URL}/api/v1/cards/`, {
+      headers: {
+        'User-Agent': 'WondersTracker-Sitemap/1.0',
+      },
+    })
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`)
+    }
     const cards: Card[] = await response.json()
 
     const today = new Date().toISOString().split('T')[0]
