@@ -57,7 +57,7 @@ function BlogIndexPage() {
   const { data: latest, isLoading } = useQuery<WeeklyData>({
     queryKey: ['weekly-movers', 'latest'],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/v1/blog/weekly-movers/latest`)
+      const res = await fetch(`${API_URL}/blog/weekly-movers/latest`)
       if (!res.ok) return null
       return res.json()
     },
@@ -68,7 +68,7 @@ function BlogIndexPage() {
   const { data: archive } = useQuery<WeekSummary[]>({
     queryKey: ['weekly-movers', 'archive'],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/v1/blog/weekly-movers?limit=5`)
+      const res = await fetch(`${API_URL}/blog/weekly-movers?limit=5`)
       if (!res.ok) return []
       return res.json()
     },

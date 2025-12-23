@@ -58,7 +58,7 @@ function MarketInsightsPage() {
   const { data, isLoading, error, refetch, dataUpdatedAt } = useQuery<WeeklyData>({
     queryKey: ['market-insights', 'latest'],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/v1/blog/weekly-movers/latest`)
+      const res = await fetch(`${API_URL}/blog/weekly-movers/latest`)
       if (!res.ok) throw new Error('Failed to fetch market data')
       return res.json()
     },

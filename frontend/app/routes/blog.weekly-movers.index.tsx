@@ -29,7 +29,7 @@ function WeeklyMoversArchivePage() {
   const { data: weeks, isLoading, error } = useQuery<WeekSummary[]>({
     queryKey: ['weekly-movers', 'archive'],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/v1/blog/weekly-movers`)
+      const res = await fetch(`${API_URL}/blog/weekly-movers`)
       if (!res.ok) return []
       return res.json()
     },

@@ -60,7 +60,7 @@ function WeeklyMoversDetailPage() {
   const { data, isLoading, error } = useQuery<WeeklyMoversData>({
     queryKey: ['weekly-movers', date],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/v1/blog/weekly-movers/${date}`)
+      const res = await fetch(`${API_URL}/blog/weekly-movers/${date}`)
       if (!res.ok) throw new Error('Failed to fetch weekly movers')
       return res.json()
     },
