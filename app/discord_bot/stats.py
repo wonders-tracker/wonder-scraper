@@ -223,11 +223,32 @@ def _generate_insights(
     return insights[:3]
 
 
-def calculate_market_stats(period: str = "daily") -> MarketStats:
-    """Calculate market statistics for a given period."""
-    start_time, end_time = get_period_bounds(period)
+def calculate_market_stats(
+    period: str = "daily",
+    session: Session | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+) -> MarketStats:
+    """Calculate market statistics for a given period.
 
-    with Session(engine) as session:
+    Args:
+        period: The period to calculate stats for ("daily", "weekly")
+        session: Optional existing database session
+        start_date: Optional custom start date (overrides period)
+        end_date: Optional custom end date (overrides period)
+    """
+    # Use custom dates if provided, otherwise calculate from period
+    if start_date and end_date:
+        start_time, end_time = start_date, end_date
+    else:
+        start_time, end_time = get_period_bounds(period)
+
+    # Use provided session or create a new one
+    own_session = session is None
+    if own_session:
+        session = Session(engine)
+
+    try:
         # Get all sold listings in period
         # Use COALESCE(sold_date, scraped_at) to include sales with NULL sold_date
         sales = session.exec(
@@ -452,6 +473,9 @@ def calculate_market_stats(period: str = "daily") -> MarketStats:
             product_breakdown=product_breakdown,
             treatment_breakdown=treatment_breakdown,
         )
+    finally:
+        if own_session:
+            session.close()
 
 
 def generate_csv_report(period: str = "daily") -> tuple[str, bytes]:
