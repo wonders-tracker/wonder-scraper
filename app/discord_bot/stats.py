@@ -326,19 +326,18 @@ def calculate_market_stats(
         else:
             sales_trend_pct = 0  # Not enough data for meaningful comparison
 
-        # Calculate top movers (biggest % change)
+        # Calculate top movers (biggest % change) with treatment context
         top_movers = []
         cards = session.exec(select(Card)).all()
 
         for card in cards:
-            # Current period avg
+            # Current period sales
             current_sales = [s for s in sales if s.card_id == card.id]
             if not current_sales:
                 continue
-            current_avg = sum(s.price for s in current_sales) / len(current_sales)
 
-            # Previous period avg
-            prev_sales = session.exec(
+            # Previous period sales
+            prev_card_sales = session.exec(
                 select(MarketPrice)
                 .where(MarketPrice.card_id == card.id)
                 .where(MarketPrice.listing_type == "sold")
@@ -346,22 +345,97 @@ def calculate_market_stats(
                 .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) < start_time)
             ).all()
 
-            if not prev_sales:
+            if not prev_card_sales:
                 continue
-            prev_avg = sum(s.price for s in prev_sales) / len(prev_sales)
 
-            if prev_avg > 0:
-                pct_change = ((current_avg - prev_avg) / prev_avg) * 100
-                top_movers.append(
-                    {
-                        "card_id": card.id,
-                        "name": card.name,
-                        "current_price": current_avg,
-                        "prev_price": prev_avg,
-                        "pct_change": pct_change,
-                        "volume": len(current_sales),
-                    }
-                )
+            # Calculate treatment breakdown for current period
+            current_treatments: Dict[str, List[float]] = {}
+            for s in current_sales:
+                t = s.treatment or "Classic Paper"
+                if t not in current_treatments:
+                    current_treatments[t] = []
+                current_treatments[t].append(s.price)
+
+            # Calculate treatment breakdown for previous period
+            prev_treatments: Dict[str, List[float]] = {}
+            for s in prev_card_sales:
+                t = s.treatment or "Classic Paper"
+                if t not in prev_treatments:
+                    prev_treatments[t] = []
+                prev_treatments[t].append(s.price)
+
+            # Overall averages
+            current_avg = sum(s.price for s in current_sales) / len(current_sales)
+            prev_avg = sum(s.price for s in prev_card_sales) / len(prev_card_sales)
+
+            if prev_avg <= 0:
+                continue
+
+            pct_change = ((current_avg - prev_avg) / prev_avg) * 100
+
+            # Determine reason for price change
+            reason = None
+            confidence = "high"  # high, medium, low
+
+            # Check if treatment mix changed significantly
+            current_premium_count = sum(len(v) for k, v in current_treatments.items() if k not in ["Classic Paper", "Paper"])
+            prev_premium_count = sum(len(v) for k, v in prev_treatments.items() if k not in ["Classic Paper", "Paper"])
+            current_paper_count = sum(len(v) for k, v in current_treatments.items() if k in ["Classic Paper", "Paper"])
+            prev_paper_count = sum(len(v) for k, v in prev_treatments.items() if k in ["Classic Paper", "Paper"])
+
+            # Build treatment summary
+            treatment_summary = []
+            for t, prices in sorted(current_treatments.items(), key=lambda x: -len(x[1])):
+                avg = sum(prices) / len(prices)
+                treatment_summary.append({"treatment": t, "count": len(prices), "avg": avg})
+
+            # Determine reason based on data patterns
+            if len(current_sales) <= 2:
+                confidence = "low"
+                reason = f"Only {len(current_sales)} sale(s) - small sample"
+            elif current_premium_count > 0 and prev_premium_count == 0:
+                reason = f"Premium variants sold ({', '.join(k for k in current_treatments if k not in ['Classic Paper', 'Paper'])})"
+                confidence = "medium"
+            elif prev_premium_count > 0 and current_premium_count == 0:
+                reason = "Only standard variants sold this period"
+                confidence = "medium"
+            elif abs(pct_change) > 50 and len(current_sales) < 5:
+                confidence = "medium"
+                reason = f"Large swing on {len(current_sales)} sales - may normalize"
+            elif pct_change > 20:
+                # Check if there's a consistent treatment to compare
+                common_treatment = max(current_treatments.keys(), key=lambda k: len(current_treatments[k]))
+                if common_treatment in prev_treatments:
+                    curr_t_avg = sum(current_treatments[common_treatment]) / len(current_treatments[common_treatment])
+                    prev_t_avg = sum(prev_treatments[common_treatment]) / len(prev_treatments[common_treatment])
+                    t_pct = ((curr_t_avg - prev_t_avg) / prev_t_avg * 100) if prev_t_avg > 0 else 0
+                    if abs(t_pct - pct_change) < 10:
+                        reason = f"Consistent demand increase across {common_treatment}"
+                        confidence = "high"
+            elif pct_change < -20:
+                common_treatment = max(current_treatments.keys(), key=lambda k: len(current_treatments[k]))
+                if common_treatment in prev_treatments:
+                    curr_t_avg = sum(current_treatments[common_treatment]) / len(current_treatments[common_treatment])
+                    prev_t_avg = sum(prev_treatments[common_treatment]) / len(prev_treatments[common_treatment])
+                    t_pct = ((curr_t_avg - prev_t_avg) / prev_t_avg * 100) if prev_t_avg > 0 else 0
+                    if abs(t_pct - pct_change) < 10:
+                        reason = f"Price correction on {common_treatment}"
+                        confidence = "high"
+
+            top_movers.append(
+                {
+                    "card_id": card.id,
+                    "name": card.name,
+                    "current_price": current_avg,
+                    "prev_price": prev_avg,
+                    "pct_change": pct_change,
+                    "volume": len(current_sales),
+                    "prev_volume": len(prev_card_sales),
+                    "treatments": treatment_summary,
+                    "reason": reason,
+                    "confidence": confidence,
+                }
+            )
 
         # Sort by absolute change, get top 5 gainers and losers
         top_movers.sort(key=lambda x: x["pct_change"], reverse=True)

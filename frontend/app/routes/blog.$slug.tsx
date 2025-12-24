@@ -31,12 +31,6 @@ export const Route = createFileRoute('/blog/$slug')({
   ),
 })
 
-function estimateReadTime(text: string): number {
-  const wordsPerMinute = 200
-  const words = text.split(/\s+/).length
-  return Math.ceil(words / wordsPerMinute)
-}
-
 function BlogPostPage() {
   const { post } = Route.useLoaderData()
   const { frontmatter, Component } = post
@@ -69,7 +63,7 @@ function BlogPostPage() {
         <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground mb-6">
           <span className="flex items-center gap-1">
             <Clock className="w-4 h-4" />
-            5 min read
+            {frontmatter.readTime || 3} min read
           </span>
           <span>|</span>
           <time dateTime={frontmatter.publishedAt}>

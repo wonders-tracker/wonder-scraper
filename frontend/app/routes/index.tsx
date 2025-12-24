@@ -3,7 +3,7 @@ import { api, auth } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel, getPaginationRowModel } from '@tanstack/react-table'
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { ArrowUpDown, Search, ArrowUp, ArrowDown, Calendar, TrendingUp, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Plus, Package, Layers, Gem, Archive, Store, ShoppingCart, ExternalLink, Info } from 'lucide-react'
 import clsx from 'clsx'
 import { Tooltip } from '../components/ui/tooltip'
@@ -199,14 +199,13 @@ function Home() {
   })
 
 
-  const { data: cards, isLoading } = useQuery({
-    queryKey: ['cards', timePeriod, productType, platform],
+  const { data: cards, isLoading, isFetching } = useQuery({
+    queryKey: ['cards', timePeriod, platform],
     queryFn: async () => {
-      const typeParam = productType !== 'all' ? `&product_type=${productType}` : ''
       const platformParam = platform !== 'all' ? `&platform=${platform}` : ''
       // Load all cards - important ones can be deep in the list
       // slim=true reduces payload by ~50% for faster loading
-      const data = await api.get(`cards?limit=500&time_period=${timePeriod}${typeParam}${platformParam}&slim=true`).json<Card[]>()
+      const data = await api.get(`cards?limit=500&time_period=${timePeriod}${platformParam}&slim=true`).json<Card[]>()
       return data.map(c => ({
           ...c,
           // Use new field names with fallback to deprecated for backwards compat
@@ -223,6 +222,7 @@ function Home() {
     staleTime: 2 * 60 * 1000, // 2 minutes - fresher feel while respecting 15min scrape interval
     gcTime: 30 * 60 * 1000, // 30 minutes - cache persists
     refetchOnWindowFocus: false, // Don't refetch on tab focus
+    placeholderData: (prev) => prev,
   })
 
   // Listings query for the Listings tab (server-side pagination)
@@ -625,8 +625,10 @@ function Home() {
   // Cards data (no filtering)
   const filteredCards = useMemo(() => {
     if (!cards) return []
-    return cards
-  }, [cards])
+    if (productType === 'all') return cards
+    const normalizedType = productType.toLowerCase()
+    return cards.filter(card => (card.product_type || 'single').toLowerCase() === normalizedType)
+  }, [cards, productType])
 
   const table = useReactTable({
     data: filteredCards,
@@ -741,6 +743,11 @@ function Home() {
                                   onChange={e => setGlobalFilter(e.target.value)}
                               />
                           </div>
+                          {isFetching && !isLoading && (
+                            <div className="flex items-center text-[10px] uppercase tracking-widest text-muted-foreground">
+                              Refreshing…
+                            </div>
+                          )}
 
                           <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
                               <SimpleDropdown

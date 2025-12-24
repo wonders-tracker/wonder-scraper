@@ -9,6 +9,7 @@ export interface BlogPostFrontmatter {
   category: 'analysis' | 'news' | 'guide'
   tags: string[]
   image?: string
+  readTime?: number
 }
 
 export interface BlogPost {
