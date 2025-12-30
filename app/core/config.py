@@ -35,6 +35,25 @@ class Settings(BaseSettings):
     POLAR_SUCCESS_URL: str = ""  # Redirect URL after successful checkout
     POLAR_ENVIRONMENT: str = "production"  # "sandbox" or "production"
 
+    # Infrastructure
+    THREADPOOL_MAX_WORKERS: int = 40  # Cap AnyIO worker threads to avoid OS limits
+    RUN_SCHEDULER: bool = True  # Allow API dyno to turn scheduler off
+    MEMORY_LOG_INTERVAL_SECONDS: int = 0  # Disabled by default
+
+    # Anti-scraping
+    ANTI_SCRAPING_STATE_TTL_SECONDS: int = 900
+    ANTI_SCRAPING_MAX_TRACKED_IPS: int = 5000
+
+    # Database pool
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 5
+
+    # Cards API tuning
+    CARDS_CACHE_MAXSIZE: int = 250
+    CARDS_CACHE_TTL_SECONDS: int = 300
+    CARDS_DEFAULT_LIMIT: int = 200
+    CARDS_MAX_LIMIT: int = 300
+
     model_config = SettingsConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 
 
