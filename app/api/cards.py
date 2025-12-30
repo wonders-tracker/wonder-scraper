@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from cachetools import TTLCache
 
 from app.core.typing import col, ensure_int
+from app.core.config import settings
 from app.db import get_session
 from app.models.card import Card, Rarity
 from app.models.market import MarketSnapshot, MarketPrice
@@ -17,9 +18,8 @@ from app.services.pricing import FairMarketPriceService, FMP_AVAILABLE
 
 router = APIRouter()
 
-# Thread-safe LRU cache with TTL (max 1000 entries, 5 min TTL)
-# Prevents unbounded memory growth
-_cache = TTLCache(maxsize=1000, ttl=300)
+# Thread-safe LRU cache with TTL
+_cache = TTLCache(maxsize=settings.CARDS_CACHE_MAXSIZE, ttl=settings.CARDS_CACHE_TTL_SECONDS)
 _cache_lock = threading.Lock()
 
 
@@ -35,17 +35,37 @@ def get_cached(key: str) -> Optional[Any]:
         return _cache.get(key)
 
 
-def set_cache(key: str, value: Any, ttl: int = 300):
+def set_cache(key: str, value: Any):
     """Set cache entry (thread-safe). TTL managed by TTLCache."""
     with _cache_lock:
         _cache[key] = value
+
+
+def normalize_floor_cutoff(days: int = 30) -> datetime:
+    """
+    Get a normalized cutoff time for floor price calculations.
+
+    Rounds down to the nearest 5-minute boundary to ensure consistency
+    between list and detail endpoints within the same cache window.
+    This prevents floor price mismatches due to microsecond timing differences.
+    """
+    now = datetime.now(timezone.utc)
+    # Round down to nearest 5 minutes (matches cache TTL)
+    rounded = now.replace(second=0, microsecond=0)
+    rounded = rounded.replace(minute=(rounded.minute // 5) * 5)
+    return rounded - timedelta(days=days)
 
 
 @router.get("/")
 def read_cards(
     session: Session = Depends(get_session),
     skip: int = Query(default=0, ge=0, description="Offset for pagination"),
-    limit: int = Query(default=100, ge=1, le=500, description="Items per page (max 500)"),
+    limit: int = Query(
+        default=settings.CARDS_DEFAULT_LIMIT,
+        ge=1,
+        le=settings.CARDS_MAX_LIMIT,
+        description=f"Items per page (max {settings.CARDS_MAX_LIMIT})",
+    ),
     search: Optional[str] = None,
     time_period: Optional[str] = Query(default="7d", pattern="^(24h|7d|30d|90d|all)$"),
     product_type: Optional[str] = Query(default=None, description="Filter by product type (e.g., Single, Box, Pack)"),
@@ -271,8 +291,8 @@ def read_cards(
                 ORDER BY card_id, lowest_ask ASC
             """)
 
-            # First try 30 days
-            floor_cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
+            # First try 30 days (use normalized cutoff for consistency with detail endpoint)
+            floor_cutoff_30d = normalize_floor_cutoff(days=30)
             floor_variant_results = session.execute(
                 floor_by_variant_query, {"card_ids": card_ids, "cutoff": floor_cutoff_30d}
             ).all()
@@ -290,7 +310,7 @@ def read_cards(
             # Fallback: 90 days for cards still missing
             missing_floor_ids = [cid for cid in card_ids if cid not in floor_price_map]
             if missing_floor_ids:
-                floor_cutoff_90d = datetime.now(timezone.utc) - timedelta(days=90)
+                floor_cutoff_90d = normalize_floor_cutoff(days=90)
                 floor_variant_results_90d = session.execute(
                     floor_by_variant_query, {"card_ids": missing_floor_ids, "cutoff": floor_cutoff_90d}
                 ).all()
@@ -507,7 +527,7 @@ def read_cards(
         # Backwards compatible: return array directly when no pagination requested
         response_data = results_dict
 
-    set_cache(cache_key, response_data, ttl=300)  # 5 minutes
+    set_cache(cache_key, response_data)
 
     return JSONResponse(content=response_data, headers={"X-Cache": "MISS"})
 
@@ -696,7 +716,7 @@ def read_card(
 
     # Calculate floor_by_variant and lowest_ask_by_variant for single card
     try:
-        floor_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        floor_cutoff = normalize_floor_cutoff(days=30)
 
         # Floor by variant query
         floor_variant_query = text("""
@@ -731,9 +751,21 @@ def read_card(
 
         if floor_variant_results:
             floor_by_variant = {row[0]: round(float(row[1]), 2) for row in floor_variant_results}
-            # Update floor_price to be cheapest variant if FMP didn't provide one
-            if floor_price is None and floor_by_variant:
+            # Always use SQL-calculated floor_price for consistency with list endpoint
+            # (FMP service's floor_price uses different time anchor, causing mismatches)
+            if floor_by_variant:
                 floor_price = min(floor_by_variant.values())
+
+        # Fallback: 90 days if no 30-day data (matches list endpoint behavior)
+        if not floor_by_variant:
+            floor_cutoff_90d = normalize_floor_cutoff(days=90)
+            floor_variant_results_90d = session.execute(
+                floor_variant_query, {"card_id": card.id, "cutoff": floor_cutoff_90d}
+            ).all()
+            if floor_variant_results_90d:
+                floor_by_variant = {row[0]: round(float(row[1]), 2) for row in floor_variant_results_90d}
+                if floor_by_variant:
+                    floor_price = min(floor_by_variant.values())
 
         # Lowest ask by variant query
         # Note: Must GROUP BY the full CASE expression, not the alias
@@ -797,7 +829,7 @@ def read_card(
 
     # Cache result
     result_dict = c_out.model_dump(mode="json")
-    set_cache(cache_key, result_dict, ttl=300)
+    set_cache(cache_key, result_dict)
 
     return JSONResponse(content=result_dict, headers={"X-Cache": "MISS"})
 
