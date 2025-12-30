@@ -1,5 +1,5 @@
 """Blog API endpoints for weekly movers and content."""
-from typing import Any, Optional
+from typing import Any
 from datetime import datetime, timedelta, timezone
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -148,14 +148,15 @@ def get_weekly_movers_by_date(
     losers = []
 
     for mover in stats.top_movers:
+        pct_change = mover.get("pct_change", 0) or 0
         item = {
             "card_id": mover.get("card_id"),
             "name": mover.get("name"),
             "current_price": mover.get("current_price", 0),
             "prev_price": mover.get("prev_price", 0),
-            "pct_change": mover.get("pct_change", 0),
+            "pct_change": pct_change,
         }
-        if item["pct_change"] >= 0:
+        if pct_change >= 0:
             gainers.append(item)
         else:
             losers.append(item)
@@ -187,12 +188,12 @@ def get_weekly_movers_by_date(
 
     new_lows = [
         {
-            "card_id": l.get("card_id"),
-            "name": l.get("name"),
-            "current_price": l.get("price", 0),
-            "prev_price": l.get("prev_low", 0),
+            "card_id": low.get("card_id"),
+            "name": low.get("name"),
+            "current_price": low.get("price", 0),
+            "prev_price": low.get("prev_low", 0),
         }
-        for l in stats.new_lows
+        for low in stats.new_lows
     ]
 
     return {

@@ -247,6 +247,7 @@ def calculate_market_stats(
     own_session = session is None
     if own_session:
         session = Session(engine)
+    assert session is not None  # Type narrowing for type checker
 
     try:
         # Get all sold listings in period
@@ -380,8 +381,6 @@ def calculate_market_stats(
             # Check if treatment mix changed significantly
             current_premium_count = sum(len(v) for k, v in current_treatments.items() if k not in ["Classic Paper", "Paper"])
             prev_premium_count = sum(len(v) for k, v in prev_treatments.items() if k not in ["Classic Paper", "Paper"])
-            current_paper_count = sum(len(v) for k, v in current_treatments.items() if k in ["Classic Paper", "Paper"])
-            prev_paper_count = sum(len(v) for k, v in prev_treatments.items() if k in ["Classic Paper", "Paper"])
 
             # Build treatment summary
             treatment_summary = []
