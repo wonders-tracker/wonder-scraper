@@ -1,5 +1,10 @@
+import asyncio
 import logging
+import os
+import resource
+import sys
 from typing import Any, cast
+import anyio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -8,7 +13,7 @@ from app.api import auth, cards, portfolio, users, market, admin, blokpax, analy
 from app.api.billing import BILLING_AVAILABLE
 from app.middleware.metering import APIMeteringMiddleware, METERING_AVAILABLE
 from app.core.saas import get_mode_info
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from app.core.scheduler import start_scheduler
 from app.core.anti_scraping import AntiScrapingMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -16,16 +21,69 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 logger = logging.getLogger(__name__)
 
 
+def _current_rss_mb() -> float:
+    """Best-effort current RSS in MiB without external dependencies."""
+    try:
+        with open("/proc/self/statm", "r", encoding="utf-8") as statm:
+            parts = statm.readline().split()
+            if len(parts) > 1:
+                pages = int(parts[1])
+                page_size = os.sysconf("SC_PAGE_SIZE")
+                return pages * page_size / (1024 * 1024)
+    except (OSError, ValueError):
+        pass
+
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    rss = usage.ru_maxrss
+    if sys.platform == "darwin":
+        return rss / (1024 * 1024)
+    return rss / 1024
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Limit AnyIO worker threads so sync dependencies don't exhaust OS thread count.
+    thread_limiter = anyio.to_thread.current_default_thread_limiter()  # type: ignore[attr-defined]
+    original_tokens = thread_limiter.total_tokens
+    max_workers = max(1, settings.THREADPOOL_MAX_WORKERS)
+    if original_tokens != max_workers:
+        logger.info(
+            "Configuring AnyIO thread limiter: %s -> %s workers",
+            original_tokens,
+            max_workers,
+        )
+        thread_limiter.total_tokens = max_workers
+
     # Startup
     logger.info("=" * 50)
     logger.info("WondersTracker API Starting")
     logger.info(f"SaaS Features: {'ENABLED' if BILLING_AVAILABLE else 'DISABLED (OSS mode)'}")
     logger.info(f"Usage Metering: {'ENABLED' if METERING_AVAILABLE else 'DISABLED'}")
     logger.info("=" * 50)
-    start_scheduler()
-    yield
+    if settings.RUN_SCHEDULER:
+        start_scheduler()
+    else:
+        logger.info("RUN_SCHEDULER is false – skipping scheduler startup in this process.")
+
+    memory_task = None
+    if settings.MEMORY_LOG_INTERVAL_SECONDS > 0:
+        interval = max(5, settings.MEMORY_LOG_INTERVAL_SECONDS)
+
+        async def log_memory():
+            while True:
+                rss_mb = _current_rss_mb()
+                logger.info("Process RSS: %.1f MiB", rss_mb)
+                await asyncio.sleep(interval)
+
+        memory_task = asyncio.create_task(log_memory())
+
+    try:
+        yield
+    finally:
+        if memory_task:
+            memory_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await memory_task
     # Shutdown (scheduler stops automatically usually or we can stop it)
 
 
