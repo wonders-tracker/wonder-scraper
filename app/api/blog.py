@@ -1,4 +1,5 @@
 """Blog API endpoints for weekly movers and content."""
+
 from typing import Any
 from datetime import datetime, timedelta, timezone
 import logging
@@ -74,20 +75,25 @@ def list_weekly_movers(
             WHERE listing_type = 'sold'
             AND DATE(COALESCE(sold_date, scraped_at)) BETWEEN :start AND :end
         """)
-        stats = session.execute(stats_query, {
-            "start": week_start.strftime("%Y-%m-%d"),
-            "end": week_end.strftime("%Y-%m-%d") if isinstance(week_end, datetime) else week_end
-        }).first()
+        stats = session.execute(
+            stats_query,
+            {
+                "start": week_start.strftime("%Y-%m-%d"),
+                "end": week_end.strftime("%Y-%m-%d") if isinstance(week_end, datetime) else week_end,
+            },
+        ).first()
 
-        weeks.append({
-            "date": week_end.strftime("%Y-%m-%d") if isinstance(week_end, datetime) else week_end,
-            "week_start": week_start.strftime("%Y-%m-%d"),
-            "week_end": week_end.strftime("%Y-%m-%d") if isinstance(week_end, datetime) else week_end,
-            "total_sales": stats[0] if stats else 0,
-            "total_volume": float(stats[1]) if stats else 0,
-            "top_gainer": None,  # Would require additional query - keep simple for list view
-            "top_loser": None,
-        })
+        weeks.append(
+            {
+                "date": week_end.strftime("%Y-%m-%d") if isinstance(week_end, datetime) else week_end,
+                "week_start": week_start.strftime("%Y-%m-%d"),
+                "week_end": week_end.strftime("%Y-%m-%d") if isinstance(week_end, datetime) else week_end,
+                "total_sales": stats[0] if stats else 0,
+                "total_volume": float(stats[1]) if stats else 0,
+                "top_gainer": None,  # Would require additional query - keep simple for list view
+                "top_loser": None,
+            }
+        )
 
     return weeks
 

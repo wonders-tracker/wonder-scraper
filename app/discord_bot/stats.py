@@ -379,7 +379,9 @@ def calculate_market_stats(
             confidence = "high"  # high, medium, low
 
             # Check if treatment mix changed significantly
-            current_premium_count = sum(len(v) for k, v in current_treatments.items() if k not in ["Classic Paper", "Paper"])
+            current_premium_count = sum(
+                len(v) for k, v in current_treatments.items() if k not in ["Classic Paper", "Paper"]
+            )
             prev_premium_count = sum(len(v) for k, v in prev_treatments.items() if k not in ["Classic Paper", "Paper"])
 
             # Build treatment summary

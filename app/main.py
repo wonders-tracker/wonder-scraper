@@ -9,7 +9,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from app.core.config import settings
-from app.api import auth, cards, portfolio, users, market, admin, blokpax, analytics, meta, billing, webhooks, watchlist, blog
+from app.api import (
+    auth,
+    cards,
+    portfolio,
+    users,
+    market,
+    admin,
+    blokpax,
+    analytics,
+    meta,
+    billing,
+    webhooks,
+    watchlist,
+    blog,
+)
 from app.api.billing import BILLING_AVAILABLE
 from app.middleware.metering import APIMeteringMiddleware, METERING_AVAILABLE
 from app.core.saas import get_mode_info
