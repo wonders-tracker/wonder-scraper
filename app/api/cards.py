@@ -1,20 +1,22 @@
-from typing import Any, List, Optional
-import json
 import hashlib
+import json
 import threading
+from datetime import datetime, timedelta, timezone
+from typing import Any, List, Optional
+
+from cachetools import TTLCache
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
-from sqlmodel import Session, select, func, desc
-from datetime import datetime, timedelta, timezone
-from cachetools import TTLCache
+from sqlmodel import Session, desc, func, select
 
-from app.core.typing import col, ensure_int
 from app.core.config import settings
+from app.core.typing import col, ensure_int
 from app.db import get_session
 from app.models.card import Card, Rarity
-from app.models.market import MarketSnapshot, MarketPrice
-from app.schemas import CardOut, CardListItem, MarketSnapshotOut, MarketPriceOut
-from app.services.pricing import FairMarketPriceService, FMP_AVAILABLE
+from app.models.market import MarketPrice, MarketSnapshot
+from app.schemas import CardListItem, CardOut, MarketPriceOut, MarketSnapshotOut
+from app.services.order_book import get_order_book_analyzer
+from app.services.pricing import FMP_AVAILABLE, FairMarketPriceService
 
 router = APIRouter()
 
@@ -972,6 +974,59 @@ def read_card_pricing(
         "calculation_method": fmp_result.get("calculation_method"),  # 'formula' or 'median'
         "breakdown": fmp_result.get("breakdown"),  # None for non-Singles
         "by_treatment": treatment_fmps,
+    }
+
+
+@router.get("/{card_id}/order-book")
+def read_card_order_book(
+    card_id: str,  # Accept string to support both ID and slug
+    session: Session = Depends(get_session),
+    treatment: Optional[str] = Query(default=None, description="Filter by treatment (e.g., 'Classic Foil')"),
+    days: int = Query(default=30, ge=1, le=90, description="Lookback window for active listings"),
+) -> Any:
+    """
+    Get order book floor analysis for a card.
+
+    Analyzes active listings to find the floor price based on order book depth.
+    Returns the price bucket with most liquidity as the floor estimate.
+
+    The algorithm:
+    1. Fetches active listings (excluding bulk lots)
+    2. Filters outliers using gap analysis (>2σ from mean gap)
+    3. Creates adaptive price buckets (width = range/√n)
+    4. Finds the deepest bucket (most listings)
+    5. Returns the midpoint as floor estimate with confidence score
+
+    Confidence is based on:
+    - Depth ratio: How much of total liquidity is in the floor bucket
+    - Freshness: Penalty for stale listings (>14 days old)
+
+    Falls back to sales data if insufficient active listings (<3).
+    """
+    card = get_card_by_id_or_slug(session, card_id)
+
+    analyzer = get_order_book_analyzer(session)
+    result = analyzer.estimate_floor(
+        card_id=ensure_int(card.id),
+        treatment=treatment,
+        days=days,
+    )
+
+    if not result:
+        return {
+            "card_id": card.id,
+            "card_name": card.name,
+            "treatment": treatment,
+            "floor_estimate": None,
+            "confidence": 0,
+            "message": "Insufficient market data for floor estimation",
+        }
+
+    return {
+        "card_id": card.id,
+        "card_name": card.name,
+        "treatment": treatment,
+        **result.to_dict(),
     }
 
 
