@@ -27,7 +27,8 @@ from app.scraper.opensea import (
     OPENSEA_WOTF_COLLECTIONS,
     scrape_opensea_listings_to_db,
 )
-from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error, log_market_insights
+from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error, log_market_insights, log_warning
+from app.models.market import MarketPrice
 from datetime import datetime, timedelta, timezone
 
 scheduler = AsyncIOScheduler()
@@ -757,6 +758,81 @@ async def job_market_insights():
         log_scrape_error("Market Insights", str(e))
 
 
+async def job_scraper_health_check():
+    """
+    Check scraper health - alert if no sold listings in 24h.
+
+    This would have caught the Dec 20 timezone bug that broke sold scraping.
+    Runs every 4 hours to detect issues early.
+    """
+    print(f"[{datetime.now(timezone.utc)}] Running scraper health check...")
+
+    try:
+        with Session(engine) as session:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+
+            # Count sold listings in last 24h
+            sold_count = session.execute(
+                select(func.count(MarketPrice.id)).where(
+                    MarketPrice.listing_type == "sold",
+                    MarketPrice.scraped_at >= cutoff
+                )
+            ).scalar() or 0
+
+            # Count active listings in last 24h
+            active_count = session.execute(
+                select(func.count(MarketPrice.id)).where(
+                    MarketPrice.listing_type == "active",
+                    MarketPrice.scraped_at >= cutoff
+                )
+            ).scalar() or 0
+
+            print(f"[Health] Last 24h: {sold_count} sold, {active_count} active")
+
+            # Alert conditions
+            alerts = []
+
+            if sold_count == 0:
+                alerts.append(f"**No sold listings** scraped in the last 24 hours!")
+
+            if active_count == 0:
+                alerts.append(f"**No active listings** scraped in the last 24 hours!")
+
+            if sold_count == 0 and active_count == 0:
+                # Critical - both scrapers are broken
+                log_warning(
+                    "Scraper Health Critical",
+                    "Both sold and active scrapers appear to be broken.\n\n"
+                    f"**Sold (24h):** {sold_count}\n"
+                    f"**Active (24h):** {active_count}\n\n"
+                    "Check server logs for errors."
+                )
+            elif sold_count == 0:
+                # Sold scraper broken (like Dec 20 bug)
+                log_warning(
+                    "Sold Scraper Down",
+                    f"No sold listings scraped in the last 24 hours.\n\n"
+                    f"**Sold (24h):** {sold_count}\n"
+                    f"**Active (24h):** {active_count}\n\n"
+                    "This may indicate a scraper bug or eBay blocking."
+                )
+            elif active_count == 0:
+                # Active scraper broken
+                log_warning(
+                    "Active Scraper Down",
+                    f"No active listings scraped in the last 24 hours.\n\n"
+                    f"**Sold (24h):** {sold_count}\n"
+                    f"**Active (24h):** {active_count}\n\n"
+                    "This may indicate a scraper bug or eBay blocking."
+                )
+            else:
+                print(f"[Health] Scrapers healthy")
+
+    except Exception as e:
+        print(f"[Health] Error during health check: {e}")
+        log_scrape_error("Health Check", str(e))
+
+
 def start_scheduler():
     # Job configuration for durability:
     # - max_instances=1: Prevent overlapping runs
@@ -864,6 +940,18 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # Scraper health check every 4 hours
+    # Alerts if no sold/active listings in 24h (would catch Dec 20 bug)
+    scheduler.add_job(
+        job_scraper_health_check,
+        IntervalTrigger(hours=4),
+        id="job_scraper_health_check",
+        max_instances=1,
+        misfire_grace_time=3600,  # 1 hour
+        coalesce=True,
+        replace_existing=True,
+    )
+
     scheduler.start()
     print("Scheduler started (with misfire handling):")
     print("  - job_update_market_data (eBay): 45m interval, 30m grace")
@@ -874,3 +962,4 @@ def start_scheduler():
     print("  - job_send_weekly_reports (Email): Mon 9:30 UTC, 2h grace")
     print("  - job_check_price_alerts (Email): 30m interval, 15m grace")
     print("  - job_backfill_seller_data (Seller): 3:00 UTC daily, 2h grace")
+    print("  - job_scraper_health_check (Monitoring): 4h interval, 1h grace")
