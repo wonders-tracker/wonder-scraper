@@ -73,6 +73,11 @@ class MarketPrice(SQLModel, table=True):
     # Format: "PSA 10", "BGS 9.5", "TAG 10", "CGC 9.8", null for raw
     grading: Optional[str] = Field(default=None, index=True)
 
+    # Bulk lot flag - for excluding from FMP calculations
+    # Bulk lots are random/mixed card sales (e.g., "3X - Wonders... $0.65")
+    # NOT the same as quantity>1 (which is legitimate multi-unit sales of same item)
+    is_bulk_lot: bool = Field(default=False, index=True)
+
     # NFT Traits (for OpenSea/Blokpax listings)
     # Format: [{"trait_type": "Hierarchy", "value": "Spell"}, {"trait_type": "Artist", "value": "Romall Smith"}, ...]
     traits: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON))
