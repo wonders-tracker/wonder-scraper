@@ -20,7 +20,8 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
         print("Database connected. Fetching cards...", flush=True)
         # Get all cards
         all_cards = session.exec(select(Card)).all()
-        
+        print(f"Fetched {len(all_cards)} cards from DB", flush=True)
+
         cards_to_scrape = []
         cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
         
@@ -42,7 +43,7 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
             if len(cards_to_scrape) >= limit:
                 break
                 
-    print(f"Found {len(cards_to_scrape)} cards needing update (out of {len(all_cards)} total).")
+    print(f"Found {len(cards_to_scrape)} cards needing update (out of {len(all_cards)} total).", flush=True)
     
     if not cards_to_scrape:
         print("No cards need updating.")

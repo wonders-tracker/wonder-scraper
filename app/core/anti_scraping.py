@@ -7,10 +7,11 @@ import time
 import re
 import hashlib
 from collections import defaultdict
-from typing import Tuple, Dict, Set
+from typing import Tuple, Dict, Set, List, Optional
 from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from app.core.config import settings
 
 
 class AntiScrapingMiddleware(BaseHTTPMiddleware):
@@ -109,10 +110,41 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
         self._blocked_ips: Dict[str, float] = {}  # {ip: blocked_until_timestamp}
         self._fingerprints: Dict[str, Set[str]] = defaultdict(set)  # {ip: {fingerprint1, ...}}
         self._suspicious_ips: Dict[str, int] = defaultdict(int)  # {ip: violation_count}
+        self._ip_last_seen: Dict[str, float] = {}
+        self._state_ttl = settings.ANTI_SCRAPING_STATE_TTL_SECONDS
+        self._max_tracked_ips = settings.ANTI_SCRAPING_MAX_TRACKED_IPS
 
         # Compile patterns
         self._bot_pattern = re.compile("|".join(self.BOT_PATTERNS), re.IGNORECASE)
         self._headless_pattern = re.compile("|".join(self.HEADLESS_INDICATORS), re.IGNORECASE)
+
+    def _purge_expired_ips(self, now: Optional[float] = None):
+        """Remove IP state older than TTL or when we exceed capacity."""
+        if now is None:
+            now = time.time()
+        expired: List[str] = [ip for ip, ts in self._ip_last_seen.items() if now - ts > self._state_ttl]
+        for ip in expired:
+            self._clear_ip_state(ip)
+
+        if len(self._ip_last_seen) > self._max_tracked_ips:
+            overflow = len(self._ip_last_seen) - self._max_tracked_ips
+            # Drop oldest entries first
+            for ip, _ in sorted(self._ip_last_seen.items(), key=lambda item: item[1])[:overflow]:
+                self._clear_ip_state(ip)
+
+    def _mark_ip_active(self, ip: str, now: Optional[float] = None):
+        if now is None:
+            now = time.time()
+        self._ip_last_seen[ip] = now
+        self._purge_expired_ips(now)
+
+    def _clear_ip_state(self, ip: str):
+        """Remove all tracking info for an IP."""
+        self._ip_last_seen.pop(ip, None)
+        self._requests.pop(ip, None)
+        self._fingerprints.pop(ip, None)
+        self._suspicious_ips.pop(ip, None)
+        self._blocked_ips.pop(ip, None)
 
     def _get_client_ip(self, request: Request) -> str:
         """Extract real client IP from headers."""
@@ -274,6 +306,7 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
         if not self.enabled:
             return await call_next(request)
 
+        self._purge_expired_ips()
         path = request.url.path
 
         # Skip non-protected paths
@@ -281,6 +314,7 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         ip = self._get_client_ip(request)
+        self._mark_ip_active(ip)
 
         # Skip for trusted IPs (localhost, internal services)
         if ip in self.TRUSTED_IPS or ip.startswith("10.") or ip.startswith("172.") or ip.startswith("192.168."):

@@ -4,6 +4,7 @@ from sqlalchemy.engine import Engine
 import os
 import logging
 from dotenv import load_dotenv
+from app.core.config import settings
 
 load_dotenv()
 
@@ -26,8 +27,8 @@ if not DATABASE_URL:
 engine = create_engine(
     DATABASE_URL,
     echo=False,  # Disable query logging in production
-    pool_size=5,  # Smaller pool for serverless (Neon has own pooler)
-    max_overflow=10,  # Allow burst connections
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
     pool_pre_ping=True,  # Verify connections before use - critical for Neon
     pool_recycle=300,  # Recycle connections every 5 min (Neon drops idle connections)
     pool_timeout=30,  # Wait up to 30s for a connection
