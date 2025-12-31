@@ -10,6 +10,7 @@ from app.models.market import MarketPrice
 from app.services.ai_extractor import get_ai_extractor
 from app.db import engine
 from app.scraper.blocklist import load_blocklist
+from app.scraper.utils import is_bulk_lot
 
 STOPWORDS = {
     "the",
@@ -1544,6 +1545,8 @@ def _parse_generic_results(
             condition=metadata.get("condition"),
             shipping_cost=metadata.get("shipping_cost"),
             grading=grading,
+            # Bulk lot detection (for FMP exclusion)
+            is_bulk_lot=is_bulk_lot(metadata["title"], product_type),
             scraped_at=datetime.now(timezone.utc),
         )
 
@@ -1610,12 +1613,19 @@ def _parse_date(date_str: str) -> Optional[datetime]:
     # Try standard date parsing for absolute dates like "Oct 4, 2025" or "Dec 1"
     try:
         # Use current year as default if year not specified
-        parsed = parser.parse(clean_str, default=datetime(datetime.now(timezone.utc).year, 1, 1))
+        now = datetime.now(timezone.utc)
+        parsed = parser.parse(clean_str, default=datetime(now.year, 1, 1, tzinfo=timezone.utc))
+
+        # Ensure parsed datetime is timezone-aware (parser.parse may return naive)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
 
         # Sanity check: sold_date shouldn't be in future
-        if parsed > datetime.now(timezone.utc) + timedelta(days=1):
+        if parsed > now + timedelta(days=1):
             # If parsed date is in future, try previous year
-            parsed = parser.parse(clean_str, default=datetime(datetime.now(timezone.utc).year - 1, 1, 1))
+            parsed = parser.parse(clean_str, default=datetime(now.year - 1, 1, 1, tzinfo=timezone.utc))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
 
         # Sanity check: shouldn't be too old (before 2023 for this TCG)
         if parsed.year < 2023:
