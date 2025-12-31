@@ -12,6 +12,7 @@ const PriceHistoryChart = lazy(() => import('../components/charts/PriceHistoryCh
 import clsx from 'clsx'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
+import { SellerBadge } from '../components/SellerBadge'
 import { CardActionSplitButton } from '../components/CardActionSplitButton'
 import { ProductSubtypeBadge, getSubtypeColor } from '../components/ProductSubtypeBadge'
 import { LoginUpsellButton } from '../components/LoginUpsellOverlay'
@@ -470,11 +471,23 @@ function CardDetail() {
           header: () => <div className="text-right text-xs">Type</div>,
           cell: ({ row }) => (
             <div className="text-right">
-                <span className={clsx("px-1.5 py-0.5 rounded text-[10px] uppercase font-bold border", 
+                <span className={clsx("px-1.5 py-0.5 rounded text-[10px] uppercase font-bold border",
                     row.original.listing_type === 'sold' ? "border-brand-700 bg-brand-800/20 text-brand-400" : "border-blue-800 bg-blue-900/20 text-blue-500")}>
                     {row.original.listing_type || 'Sold'}
                 </span>
             </div>
+          )
+      },
+      {
+          accessorKey: 'seller_name',
+          header: 'Seller',
+          cell: ({ row }) => (
+            <SellerBadge
+              sellerName={row.original.seller_name}
+              feedbackScore={row.original.seller_feedback_score}
+              feedbackPercent={row.original.seller_feedback_percent}
+              size="xs"
+            />
           )
       }
   ], [])
