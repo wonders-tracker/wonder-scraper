@@ -1,7 +1,8 @@
 import { createFileRoute, useRouter, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { auth, api } from '../utils/auth'
+import { api } from '../utils/auth'
+import { useCurrentUser } from '../context/UserContext'
 import {
   Zap,
   Check,
@@ -30,7 +31,8 @@ interface SubscriptionStatus {
 
 function Upgrade() {
   const router = useRouter()
-  const isLoggedIn = auth.isAuthenticated()
+  const { user } = useCurrentUser()
+  const isLoggedIn = !!user
   const [isRedirecting, setIsRedirecting] = useState(false)
 
   // Get current subscription status

@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, auth } from '../utils/auth'
+import { api } from '../utils/auth'
 import { ThumbsUp, ThumbsDown, HelpCircle } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { DiscordIcon } from './icons/DiscordIcon'
+import { useCurrentUser } from '../context/UserContext'
 
 type MetaVoteSummary = {
   yes: number
@@ -22,7 +23,8 @@ type MetaVoteProps = {
 }
 
 export function MetaVote({ cardId }: MetaVoteProps) {
-  const isLoggedIn = auth.isAuthenticated()
+  const { user } = useCurrentUser()
+  const isLoggedIn = !!user
   const queryClient = useQueryClient()
 
   // Fetch current vote data

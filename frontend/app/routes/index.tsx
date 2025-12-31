@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
-import { api, auth } from '../utils/auth'
+import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel, getPaginationRowModel } from '@tanstack/react-table'
@@ -9,8 +9,11 @@ import clsx from 'clsx'
 import { Tooltip } from '../components/ui/tooltip'
 import { SimpleDropdown } from '../components/ui/dropdown'
 import { useTimePeriod } from '../context/TimePeriodContext'
+import { useCurrentUser } from '../context/UserContext'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
+
+const CARDS_FETCH_LIMIT = Number(import.meta.env.VITE_CARDS_FETCH_LIMIT ?? '200')
 
 // Card thumbnail that only renders if src provided and loads successfully
 // Uses image_url from API response (blob storage URLs with hash)
@@ -84,12 +87,6 @@ type Card = {
   volume_30d?: number // @deprecated: use 'volume'
   price_delta_24h?: number // @deprecated: use 'price_delta'
   last_sale_treatment?: string // @deprecated: use 'last_treatment'
-}
-
-type UserProfile = {
-    id: number
-    email: string
-    is_superuser: boolean
 }
 
 // Individual marketplace listing
@@ -183,20 +180,7 @@ function Home() {
     return () => clearTimeout(timer)
   }, [listingSearch])
 
-  // User profile is fetched in root layout and cached
-  // We just read from cache here (staleTime in root ensures it's fresh)
-  const { data: user } = useQuery({
-      queryKey: ['me'],
-      queryFn: async () => {
-          try {
-              return await api.get('users/me').json<UserProfile>()
-          } catch {
-              return null
-          }
-      },
-      retry: false,
-      staleTime: 30 * 60 * 1000, // 30 minutes - user data rarely changes
-  })
+  const { user } = useCurrentUser()
 
 
   const { data: cards, isLoading, isFetching } = useQuery({
@@ -205,7 +189,7 @@ function Home() {
       const platformParam = platform !== 'all' ? `&platform=${platform}` : ''
       // Load all cards - important ones can be deep in the list
       // slim=true reduces payload by ~50% for faster loading
-      const data = await api.get(`cards?limit=500&time_period=${timePeriod}${platformParam}&slim=true`).json<Card[]>()
+      const data = await api.get(`cards?limit=${CARDS_FETCH_LIMIT}&time_period=${timePeriod}${platformParam}&slim=true`).json<Card[]>()
       return data.map(c => ({
           ...c,
           // Use new field names with fallback to deprecated for backwards compat

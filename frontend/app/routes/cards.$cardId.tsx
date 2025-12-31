@@ -16,7 +16,7 @@ import { CardActionSplitButton } from '../components/CardActionSplitButton'
 import { ProductSubtypeBadge, getSubtypeColor } from '../components/ProductSubtypeBadge'
 import { LoginUpsellButton } from '../components/LoginUpsellOverlay'
 import { MetaVote } from '../components/MetaVote'
-import { auth } from '../utils/auth'
+import { useCurrentUser } from '../context/UserContext'
 
 type CardDetail = {
   id: number
@@ -255,8 +255,8 @@ function CardDetail() {
   const [reportSubmitting, setReportSubmitting] = useState(false)
   const [reportSubmitted, setReportSubmitted] = useState(false)
 
-  // Check if user is logged in
-  const isLoggedIn = auth.isAuthenticated()
+  const { user: currentUser } = useCurrentUser()
+  const isLoggedIn = !!currentUser
 
   // Track card listing view (with session-based milestone tracking)
   useEffect(() => {

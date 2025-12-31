@@ -8,6 +8,7 @@ import Marquee from '../components/ui/marquee'
 import { Tooltip } from '../components/ui/tooltip'
 import { Analytics } from '@vercel/analytics/react'
 import { TimePeriodProvider, useTimePeriod } from '../context/TimePeriodContext'
+import { UserProvider } from '../context/UserContext'
 
 type UserProfile = {
     id: number
@@ -171,22 +172,13 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
   const queryClient = useQueryClient()
 
   // Reactive auth state - listens for auth-change events from login/logout
-  const [hasToken, setHasToken] = useState(() =>
-    typeof window !== 'undefined' && !!localStorage.getItem('token')
-  )
 
   // Listen for auth changes (login/logout from same tab or other tabs)
   useEffect(() => {
     const handleAuthChange = async () => {
-      const newHasToken = !!localStorage.getItem('token')
-      setHasToken(newHasToken)
-      // Invalidate and refetch user query to ensure consistency
       await queryClient.invalidateQueries({ queryKey: ['me'] })
-      if (newHasToken) {
-        // Force refetch to ensure we have fresh data
-        queryClient.refetchQueries({ queryKey: ['me'] })
-      } else {
-        // Logged out - clear user data immediately to prevent stale state
+      const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('token')
+      if (!hasToken) {
         queryClient.setQueryData(['me'], null)
       }
     }
@@ -200,7 +192,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
     }
   }, [queryClient])
 
-  const { data: user } = useQuery({
+  const { data: user, isLoading: userLoading } = useQuery({
       queryKey: ['me'],
       queryFn: async () => {
           try {
@@ -212,7 +204,6 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
               return null
           }
       },
-      enabled: hasToken, // Only fetch if user has a token
       retry: false,
       staleTime: 5 * 60 * 1000, // 5 minutes - onboarding check is in beforeLoad now
   })
@@ -247,17 +238,20 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
   // For docs pages, render just the outlet with minimal wrapper
   if (isDocsPage) {
     return (
-      <>
-        <Analytics />
-        <div className="min-h-screen bg-background text-foreground antialiased font-mono">
-          <Outlet />
-        </div>
-      </>
+      <UserProvider user={user ?? null} isLoading={userLoading}>
+        <>
+          <Analytics />
+          <div className="min-h-screen bg-background text-foreground antialiased font-mono">
+            <Outlet />
+          </div>
+        </>
+      </UserProvider>
     )
   }
 
   return (
-    <>
+    <UserProvider user={user ?? null} isLoading={userLoading}>
+      <>
       {/* Vercel Analytics */}
       <Analytics />
 
@@ -530,6 +524,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
           </div>
         </footer>
       </div>
-    </>
+      </>
+    </UserProvider>
   )
 }

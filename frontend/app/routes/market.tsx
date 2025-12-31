@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { api, auth } from '../utils/auth'
+import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { ArrowLeft, TrendingUp, ArrowUp, ArrowDown, Activity, Zap, BarChart3, DollarSign, TableIcon, PieChartIcon, LineChart, Tag } from 'lucide-react'
 import { Tooltip } from '../components/ui/tooltip'
 import { lazy, Suspense } from 'react'
+import { useCurrentUser } from '../context/UserContext'
 
 // Lazy load recharts components (368KB) - only loads when user clicks Sentiment tab
 const SentimentChart = lazy(() => import('../components/charts/SentimentChart'))
@@ -53,7 +54,8 @@ function MarketAnalysis() {
   const [activeTab, setActiveTab] = useState<AnalyticsTab>('table')
 
   // Check if user is logged in
-  const isLoggedIn = auth.isAuthenticated()
+  const { user } = useCurrentUser()
+  const isLoggedIn = !!user
 
   // Track market page view
   useEffect(() => {
@@ -147,7 +149,7 @@ function MarketAnalysis() {
     'all': 20 * 60 * 1000, // 20 minutes for all time
   }
 
-  const { data: rawCards, isLoading } = useQuery({
+  const { data: rawCards, isLoading, isFetching } = useQuery({
     queryKey: ['market-overview', timeFrame],
     queryFn: async () => {
         const data = await api.get(`market/overview?time_period=${timeFrame}`).json<any[]>()
@@ -549,7 +551,7 @@ function MarketAnalysis() {
       },
   })
 
-  if (isLoading) {
+  if (!rawCards) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-background text-foreground font-mono">
             <div className="text-center animate-pulse">
@@ -602,6 +604,12 @@ function MarketAnalysis() {
                         <span className="w-2 h-2 bg-brand-300 rounded-full animate-pulse"></span>
                         Live
                     </div>
+                    {isFetching && (
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <span className="w-1.5 h-1.5 bg-muted-foreground/60 rounded-full animate-ping"></span>
+                            Refreshing
+                        </div>
+                    )}
                     <div>{cards.length} of {rawCards?.length || 0} Assets</div>
                 </div>
             </div>
