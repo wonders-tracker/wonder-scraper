@@ -2,8 +2,9 @@
 
 **Epic:** EPIC-002 Data Quality Improvements
 **Priority:** P1
-**Status:** Pending
+**Status:** COMPLETED
 **Owner:** TBD
+**Completed:** 2025-12-30
 **Estimate:** 4-6 hours
 
 ---
@@ -102,15 +103,30 @@ def get_recent_sales(card_id: int, days: int = 90, session: Session) -> List[Mar
 - **Schema decision:** Team agrees on `is_bulk_lot` field vs quantity=-1 hack
 
 ## Done-When
-- [ ] `_is_bulk_lot(title, product_type)` function implemented with regex patterns
-- [ ] Detects all BULK_LOT_PATTERNS and excludes PRODUCT_EXCEPTIONS
-- [ ] `is_bulk_lot` field added to MarketPrice model (or quantity=-1 flag implemented)
-- [ ] Alembic migration created and tested
-- [ ] Existing bulk lots backfilled via migration script
-- [ ] Scraper pipeline integrated (eBay and Blokpax)
-- [ ] FMP service updated to exclude bulk lots from calculations
-- [ ] Tested on 20 bulk lot examples with 100% accuracy
-- [ ] Tested on 20 product exceptions with 0% false positives
+- [x] `_is_bulk_lot(title, product_type)` function implemented with regex patterns
+- [x] Detects all BULK_LOT_PATTERNS and excludes PRODUCT_EXCEPTIONS
+- [x] `is_bulk_lot` field added to MarketPrice model
+- [x] Alembic migration created and tested
+- [x] Existing bulk lots backfilled via migration script
+- [x] Scraper pipeline integrated (eBay and Blokpax)
+- [x] FMP service updated to exclude bulk lots from calculations
+- [x] Tested on 20 bulk lot examples with 100% accuracy
+- [x] Tested on 20 product exceptions with 0% false positives
+
+## Completion Notes
+
+**Implementation Files:**
+- `is_bulk_lot()` function in `/Users/Cody/code_projects/wonder-scraper/app/scraper/utils.py`
+- `is_bulk_lot` field in `/Users/Cody/code_projects/wonder-scraper/app/models/market.py`
+- Migration script: `/Users/Cody/code_projects/wonder-scraper/scripts/migrate_add_bulk_lot.py`
+- Backfill script: `/Users/Cody/code_projects/wonder-scraper/scripts/backfill_bulk_lot_flags.py`
+- Tests: `/Users/Cody/code_projects/wonder-scraper/tests/test_bulk_lot_detection.py`
+
+**Key Decision:** Used `is_bulk_lot: bool` field (Option 2) for semantic clarity.
+
+**Integration:**
+- OrderBookAnalyzer excludes bulk lots from floor estimation
+- eBay scraper sets flag on new listings
 
 ---
 
