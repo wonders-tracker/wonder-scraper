@@ -377,6 +377,33 @@ function CardDetail() {
       staleTime: 5 * 60 * 1000, // 5 minutes - pricing is computed, changes slowly
   })
 
+  // Fetch Order Book floor data (OSS-compatible alternative to FMP pricing)
+  type OrderBookTreatment = {
+      treatment: string
+      floor_estimate: number | null
+      confidence: number
+      total_listings: number
+      source: string | null
+  }
+  type OrderBookData = {
+      card_id: number
+      card_name: string
+      overall_floor: number | null
+      overall_confidence: number
+      by_treatment: OrderBookTreatment[]
+  }
+  const { data: orderBookData } = useQuery({
+      queryKey: ['card-order-book', cardId],
+      queryFn: async () => {
+          try {
+            return await api.get(`cards/${cardId}/order-book/by-treatment`).json<OrderBookData>()
+          } catch (e) {
+              return null
+          }
+      },
+      staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+
   // Determine if this is an OpenSea/NFT item (no individual sales, only snapshots)
   const isOpenSeaItem = useMemo(() => {
       if (!history || history.length === 0) return true
@@ -1191,6 +1218,44 @@ function CardDetail() {
                                             <span className="text-[10px] text-muted-foreground font-mono">
                                                 ({item.sales_count})
                                             </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Order Book Floor by Treatment - Shows floor from active listings */}
+                        {orderBookData?.by_treatment && orderBookData.by_treatment.some(t => t.floor_estimate !== null) && (
+                            <div className="border border-border rounded bg-card px-4 py-3">
+                                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2 h-2 bg-brand-500 rounded-full"></span>
+                                        <Tooltip content="Floor price based on active listing depth. Confidence reflects data quality.">
+                                            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground cursor-help">
+                                                Floor by Treatment (Live)
+                                            </span>
+                                        </Tooltip>
+                                    </div>
+                                    <div className="h-4 w-px bg-border hidden sm:block"></div>
+                                    {orderBookData.by_treatment
+                                        .filter(item => item.floor_estimate !== null)
+                                        .sort((a, b) => (a.floor_estimate ?? Infinity) - (b.floor_estimate ?? Infinity))
+                                        .map((item, idx) => (
+                                        <div key={idx} className="flex items-center gap-2">
+                                            <TreatmentBadge treatment={item.treatment} size="xs" />
+                                            <span className="font-mono font-bold text-brand-400">
+                                                ${item.floor_estimate?.toFixed(2)}
+                                            </span>
+                                            <Tooltip content={`${item.total_listings} active listings • ${item.source === 'sales_fallback' ? 'Based on recent sales' : 'Based on active listings'}`}>
+                                                <span className={clsx(
+                                                    "text-[10px] font-mono cursor-help",
+                                                    item.confidence >= 0.7 ? "text-green-500" :
+                                                    item.confidence >= 0.4 ? "text-yellow-500" :
+                                                    "text-red-500"
+                                                )}>
+                                                    ({(item.confidence * 100).toFixed(0)}%)
+                                                </span>
+                                            </Tooltip>
                                         </div>
                                     ))}
                                 </div>

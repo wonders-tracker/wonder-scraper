@@ -1030,6 +1030,72 @@ def read_card_order_book(
     }
 
 
+@router.get("/{card_id}/order-book/by-treatment")
+def read_card_order_book_by_treatment(
+    card_id: str,
+    session: Session = Depends(get_session),
+    days: int = Query(default=30, ge=1, le=90, description="Lookback window for active listings"),
+) -> Any:
+    """
+    Get order book floor analysis for each treatment variant.
+
+    Returns floor price estimates for all common treatments (Classic Paper, Classic Foil, etc.)
+    This is the OSS-compatible alternative to /pricing which requires FMP (SaaS).
+
+    Useful for:
+    - Comparing floor prices across treatments
+    - Showing price breakdown in the UI when FMP is unavailable
+    """
+    card = get_card_by_id_or_slug(session, card_id)
+    analyzer = get_order_book_analyzer(session)
+
+    # Standard treatments for Singles
+    treatments = [
+        "Classic Paper",
+        "Classic Foil",
+        "Stonefoil",
+        "Formless Foil",
+        "Prerelease",
+        "Promo",
+        "OCM Serialized",
+    ]
+
+    results = []
+    for treatment in treatments:
+        result = analyzer.estimate_floor(
+            card_id=ensure_int(card.id),
+            treatment=treatment,
+            days=days,
+        )
+        if result:
+            results.append({
+                "treatment": treatment,
+                "floor_estimate": result.floor_estimate,
+                "confidence": result.confidence,
+                "total_listings": result.total_listings,
+                "source": result.source,
+            })
+        else:
+            results.append({
+                "treatment": treatment,
+                "floor_estimate": None,
+                "confidence": 0,
+                "total_listings": 0,
+                "source": None,
+            })
+
+    # Also get overall floor (all treatments combined)
+    overall = analyzer.estimate_floor(card_id=ensure_int(card.id), days=days)
+
+    return {
+        "card_id": card.id,
+        "card_name": card.name,
+        "overall_floor": overall.floor_estimate if overall else None,
+        "overall_confidence": overall.confidence if overall else 0,
+        "by_treatment": results,
+    }
+
+
 @router.get("/{card_id}/snapshots", response_model=List[MarketSnapshotOut])
 def read_snapshot_history(
     card_id: str,  # Accept string to support both ID and slug
