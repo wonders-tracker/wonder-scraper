@@ -50,20 +50,20 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
         return
 
     # Initialize browser once (with Pydoll's internal 60s timeout)
-    print("Initializing browser (may take up to 60 seconds)...")
+    print("Initializing browser (may take up to 60 seconds)...", flush=True)
     try:
         await BrowserManager.get_browser()
-        print("Browser ready!")
+        print("Browser ready!", flush=True)
     except Exception as e:
-        print(f"Browser initialization failed: {e}")
-        print("Attempting to continue with simple HTTP fallback...")
+        print(f"Browser initialization failed: {e}", flush=True)
+        print("Attempting to continue with simple HTTP fallback...", flush=True)
         # Don't exit - the simple_http fallback in scrape_card will handle it
-    
+
     try:
         for i, card in enumerate(cards_to_scrape):
             search_term = f"{card.name} {card.set_name}"
-            print(f"\n[{i+1}/{len(cards_to_scrape)}] Processing: {card.name}")
-            
+            print(f"\n[{i+1}/{len(cards_to_scrape)}] Processing: {card.name}", flush=True)
+
             try:
                 # Pass card_name separately from search_term to ensure strict validation
                 # Pass set_name to help build search variations
@@ -76,16 +76,16 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
                     is_backfill=True  # Bulk scrape should capture max historical data
                 )
             except Exception as e:
-                print(f"Error scraping {card.name}: {e}")
-            
+                print(f"Error scraping {card.name}: {e}", flush=True)
+
             # Random delay to be polite/safe
             delay = random.uniform(2, 5)
-            print(f"Sleeping for {delay:.2f}s...")
+            print(f"Sleeping for {delay:.2f}s...", flush=True)
             await asyncio.sleep(delay)
-            
+
     finally:
         await BrowserManager.close()
-        print("Bulk Scrape Complete.")
+        print("Bulk Scrape Complete.", flush=True)
 
 if __name__ == "__main__":
     import sys

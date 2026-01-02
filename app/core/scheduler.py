@@ -6,7 +6,9 @@ from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 from sqlmodel import Session, select
 from sqlalchemy import func
+from sqlalchemy.exc import OperationalError, DisconnectionError, InterfaceError
 from app.core.typing import col, ensure_int
+from app.core.db_utils import execute_with_retry_async, is_transient_error
 from app.db import engine
 from app.models.card import Card
 from app.models.market import MarketSnapshot
@@ -27,7 +29,13 @@ from app.scraper.opensea import (
     OPENSEA_WOTF_COLLECTIONS,
     scrape_opensea_listings_to_db,
 )
-from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error, log_market_insights, log_warning
+from app.discord_bot.logger import (
+    log_scrape_start,
+    log_scrape_complete,
+    log_scrape_error,
+    log_market_insights,
+    log_warning,
+)
 from app.models.market import MarketPrice
 from datetime import datetime, timedelta, timezone
 
@@ -52,8 +60,8 @@ async def scrape_single_card(card: Card):
         # Get active data
         low_ask, inventory, high_bid = await scrape_active_data(card.name, ensure_int(card.id), search_term=search_term)
 
-        # Update snapshot with active data
-        with Session(engine) as session:
+        # Update snapshot with active data (with retry for transient DB failures)
+        def update_snapshot(session: Session):
             statement = (
                 select(MarketSnapshot)
                 .where(MarketSnapshot.card_id == card.id)
@@ -66,24 +74,48 @@ async def scrape_single_card(card: Card):
                 snapshot.highest_bid = high_bid
                 session.add(snapshot)
                 session.commit()
+                return True
+            return False
+
+        try:
+            updated = await execute_with_retry_async(engine, update_snapshot)
+            if updated:
                 print(f"[Polling] Updated {card.name}: Ask=${low_ask}, Inv={inventory}")
+        except (OperationalError, DisconnectionError, InterfaceError) as db_error:
+            print(f"[Polling] DB error updating {card.name} (retries exhausted): {db_error}")
+            return False
 
         return True
     except Exception as e:
-        print(f"[Polling] Error updating {card.name}: {e}")
+        # Distinguish between DB errors and scrape errors for better diagnostics
+        error_type = "DB" if is_transient_error(e) else "Scrape"
+        print(f"[Polling] {error_type} error updating {card.name}: {e}")
         return False
 
 
 async def job_update_market_data():
     """
     Optimized polling job - scrapes cards in batches with concurrency control.
-    Includes robust error handling for browser startup failures.
+    Includes robust error handling for browser startup and database failures.
     """
     print(f"[{datetime.now(timezone.utc)}] Starting Scheduled Market Update...")
     start_time = time.time()
 
-    with Session(engine) as session:
-        # Get cards that haven't been updated in the last hour (or all if none)
+    # Verify database connection before starting heavy work
+    def check_connection(session: Session):
+        session.execute(select(func.count(Card.id)))
+        return True
+
+    try:
+        await execute_with_retry_async(engine, check_connection, max_retries=5, base_delay=2.0)
+        print("[Polling] Database connection verified")
+    except Exception as e:
+        print(f"[Polling] CRITICAL: Database connection failed after retries: {e}")
+        log_scrape_error("Market Update", f"Database connection failed: {e}")
+        return
+
+    # Fetch cards to update (with retry)
+    def get_cards_to_update(session: Session):
         cutoff_time = datetime.now(timezone.utc) - timedelta(hours=1)
 
         # Subquery for latest snapshot per card
@@ -100,12 +132,22 @@ async def job_update_market_data():
             .where((latest_snapshots.c.latest_timestamp < cutoff_time) | (latest_snapshots.c.latest_timestamp is None))
         )
 
-        cards_to_update = session.execute(cards_query).all()
+        # Use .scalars() to get Card objects directly, not Row tuples
+        cards = list(session.execute(cards_query).scalars().all())
 
         # If no stale cards, update a random sample
-        if not cards_to_update:
-            all_cards = session.execute(select(Card)).scalars().all()
-            cards_to_update = random.sample(all_cards, min(10, len(all_cards)))
+        if not cards:
+            all_cards = list(session.execute(select(Card)).scalars().all())
+            cards = random.sample(all_cards, min(10, len(all_cards)))
+
+        return cards
+
+    try:
+        cards_to_update = await execute_with_retry_async(engine, get_cards_to_update)
+    except Exception as e:
+        print(f"[Polling] CRITICAL: Failed to fetch cards: {e}")
+        log_scrape_error("Market Update", f"Failed to fetch cards: {e}")
+        return
 
     if not cards_to_update:
         print("[Polling] No cards to update.")
@@ -145,33 +187,75 @@ async def job_update_market_data():
         batch_size = 3
         successful = 0
         failed = 0
+        db_errors = 0
+        consecutive_db_failures = 0
+        max_consecutive_db_failures = 5  # Stop if DB consistently failing
 
         for i in range(0, len(cards_to_update), batch_size):
             batch = cards_to_update[i : i + batch_size]
+
+            # Every 10 batches (30 cards), verify DB connection is still healthy
+            if i > 0 and i % 30 == 0:
+                try:
+                    await execute_with_retry_async(engine, check_connection, max_retries=2)
+                    print(f"[Polling] Connection verified at batch {i // batch_size}")
+                    consecutive_db_failures = 0  # Reset on success
+                except Exception as e:
+                    print(f"[Polling] WARNING: Connection check failed at batch {i // batch_size}: {e}")
+                    consecutive_db_failures += 1
+                    if consecutive_db_failures >= max_consecutive_db_failures:
+                        print("[Polling] CRITICAL: Too many consecutive DB failures, aborting job")
+                        log_scrape_error("Market Update", f"Aborted: {consecutive_db_failures} consecutive DB failures")
+                        break
 
             # Process batch concurrently
             tasks = [scrape_single_card(card) for card in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Count successes/failures
+            # Count successes/failures with detailed error tracking
+            batch_db_errors = 0
             for result in results:
                 if isinstance(result, Exception):
                     failed += 1
+                    if is_transient_error(result):
+                        db_errors += 1
+                        batch_db_errors += 1
                 elif result:
                     successful += 1
+                    consecutive_db_failures = 0  # Reset on any success
                 else:
                     failed += 1
+
+            # Track consecutive DB failures
+            if batch_db_errors == len(batch):
+                consecutive_db_failures += 1
+                if consecutive_db_failures >= max_consecutive_db_failures:
+                    print("[Polling] CRITICAL: All cards in batch had DB errors, aborting job")
+                    log_scrape_error(
+                        "Market Update", f"Aborted: {consecutive_db_failures} consecutive batch DB failures"
+                    )
+                    break
 
             # Brief delay between batches
             if i + batch_size < len(cards_to_update):
                 await asyncio.sleep(5)
 
-        print(f"[Polling] Results: {successful} successful, {failed} failed out of {len(cards_to_update)} cards")
+        # Detailed results
+        total_cards = len(cards_to_update)
+        print(f"[Polling] Results: {successful}/{total_cards} successful, {failed} failed ({db_errors} DB errors)")
+
+        # Alert if high DB error rate
+        if db_errors > failed * 0.5 and db_errors > 5:
+            log_warning(
+                "⚠️ High DB Error Rate",
+                f"Market update had {db_errors} database errors out of {failed} total failures.\n"
+                "This may indicate Neon connection issues or resource exhaustion.",
+            )
 
         # Log scrape complete to Discord
         duration = time.time() - start_time
         log_scrape_complete(
-            cards_processed=len(cards_to_update),
+            cards_processed=total_cards,
             new_listings=0,  # Scheduled scrapes don't track new listings separately
             new_sales=0,
             duration_seconds=duration,
@@ -760,73 +844,124 @@ async def job_market_insights():
 
 async def job_scraper_health_check():
     """
-    Check scraper health - alert if no sold listings in 24h.
+    Check scraper health - alert on issues.
 
-    This would have caught the Dec 20 timezone bug that broke sold scraping.
+    Alerts on:
+    1. Zero sold listings in 24h (critical)
+    2. Less than 10 sold in 24h (warning - might be a partial failure)
+    3. Zero active listings in 24h (critical)
+    4. Multi-day gaps in scraping (checks last 7 days)
+
+    This would have caught the Dec 19-30 gap where the sold scraper failed.
     Runs every 4 hours to detect issues early.
     """
     print(f"[{datetime.now(timezone.utc)}] Running scraper health check...")
 
     try:
         with Session(engine) as session:
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+            now = datetime.now(timezone.utc)
+            cutoff_24h = now - timedelta(hours=24)
 
             # Count sold listings in last 24h
-            sold_count = session.execute(
-                select(func.count(MarketPrice.id)).where(
-                    MarketPrice.listing_type == "sold",
-                    MarketPrice.scraped_at >= cutoff
-                )
-            ).scalar() or 0
+            sold_count_24h = (
+                session.execute(
+                    select(func.count(MarketPrice.id)).where(
+                        MarketPrice.listing_type == "sold", MarketPrice.scraped_at >= cutoff_24h
+                    )
+                ).scalar()
+                or 0
+            )
 
             # Count active listings in last 24h
-            active_count = session.execute(
-                select(func.count(MarketPrice.id)).where(
-                    MarketPrice.listing_type == "active",
-                    MarketPrice.scraped_at >= cutoff
+            active_count_24h = (
+                session.execute(
+                    select(func.count(MarketPrice.id)).where(
+                        MarketPrice.listing_type == "active", MarketPrice.scraped_at >= cutoff_24h
+                    )
+                ).scalar()
+                or 0
+            )
+
+            print(f"[Health] Last 24h: {sold_count_24h} sold, {active_count_24h} active")
+
+            # Check for multi-day gaps in sold scraping (last 7 days)
+            days_with_scrapes = []
+            for days_ago in range(7):
+                day_start = (now - timedelta(days=days_ago)).replace(hour=0, minute=0, second=0, microsecond=0)
+                day_end = day_start + timedelta(days=1)
+
+                day_count = (
+                    session.execute(
+                        select(func.count(MarketPrice.id)).where(
+                            MarketPrice.listing_type == "sold",
+                            MarketPrice.scraped_at >= day_start,
+                            MarketPrice.scraped_at < day_end,
+                        )
+                    ).scalar()
+                    or 0
                 )
-            ).scalar() or 0
 
-            print(f"[Health] Last 24h: {sold_count} sold, {active_count} active")
+                days_with_scrapes.append((day_start.strftime("%b %d"), day_count))
 
-            # Alert conditions
-            alerts = []
+            # Find consecutive gaps
+            gap_days = [d for d, c in days_with_scrapes if c == 0]
+            low_volume_days = [d for d, c in days_with_scrapes if 0 < c < 10]
 
-            if sold_count == 0:
-                alerts.append(f"**No sold listings** scraped in the last 24 hours!")
+            # Build status report
+            status_lines = [f"**{d}:** {c}" for d, c in days_with_scrapes]
+            status_report = "\n".join(status_lines)
 
-            if active_count == 0:
-                alerts.append(f"**No active listings** scraped in the last 24 hours!")
-
-            if sold_count == 0 and active_count == 0:
+            # Determine alert level
+            if sold_count_24h == 0 and active_count_24h == 0:
                 # Critical - both scrapers are broken
                 log_warning(
-                    "Scraper Health Critical",
-                    "Both sold and active scrapers appear to be broken.\n\n"
-                    f"**Sold (24h):** {sold_count}\n"
-                    f"**Active (24h):** {active_count}\n\n"
-                    "Check server logs for errors."
+                    "🚨 Scraper Health Critical",
+                    "Both sold and active scrapers appear to be broken!\n\n"
+                    f"**Sold (24h):** {sold_count_24h}\n"
+                    f"**Active (24h):** {active_count_24h}\n\n"
+                    f"**Last 7 days:**\n{status_report}\n\n"
+                    "Check server logs and Railway deployment status.",
                 )
-            elif sold_count == 0:
-                # Sold scraper broken (like Dec 20 bug)
+            elif sold_count_24h == 0:
+                # Sold scraper down
                 log_warning(
-                    "Sold Scraper Down",
+                    "🔴 Sold Scraper Down",
                     f"No sold listings scraped in the last 24 hours.\n\n"
-                    f"**Sold (24h):** {sold_count}\n"
-                    f"**Active (24h):** {active_count}\n\n"
-                    "This may indicate a scraper bug or eBay blocking."
+                    f"**Sold (24h):** {sold_count_24h}\n"
+                    f"**Active (24h):** {active_count_24h}\n\n"
+                    f"**Last 7 days:**\n{status_report}\n\n"
+                    "This may indicate a browser crash, eBay blocking, or scheduler issue.",
                 )
-            elif active_count == 0:
-                # Active scraper broken
+            elif sold_count_24h < 10:
+                # Low volume warning
                 log_warning(
-                    "Active Scraper Down",
+                    "⚠️ Sold Scraper Low Volume",
+                    f"Only {sold_count_24h} sold listings scraped in 24 hours (expected 20+).\n\n"
+                    f"**Sold (24h):** {sold_count_24h}\n"
+                    f"**Active (24h):** {active_count_24h}\n\n"
+                    f"**Last 7 days:**\n{status_report}\n\n"
+                    "The scraper may be partially failing or running infrequently.",
+                )
+            elif len(gap_days) >= 2:
+                # Multi-day gap detected
+                log_warning(
+                    "⚠️ Scraper Gap Detected",
+                    f"Found {len(gap_days)} days with zero sold scrapes in the last 7 days.\n\n"
+                    f"**Gap days:** {', '.join(gap_days)}\n\n"
+                    f"**Last 7 days:**\n{status_report}\n\n"
+                    "This suggests the scraper was down intermittently.",
+                )
+            elif active_count_24h == 0:
+                # Active scraper down
+                log_warning(
+                    "🔴 Active Scraper Down",
                     f"No active listings scraped in the last 24 hours.\n\n"
-                    f"**Sold (24h):** {sold_count}\n"
-                    f"**Active (24h):** {active_count}\n\n"
-                    "This may indicate a scraper bug or eBay blocking."
+                    f"**Sold (24h):** {sold_count_24h}\n"
+                    f"**Active (24h):** {active_count_24h}\n\n"
+                    "This may indicate a browser crash or eBay blocking.",
                 )
             else:
-                print(f"[Health] Scrapers healthy")
+                print(f"[Health] Scrapers healthy. Gap days: {len(gap_days)}, Low days: {len(low_volume_days)}")
 
     except Exception as e:
         print(f"[Health] Error during health check: {e}")
@@ -940,14 +1075,15 @@ def start_scheduler():
         replace_existing=True,
     )
 
-    # Scraper health check every 4 hours
-    # Alerts if no sold/active listings in 24h (would catch Dec 20 bug)
+    # Scraper health check every 2 hours
+    # Alerts on: zero listings, low volume (<10), multi-day gaps
+    # Would have caught the Dec 19-30 gap where sold scraper failed
     scheduler.add_job(
         job_scraper_health_check,
-        IntervalTrigger(hours=4),
+        IntervalTrigger(hours=2),
         id="job_scraper_health_check",
         max_instances=1,
-        misfire_grace_time=3600,  # 1 hour
+        misfire_grace_time=1800,  # 30 minutes
         coalesce=True,
         replace_existing=True,
     )
@@ -962,4 +1098,4 @@ def start_scheduler():
     print("  - job_send_weekly_reports (Email): Mon 9:30 UTC, 2h grace")
     print("  - job_check_price_alerts (Email): 30m interval, 15m grace")
     print("  - job_backfill_seller_data (Seller): 3:00 UTC daily, 2h grace")
-    print("  - job_scraper_health_check (Monitoring): 4h interval, 1h grace")
+    print("  - job_scraper_health_check (Monitoring): 2h interval, 30m grace")
