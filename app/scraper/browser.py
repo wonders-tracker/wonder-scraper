@@ -8,6 +8,7 @@ import random
 import shutil
 import tempfile
 import subprocess
+import uuid
 
 
 # Serialize browser operations - only 1 at a time for stability
@@ -15,6 +16,9 @@ _semaphore = asyncio.Semaphore(1)
 
 # Flag to track if we're in a container environment
 IS_CONTAINER = os.path.exists("/.dockerenv") or os.getenv("RAILWAY_ENVIRONMENT") is not None
+
+# Unique session ID for this process (avoids PID=1 collision in containers)
+_SESSION_ID = uuid.uuid4().hex[:8]
 
 
 def find_chrome_binary() -> Optional[str]:
@@ -91,8 +95,47 @@ def find_chrome_binary() -> Optional[str]:
 
 
 def get_user_data_dir():
-    """Get unique profile directory for this process"""
-    return os.path.join(tempfile.gettempdir(), f"pydoll_profile_{os.getpid()}")
+    """Get unique profile directory for this process session."""
+    # Use session ID instead of PID - in containers PID is often 1
+    # which causes all instances to collide on the same profile
+    return os.path.join(tempfile.gettempdir(), f"pydoll_profile_{_SESSION_ID}")
+
+
+def kill_stale_chrome_processes():
+    """Kill any stale Chrome processes that might be blocking resources."""
+    if not IS_CONTAINER:
+        return  # Only needed in containers
+
+    try:
+        # Find and kill any chrome processes
+        result = subprocess.run(["pkill", "-9", "-f", "chrome"], capture_output=True, timeout=5)
+        if result.returncode == 0:
+            print("[Browser] Killed stale Chrome processes")
+    except Exception:
+        # pkill might not exist or no processes to kill - that's fine
+        pass
+
+
+def cleanup_stale_profiles():
+    """Clean up old profile directories from previous sessions."""
+    if not IS_CONTAINER:
+        return
+
+    try:
+        tmp_dir = tempfile.gettempdir()
+        current_profile = f"pydoll_profile_{_SESSION_ID}"
+
+        for item in os.listdir(tmp_dir):
+            if item.startswith("pydoll_profile_") and item != current_profile:
+                path = os.path.join(tmp_dir, item)
+                try:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path, ignore_errors=True)
+                        print(f"[Browser] Cleaned up stale profile: {item}")
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 class BrowserManager:
@@ -108,6 +151,11 @@ class BrowserManager:
             if not cls._browser:
                 print("[Browser] Starting pydoll browser...")
                 print(f"[Browser] Container environment: {IS_CONTAINER}")
+
+                # Clean up stale resources before starting
+                if IS_CONTAINER:
+                    kill_stale_chrome_processes()
+                    cleanup_stale_profiles()
 
                 options = ChromiumOptions()
                 options.headless = True
@@ -165,10 +213,14 @@ class BrowserManager:
                 except asyncio.TimeoutError:
                     print(f"[Browser] ERROR: Browser startup timed out after {cls._startup_timeout}s")
                     cls._browser = None
+                    # Force kill any stuck processes
+                    kill_stale_chrome_processes()
                     raise Exception(f"Browser startup timed out after {cls._startup_timeout}s")
                 except Exception as start_err:
                     print(f"[Browser] ERROR: Browser start failed: {type(start_err).__name__}: {start_err}")
                     cls._browser = None
+                    # Force kill any stuck processes on failure
+                    kill_stale_chrome_processes()
                     raise
 
             return cls._browser
@@ -182,6 +234,9 @@ class BrowserManager:
                 except Exception as e:
                     print(f"Error closing browser: {e}")
                 cls._browser = None
+                # Ensure Chrome processes are cleaned up
+                if IS_CONTAINER:
+                    kill_stale_chrome_processes()
 
     @classmethod
     async def restart(cls):
