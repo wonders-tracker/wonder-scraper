@@ -1,6 +1,7 @@
 from sqlmodel import create_engine, SQLModel, Session
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
+from urllib.parse import urlparse
 import os
 import logging
 from dotenv import load_dotenv
@@ -22,15 +23,43 @@ if not DATABASE_URL:
 
     DATABASE_URL = f"postgresql://{user}:{password}@{host}/{db}?sslmode={ssl_mode}"
 
+
+def _is_neon_pooler(url: str) -> bool:
+    """Check if using Neon's connection pooler (pgBouncer)."""
+    try:
+        parsed = urlparse(url)
+        return parsed.hostname is not None and "-pooler" in parsed.hostname
+    except Exception:
+        return False
+
+
+# Detect if using Neon pooler for optimized settings
+USING_NEON_POOLER = _is_neon_pooler(DATABASE_URL)
+
+# When using Neon pooler (pgBouncer), we need different settings:
+# - Smaller local pool (pooler handles connection reuse)
+# - Shorter recycle time (pooler manages long-lived connections)
+# - Can use more aggressive keepalives
+if USING_NEON_POOLER:
+    _pool_size = min(settings.DB_POOL_SIZE, 5)  # Smaller local pool with external pooler
+    _max_overflow = min(settings.DB_MAX_OVERFLOW, 3)
+    _pool_recycle = 180  # 3 min - pooler handles persistence
+    logger.info("Using Neon Pooler - optimized connection settings")
+else:
+    _pool_size = settings.DB_POOL_SIZE
+    _max_overflow = settings.DB_MAX_OVERFLOW
+    _pool_recycle = 300  # 5 min for direct connections
+    logger.info("Using direct Neon connection (consider enabling pooler for stability)")
+
 # Neon requires sslmode=require
 # Add connection pooling for better performance with Neon serverless
 engine = create_engine(
     DATABASE_URL,
     echo=False,  # Disable query logging in production
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_size=_pool_size,
+    max_overflow=_max_overflow,
     pool_pre_ping=True,  # Verify connections before use - critical for Neon
-    pool_recycle=300,  # Recycle connections every 5 min (Neon drops idle connections)
+    pool_recycle=_pool_recycle,
     pool_timeout=30,  # Wait up to 30s for a connection
     connect_args={
         "connect_timeout": 10,  # Connection timeout

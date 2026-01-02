@@ -37,6 +37,7 @@ from app.discord_bot.logger import (
     log_warning,
 )
 from app.models.market import MarketPrice
+from app.core.metrics import scraper_metrics
 from datetime import datetime, timedelta, timezone
 
 scheduler = AsyncIOScheduler()
@@ -155,6 +156,9 @@ async def job_update_market_data():
 
     print(f"[Polling] Updating {len(cards_to_update)} cards...")
 
+    # Record metrics start
+    scraper_metrics.record_start("ebay_market_update")
+
     # Log scrape start to Discord
     log_scrape_start(len(cards_to_update), scrape_type="scheduled")
 
@@ -262,9 +266,26 @@ async def job_update_market_data():
             errors=failed,
         )
 
+        # Record metrics
+        scraper_metrics.record_complete(
+            "ebay_market_update",
+            cards_processed=total_cards,
+            successful=successful,
+            failed=failed,
+            db_errors=db_errors,
+        )
+
     except Exception as e:
         print(f"[Polling] ERROR during scraping: {type(e).__name__}: {e}")
         log_scrape_error("Scheduled Job", str(e))
+        # Record failed metrics
+        scraper_metrics.record_complete(
+            "ebay_market_update",
+            cards_processed=0,
+            successful=0,
+            failed=1,
+            db_errors=0,
+        )
 
     finally:
         await BrowserManager.close()
@@ -280,6 +301,7 @@ async def job_update_blokpax_data():
     print(f"[{datetime.now(timezone.utc)}] Starting Blokpax Update...")
     start_time = time.time()
 
+    scraper_metrics.record_start("blokpax_opensea_update")
     log_scrape_start(len(WOTF_STOREFRONTS), scrape_type="blokpax")
 
     errors = 0
@@ -405,12 +427,23 @@ async def job_update_blokpax_data():
     total_listings += opensea_listings
 
     duration = time.time() - start_time
+    total_processed = len(WOTF_STOREFRONTS) + len(OPENSEA_WOTF_COLLECTIONS)
+
     log_scrape_complete(
-        cards_processed=len(WOTF_STOREFRONTS) + len(OPENSEA_WOTF_COLLECTIONS),
+        cards_processed=total_processed,
         new_listings=total_listings,
         new_sales=total_sales,
         duration_seconds=duration,
         errors=errors,
+    )
+
+    # Record metrics
+    scraper_metrics.record_complete(
+        "blokpax_opensea_update",
+        cards_processed=total_processed,
+        successful=total_processed - errors,
+        failed=errors,
+        db_errors=0,
     )
 
     print(
