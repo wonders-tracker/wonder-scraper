@@ -48,9 +48,28 @@ async def scrape_opensea_collection(collection_url: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"Failed to fetch ETH price: {e}")
 
-    try:
-        html = await get_page_content(collection_url)
+    # Try to get page content with browser - with graceful failure
+    html = None
+    max_browser_retries = 3
+    for attempt in range(max_browser_retries):
+        try:
+            html = await get_page_content(collection_url)
+            break
+        except Exception as browser_error:
+            print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}")
+            if attempt < max_browser_retries - 1:
+                wait_time = 5 * (2 ** attempt)
+                print(f"[OpenSea] Waiting {wait_time}s before retry...")
+                await asyncio.sleep(wait_time)
+            else:
+                print(f"[OpenSea] Browser scraping failed after {max_browser_retries} attempts")
+                return {}
 
+    if not html:
+        print("[OpenSea] No HTML content received")
+        return {}
+
+    try:
         # Wait additional time for dynamic content (volume loads via JS)
         await asyncio.sleep(5)
 
@@ -354,8 +373,29 @@ async def _scrape_opensea_sales_web(collection_slug: str, eth_price_usd: float, 
 
     sales: List[OpenSeaSale] = []
 
+    # Try to get page content with browser - with graceful failure
+    html = None
+    max_browser_retries = 3
+    for attempt in range(max_browser_retries):
+        try:
+            html = await get_page_content(activity_url)
+            break
+        except Exception as browser_error:
+            print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}")
+            if attempt < max_browser_retries - 1:
+                # Exponential backoff: 5s, 10s, 20s
+                wait_time = 5 * (2 ** attempt)
+                print(f"[OpenSea] Waiting {wait_time}s before retry...")
+                await asyncio.sleep(wait_time)
+            else:
+                print(f"[OpenSea] Browser scraping failed after {max_browser_retries} attempts, returning empty")
+                return []
+
+    if not html:
+        print("[OpenSea] No HTML content received, returning empty")
+        return []
+
     try:
-        html = await get_page_content(activity_url)
         await asyncio.sleep(3)  # Wait for JS to load
 
         soup = BeautifulSoup(html, "lxml")
@@ -633,8 +673,29 @@ async def _scrape_opensea_listings_web(
 
     listings: List[OpenSeaListing] = []
 
+    # Try to get page content with browser - with graceful failure
+    html = None
+    max_browser_retries = 3
+    for attempt in range(max_browser_retries):
+        try:
+            html = await get_page_content(collection_url)
+            break
+        except Exception as browser_error:
+            print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}")
+            if attempt < max_browser_retries - 1:
+                # Exponential backoff: 5s, 10s, 20s
+                wait_time = 5 * (2 ** attempt)
+                print(f"[OpenSea] Waiting {wait_time}s before retry...")
+                await asyncio.sleep(wait_time)
+            else:
+                print(f"[OpenSea] Browser scraping failed after {max_browser_retries} attempts, returning empty")
+                return []
+
+    if not html:
+        print("[OpenSea] No HTML content received, returning empty")
+        return []
+
     try:
-        html = await get_page_content(collection_url)
         await asyncio.sleep(3)  # Wait for JS to load
 
         soup = BeautifulSoup(html, "lxml")

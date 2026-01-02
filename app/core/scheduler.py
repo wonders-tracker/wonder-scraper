@@ -397,6 +397,14 @@ async def job_update_blokpax_data():
     opensea_listings = 0
     try:
         print(f"[{datetime.now(timezone.utc)}] Scraping OpenSea Active Listings...")
+
+        # Ensure browser is in clean state before OpenSea (may have stale state from eBay)
+        try:
+            await BrowserManager.close()
+            await asyncio.sleep(2)
+        except Exception:
+            pass  # Ignore cleanup errors
+
         with Session(engine) as session:
             for collection_slug, card_name in OPENSEA_WOTF_COLLECTIONS.items():
                 try:
@@ -423,6 +431,12 @@ async def job_update_blokpax_data():
         print(f"[OpenSea] Fatal error: {e}")
         log_scrape_error("OpenSea Scheduled", str(e))
         errors += 1
+    finally:
+        # Clean up browser after OpenSea scraping
+        try:
+            await BrowserManager.close()
+        except Exception:
+            pass
 
     total_listings += opensea_listings
 
@@ -1019,14 +1033,15 @@ def start_scheduler():
         replace_existing=True,
     )
 
-    # Blokpax scraping: 20 min interval (API-based, faster)
-    # Grace time of 10 min
+    # Blokpax + OpenSea scraping: 8 hour interval
+    # Reduced from 20 min to save resources (NFT markets move slower than eBay)
+    # Grace time of 1 hour
     scheduler.add_job(
         job_update_blokpax_data,
-        IntervalTrigger(minutes=20),
+        IntervalTrigger(hours=8),
         id="job_update_blokpax_data",
         max_instances=1,
-        misfire_grace_time=600,  # 10 minutes
+        misfire_grace_time=3600,  # 1 hour
         coalesce=True,
         replace_existing=True,
     )
@@ -1124,7 +1139,7 @@ def start_scheduler():
     scheduler.start()
     print("Scheduler started (with misfire handling):")
     print("  - job_update_market_data (eBay): 45m interval, 30m grace")
-    print("  - job_update_blokpax_data (Blokpax): 20m interval, 10m grace")
+    print("  - job_update_blokpax_data (Blokpax+OpenSea): 8h interval, 1h grace")
     print("  - job_market_insights (Discord AI): 9:00 & 18:00 UTC, 1h grace")
     print("  - job_send_daily_digests (Email): 9:15 UTC daily, 1h grace")
     print("  - job_send_personal_welcome_emails (Email): 10:00 UTC daily, 1h grace")
