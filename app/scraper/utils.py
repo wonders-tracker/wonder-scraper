@@ -69,13 +69,6 @@ def is_bulk_lot(title: str, product_type: str = "Single") -> bool:
     if re.search(r"(?i)\bcase\s+of\s+\d+", title_lower):
         return False
 
-    # Sealed products (Box, Pack, Bundle) are typically NOT bulk lots
-    # unless they match a bulk pattern explicitly
-    if product_type in ("Box", "Pack", "Bundle"):
-        # Allow sealed products through by default
-        # Only flag if explicit bulk lot pattern matches
-        pass
-
     # Check for bulk lot patterns
     for pattern in BULK_LOT_PATTERNS:
         if re.search(pattern, title):

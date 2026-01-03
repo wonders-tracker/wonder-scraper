@@ -407,7 +407,6 @@ def read_cards(
     for card in cards:
         card_snaps = snapshots_by_card.get(card.id, [])
         latest_snap = card_snaps[0] if card_snaps else None
-        card_snaps[-1] if card_snaps else None  # Oldest in the time window
 
         # Use actual last sale if available, otherwise fallback to avg
         last_sale_data = last_sale_map.get(card.id)
@@ -581,9 +580,6 @@ def read_card(
     snapshots = session.execute(stmt).scalars().all()
 
     latest_snap = snapshots[0] if snapshots else None
-    # Rough approximation for "oldest in recent history" since we don't have time_period param here easily
-    # Let's just take the last one fetched (up to 50 snapshots ago)
-    snapshots[-1] if snapshots else None
 
     # Fetch actual last sale using COALESCE for proper date ordering
     from sqlalchemy import text as sql_text
@@ -637,7 +633,7 @@ def read_card(
             ORDER BY COALESCE(sold_date, scraped_at) DESC LIMIT 1
         """)
         prev_res = session.execute(prev_q, {"cid": card.id, "cutoff": cutoff_30d}).first()
-        prev_res[0] if prev_res else None
+        # TODO: Use prev_res for trend calculation if needed
 
     except Exception:
         pass

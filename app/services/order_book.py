@@ -8,6 +8,7 @@ and returns the midpoint as the floor estimate with a confidence score.
 This service is available in both OSS and SaaS modes.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from math import sqrt
@@ -19,9 +20,13 @@ from sqlmodel import Session
 
 from app.db import engine
 
+logger = logging.getLogger(__name__)
+
 
 # Configuration constants
 class OrderBookConfig:
+    """Configuration constants for order book floor price estimation."""
+
     MIN_BUCKET_WIDTH: float = 5.0  # Minimum bucket size in dollars
     MAX_BUCKET_WIDTH: float = 50.0  # Maximum bucket size in dollars
     OUTLIER_SIGMA_THRESHOLD: float = 2.0  # Standard deviations for outlier detection
@@ -96,6 +101,12 @@ class OrderBookAnalyzer:
     """
 
     def __init__(self, session: Optional[Session] = None):
+        """
+        Initialize the OrderBookAnalyzer.
+
+        Args:
+            session: Optional SQLModel session. If not provided, creates new connections per query.
+        """
         self.session = session
         self.config = OrderBookConfig()
 
@@ -185,18 +196,22 @@ class OrderBookAnalyzer:
             ORDER BY price ASC
         """)
 
-        # Use provided session or create new one
-        if self.session:
-            result = self.session.execute(
-                query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
-            )
-            return [dict(row._mapping) for row in result.fetchall()]
-        else:
-            with engine.connect() as conn:
-                result = conn.execute(
+        try:
+            # Use provided session or create new one
+            if self.session:
+                result = self.session.execute(
                     query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
                 )
                 return [dict(row._mapping) for row in result.fetchall()]
+            else:
+                with engine.connect() as conn:
+                    result = conn.execute(
+                        query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
+                    )
+                    return [dict(row._mapping) for row in result.fetchall()]
+        except Exception as e:
+            logger.error(f"[OrderBook] Failed to fetch active listings for card {card_id}: {e}")
+            return []
 
     def _filter_outliers(
         self, prices: list[float]
@@ -321,17 +336,21 @@ class OrderBookAnalyzer:
             ORDER BY price ASC
         """)
 
-        if self.session:
-            result = self.session.execute(
-                query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
-            )
-            return [dict(row._mapping) for row in result.fetchall()]
-        else:
-            with engine.connect() as conn:
-                result = conn.execute(
+        try:
+            if self.session:
+                result = self.session.execute(
                     query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
                 )
                 return [dict(row._mapping) for row in result.fetchall()]
+            else:
+                with engine.connect() as conn:
+                    result = conn.execute(
+                        query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
+                    )
+                    return [dict(row._mapping) for row in result.fetchall()]
+        except Exception as e:
+            logger.error(f"[OrderBook] Failed to fetch sold listings for card {card_id}: {e}")
+            return []
 
     def _estimate_from_sales(
         self,
