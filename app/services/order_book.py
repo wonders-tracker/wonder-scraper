@@ -33,6 +33,8 @@ class OrderBookConfig:
     STALE_DAYS: int = 14  # Listings older than this reduce confidence
     MIN_LISTINGS: int = 3  # Minimum listings required for analysis
     DEFAULT_LOOKBACK_DAYS: int = 30  # Default window for active listings
+    SPARSE_DATA_CONFIDENCE_MULTIPLIER: float = 0.1  # Confidence per listing for sparse data (1-2 listings)
+    SALES_FALLBACK_CONFIDENCE_PENALTY: float = 0.5  # Confidence multiplier for sales fallback
 
 
 @dataclass
@@ -388,7 +390,7 @@ class OrderBookAnalyzer:
             lowest_price = min(prices)
             bucket = BucketInfo(lowest_price, lowest_price, len(prices))
             # Low confidence for sparse data
-            confidence = 0.1 * len(prices)  # 0.1 for 1 listing, 0.2 for 2
+            confidence = self.config.SPARSE_DATA_CONFIDENCE_MULTIPLIER * len(prices)
             return OrderBookResult(
                 floor_estimate=round(lowest_price, 2),
                 confidence=round(confidence, 3),
@@ -424,9 +426,9 @@ class OrderBookAnalyzer:
             if d < stale_cutoff:
                 stale_count += 1
 
-        # Calculate confidence with 0.5x penalty for sales fallback
+        # Calculate confidence with penalty for sales fallback
         base_confidence = self._calculate_confidence(deepest, len(filtered_prices), stale_count)
-        confidence = round(base_confidence * 0.5, 3)
+        confidence = round(base_confidence * self.config.SALES_FALLBACK_CONFIDENCE_PENALTY, 3)
 
         return OrderBookResult(
             floor_estimate=round(deepest.midpoint, 2),

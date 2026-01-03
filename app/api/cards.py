@@ -625,16 +625,6 @@ def read_card(
         if vol_res:
             volume_30d = vol_res[0] or 0
 
-        # Fetch Prev Close (30 days ago for trend calculation)
-        prev_q = text("""
-            SELECT price FROM marketprice
-            WHERE card_id = :cid AND listing_type = 'sold'
-            AND COALESCE(sold_date, scraped_at) < :cutoff
-            ORDER BY COALESCE(sold_date, scraped_at) DESC LIMIT 1
-        """)
-        prev_res = session.execute(prev_q, {"cid": card.id, "cutoff": cutoff_30d}).first()
-        # TODO: Use prev_res for trend calculation if needed
-
     except Exception:
         pass
 
