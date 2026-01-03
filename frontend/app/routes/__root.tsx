@@ -213,7 +213,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
   // Fetch cards for marquee ticker - uses shared time period
   // Uses same query key as dashboard so data is shared/cached
   // slim=true reduces payload by ~50% for faster loading
-  const { data: cards = [] } = useQuery({
+  const { data: cards = [], isLoading: isLoadingCards } = useQuery({
       queryKey: ['cards', timePeriod, 'all'], // Same key as dashboard with productType='all'
       queryFn: async () => {
           return await api.get(`cards?limit=500&time_period=${timePeriod}&slim=true`).json<Card[]>()
@@ -453,28 +453,39 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
 
           {/* Scrolling Ticker */}
           <div className="flex-1 min-w-0">
-            <Marquee pauseOnHover className="[--gap:2rem]">
-              {/* Fallback if lists are empty: show top volume items */}
-              {(topGainers.length === 0 && topLosers.length === 0) && topVolume.map(c => (
-                <div key={`ticker-vol-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                  <span className="font-bold uppercase">{c.name}</span>
-                  <span className="text-muted-foreground">${Number(c.latest_price).toFixed(2)}</span>
-                </div>
-              ))}
+            {isLoadingCards ? (
+              <div className="flex items-center gap-8 px-4 h-full">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-2 animate-pulse">
+                    <div className="h-3 w-20 bg-muted rounded" />
+                    <div className="h-3 w-12 bg-muted rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Marquee pauseOnHover className="[--gap:2rem]">
+                {/* Fallback if lists are empty: show top volume items */}
+                {(topGainers.length === 0 && topLosers.length === 0) && topVolume.map(c => (
+                  <div key={`ticker-vol-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
+                    <span className="font-bold uppercase">{c.name}</span>
+                    <span className="text-muted-foreground">${Number(c.latest_price).toFixed(2)}</span>
+                  </div>
+                ))}
 
-              {topGainers.map(c => (
-                <div key={`ticker-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                  <span className="font-bold uppercase">{c.name}</span>
-                  <span className="text-brand-300">+{getDelta(c).toFixed(1)}%</span>
-                </div>
-              ))}
-              {topLosers.map(c => (
-                <div key={`ticker-loss-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                  <span className="font-bold uppercase">{c.name}</span>
-                  <span className="text-red-500">{getDelta(c).toFixed(1)}%</span>
-                </div>
-              ))}
-            </Marquee>
+                {topGainers.map(c => (
+                  <div key={`ticker-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
+                    <span className="font-bold uppercase">{c.name}</span>
+                    <span className="text-brand-300">+{getDelta(c).toFixed(1)}%</span>
+                  </div>
+                ))}
+                {topLosers.map(c => (
+                  <div key={`ticker-loss-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
+                    <span className="font-bold uppercase">{c.name}</span>
+                    <span className="text-red-500">{getDelta(c).toFixed(1)}%</span>
+                  </div>
+                ))}
+              </Marquee>
+            )}
           </div>
         </div>
 
