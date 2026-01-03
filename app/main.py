@@ -118,9 +118,9 @@ origins = [
 # Clean up duplicates and empty strings
 origins = list(set([o for o in origins if o]))
 
-# CRITICAL: Add ProxyHeadersMiddleware FIRST to trust X-Forwarded-* headers from Railway
-# This prevents FastAPI from redirecting HTTPS requests to HTTP
-app.add_middleware(cast(Any, ProxyHeadersMiddleware), trusted_hosts=["*"])
+# Middleware order matters! They execute in REVERSE order of addition.
+# So the LAST added middleware executes FIRST on the request.
+# Order: CORS -> Proxy -> GZip -> Metering -> AntiScraping
 
 # Anti-scraping middleware - detects bots, headless browsers, rate limits
 # Protects /api/v1/cards, /api/v1/market, /api/v1/blokpax endpoints
@@ -133,13 +133,19 @@ app.add_middleware(cast(Any, APIMeteringMiddleware))
 # GZip compression for responses > 1KB (80-90% bandwidth reduction)
 app.add_middleware(cast(Any, GZipMiddleware), minimum_size=1000)
 
+# ProxyHeadersMiddleware to trust X-Forwarded-* headers from Railway
+# This prevents FastAPI from redirecting HTTPS requests to HTTP
+app.add_middleware(cast(Any, ProxyHeadersMiddleware), trusted_hosts=["*"])
+
+# CORS middleware LAST (so it runs FIRST) to handle preflight OPTIONS requests
+# before any other middleware can reject them
 app.add_middleware(
     cast(Any, CORSMiddleware),
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Bot-Warning", "X-Automation-Warning"],  # Expose warning headers
+    expose_headers=["X-Bot-Warning", "X-Automation-Warning"],
 )
 
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])

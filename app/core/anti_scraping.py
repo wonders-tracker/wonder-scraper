@@ -406,7 +406,14 @@ class APIKeyRateLimiter:
     def __init__(self):
         self._minute_requests: Dict[str, list] = defaultdict(list)  # {key_hash: [timestamps]}
         self._day_requests: Dict[str, int] = defaultdict(int)  # {key_hash: count}
-        self._day_reset: Dict[str, float] = {}  # {key_hash: reset_timestamp}
+        self._day_start: Dict[str, float] = {}  # {key_hash: day_start_timestamp}
+
+    def _get_day_start(self) -> float:
+        """Get the start of the current UTC day as a timestamp."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return day_start.timestamp()
 
     def check_limit(self, key_hash: str, per_minute: int = 60, per_day: int = 10000) -> Tuple[bool, str]:
         """
@@ -414,14 +421,14 @@ class APIKeyRateLimiter:
         Returns (allowed, reason).
         """
         now = time.time()
+        current_day_start = self._get_day_start()
 
-        # Check daily reset
-        if key_hash in self._day_reset:
-            if now > self._day_reset[key_hash]:
-                self._day_requests[key_hash] = 0
-                self._day_reset[key_hash] = now + 86400
-        else:
-            self._day_reset[key_hash] = now + 86400
+        # Check if we need to reset daily counter (new UTC day)
+        stored_day_start = self._day_start.get(key_hash, 0)
+        if current_day_start > stored_day_start:
+            # New day - reset counter
+            self._day_requests[key_hash] = 0
+            self._day_start[key_hash] = current_day_start
 
         # Check daily limit
         if self._day_requests[key_hash] >= per_day:
@@ -440,6 +447,16 @@ class APIKeyRateLimiter:
         """Record a request for an API key."""
         self._minute_requests[key_hash].append(time.time())
         self._day_requests[key_hash] += 1
+
+    def get_usage(self, key_hash: str) -> Dict[str, int]:
+        """Get current usage stats for an API key."""
+        now = time.time()
+        # Clean minute requests for accurate count
+        self._minute_requests[key_hash] = [ts for ts in self._minute_requests[key_hash] if now - ts < 60]
+        return {
+            "requests_this_minute": len(self._minute_requests[key_hash]),
+            "requests_today": self._day_requests[key_hash],
+        }
 
 
 # Global instances

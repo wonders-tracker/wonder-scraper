@@ -9,7 +9,14 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str = ""  # Must be set via environment variable
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days (matches cookie expiry)
+
+    def model_post_init(self, __context) -> None:
+        """Validate critical settings after initialization."""
+        if not self.SECRET_KEY:
+            raise ValueError(
+                "SECRET_KEY environment variable is required. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+            )
 
     # Discord OAuth
     DISCORD_CLIENT_ID: str = ""  # Required in production, optional for tests
@@ -47,6 +54,13 @@ class Settings(BaseSettings):
     # Database pool
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 5
+
+    # Auth tokens
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # Short-lived access token
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # Refresh token in httpOnly cookie
+
+    # CSRF Protection
+    CSRF_SECRET: str = ""  # Falls back to SECRET_KEY if not set
 
     # Cards API tuning
     CARDS_CACHE_MAXSIZE: int = 250
