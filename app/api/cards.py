@@ -15,6 +15,7 @@ from app.db import get_session
 from app.models.card import Card, Rarity
 from app.models.market import MarketPrice, MarketSnapshot
 from app.schemas import CardListItem, CardOut, MarketPriceOut, MarketSnapshotOut
+from app.services.floor_price import get_floor_price_service
 from app.services.order_book import get_order_book_analyzer
 from app.services.pricing import FMP_AVAILABLE, FairMarketPriceService
 
@@ -1079,6 +1080,54 @@ def read_card_order_book_by_treatment(
         "overall_floor": overall.floor_estimate if overall else None,
         "overall_confidence": overall.confidence if overall else 0,
         "by_treatment": results,
+    }
+
+
+@router.get("/{card_id}/floor-price")
+def read_card_floor_price(
+    card_id: str,  # Accept string to support both ID and slug
+    session: Session = Depends(get_session),
+    treatment: Optional[str] = Query(default=None, description="Filter by treatment (e.g., 'Classic Foil')"),
+    days: int = Query(default=30, ge=1, le=90, description="Initial lookback window (auto-expands to 90d if needed)"),
+    include_blokpax: bool = Query(default=True, description="Include Blokpax sales in calculation"),
+) -> Any:
+    """
+    Get hybrid floor price estimate for a card.
+
+    Uses a decision tree that combines sales data and order book analysis:
+    1. If >=4 sales in window: Return sales floor (avg of lowest 4) with HIGH confidence
+    2. If order book confidence >30%: Return order book floor with mapped confidence
+    3. If 2-3 sales: Return sales floor with LOW/MEDIUM confidence
+    4. Auto-expands to 90 days if insufficient data in initial window
+    5. Returns null if no data available
+
+    Sources combined:
+    - eBay sales (marketprice.platform='ebay')
+    - OpenSea sales (marketprice.platform='opensea')
+    - Blokpax sales (blokpaxsale table) when include_blokpax=True
+
+    Response includes:
+    - price: The floor price estimate (or null)
+    - source: 'sales', 'order_book', or 'none'
+    - confidence: 'high', 'medium', or 'low'
+    - confidence_score: Raw 0.0-1.0 score
+    - metadata: Source-specific details (sales_count, platforms, bucket_depth, etc.)
+    """
+    card = get_card_by_id_or_slug(session, card_id)
+
+    service = get_floor_price_service(session)
+    result = service.get_floor_price(
+        card_id=ensure_int(card.id),
+        treatment=treatment,
+        days=days,
+        include_blokpax=include_blokpax,
+    )
+
+    return {
+        "card_id": card.id,
+        "card_name": card.name,
+        "treatment": treatment,
+        **result.to_dict(),
     }
 
 
