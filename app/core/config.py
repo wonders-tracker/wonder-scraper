@@ -70,7 +70,7 @@ class Settings(BaseSettings):
 
     # ===== Browser Scraper Settings =====
     # Concurrent browser tab operations (4 tabs balances speed vs memory)
-    BROWSER_SEMAPHORE_LIMIT: int = 4
+    BROWSER_SEMAPHORE_LIMIT: int = 2  # Reduced from 4 to avoid eBay rate limits
     # Maximum browser restart attempts before extended cooldown
     BROWSER_MAX_RESTARTS: int = 3
     # Seconds to wait for browser to start

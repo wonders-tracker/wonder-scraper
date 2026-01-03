@@ -106,13 +106,11 @@ def get_user_data_dir():
 
 def kill_stale_chrome_processes():
     """Kill any stale Chrome processes that might be blocking resources."""
-    if not IS_CONTAINER:
-        return  # Only needed in containers
-
     try:
-        # Find and kill any chrome processes (with timeout to prevent hanging)
+        # Find and kill any orphaned chrome processes
+        # On macOS, use pkill with pattern matching for headless Chrome
         result = subprocess.run(
-            ["pkill", "-9", "-f", "chrome"],
+            ["pkill", "-9", "-f", "chrome.*--headless"],
             capture_output=True,
             timeout=settings.BROWSER_PKILL_TIMEOUT,
         )
@@ -127,8 +125,6 @@ def kill_stale_chrome_processes():
 
 def cleanup_stale_profiles():
     """Clean up old profile directories from previous sessions."""
-    if not IS_CONTAINER:
-        return
 
     try:
         tmp_dir = tempfile.gettempdir()
@@ -157,115 +153,144 @@ class BrowserManager:
     _startup_timeout: int = settings.BROWSER_STARTUP_TIMEOUT
     _page_count: int = 0
     _max_pages_before_restart: int = settings.BROWSER_MAX_PAGES_BEFORE_RESTART
+    _restarting: bool = False  # Flag to coordinate concurrent restart requests
+    _last_restart_time: float = 0  # Timestamp of last restart
 
     @classmethod
     async def get_browser(cls) -> Chrome:
         async with cls._lock:
             if not cls._browser:
-                print("[Browser] Starting pydoll browser...")
-                print(f"[Browser] Container environment: {IS_CONTAINER}")
-
-                # Clean up stale resources before starting
-                if IS_CONTAINER:
-                    kill_stale_chrome_processes()
-                    cleanup_stale_profiles()
-
-                options = ChromiumOptions()
-                options.headless = True
-
-                # Use system Chrome if available (for production containers)
-                chrome_path = find_chrome_binary()
-                if chrome_path:
-                    print(f"[Browser] Using Chrome: {chrome_path}")
-                    options.binary_location = chrome_path
-                else:
-                    print("[Browser] ERROR: No Chrome binary found. Browser will likely fail.")
-
-                # Essential args for headless Chrome in containers
-                options.add_argument("--no-sandbox")
-                options.add_argument("--disable-dev-shm-usage")
-                options.add_argument("--disable-gpu")
-                options.add_argument("--disable-software-rasterizer")
-
-                # Anti-detection args
-                options.add_argument("--disable-blink-features=AutomationControlled")
-
-                # Memory optimization for containers
-                options.add_argument("--disable-extensions")
-                options.add_argument("--disable-plugins")
-
-                # Additional container-specific settings
-                if IS_CONTAINER:
-                    print("[Browser] Applying container-specific settings...")
-                    options.add_argument("--disable-setuid-sandbox")
-                    options.add_argument("--disable-background-networking")
-                    options.add_argument("--disable-default-apps")
-                    options.add_argument("--disable-sync")
-                    options.add_argument("--disable-translate")
-                    options.add_argument("--metrics-recording-only")
-                    options.add_argument("--mute-audio")
-                    # Note: --no-first-run is added automatically by pydoll
-                    options.add_argument("--safebrowsing-disable-auto-update")
-                    # Reduce process count
-                    options.add_argument("--renderer-process-limit=1")
-                    options.add_argument("--disable-features=TranslateUI")
-
-                # Use unique profile per process
-                profile_dir = get_user_data_dir()
-                print(f"[Browser] Using profile: {profile_dir}")
-                options.add_argument(f"--user-data-dir={profile_dir}")
-
-                # Create browser instance
-                cls._browser = Chrome(options=options)
-
-                # Start with timeout
-                try:
-                    print(f"[Browser] Starting browser with {cls._startup_timeout}s timeout...")
-                    await asyncio.wait_for(cls._browser.start(), timeout=cls._startup_timeout)
-                    print("[Browser] Pydoll browser started successfully!")
-                except asyncio.TimeoutError:
-                    print(f"[Browser] ERROR: Browser startup timed out after {cls._startup_timeout}s")
-                    cls._browser = None
-                    # Force kill any stuck processes
-                    kill_stale_chrome_processes()
-                    raise Exception(f"Browser startup timed out after {cls._startup_timeout}s")
-                except Exception as start_err:
-                    print(f"[Browser] ERROR: Browser start failed: {type(start_err).__name__}: {start_err}")
-                    cls._browser = None
-                    # Force kill any stuck processes on failure
-                    kill_stale_chrome_processes()
-                    raise
-
+                await cls._start_browser_internal()
             return cls._browser
+
+    @classmethod
+    async def _close_internal(cls):
+        """Internal close - assumes lock is already held."""
+        if cls._browser:
+            try:
+                await asyncio.wait_for(cls._browser.stop(), timeout=10)
+            except asyncio.TimeoutError:
+                print("[Browser] Stop timed out, forcing cleanup")
+            except Exception as e:
+                print(f"[Browser] Error closing browser: {e}")
+            cls._browser = None
+            # Ensure Chrome processes are cleaned up
+            kill_stale_chrome_processes()
 
     @classmethod
     async def close(cls):
         async with cls._lock:
-            if cls._browser:
-                try:
-                    await cls._browser.stop()
-                except Exception as e:
-                    print(f"Error closing browser: {e}")
-                cls._browser = None
-                # Ensure Chrome processes are cleaned up
-                if IS_CONTAINER:
-                    kill_stale_chrome_processes()
+            await cls._close_internal()
 
     @classmethod
     async def restart(cls):
-        """Force restart of the browser instance"""
-        # Check if we've hit the restart limit BEFORE incrementing
-        if cls._restart_count >= cls._max_restarts:
-            print(f"Browser restarted {cls._restart_count} times. Applying extended cooldown...")
-            await asyncio.sleep(settings.BROWSER_EXTENDED_COOLDOWN)
-            cls._restart_count = 0
+        """
+        Force restart of the browser instance.
+        Coordinates concurrent restart requests to prevent race conditions.
+        """
+        import time
 
-        cls._restart_count += 1
-        cls._page_count = 0  # Reset page count on restart
-        print(f"Restarting browser instance (attempt {cls._restart_count}/{cls._max_restarts})...")
-        await cls.close()
-        await asyncio.sleep(settings.BROWSER_RESTART_DELAY)
-        return await cls.get_browser()
+        async with cls._lock:
+            # Check if another task just restarted (within last 2 seconds)
+            # If so, just return the existing browser
+            if cls._browser and (time.time() - cls._last_restart_time) < 2:
+                print("[Browser] Skipping restart - browser was just restarted")
+                return cls._browser
+
+            # Check if we've hit the restart limit
+            if cls._restart_count >= cls._max_restarts:
+                print(f"[Browser] Restarted {cls._restart_count} times. Applying extended cooldown...")
+                cls._restart_count = 0
+                # Release lock during cooldown so other operations don't deadlock
+                cls._restarting = True
+
+        # Extended cooldown outside the lock
+        if cls._restarting:
+            await asyncio.sleep(settings.BROWSER_EXTENDED_COOLDOWN)
+
+        async with cls._lock:
+            cls._restarting = False
+            cls._restart_count += 1
+            cls._page_count = 0
+            print(f"[Browser] Restarting browser (attempt {cls._restart_count}/{cls._max_restarts})...")
+
+            # Close existing browser
+            await cls._close_internal()
+
+            # Brief delay before restart
+            await asyncio.sleep(settings.BROWSER_RESTART_DELAY)
+
+            # Start new browser (inline to keep lock held)
+            try:
+                await cls._start_browser_internal()
+                cls._last_restart_time = time.time()
+            except Exception as e:
+                print(f"[Browser] Restart failed: {e}")
+                raise
+
+            return cls._browser
+
+    @classmethod
+    async def _start_browser_internal(cls):
+        """Internal browser start - assumes lock is already held."""
+        print("[Browser] Starting pydoll browser...")
+
+        # Clean up stale resources before starting
+        kill_stale_chrome_processes()
+        cleanup_stale_profiles()
+
+        options = ChromiumOptions()
+        options.headless = True
+
+        # Use system Chrome if available
+        chrome_path = find_chrome_binary()
+        if chrome_path:
+            print(f"[Browser] Using Chrome: {chrome_path}")
+            options.binary_location = chrome_path
+        else:
+            print("[Browser] ERROR: No Chrome binary found.")
+
+        # Essential args for headless Chrome
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-plugins")
+
+        if IS_CONTAINER:
+            options.add_argument("--disable-setuid-sandbox")
+            options.add_argument("--disable-background-networking")
+            options.add_argument("--disable-default-apps")
+            options.add_argument("--disable-sync")
+            options.add_argument("--disable-translate")
+            options.add_argument("--metrics-recording-only")
+            options.add_argument("--mute-audio")
+            options.add_argument("--safebrowsing-disable-auto-update")
+            options.add_argument("--renderer-process-limit=1")
+            options.add_argument("--disable-features=TranslateUI")
+
+        profile_dir = get_user_data_dir()
+        print(f"[Browser] Using profile: {profile_dir}")
+        options.add_argument(f"--user-data-dir={profile_dir}")
+
+        cls._browser = Chrome(options=options)
+
+        try:
+            print(f"[Browser] Starting with {cls._startup_timeout}s timeout...")
+            await asyncio.wait_for(cls._browser.start(), timeout=cls._startup_timeout)
+            print("[Browser] Started successfully!")
+        except asyncio.TimeoutError:
+            print(f"[Browser] ERROR: Startup timed out after {cls._startup_timeout}s")
+            cls._browser = None
+            kill_stale_chrome_processes()
+            raise Exception("Browser startup timed out")
+        except Exception as e:
+            print(f"[Browser] ERROR: Start failed: {type(e).__name__}: {e}")
+            cls._browser = None
+            kill_stale_chrome_processes()
+            raise
 
     @classmethod
     async def increment_page_count(cls) -> bool:
@@ -344,9 +369,21 @@ async def get_page_content(url: str, retries: int = settings.BROWSER_PAGE_RETRIE
             except Exception as e:
                 last_error = e
                 error_msg = str(e).lower()
+                error_type = type(e).__name__
                 print(f"Error in get_page_content (attempt {attempt + 1}/{retries + 1}):")
-                print(f"  Type: {type(e).__name__}")
+                print(f"  Type: {error_type}")
                 print(f"  Message: {e}")
+
+                # Determine if this is a browser-level error requiring restart
+                browser_error_keywords = [
+                    "browser", "closed", "crashed", "connection",
+                    "websocket", "connect call failed", "errno 61",
+                    "invalidstate", "target", "timeout",
+                ]
+                is_browser_error = (
+                    error_type in ("OSError", "ConnectionError", "WebSocketException") or
+                    any(keyword in error_msg for keyword in browser_error_keywords)
+                )
 
                 # Handle different error types with appropriate recovery
                 if "blocking detected" in error_msg:
@@ -359,9 +396,9 @@ async def get_page_content(url: str, retries: int = settings.BROWSER_PAGE_RETRIE
                             settings.BROWSER_BLOCKING_COOLDOWN_MAX,
                         )
                     )
-                elif any(keyword in error_msg for keyword in ["browser", "closed", "crashed", "connection"]):
+                elif is_browser_error:
                     # Browser-level error - restart
-                    print("Detected browser issue. Restarting browser...")
+                    print("[Browser] Detected browser issue. Restarting browser...")
                     await BrowserManager.restart()
                     await asyncio.sleep(settings.BROWSER_RESTART_DELAY)
                 else:
