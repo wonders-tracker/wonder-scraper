@@ -4,9 +4,11 @@
  * This component is code-split to avoid loading recharts (378KB) on initial page load.
  * It only loads when the user visits a card detail page.
  */
+import { useMemo } from 'react'
 import {
-  AreaChart,
+  ComposedChart,
   Area,
+  Line,
   ScatterChart,
   Scatter,
   XAxis,
@@ -17,6 +19,8 @@ import {
   ReferenceLine,
 } from 'recharts'
 
+// Note: AreaChart removed - now using ComposedChart for combined price + floor trend
+
 type ChartDataPoint = {
   timestamp: number
   price: number
@@ -26,14 +30,73 @@ type ChartDataPoint = {
   isActive?: boolean
 }
 
+type FloorHistoryPoint = {
+  date: string
+  floor_price: number | null
+  fmp: number | null
+  vwap: number | null
+  sales_count: number
+  treatment: string | null
+}
+
 type Props = {
   data: ChartDataPoint[]
   chartType: 'scatter' | 'line'
   floorPrice?: number
   lowestAsk?: number
+  floorHistory?: FloorHistoryPoint[]
 }
 
-export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk }: Props) {
+export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floorHistory }: Props) {
+  // Transform floor history to chart format
+  const floorHistoryData = useMemo(() => {
+    if (!floorHistory || floorHistory.length === 0) return []
+    return floorHistory
+      .filter(h => h.floor_price !== null)
+      .map(h => ({
+        timestamp: new Date(h.date).getTime(),
+        floorPrice: h.floor_price,
+        vwap: h.vwap,
+      }))
+  }, [floorHistory])
+
+  // Merge sales data with floor history for combined chart
+  const combinedData = useMemo(() => {
+    if (floorHistoryData.length === 0) return data
+
+    // Create a map of timestamps to floor prices
+    const floorMap = new Map<number, { floorPrice: number | null, vwap: number | null }>()
+    floorHistoryData.forEach(h => {
+      // Round to day for matching
+      const dayTs = new Date(h.timestamp).setHours(0, 0, 0, 0)
+      floorMap.set(dayTs, { floorPrice: h.floorPrice, vwap: h.vwap })
+    })
+
+    // Add floor data to each sales point
+    const enrichedData = data.map(d => {
+      const dayTs = new Date(d.timestamp).setHours(0, 0, 0, 0)
+      const floorData = floorMap.get(dayTs)
+      return {
+        ...d,
+        historicalFloor: floorData?.floorPrice ?? null,
+        historicalVwap: floorData?.vwap ?? null,
+      }
+    })
+
+    // Also add floor-only points for days without sales
+    const salesDays = new Set(data.map(d => new Date(d.timestamp).setHours(0, 0, 0, 0)))
+    const floorOnlyPoints = floorHistoryData
+      .filter(h => !salesDays.has(new Date(h.timestamp).setHours(0, 0, 0, 0)))
+      .map(h => ({
+        timestamp: h.timestamp,
+        price: null as number | null,
+        date: new Date(h.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
+        historicalFloor: h.floorPrice,
+        historicalVwap: h.vwap,
+      }))
+
+    return [...enrichedData, ...floorOnlyPoints].sort((a, b) => a.timestamp - b.timestamp)
+  }, [data, floorHistoryData])
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -42,10 +105,11 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk }: Pr
     )
   }
 
-  // Calculate Y-axis domain for log scale
+  // Calculate Y-axis domain for log scale (include floor history prices)
   const prices = data.map(d => d.price).filter(p => p > 0)
+  const floorPrices = floorHistoryData.map(h => h.floorPrice).filter((p): p is number => p !== null && p > 0)
   const refPrices = [floorPrice, lowestAsk].filter((p): p is number => p !== undefined && p > 0)
-  const allPrices = [...prices, ...refPrices]
+  const allPrices = [...prices, ...floorPrices, ...refPrices]
 
   // For log scale, find min/max and add padding in log space
   const minPrice = Math.min(...allPrices)
@@ -58,6 +122,9 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk }: Pr
 
   const yMin = Math.pow(10, logMin - logPadding)
   const yMax = Math.pow(10, logMax + logPadding)
+
+  // Check if we have floor history to show
+  const hasFloorHistory = floorHistoryData.length > 1
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -167,11 +234,15 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk }: Pr
           />
         </ScatterChart>
       ) : (
-        <AreaChart data={data} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
+        <ComposedChart data={hasFloorHistory ? combinedData : data} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
           <defs>
             <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#7dd3a8" stopOpacity={0.15}/>
               <stop offset="95%" stopColor="#7dd3a8" stopOpacity={0}/>
+            </linearGradient>
+            <linearGradient id="floorGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/>
+              <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} />
@@ -194,7 +265,8 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk }: Pr
             tickLine={{ stroke: '#27272a' }}
             allowDataOverflow
           />
-          {floorPrice && floorPrice > 0 && (
+          {/* Only show current floor reference line if no historical floor data */}
+          {!hasFloorHistory && floorPrice && floorPrice > 0 && (
             <ReferenceLine
               y={floorPrice}
               stroke="#7dd3a8"
@@ -216,10 +288,15 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk }: Pr
             cursor={{ strokeDasharray: '3 3', stroke: '#71717a' }}
             content={({ active, payload }) => {
               if (active && payload && payload.length) {
-                const d = payload[0].payload as ChartDataPoint
+                const d = payload[0].payload as any
                 return (
                   <div className="bg-black/90 border border-border rounded p-3 shadow-lg">
-                    <div className="text-brand-300 font-bold font-mono text-lg">${d.price.toFixed(2)}</div>
+                    {d.price && <div className="text-brand-300 font-bold font-mono text-lg">${d.price.toFixed(2)}</div>}
+                    {d.historicalFloor && (
+                      <div className="text-amber-400 font-mono text-sm mt-1">
+                        Floor: ${d.historicalFloor.toFixed(2)}
+                      </div>
+                    )}
                     <div className="text-muted-foreground text-xs mt-1">{d.date}</div>
                     {d.treatment && (
                       <div className="mt-2">
@@ -240,15 +317,28 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk }: Pr
               return null
             }}
           />
+          {/* Historical floor price trend line */}
+          {hasFloorHistory && (
+            <Line
+              type="monotone"
+              dataKey="historicalFloor"
+              stroke="#f59e0b"
+              strokeWidth={2}
+              dot={false}
+              connectNulls
+              name="Floor Trend"
+            />
+          )}
           <Area
             type="monotone"
             dataKey="price"
             stroke="#7dd3a8"
             strokeWidth={2}
             fill="url(#priceGradient)"
+            connectNulls={false}
             dot={(props: any) => {
               const { cx, cy, payload } = props
-              if (!cx || !cy || !payload) return <g />
+              if (!cx || !cy || !payload || payload.price === null) return <g />
 
               if (payload.isActive) {
                 const size = 5
@@ -277,7 +367,7 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk }: Pr
             }}
             activeDot={{ r: 6, fill: '#7dd3a8', stroke: '#0a0a0a', strokeWidth: 2 }}
           />
-        </AreaChart>
+        </ComposedChart>
       )}
     </ResponsiveContainer>
   )

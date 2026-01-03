@@ -405,6 +405,27 @@ function CardDetail() {
       staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
+  // Fetch FMP/Floor price history for chart trend line
+  type FMPHistoryPoint = {
+      date: string
+      floor_price: number | null
+      fmp: number | null
+      vwap: number | null
+      sales_count: number
+      treatment: string | null
+  }
+  const { data: fmpHistory } = useQuery({
+      queryKey: ['card-fmp-history', cardId],
+      queryFn: async () => {
+          try {
+            return await api.get(`cards/${cardId}/fmp-history?days=365`).json<FMPHistoryPoint[]>()
+          } catch (e) {
+              return []
+          }
+      },
+      staleTime: 10 * 60 * 1000, // 10 minutes - historical data changes slowly
+  })
+
   // Determine if this is an OpenSea/NFT item (no individual sales, only snapshots)
   const isOpenSeaItem = useMemo(() => {
       if (!history || history.length === 0) return true
@@ -456,8 +477,16 @@ function CardDetail() {
           accessorKey: 'treatment',
           header: 'Treatment',
           cell: ({ row }) => {
-              // If treatment is "NFT" or empty, try to extract from title
               const rawTreatment = row.original.treatment
+              const hasSubtype = !!row.original.product_subtype
+
+              // If product_subtype exists (e.g., Dragon Box, First Form for NFTs),
+              // don't show a card treatment - the subtype column handles categorization
+              if (!rawTreatment && hasSubtype) {
+                  return <span className="text-muted-foreground text-xs">—</span>
+              }
+
+              // If treatment is "NFT" or empty, try to extract from title
               const isGeneric = !rawTreatment || rawTreatment.toLowerCase() === 'nft'
               const effectiveTreatment = isGeneric
                   ? (extractTreatmentFromTitle(row.original.title) || 'Classic Paper')
@@ -607,10 +636,12 @@ function CardDetail() {
           const offsetMs = offsetIndex * 2 * 60 * 60 * 1000
           const adjustedTimestamp = saleDate.getTime() + offsetMs
 
-          const treatment = h.treatment || 'Classic Paper'
+          // For items with product_subtype (NFTs, sealed), use subtype; otherwise use treatment
+          const hasSubtype = !!h.product_subtype
+          const treatment = hasSubtype ? (h.product_subtype || 'Unknown') : (h.treatment || 'Classic Paper')
           const isCardSealed = card?.rarity_name?.toUpperCase() === 'SEALED'
           // For sealed products, use subtype color; otherwise use treatment color
-          const pointColor = isCardSealed ? getSubtypeColor(h.product_subtype) : getTreatmentColor(treatment)
+          const pointColor = isCardSealed || hasSubtype ? getSubtypeColor(h.product_subtype) : getTreatmentColor(h.treatment || 'Classic Paper')
           return {
               id: `${h.id}-${index}`,
               date: saleDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
@@ -620,7 +651,7 @@ function CardDetail() {
               treatment,
               product_subtype: h.product_subtype,
               treatmentColor: pointColor,
-              treatmentSimple: simplifyTreatment(treatment),
+              treatmentSimple: hasSubtype ? h.product_subtype : simplifyTreatment(h.treatment || 'Classic Paper'),
               title: h.title,
               listing_type: 'sold',
               isGraded: isPSAGraded(h.title).graded,
@@ -641,9 +672,11 @@ function CardDetail() {
       const nowTime = now.getTime()
       // Calculate spacing: use 6 hours between each active listing for visual clarity
       const activeData = sortedActive.map((h, index) => {
-          const treatment = h.treatment || 'Classic Paper'
+          // For items with product_subtype (NFTs, sealed), use subtype; otherwise use treatment
+          const hasSubtype = !!h.product_subtype
+          const treatment = hasSubtype ? (h.product_subtype || 'Unknown') : (h.treatment || 'Classic Paper')
           const isCardSealed = card?.rarity_name?.toUpperCase() === 'SEALED'
-          const pointColor = isCardSealed ? getSubtypeColor(h.product_subtype) : getTreatmentColor(treatment)
+          const pointColor = isCardSealed || hasSubtype ? getSubtypeColor(h.product_subtype) : getTreatmentColor(h.treatment || 'Classic Paper')
           return {
               id: `active-${h.id}-${index}`,
               date: 'Active',
@@ -653,7 +686,7 @@ function CardDetail() {
               treatment,
               product_subtype: h.product_subtype,
               treatmentColor: pointColor,
-              treatmentSimple: simplifyTreatment(treatment),
+              treatmentSimple: hasSubtype ? h.product_subtype : simplifyTreatment(h.treatment || 'Classic Paper'),
               title: h.title,
               listing_type: 'active',
               isGraded: isPSAGraded(h.title).graded,
@@ -738,7 +771,10 @@ function CardDetail() {
           fmp: pricingData?.by_treatment?.find(t => t.treatment === treatment)?.fmp ?? null,
           confidence: orderBookData?.by_treatment?.find(t => t.treatment === treatment)?.confidence ?? 0,
           salesCount: pricingData?.by_treatment?.find(t => t.treatment === treatment)?.sales_count ?? 0,
-      })).sort((a, b) => (a.floor ?? Infinity) - (b.floor ?? Infinity))
+      }))
+      // Filter out rows with no meaningful data
+      .filter(row => row.floor !== null || row.ask !== null || row.fmp !== null || row.salesCount > 0)
+      .sort((a, b) => (a.floor ?? Infinity) - (b.floor ?? Infinity))
   }, [card, pricingData, orderBookData])
 
   if (isLoadingCard) {
@@ -1104,6 +1140,7 @@ function CardDetail() {
                                                     chartType={chartType}
                                                     floorPrice={card.floor_price ?? undefined}
                                                     lowestAsk={card.lowest_ask ?? undefined}
+                                                    floorHistory={fmpHistory}
                                                 />
                                             </Suspense>
                                         ) : (
@@ -1456,8 +1493,14 @@ function CardDetail() {
                                     </span>
                                 </div>
                                 <div>
-                                    <div className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-1">Treatment</div>
-                                    <TreatmentBadge treatment={selectedListing.treatment || 'Classic Paper'} size='xs' />
+                                    <div className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-1">
+                                        {selectedListing.product_subtype ? 'Subtype' : 'Treatment'}
+                                    </div>
+                                    {selectedListing.product_subtype ? (
+                                        <ProductSubtypeBadge subtype={selectedListing.product_subtype} size="xs" />
+                                    ) : (
+                                        <TreatmentBadge treatment={selectedListing.treatment || 'Classic Paper'} size='xs' />
+                                    )}
                                 </div>
                             </div>
 
