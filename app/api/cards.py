@@ -275,10 +275,12 @@ def read_cards(
                 if card_id not in floor_price_map or result.price < floor_price_map[card_id]:
                     floor_price_map[card_id] = result.price
 
-            # Fallback: 90 days for cards still missing
+            # Fallback: 90 days + order book for cards still missing
             missing_floor_ids = [cid for cid in card_ids if cid not in floor_price_map]
             if missing_floor_ids:
-                floor_results_90d = floor_service.get_floor_prices_batch(missing_floor_ids, days=90, by_variant=True)
+                floor_results_90d = floor_service.get_floor_prices_batch(
+                    missing_floor_ids, days=90, by_variant=True, include_order_book_fallback=True
+                )
                 for (card_id, variant), result in floor_results_90d.items():
                     if result.price is None:
                         continue
@@ -656,9 +658,11 @@ def read_card(
             if floor_by_variant:
                 floor_price = min(floor_by_variant.values())
 
-        # Fallback: 90 days if no 30-day data (matches list endpoint behavior)
+        # Fallback: 90 days + order book if no 30-day data
         if not floor_by_variant:
-            floor_results_90d = floor_service.get_floor_prices_batch([card_id_int], days=90, by_variant=True)
+            floor_results_90d = floor_service.get_floor_prices_batch(
+                [card_id_int], days=90, by_variant=True, include_order_book_fallback=True
+            )
             if floor_results_90d:
                 floor_by_variant = {}
                 for (cid, variant), result in floor_results_90d.items():

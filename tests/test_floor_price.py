@@ -373,7 +373,7 @@ class TestFloorPriceConfig:
 
         assert config.MIN_SALES_HIGH_CONFIDENCE == 4
         assert config.MIN_SALES_MEDIUM_CONFIDENCE == 3
-        assert config.MIN_SALES_LOW_CONFIDENCE == 2
+        assert config.MIN_SALES_LOW_CONFIDENCE == 1  # Single sale allowed
         assert config.ORDER_BOOK_MIN_CONFIDENCE == 0.3
         assert config.DEFAULT_LOOKBACK_DAYS == 30
         assert config.EXPANDED_LOOKBACK_DAYS == 90
@@ -417,8 +417,8 @@ class TestBatchFloorPrice(TestFloorPriceService):
         assert result[(1, "Classic Paper")].price == 20.00
         assert result[(1, "Classic Foil")].price == 50.00
 
-    def test_batch_excludes_cards_with_insufficient_sales(self, service):
-        """Should not include cards with less than MIN_SALES_LOW_CONFIDENCE sales."""
+    def test_batch_includes_single_sale_with_low_confidence(self, service):
+        """Should include cards with 1 sale with LOW confidence (MIN_SALES_LOW_CONFIDENCE=1)."""
         mock_sales_data = {
             1: {"price": 25.00, "count": 4, "platforms": ["ebay"]},
             2: {"price": 30.00, "count": 1, "platforms": ["opensea"]},  # Only 1 sale
@@ -428,18 +428,21 @@ class TestBatchFloorPrice(TestFloorPriceService):
             result = service.get_floor_prices_batch([1, 2])
 
         assert 1 in result
-        assert 2 not in result  # Excluded due to insufficient sales
+        assert 2 in result  # Included with LOW confidence
+        assert result[2].confidence == ConfidenceLevel.LOW
+        assert result[2].confidence_score == 0.25  # 1/4
 
     def test_batch_maps_confidence_correctly(self, service):
         """Should map confidence levels based on sales count."""
         mock_sales_data = {
             1: {"price": 25.00, "count": 4, "platforms": ["ebay"]},  # HIGH
             2: {"price": 30.00, "count": 3, "platforms": ["opensea"]},  # MEDIUM
-            3: {"price": 35.00, "count": 2, "platforms": ["blokpax"]},  # LOW
+            3: {"price": 35.00, "count": 2, "platforms": ["blokpax"]},  # LOW (2 sales)
+            4: {"price": 40.00, "count": 1, "platforms": ["ebay"]},  # LOW (1 sale)
         }
 
         with patch.object(service, "_get_sales_floors_batch", return_value=mock_sales_data):
-            result = service.get_floor_prices_batch([1, 2, 3])
+            result = service.get_floor_prices_batch([1, 2, 3, 4])
 
         assert result[1].confidence == ConfidenceLevel.HIGH
         assert result[1].confidence_score == 1.0
@@ -447,6 +450,8 @@ class TestBatchFloorPrice(TestFloorPriceService):
         assert result[2].confidence_score == 0.75
         assert result[3].confidence == ConfidenceLevel.LOW
         assert result[3].confidence_score == 0.5
+        assert result[4].confidence == ConfidenceLevel.LOW
+        assert result[4].confidence_score == 0.25
 
     def test_batch_includes_metadata(self, service):
         """Should include metadata in results."""

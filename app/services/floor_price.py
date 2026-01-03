@@ -102,7 +102,7 @@ class FloorPriceConfig:
 
     MIN_SALES_HIGH_CONFIDENCE: int = 4  # Minimum sales for HIGH confidence
     MIN_SALES_MEDIUM_CONFIDENCE: int = 3  # Minimum sales for MEDIUM confidence
-    MIN_SALES_LOW_CONFIDENCE: int = 2  # Minimum sales for LOW confidence
+    MIN_SALES_LOW_CONFIDENCE: int = 1  # Minimum sales for LOW confidence (single sale allowed)
     ORDER_BOOK_MIN_CONFIDENCE: float = 0.3  # Minimum OB confidence to use
     DEFAULT_LOOKBACK_DAYS: int = 30
     EXPANDED_LOOKBACK_DAYS: int = 90
@@ -360,6 +360,7 @@ class FloorPriceService:
         days: int = ...,
         include_blokpax: bool = ...,
         by_variant: Literal[False] = ...,
+        include_order_book_fallback: bool = ...,
     ) -> dict[int, FloorPriceResult]: ...
 
     @overload
@@ -369,6 +370,7 @@ class FloorPriceService:
         days: int = ...,
         include_blokpax: bool = ...,
         by_variant: Literal[True] = ...,
+        include_order_book_fallback: bool = ...,
     ) -> dict[tuple[int, str], FloorPriceResult]: ...
 
     def get_floor_prices_batch(
@@ -377,18 +379,20 @@ class FloorPriceService:
         days: int = FloorPriceConfig.DEFAULT_LOOKBACK_DAYS,
         include_blokpax: bool = True,
         by_variant: bool = False,
+        include_order_book_fallback: bool = False,
     ) -> dict[int, FloorPriceResult] | dict[tuple[int, str], FloorPriceResult]:
         """
         Batch floor price calculation for multiple cards.
 
-        For performance, uses bulk SQL queries instead of per-card lookups.
-        Does NOT fall back to order book (sales-only for batch efficiency).
+        Uses bulk SQL queries for sales data. Optionally falls back to order book
+        for cards without sufficient sales data.
 
         Args:
             card_ids: List of card database IDs
             days: Lookback window for sales data
             include_blokpax: Include Blokpax sales in calculation
             by_variant: If True, group by (card_id, variant) instead of card_id
+            include_order_book_fallback: If True, use order book for cards without sales
 
         Returns:
             If by_variant=False: dict[card_id, FloorPriceResult]
@@ -403,6 +407,7 @@ class FloorPriceService:
         )
 
         results: dict[Any, FloorPriceResult] = {}
+        cards_with_results: set[int] = set()
 
         for key, data in sales_data.items():
             count = data["count"]
@@ -431,6 +436,34 @@ class FloorPriceService:
                     "variant": data.get("variant") if by_variant else None,
                 },
             )
+            # Track which cards have results
+            card_id = key[0] if by_variant else key
+            cards_with_results.add(card_id)
+
+        # Order book fallback for cards without sales data
+        if include_order_book_fallback:
+            missing_card_ids = [cid for cid in card_ids if cid not in cards_with_results]
+            if missing_card_ids:
+                for card_id in missing_card_ids:
+                    ob_result = self.order_book_analyzer.estimate_floor(
+                        card_id=card_id, treatment=None, days=days
+                    )
+                    if ob_result and ob_result.confidence > self.config.ORDER_BOOK_MIN_CONFIDENCE:
+                        floor_result = FloorPriceResult(
+                            price=round(ob_result.floor_estimate, 2),
+                            source=FloorPriceSource.ORDER_BOOK,
+                            confidence=self._map_confidence(ob_result.confidence),
+                            confidence_score=ob_result.confidence,
+                            metadata={
+                                "bucket_depth": ob_result.deepest_bucket.count,
+                                "total_listings": ob_result.total_listings,
+                                "days": days,
+                            },
+                        )
+                        if by_variant:
+                            results[(card_id, "Base")] = floor_result
+                        else:
+                            results[card_id] = floor_result
 
         return results
 
