@@ -253,11 +253,13 @@ async def scrape_opensea_sales(collection_slug: str, limit: int = 50, event_type
     }
 
     try:
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, headers=headers, params=params) as response:
                 if response.status == 401:
-                    print("[OpenSea] API key required or invalid. Falling back to web scraping.")
-                    return await _scrape_opensea_sales_web(collection_slug, eth_price_usd, limit)
+                    print("[OpenSea] API key required. Set OPENSEA_API_KEY env var.")
+                    print("[OpenSea] Skipping slow web fallback - returning empty.")
+                    return []
 
                 if response.status == 429:
                     print("[OpenSea] Rate limited. Try again later.")
@@ -585,11 +587,13 @@ async def scrape_opensea_listings(collection_slug: str, limit: int = 100) -> Lis
     }
 
     try:
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, headers=headers, params=params) as response:
                 if response.status == 401:
-                    print("[OpenSea] API key required. Falling back to web scraping.")
-                    return await _scrape_opensea_listings_web(collection_slug, eth_price_usd, limit)
+                    print("[OpenSea] API key required. Set OPENSEA_API_KEY env var.")
+                    print("[OpenSea] Skipping slow web fallback - returning empty.")
+                    return []
 
                 if response.status == 429:
                     print("[OpenSea] Rate limited. Try again later.")
