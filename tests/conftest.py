@@ -331,41 +331,59 @@ def onboarded_user(test_session: Session) -> User:
 
 
 @pytest.fixture
-def sample_user_with_reset_token(test_session: Session) -> User:
-    """Create a user with a valid password reset token."""
+def sample_user_with_reset_token(test_session: Session) -> tuple[User, str]:
+    """Create a user with a valid password reset token.
+
+    Returns:
+        Tuple of (user, raw_token) - raw_token is what would be sent in email
+    """
     import secrets
+    import hashlib
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
     user = User(
         id=2,
         email="reset@example.com",
         hashed_password=security.get_password_hash("oldpassword123"),
         is_active=True,
         is_superuser=False,
-        password_reset_token=secrets.token_urlsafe(32),
+        password_reset_token_hash=token_hash,
         password_reset_expires=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1),
     )
     test_session.add(user)
     test_session.commit()
     test_session.refresh(user)
-    return user
+    return user, raw_token
 
 
 @pytest.fixture
-def sample_user_with_expired_token(test_session: Session) -> User:
-    """Create a user with an expired password reset token."""
+def sample_user_with_expired_token(test_session: Session) -> tuple[User, str]:
+    """Create a user with an expired password reset token.
+
+    Returns:
+        Tuple of (user, raw_token) - raw_token is what would be sent in email
+    """
     import secrets
+    import hashlib
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
     user = User(
         id=3,
         email="expired@example.com",
         hashed_password=security.get_password_hash("oldpassword123"),
         is_active=True,
         is_superuser=False,
-        password_reset_token=secrets.token_urlsafe(32),
+        password_reset_token_hash=token_hash,
         password_reset_expires=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1),  # Expired
     )
     test_session.add(user)
     test_session.commit()
     test_session.refresh(user)
-    return user
+    return user, raw_token
 
 
 @pytest.fixture

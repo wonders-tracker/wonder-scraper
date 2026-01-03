@@ -91,29 +91,39 @@ class TestUserLogin:
 class TestPasswordReset:
     """Tests for password reset flow."""
 
-    def test_forgot_password_generates_token(self, test_session: Session, sample_user: User):
-        """Test forgot password generates reset token."""
+    def test_forgot_password_generates_token_hash(self, test_session: Session, sample_user: User):
+        """Test forgot password generates and hashes reset token."""
         import secrets
+        import hashlib
 
-        # Simulate forgot password logic
-        reset_token = secrets.token_urlsafe(32)
-        sample_user.password_reset_token = reset_token
+        # Simulate forgot password logic (what the API does)
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+        sample_user.password_reset_token_hash = token_hash
         sample_user.password_reset_expires = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
         test_session.add(sample_user)
         test_session.commit()
         test_session.refresh(sample_user)
 
-        assert sample_user.password_reset_token is not None
-        assert len(sample_user.password_reset_token) > 20
+        # Hash is stored, not the raw token
+        assert sample_user.password_reset_token_hash is not None
+        assert len(sample_user.password_reset_token_hash) == 64  # SHA-256 hex length
         assert sample_user.password_reset_expires > datetime.now(timezone.utc).replace(tzinfo=None)
+
+        # Raw token should be URL-safe and long enough
+        assert len(raw_token) >= 40
 
     def test_forgot_password_token_has_expiry(self, test_session: Session, sample_user: User):
         """Test forgot password token has proper expiry."""
         import secrets
+        import hashlib
 
-        reset_token = secrets.token_urlsafe(32)
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
         expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
-        sample_user.password_reset_token = reset_token
+
+        sample_user.password_reset_token_hash = token_hash
         sample_user.password_reset_expires = expiry
         test_session.add(sample_user)
         test_session.commit()
@@ -123,17 +133,22 @@ class TestPasswordReset:
         assert sample_user.password_reset_expires < datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=2)
 
     def test_reset_password_with_valid_token(
-        self, test_session: Session, sample_user_with_reset_token: User
+        self, test_session: Session, sample_user_with_reset_token: tuple[User, str]
     ):
         """Test password reset with valid token succeeds."""
-        user = sample_user_with_reset_token
+        import hashlib
+
+        user, raw_token = sample_user_with_reset_token
         old_password_hash = user.hashed_password
-        token = user.password_reset_token
+
+        # Verify token hash matches (what the API does)
+        submitted_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        assert submitted_hash == user.password_reset_token_hash
 
         # Simulate reset password logic
         new_password = "newpassword456"
         user.hashed_password = security.get_password_hash(new_password)
-        user.password_reset_token = None
+        user.password_reset_token_hash = None
         user.password_reset_expires = None
         test_session.add(user)
         test_session.commit()
@@ -142,41 +157,46 @@ class TestPasswordReset:
         # Verify password was changed
         assert user.hashed_password != old_password_hash
         assert security.verify_password(new_password, user.hashed_password)
-        assert user.password_reset_token is None
+        assert user.password_reset_token_hash is None
         assert user.password_reset_expires is None
 
     def test_reset_password_with_expired_token_fails(
-        self, test_session: Session, sample_user_with_expired_token: User
+        self, test_session: Session, sample_user_with_expired_token: tuple[User, str]
     ):
         """Test password reset with expired token fails."""
-        user = sample_user_with_expired_token
+        user, raw_token = sample_user_with_expired_token
 
         # Token should be expired
         assert user.password_reset_expires < datetime.now(timezone.utc).replace(tzinfo=None)
 
     def test_reset_password_with_invalid_token_fails(self, test_session: Session):
         """Test password reset with invalid token fails."""
+        import hashlib
+
+        # Hash of a non-existent token
+        invalid_token_hash = hashlib.sha256(b"invalid_token_that_does_not_exist").hexdigest()
+
         user = test_session.exec(select(User).where(
-            User.password_reset_token == "invalid_token_that_does_not_exist"
+            User.password_reset_token_hash == invalid_token_hash
         )).first()
         assert user is None
 
-    def test_reset_password_clears_token(
-        self, test_session: Session, sample_user_with_reset_token: User
+    def test_reset_password_clears_token_hash(
+        self, test_session: Session, sample_user_with_reset_token: tuple[User, str]
     ):
-        """Test password reset clears the token after use."""
-        user = sample_user_with_reset_token
-        assert user.password_reset_token is not None
+        """Test password reset clears the token hash after use."""
+        user, raw_token = sample_user_with_reset_token
+        assert user.password_reset_token_hash is not None
 
         # Simulate successful reset
         user.hashed_password = security.get_password_hash("newpassword789")
-        user.password_reset_token = None
+        user.password_reset_token_hash = None
         user.password_reset_expires = None
         test_session.add(user)
         test_session.commit()
         test_session.refresh(user)
 
-        assert user.password_reset_token is None
+        assert user.password_reset_token_hash is None
 
     def test_forgot_password_nonexistent_email_no_error(self, test_session: Session):
         """Test forgot password with nonexistent email doesn't reveal user existence."""
@@ -186,6 +206,21 @@ class TestPasswordReset:
         )).first()
         assert user is None
         # In real endpoint, this should still return success message
+
+    def test_token_hash_prevents_raw_token_recovery(
+        self, test_session: Session, sample_user_with_reset_token: tuple[User, str]
+    ):
+        """Test that stored hash cannot be used to recover the raw token."""
+        user, raw_token = sample_user_with_reset_token
+
+        # The hash is stored, not the token
+        stored_hash = user.password_reset_token_hash
+
+        # Hash is not the same as the token (obviously)
+        assert stored_hash != raw_token
+
+        # Cannot reverse the hash to get the token
+        # This is a security property of SHA-256
 
 
 class TestPasswordHashing:
@@ -267,13 +302,13 @@ class TestUserModel:
         assert sample_user.is_active is not None
         assert sample_user.is_superuser is not None
 
-    def test_user_password_reset_fields(self, test_session: Session, sample_user_with_reset_token: User):
+    def test_user_password_reset_fields(self, test_session: Session, sample_user_with_reset_token: tuple[User, str]):
         """Test user model has password reset fields."""
-        user = sample_user_with_reset_token
+        user, raw_token = sample_user_with_reset_token
 
-        assert hasattr(user, 'password_reset_token')
+        assert hasattr(user, 'password_reset_token_hash')
         assert hasattr(user, 'password_reset_expires')
-        assert user.password_reset_token is not None
+        assert user.password_reset_token_hash is not None
         assert user.password_reset_expires is not None
 
     def test_user_email_is_unique(self, test_session: Session, sample_user: User):

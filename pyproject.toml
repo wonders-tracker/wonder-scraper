@@ -36,6 +36,7 @@ polar-sdk = "^0.28.0"
 alembic = "^1.17.2"
 discord-py = ">=2.0"
 numpy = "^2.4.0"
+email-validator = "^2.3.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.1"
