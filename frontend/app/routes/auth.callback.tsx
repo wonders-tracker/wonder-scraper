@@ -1,15 +1,10 @@
-import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { analytics } from '~/services/analytics'
 import { api } from '~/utils/auth'
 
 export const Route = createFileRoute('/auth/callback')({
   component: AuthCallback,
-  validateSearch: (search: Record<string, unknown>) => {
-    return {
-      token: search.token as string | undefined,
-    }
-  },
 })
 
 interface UserProfile {
@@ -22,39 +17,34 @@ interface UserProfile {
 }
 
 function AuthCallback() {
-  const search = useSearch({ from: Route.id })
   const navigate = useNavigate()
 
   useEffect(() => {
     const handleAuth = async () => {
-      if (search.token) {
-        localStorage.setItem('token', search.token)
-        // Notify app of auth state change
-        window.dispatchEvent(new Event('auth-change'))
+      // Cookies are already set by the backend redirect
+      // Just verify auth worked and redirect appropriately
+      try {
+        const profile = await api.get('auth/me').json<UserProfile>()
         // Track successful Discord login
         analytics.trackLogin('discord')
+        // Notify app of auth state change
+        window.dispatchEvent(new Event('auth-change'))
 
-        // Check if user has completed onboarding
-        try {
-          const profile = await api.get('auth/me').json<UserProfile>()
-          if (profile.onboarding_completed) {
-            // Already onboarded, go to home
-            navigate({ to: '/' })
-          } else {
-            // New user or hasn't completed onboarding
-            navigate({ to: '/welcome' })
-          }
-        } catch (e) {
-          // If we can't check, default to welcome
+        if (profile.onboarding_completed) {
+          // Already onboarded, go to home
+          navigate({ to: '/' })
+        } else {
+          // New user or hasn't completed onboarding
           navigate({ to: '/welcome' })
         }
-      } else {
-        // No token? Redirect to login
+      } catch (e) {
+        // Auth failed - cookies weren't set properly
+        console.error('Auth callback failed:', e)
         navigate({ to: '/login' })
       }
     }
     handleAuth()
-  }, [search.token, navigate])
+  }, [navigate])
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -65,4 +55,3 @@ function AuthCallback() {
     </div>
   )
 }
-

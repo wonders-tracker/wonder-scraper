@@ -43,30 +43,29 @@ export const Route = createRootRoute({
       return
     }
 
-    // Check if user has a token
     if (typeof window === 'undefined') return
-    const token = localStorage.getItem('token')
-    if (!token) return
 
-    // Fetch user profile to check onboarding status
-    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/auth/me`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    })
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem('token')
+    // Fetch user profile to check onboarding status (uses httpOnly cookie)
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/auth/me`, {
+        credentials: 'include',
+      })
+      if (!response.ok) {
+        // Not authenticated, let them continue to page (will show login prompt if needed)
+        return
+      }
+      const user = await response.json()
+      // Check if onboarding is incomplete: either flag is false OR username is empty
+      const needsOnboarding = user && (user.onboarding_completed === false || !user.username)
+      if (needsOnboarding) {
+        throw redirect({ to: '/welcome' })
+      }
+    } catch (e) {
+      // Network error or not authenticated - continue to page
+      if (e instanceof Response || (e && typeof e === 'object' && 'to' in e)) {
+        throw e // Re-throw redirects
       }
       return
-    }
-    const user = await response.json()
-    // Check if onboarding is incomplete: either flag is false OR username is empty
-    const needsOnboarding = user && (user.onboarding_completed === false || !user.username)
-    console.log('[onboarding check] user:', user?.email, 'onboarding_completed:', user?.onboarding_completed, 'username:', user?.username, 'needsOnboarding:', needsOnboarding)
-    if (needsOnboarding) {
-      console.log('[onboarding check] redirecting to /welcome')
-      throw redirect({ to: '/welcome' })
     }
   },
 })
@@ -173,22 +172,26 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
 
   // Reactive auth state - listens for auth-change events from login/logout
 
-  // Listen for auth changes (login/logout from same tab or other tabs)
+  // Listen for auth changes (login/logout)
+  // Since we use httpOnly cookies, we can't detect cross-tab changes via storage
+  // Instead, we rely on the auth-change custom event and periodic revalidation
   useEffect(() => {
     const handleAuthChange = async () => {
+      // Invalidate and refetch user data
       await queryClient.invalidateQueries({ queryKey: ['me'] })
-      const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('token')
-      if (!hasToken) {
-        queryClient.setQueryData(['me'], null)
+    }
+    // Custom event for auth changes (login/logout in this tab)
+    window.addEventListener('auth-change', handleAuthChange)
+    // Revalidate when tab becomes visible (handles cross-tab logout)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: ['me'] })
       }
     }
-    // Custom event for same-tab auth changes
-    window.addEventListener('auth-change', handleAuthChange)
-    // Storage event for cross-tab auth changes
-    window.addEventListener('storage', handleAuthChange)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       window.removeEventListener('auth-change', handleAuthChange)
-      window.removeEventListener('storage', handleAuthChange)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [queryClient])
 
@@ -198,14 +201,12 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
           try {
               return await api.get('auth/me').json<UserProfile>()
           } catch {
-              // If API fails (e.g. 401), clear local token so app knows we are logged out
-              // This prevents redirect loops where localStorage has token but API rejects it
-              localStorage.removeItem('token')
+              // API failed (e.g. 401) - user is not authenticated
               return null
           }
       },
       retry: false,
-      staleTime: 5 * 60 * 1000, // 5 minutes - onboarding check is in beforeLoad now
+      staleTime: 60 * 1000, // 1 minute - shorter for better cross-tab sync
   })
 
   // Note: Onboarding redirect is handled in beforeLoad at the route level
