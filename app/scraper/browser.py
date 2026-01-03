@@ -346,20 +346,24 @@ async def get_page_content(url: str, retries: int = settings.BROWSER_PAGE_RETRIE
                     raise Exception("Empty or invalid page content received")
 
                 # Check for eBay blocking indicators
+                # Only trigger if we DON'T have real listing content AND have blocking phrases
                 content_lower = content.lower()
-                blocking_indicators = [
-                    "please verify yourself",
-                    "robot or human",
-                    "security measure",
-                    "access denied",
-                    "blocked",
-                    "captcha",
-                    "unusual traffic",
-                    "too many requests",
-                ]
-                for indicator in blocking_indicators:
-                    if indicator in content_lower:
-                        raise Exception(f"eBay blocking detected: '{indicator}' found in response")
+                has_listings = "s-item__link" in content or "srp-results" in content
+
+                if not has_listings:
+                    # More specific blocking phrases (avoid false positives from JS/CSS)
+                    blocking_phrases = [
+                        "please verify yourself",
+                        "robot or human",
+                        "security measure",
+                        "access to this page has been denied",
+                        "unusual traffic from your computer",
+                        "too many requests",
+                        "complete the captcha",
+                    ]
+                    for phrase in blocking_phrases:
+                        if phrase in content_lower:
+                            raise Exception(f"eBay blocking detected: '{phrase}' found")
 
                 # Track page count for preventive restart
                 await BrowserManager.increment_page_count()
