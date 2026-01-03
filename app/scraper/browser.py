@@ -107,10 +107,12 @@ def kill_stale_chrome_processes():
         return  # Only needed in containers
 
     try:
-        # Find and kill any chrome processes
-        result = subprocess.run(["pkill", "-9", "-f", "chrome"], capture_output=True, timeout=5)
+        # Find and kill any chrome processes (with timeout to prevent hanging)
+        result = subprocess.run(["pkill", "-9", "-f", "chrome"], capture_output=True, timeout=10)
         if result.returncode == 0:
             print("[Browser] Killed stale Chrome processes")
+    except subprocess.TimeoutExpired:
+        print("[Browser] WARNING: pkill timed out after 10s")
     except Exception:
         # pkill might not exist or no processes to kill - that's fine
         pass

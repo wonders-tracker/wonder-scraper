@@ -8,6 +8,7 @@ This module provides retry logic to handle these transient failures.
 import asyncio
 import functools
 import logging
+import time
 from typing import TypeVar, Callable, Any, ParamSpec
 from sqlmodel import Session
 from sqlalchemy import text
@@ -23,11 +24,12 @@ T = TypeVar("T")
 P = ParamSpec("P")
 
 # Errors that indicate a transient connection failure (worth retrying)
+# All strings must be lowercase for case-insensitive matching
 TRANSIENT_ERRORS = (
     "server closed the connection unexpectedly",
     "connection refused",
     "connection reset by peer",
-    "SSL connection has been closed unexpectedly",
+    "ssl connection has been closed unexpectedly",
     "terminating connection due to administrator command",
     "connection timed out",
     "could not connect to server",
@@ -81,8 +83,6 @@ def db_retry(
                         f"[DB Retry] {func_name} failed (attempt {attempt + 1}/{max_retries + 1}): {e}. "
                         f"Retrying in {delay:.1f}s..."
                     )
-                    import time
-
                     time.sleep(delay)
 
             if last_error:
@@ -130,6 +130,7 @@ def execute_with_retry(
     operation: Callable[[Session], T],
     max_retries: int = 3,
     base_delay: float = 1.0,
+    max_delay: float = 10.0,
 ) -> T:
     """
     Execute a database operation with automatic retry on transient failures.
@@ -139,6 +140,7 @@ def execute_with_retry(
         operation: Function that takes a Session and returns a result
         max_retries: Maximum number of retry attempts
         base_delay: Initial delay between retries
+        max_delay: Maximum delay between retries (caps exponential backoff)
 
     Returns:
         The result of the operation
@@ -163,13 +165,11 @@ def execute_with_retry(
             if not is_transient_error(e) or attempt >= max_retries:
                 raise
 
-            delay = base_delay * (2**attempt)
+            delay = min(base_delay * (2**attempt), max_delay)
             logger.warning(
                 f"[DB Retry] Operation failed (attempt {attempt + 1}/{max_retries + 1}): {e}. "
                 f"Retrying in {delay:.1f}s..."
             )
-            import time
-
             time.sleep(delay)
 
     raise last_error  # type: ignore
@@ -180,6 +180,7 @@ async def execute_with_retry_async(
     operation: Callable[[Session], T],
     max_retries: int = 3,
     base_delay: float = 1.0,
+    max_delay: float = 10.0,
 ) -> T:
     """
     Async version of execute_with_retry.
@@ -197,7 +198,7 @@ async def execute_with_retry_async(
             if not is_transient_error(e) or attempt >= max_retries:
                 raise
 
-            delay = base_delay * (2**attempt)
+            delay = min(base_delay * (2**attempt), max_delay)
             logger.warning(
                 f"[DB Retry] Operation failed (attempt {attempt + 1}/{max_retries + 1}): {e}. "
                 f"Retrying in {delay:.1f}s..."

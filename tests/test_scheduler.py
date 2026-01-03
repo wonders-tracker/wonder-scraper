@@ -66,10 +66,10 @@ class TestSchedulerInitialization:
                 )
                 test_scheduler.add_job(
                     lambda: None,
-                    IntervalTrigger(minutes=20),
+                    IntervalTrigger(hours=8),
                     id="job_update_blokpax_data",
                     max_instances=1,
-                    misfire_grace_time=600,
+                    misfire_grace_time=3600,
                     coalesce=True,
                     replace_existing=True
                 )
@@ -128,10 +128,10 @@ class TestSchedulerInitialization:
 
         test_scheduler.add_job(
             lambda: None,
-            IntervalTrigger(minutes=20),
+            IntervalTrigger(hours=8),
             id="job_update_blokpax_data",
             max_instances=1,
-            misfire_grace_time=600,
+            misfire_grace_time=3600,
             coalesce=True,
             replace_existing=True
         )
@@ -140,7 +140,7 @@ class TestSchedulerInitialization:
         assert job is not None
         assert isinstance(job.trigger, IntervalTrigger)
         assert job.max_instances == 1
-        assert job.misfire_grace_time == 600  # 10 minutes
+        assert job.misfire_grace_time == 3600  # 1 hour
 
     def test_market_insights_jobs_configuration(self):
         """Verify market insights jobs use cron triggers."""
@@ -180,7 +180,7 @@ class TestSchedulerInitialization:
         test_scheduler = AsyncIOScheduler()
 
         test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=45), id="job1", max_instances=1)
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=20), id="job2", max_instances=1)
+        test_scheduler.add_job(lambda: None, IntervalTrigger(hours=8), id="job2", max_instances=1)
 
         for job in test_scheduler.get_jobs():
             assert job.max_instances == 1, f"Job {job.id} allows concurrent execution"
@@ -909,7 +909,7 @@ class TestJobCancellation:
         test_scheduler = AsyncIOScheduler()
 
         test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=45), id="job_update_market_data")
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=20), id="job_update_blokpax_data")
+        test_scheduler.add_job(lambda: None, IntervalTrigger(hours=8), id="job_update_blokpax_data")
 
         # Remove one job
         test_scheduler.remove_job('job_update_market_data')
@@ -986,15 +986,15 @@ class TestIntervalTriggerConfiguration:
 
         test_scheduler.add_job(
             lambda: None,
-            IntervalTrigger(minutes=20),
+            IntervalTrigger(hours=8),
             id="job_update_blokpax_data"
         )
 
         job = test_scheduler.get_job('job_update_blokpax_data')
         trigger = job.trigger
 
-        # 20 minutes = 1200 seconds
-        assert trigger.interval.total_seconds() == 1200
+        # 8 hours = 28800 seconds
+        assert trigger.interval.total_seconds() == 28800
 
 
 class TestEdgeCases:
@@ -1007,7 +1007,7 @@ class TestEdgeCases:
         test_scheduler = AsyncIOScheduler()
 
         test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=45), id="job1", max_instances=1)
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=20), id="job2", max_instances=1)
+        test_scheduler.add_job(lambda: None, IntervalTrigger(hours=8), id="job2", max_instances=1)
 
         # All jobs should have max_instances=1
         for job in test_scheduler.get_jobs():
@@ -1026,9 +1026,9 @@ class TestEdgeCases:
         )
         test_scheduler.add_job(
             lambda: None,
-            IntervalTrigger(minutes=20),
+            IntervalTrigger(hours=8),
             id="job_update_blokpax_data",
-            misfire_grace_time=600
+            misfire_grace_time=3600
         )
         test_scheduler.add_job(
             lambda: None,
