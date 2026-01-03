@@ -31,10 +31,15 @@ class OrderBookConfig:
     MAX_BUCKET_WIDTH: float = 50.0  # Maximum bucket size in dollars
     OUTLIER_SIGMA_THRESHOLD: float = 2.0  # Standard deviations for outlier detection
     STALE_DAYS: int = 14  # Listings older than this reduce confidence
-    MIN_LISTINGS: int = 3  # Minimum listings required for analysis
+    MIN_LISTINGS: int = 1  # Minimum listings required (lowered from 3)
     DEFAULT_LOOKBACK_DAYS: int = 30  # Default window for active listings
-    SPARSE_DATA_CONFIDENCE_MULTIPLIER: float = 0.1  # Confidence per listing for sparse data (1-2 listings)
+    SPARSE_DATA_CONFIDENCE_MULTIPLIER: float = 0.1  # Confidence per listing for sparse data
     SALES_FALLBACK_CONFIDENCE_PENALTY: float = 0.5  # Confidence multiplier for sales fallback
+    # Confidence calculation weights (v2.1 - with volatility)
+    LISTING_COUNT_WEIGHT: float = 0.35  # Weight for number of listings
+    SPREAD_WEIGHT: float = 0.25  # Weight for price spread tightness
+    RECENCY_WEIGHT: float = 0.25  # Weight for listing recency
+    VOLATILITY_WEIGHT: float = 0.15  # Weight for historical price stability
 
 
 @dataclass
@@ -64,22 +69,28 @@ class OrderBookResult:
 
     floor_estimate: float
     confidence: float
-    deepest_bucket: BucketInfo
+    lowest_ask: float  # The actual lowest active listing price
     total_listings: int
     outliers_removed: int
     buckets: list[BucketInfo]
+    deepest_bucket: Optional[BucketInfo] = None
     stale_count: int = 0
+    spread_pct: float = 0.0  # Price spread as percentage of lowest
     source: str = "order_book"  # "order_book" or "sales_fallback"
+    volatility_cv: float = 0.5  # Coefficient of variation (0 = stable, 1+ = volatile)
 
     def to_dict(self) -> dict:
         return {
             "floor_estimate": self.floor_estimate,
+            "lowest_ask": self.lowest_ask,
             "confidence": self.confidence,
             "total_listings": self.total_listings,
             "outliers_removed": self.outliers_removed,
             "stale_count": self.stale_count,
+            "spread_pct": self.spread_pct,
+            "volatility_cv": self.volatility_cv,
             "source": self.source,
-            "deepest_bucket": self.deepest_bucket.to_dict(),
+            "deepest_bucket": self.deepest_bucket.to_dict() if self.deepest_bucket else None,
             "buckets": [b.to_dict() for b in self.buckets],
         }
 
@@ -111,6 +122,15 @@ class OrderBookAnalyzer:
         """
         self.session = session
         self.config = OrderBookConfig()
+        self._market_patterns = None
+
+    @property
+    def market_patterns(self):
+        """Lazy-load MarketPatternsService to avoid circular imports."""
+        if self._market_patterns is None:
+            from app.services.market_patterns import MarketPatternsService
+            self._market_patterns = MarketPatternsService(self.session)
+        return self._market_patterns
 
     def estimate_floor(
         self,
@@ -121,6 +141,11 @@ class OrderBookAnalyzer:
     ) -> Optional[OrderBookResult]:
         """
         Estimate floor price from order book depth.
+
+        Algorithm (v2 - fixed):
+        1. Fetch active listings for a card/variant
+        2. Use LOWEST ASK as floor estimate (not bucket midpoint)
+        3. Calculate confidence based on: listing count, price spread, recency
 
         Args:
             card_id: Database ID of the card
@@ -143,42 +168,58 @@ class OrderBookAnalyzer:
         prices = [row["price"] for row in listings]
         scraped_dates = [row["scraped_at"] for row in listings]
 
-        # 2. Filter outliers
+        # 2. Calculate key metrics BEFORE filtering (we want true lowest ask)
+        lowest_ask = min(prices)
+
+        # 3. Filter outliers for bucket analysis
         filtered_prices, outliers_removed = self._filter_outliers(prices)
 
-        if len(filtered_prices) < self.config.MIN_LISTINGS:
-            return None
+        if len(filtered_prices) == 0:
+            filtered_prices = prices  # Fall back to unfiltered
 
-        # 3. Create buckets
+        # 4. Create buckets (for analysis, not floor estimation)
         buckets = self._create_buckets(filtered_prices)
+        deepest = self._find_deepest_bucket(buckets) if buckets else None
 
-        if not buckets:
-            return None
+        # 5. Calculate price spread
+        if len(filtered_prices) > 1:
+            spread_pct = ((max(filtered_prices) - min(filtered_prices)) / min(filtered_prices)) * 100
+        else:
+            spread_pct = 0.0
 
-        # 4. Find deepest bucket
-        deepest = self._find_deepest_bucket(buckets)
-
-        # 5. Calculate staleness
+        # 6. Calculate staleness
         stale_cutoff = datetime.now(timezone.utc) - timedelta(days=self.config.STALE_DAYS)
         stale_count = 0
         for d in scraped_dates:
-            # Handle both timezone-aware and naive datetimes
             if d.tzinfo is None:
                 d = d.replace(tzinfo=timezone.utc)
             if d < stale_cutoff:
                 stale_count += 1
 
-        # 6. Calculate confidence
-        confidence = self._calculate_confidence(deepest, len(filtered_prices), stale_count)
+        # 7. Get card volatility for confidence adjustment
+        volatility = self.market_patterns.get_card_volatility(card_id, treatment)
+        volatility_cv = volatility.coefficient_of_variation
 
+        # 8. Calculate NEW confidence score (with volatility)
+        confidence = self._calculate_confidence_v2(
+            total_listings=len(filtered_prices),
+            spread_pct=spread_pct,
+            stale_count=stale_count,
+            volatility_cv=volatility_cv,
+        )
+
+        # Floor estimate = lowest ask (the actual floor!)
         return OrderBookResult(
-            floor_estimate=round(deepest.midpoint, 2),
+            floor_estimate=round(lowest_ask, 2),
+            lowest_ask=round(lowest_ask, 2),
             confidence=confidence,
             deepest_bucket=deepest,
             total_listings=len(filtered_prices),
             outliers_removed=outliers_removed,
             buckets=buckets,
             stale_count=stale_count,
+            spread_pct=round(spread_pct, 1),
+            volatility_cv=round(volatility_cv, 3),
         )
 
     def _fetch_active_listings(
@@ -304,13 +345,8 @@ class OrderBookAnalyzer:
         self, deepest_bucket: BucketInfo, total_listings: int, stale_count: int
     ) -> float:
         """
-        Calculate confidence score for floor estimate.
-
-        confidence = depth_ratio × (1 - stale_ratio)
-
-        Where:
-        - depth_ratio = deepest_bucket.count / total_listings
-        - stale_ratio = stale listings / total_listings
+        DEPRECATED: Old confidence calculation (kept for backwards compatibility).
+        Use _calculate_confidence_v2 instead.
         """
         if total_listings == 0:
             return 0.0
@@ -319,6 +355,67 @@ class OrderBookAnalyzer:
         stale_ratio = stale_count / total_listings
 
         confidence = depth_ratio * (1 - stale_ratio)
+        return round(min(1.0, max(0.0, confidence)), 3)
+
+    def _calculate_confidence_v2(
+        self,
+        total_listings: int,
+        spread_pct: float,
+        stale_count: int,
+        volatility_cv: float = 0.5,
+    ) -> float:
+        """
+        Calculate confidence score for floor estimate (v2.1 - with volatility).
+
+        Confidence is based on four factors:
+        1. Listing count (more listings = higher confidence, with diminishing returns)
+        2. Price spread (tighter spread = higher confidence)
+        3. Recency (fewer stale listings = higher confidence)
+        4. Volatility (stable cards = higher confidence in floor estimate)
+
+        Returns: 0.0 to 1.0
+        """
+        from math import log2
+
+        if total_listings == 0:
+            return 0.0
+
+        # 1. Listing count score (logarithmic - diminishing returns)
+        # 1 listing = 0.3, 3 listings = 0.5, 10 listings = 0.7, 30+ = 0.9
+        count_score = min(0.9, 0.3 + 0.2 * log2(max(1, total_listings)))
+
+        # 2. Spread score (lower spread = higher confidence)
+        # 0% spread = 1.0, 50% spread = 0.5, 100%+ spread = 0.2
+        if spread_pct <= 0:
+            spread_score = 1.0
+        elif spread_pct <= 20:
+            spread_score = 1.0 - (spread_pct / 40)  # 0-20% -> 1.0-0.5
+        elif spread_pct <= 50:
+            spread_score = 0.5 - ((spread_pct - 20) / 60)  # 20-50% -> 0.5-0.0
+        else:
+            spread_score = max(0.0, 0.2 - (spread_pct - 50) / 500)  # 50%+ -> small penalty
+
+        # 3. Recency score (fewer stale = higher confidence)
+        stale_ratio = stale_count / total_listings
+        recency_score = 1.0 - (stale_ratio * 0.5)  # Max 50% penalty for all stale
+
+        # 4. Volatility score (lower CV = higher confidence)
+        # CV 0.0 = 1.0 (very stable), CV 0.3 = 0.85, CV 0.5 = 0.5, CV 1.0+ = 0.2
+        if volatility_cv <= 0.3:
+            volatility_score = 1.0 - (volatility_cv * 0.5)  # 0-0.3 -> 1.0-0.85
+        elif volatility_cv <= 0.5:
+            volatility_score = 0.85 - ((volatility_cv - 0.3) * 1.75)  # 0.3-0.5 -> 0.85-0.5
+        else:
+            volatility_score = max(0.2, 0.5 - (volatility_cv - 0.5) * 0.6)  # 0.5+ -> 0.5-0.2
+
+        # Weighted combination
+        confidence = (
+            self.config.LISTING_COUNT_WEIGHT * count_score +
+            self.config.SPREAD_WEIGHT * spread_score +
+            self.config.RECENCY_WEIGHT * recency_score +
+            self.config.VOLATILITY_WEIGHT * volatility_score
+        )
+
         return round(min(1.0, max(0.0, confidence)), 3)
 
     def _fetch_sold_listings(
@@ -363,8 +460,8 @@ class OrderBookAnalyzer:
         """
         Fallback: estimate floor from sold listings when active listings are insufficient.
 
-        Uses the same bucketing algorithm but with reduced confidence (0.5x multiplier)
-        to reflect that sales data is historical rather than current availability.
+        Uses lowest sale price (floor) with confidence penalty to reflect that
+        sales data is historical rather than current availability.
 
         If no data found within the given window, expands to 90 days, then all-time.
         """
@@ -378,44 +475,32 @@ class OrderBookAnalyzer:
             # Last resort: all-time data (365 days)
             listings = self._fetch_sold_listings(card_id, treatment, 365)
 
-        # For sales fallback, we accept even 1 listing
         if len(listings) == 0:
             return None
 
         prices = [row["price"] for row in listings]
         sold_dates = [row["sold_date"] for row in listings]
 
-        # If only 1-2 listings, return the lowest price directly
-        if len(prices) < self.config.MIN_LISTINGS:
-            lowest_price = min(prices)
-            bucket = BucketInfo(lowest_price, lowest_price, len(prices))
-            # Low confidence for sparse data
-            confidence = self.config.SPARSE_DATA_CONFIDENCE_MULTIPLIER * len(prices)
-            return OrderBookResult(
-                floor_estimate=round(lowest_price, 2),
-                confidence=round(confidence, 3),
-                deepest_bucket=bucket,
-                total_listings=len(prices),
-                outliers_removed=0,
-                buckets=[bucket],
-                stale_count=0,
-                source="sales_fallback",
-            )
+        # Use avg of 4 lowest sales as floor (matches floor_price service)
+        sorted_prices = sorted(prices)
+        floor_sample = sorted_prices[:4]
+        floor_estimate = sum(floor_sample) / len(floor_sample)
+        lowest_sale = min(prices)
 
-        # Apply same algorithm as order book
+        # Filter outliers for bucket analysis
         filtered_prices, outliers_removed = self._filter_outliers(prices)
-
         if len(filtered_prices) == 0:
-            filtered_prices = prices  # Fall back to unfiltered if all removed
+            filtered_prices = prices
 
+        # Create buckets for analysis
         buckets = self._create_buckets(filtered_prices)
+        deepest = self._find_deepest_bucket(buckets) if buckets else None
 
-        if not buckets:
-            # Edge case: create single bucket from lowest price
-            lowest = min(filtered_prices)
-            buckets = [BucketInfo(lowest, lowest, len(filtered_prices))]
-
-        deepest = self._find_deepest_bucket(buckets)
+        # Calculate spread
+        if len(filtered_prices) > 1:
+            spread_pct = ((max(filtered_prices) - min(filtered_prices)) / min(filtered_prices)) * 100
+        else:
+            spread_pct = 0.0
 
         # Calculate staleness
         stale_cutoff = datetime.now(timezone.utc) - timedelta(days=self.config.STALE_DAYS)
@@ -426,18 +511,30 @@ class OrderBookAnalyzer:
             if d < stale_cutoff:
                 stale_count += 1
 
-        # Calculate confidence with penalty for sales fallback
-        base_confidence = self._calculate_confidence(deepest, len(filtered_prices), stale_count)
+        # Get card volatility for confidence adjustment
+        volatility = self.market_patterns.get_card_volatility(card_id, treatment)
+        volatility_cv = volatility.coefficient_of_variation
+
+        # Calculate confidence with sales fallback penalty
+        base_confidence = self._calculate_confidence_v2(
+            total_listings=len(filtered_prices),
+            spread_pct=spread_pct,
+            stale_count=stale_count,
+            volatility_cv=volatility_cv,
+        )
         confidence = round(base_confidence * self.config.SALES_FALLBACK_CONFIDENCE_PENALTY, 3)
 
         return OrderBookResult(
-            floor_estimate=round(deepest.midpoint, 2),
+            floor_estimate=round(floor_estimate, 2),
+            lowest_ask=round(lowest_sale, 2),  # Lowest sale, not ask
             confidence=confidence,
             deepest_bucket=deepest,
             total_listings=len(filtered_prices),
             outliers_removed=outliers_removed,
             buckets=buckets,
             stale_count=stale_count,
+            spread_pct=round(spread_pct, 1),
+            volatility_cv=round(volatility_cv, 3),
             source="sales_fallback",
         )
 

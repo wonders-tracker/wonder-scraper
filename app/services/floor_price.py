@@ -66,6 +66,7 @@ class FloorPriceSource(str, Enum):
 
     SALES = "sales"  # Avg of lowest sales
     ORDER_BOOK = "order_book"  # Order book bucket analysis
+    TREATMENT_MULTIPLIER = "treatment_multiplier"  # Estimated from other treatment
     NONE = "none"  # No data available
 
 
@@ -117,7 +118,8 @@ class FloorPriceService:
     2. order_book confidence > 0.3? -> ORDER_BOOK, mapped confidence
     3. sales_count >= 2? -> SALES, LOW/MEDIUM confidence
     4. Expand to 90 days and retry
-    5. Return NONE if still no data
+    5. Treatment multiplier fallback (estimate from other treatments)
+    6. Return NONE if still no data
 
     Example:
         service = FloorPriceService(session)
@@ -130,6 +132,7 @@ class FloorPriceService:
         self.session = session
         self.config = FloorPriceConfig()
         self._order_book_analyzer: Optional[OrderBookAnalyzer] = None
+        self._market_patterns = None
 
     @property
     def order_book_analyzer(self) -> OrderBookAnalyzer:
@@ -137,6 +140,14 @@ class FloorPriceService:
         if self._order_book_analyzer is None:
             self._order_book_analyzer = OrderBookAnalyzer(self.session)
         return self._order_book_analyzer
+
+    @property
+    def market_patterns(self):
+        """Lazy-load MarketPatternsService."""
+        if self._market_patterns is None:
+            from app.services.market_patterns import MarketPatternsService
+            self._market_patterns = MarketPatternsService(self.session)
+        return self._market_patterns
 
     def get_floor_price(
         self,
@@ -237,7 +248,14 @@ class FloorPriceService:
                 card_id, treatment, self.config.EXPANDED_LOOKBACK_DAYS, include_blokpax
             )
 
-        # Step 5: No data available
+        # Step 5: Treatment multiplier fallback (when specific treatment has no data)
+        if treatment:
+            multiplier_result = self._estimate_from_treatment_multiplier(card_id, treatment, days)
+            if multiplier_result:
+                _set_cached_floor(cache_key, multiplier_result)
+                return multiplier_result
+
+        # Step 6: No data available
         result = FloorPriceResult(
             price=None,
             source=FloorPriceSource.NONE,
@@ -352,6 +370,81 @@ class FloorPriceService:
             return ConfidenceLevel.MEDIUM
         else:
             return ConfidenceLevel.LOW
+
+    def _estimate_from_treatment_multiplier(
+        self,
+        card_id: int,
+        target_treatment: str,
+        days: int,
+    ) -> Optional[FloorPriceResult]:
+        """
+        Estimate floor price for a treatment using multipliers from another treatment.
+
+        When a specific treatment has no sales data, this method:
+        1. Finds other treatments for this card that have sales
+        2. Uses the treatment with the most reliable data (most sales)
+        3. Applies the multiplier to estimate the target treatment's floor
+
+        Returns:
+            FloorPriceResult with estimated price, or None if no base treatment found
+        """
+        from app.services.market_patterns import TREATMENT_MULTIPLIERS
+
+        # Get available treatments with their floor prices
+        available = self.market_patterns.get_available_treatments_for_card(card_id, days)
+
+        if not available:
+            return None
+
+        # Don't estimate if target treatment already has data
+        if target_treatment in available:
+            return None
+
+        # Find best base treatment (most sales, and has a known multiplier)
+        best_base = None
+        best_count = 0
+
+        for treatment, data in available.items():
+            if treatment in TREATMENT_MULTIPLIERS and data["count"] > best_count:
+                best_base = treatment
+                best_count = data["count"]
+
+        if not best_base:
+            return None
+
+        # Check if target treatment has a known multiplier
+        if target_treatment not in TREATMENT_MULTIPLIERS:
+            return None
+
+        # Calculate estimated floor
+        base_floor = available[best_base]["floor"]
+        estimated_price = self.market_patterns.estimate_from_treatment_multiplier(
+            known_price=base_floor,
+            known_treatment=best_base,
+            target_treatment=target_treatment,
+        )
+
+        if not estimated_price:
+            return None
+
+        # Confidence is LOW because this is an estimate
+        # Reduce further if base treatment had few sales
+        base_confidence = min(0.5, best_count / 8)  # Max 0.5, scaled by sales count
+
+        return FloorPriceResult(
+            price=estimated_price,
+            source=FloorPriceSource.TREATMENT_MULTIPLIER,
+            confidence=ConfidenceLevel.LOW,
+            confidence_score=base_confidence,
+            metadata={
+                "base_treatment": best_base,
+                "base_floor": base_floor,
+                "base_sales_count": best_count,
+                "multiplier": round(estimated_price / base_floor, 2),
+                "target_treatment": target_treatment,
+                "days": days,
+            },
+        )
 
     @overload
     def get_floor_prices_batch(

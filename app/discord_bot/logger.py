@@ -17,6 +17,7 @@ LOGS_WEBHOOK_URL = os.getenv("DISCORD_LOGS_WEBHOOK_URL")
 UPDATES_WEBHOOK_URL = os.getenv("DISCORD_UPDATES_WEBHOOK_URL")
 NEW_LISTINGS_WEBHOOK_URL = os.getenv("DISCORD_NEW_LISTINGS_WEBHOOK_URL")
 NEW_SALES_WEBHOOK_URL = os.getenv("DISCORD_NEW_SALES_WEBHOOK_URL")
+DEALS_WEBHOOK_URL = os.getenv("DISCORD_DEALS_WEBHOOK_URL")  # Falls back to NEW_LISTINGS
 
 
 def _send_log(
@@ -266,4 +267,125 @@ def log_market_insights(insights_text: str) -> bool:
         return response.status_code in (200, 204)
     except Exception as e:
         print(f"Market insights Discord post failed: {e}")
+        return False
+
+
+def log_hot_deal(
+    card_name: str,
+    price: float,
+    floor_price: float,
+    discount_pct: float,
+    deal_quality: str,
+    treatment: Optional[str] = None,
+    url: Optional[str] = None,
+    volatility_cv: Optional[float] = None,
+    threshold_pct: Optional[float] = None,
+) -> bool:
+    """
+    Log a hot deal alert using smart deal detection.
+
+    This uses volatility-based thresholds:
+    - Stable cards (CV < 0.3): 15% below floor = deal
+    - Moderate (CV 0.3-0.5): 25% below floor = deal
+    - Volatile (CV > 0.5): 40% below floor = deal
+
+    Args:
+        card_name: Name of the card
+        price: Listed/sold price
+        floor_price: Current floor price
+        discount_pct: Discount percentage (e.g., 25.0 for 25% off)
+        deal_quality: "hot", "good", or "marginal"
+        treatment: Card treatment (optional)
+        url: Link to listing (optional)
+        volatility_cv: Card's coefficient of variation (optional)
+        threshold_pct: Deal threshold for this card (optional)
+    """
+    webhook_url = DEALS_WEBHOOK_URL or NEW_LISTINGS_WEBHOOK_URL
+    if not webhook_url:
+        return False
+
+    # Emoji and color based on deal quality
+    quality_config = {
+        "hot": {"emoji": "🔥🔥🔥", "color": 0xEF4444, "label": "HOT DEAL"},  # Red
+        "good": {"emoji": "🔥🔥", "color": 0xF59E0B, "label": "Good Deal"},  # Orange
+        "marginal": {"emoji": "🔥", "color": 0x10B981, "label": "Deal"},  # Green
+    }
+    config = quality_config.get(deal_quality, quality_config["marginal"])
+
+    # Build description
+    description = f"**{card_name}**"
+    if treatment and treatment != "Classic Paper":
+        description += f" ({treatment})"
+    description += f"\n\n💰 **${price:.2f}** — {discount_pct:.0f}% below floor!"
+
+    # Add volatility context if available
+    if volatility_cv is not None and threshold_pct is not None:
+        stability = "stable" if volatility_cv < 0.3 else "moderate" if volatility_cv < 0.5 else "volatile"
+        description += f"\n📊 Card is {stability} (threshold: {threshold_pct:.0f}%)"
+
+    fields = [
+        {"name": "Price", "value": f"${price:.2f}", "inline": True},
+        {"name": "Floor", "value": f"${floor_price:.2f}", "inline": True},
+        {"name": "Discount", "value": f"{discount_pct:.0f}%", "inline": True},
+    ]
+
+    if url:
+        fields.append({"name": "Link", "value": f"[View Listing]({url})", "inline": False})
+
+    return _send_log(
+        title=f"{config['emoji']} {config['label']}!",
+        description=description,
+        color=config["color"],
+        fields=fields,
+        webhook_url=webhook_url,
+        username="Wonders Deals",
+    )
+
+
+def check_and_log_deal(
+    card_id: int,
+    card_name: str,
+    price: float,
+    treatment: Optional[str] = None,
+    url: Optional[str] = None,
+    min_quality: str = "good",
+) -> bool:
+    """
+    Check if a listing qualifies as a deal and log it if so.
+
+    Uses the DealDetector with volatility-based thresholds.
+
+    Args:
+        card_id: Database ID of the card
+        card_name: Name of the card (for display)
+        price: Listed price
+        treatment: Card treatment (optional)
+        url: Link to listing (optional)
+        min_quality: Minimum quality to log ("marginal", "good", "hot")
+
+    Returns:
+        True if a deal was detected and logged
+    """
+    try:
+        from app.services.market_patterns import get_deal_detector
+
+        detector = get_deal_detector()
+        result = detector.check_deal(card_id, price, treatment)
+
+        quality_order = {"not_a_deal": 0, "marginal": 1, "good": 2, "hot": 3}
+        if quality_order.get(result.deal_quality, 0) >= quality_order.get(min_quality, 1):
+            return log_hot_deal(
+                card_name=card_name,
+                price=result.price,
+                floor_price=result.floor_price,
+                discount_pct=result.discount_pct,
+                deal_quality=result.deal_quality,
+                treatment=treatment,
+                url=url,
+                volatility_cv=result.volatility_cv,
+                threshold_pct=result.threshold_pct,
+            )
+        return False
+    except Exception as e:
+        print(f"Deal detection failed: {e}")
         return False
