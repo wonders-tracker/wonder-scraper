@@ -888,7 +888,8 @@ async def scrape_opensea_listings_to_db(
             # Rollback failed transaction to allow subsequent operations
             try:
                 session.rollback()
-            except Exception:
+            except (RuntimeError, AttributeError):
+                # Rollback can fail if session is in bad state - safe to ignore
                 pass
             continue
 

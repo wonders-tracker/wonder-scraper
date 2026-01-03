@@ -255,8 +255,8 @@ async def daily_report_task():
 
             await channel.send(embed=embed, view=view)
 
-        except Exception:
-            # Send with attachment fallback
+        except (OSError, ValueError, RuntimeError):
+            # Storage upload can fail (DB error, encoding error) - fall back to attachment
             file = discord.File(fp=__import__("io").BytesIO(csv_content), filename=filename)
             await channel.send(embed=embed, file=file)
 
@@ -310,8 +310,8 @@ async def weekly_report_task():
 
             await channel.send(embed=embed, view=view)
 
-        except Exception:
-            # Send with attachment fallback
+        except (OSError, ValueError, RuntimeError):
+            # Storage upload can fail (DB error, encoding error) - fall back to attachment
             file = discord.File(fp=__import__("io").BytesIO(csv_content), filename=filename)
             await channel.send(embed=embed, file=file)
 

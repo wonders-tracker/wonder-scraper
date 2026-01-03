@@ -60,7 +60,8 @@ def load_checkpoint() -> tuple[set, dict]:
         with open(CHECKPOINT_FILE) as f:
             data = json.load(f)
         return set(data.get("processed_ids", [])), data.get("stats", {})
-    except Exception:
+    except (json.JSONDecodeError, KeyError, TypeError, OSError) as e:
+        print(f"Warning: Could not load checkpoint: {e}")
         return set(), {}
 
 
@@ -137,7 +138,8 @@ async def fetch_with_browser(browser, item_id: str, mp_id: int) -> dict:
         if tab:
             try:
                 await asyncio.wait_for(tab.close(), timeout=5)
-            except:
+            except (asyncio.TimeoutError, Exception):
+                # Tab close can fail if browser crashed or timeout occurred - safe to ignore
                 pass
 
 
@@ -145,13 +147,23 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
     """Run backfill with Pydoll browser."""
     from pydoll.browser import Chrome
     from pydoll.browser.options import ChromiumOptions
+    from app.scraper.browser import find_chrome_binary
 
-    # Setup browser
+    # Setup browser with proper Chrome detection
     options = ChromiumOptions()
     options.headless = True
     options.add_argument('--disable-gpu')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+
+    # Use system Chrome binary
+    chrome_path = find_chrome_binary()
+    if chrome_path:
+        print(f"Using Chrome: {chrome_path}")
+        options.binary_location = chrome_path
+    else:
+        print("ERROR: No Chrome binary found!")
+        return 0, 0, len(work_items)
 
     print("Starting browser...")
     browser = Chrome(options=options)
@@ -223,10 +235,18 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
                         print("\n⚠️  Blocked - restarting browser...")
                         try:
                             await asyncio.wait_for(browser.stop(), timeout=10)
-                        except:
+                        except (asyncio.TimeoutError, Exception):
+                            # Browser stop can fail if already crashed - safe to ignore
                             pass
                         await asyncio.sleep(5)
-                        browser = Chrome(options=options)
+                        new_options = ChromiumOptions()
+                        new_options.headless = True
+                        new_options.add_argument('--disable-gpu')
+                        new_options.add_argument('--no-sandbox')
+                        new_options.add_argument('--disable-dev-shm-usage')
+                        if chrome_path:
+                            new_options.binary_location = chrome_path
+                        browser = Chrome(options=new_options)
                         await browser.start()
                         blocked_count = 0
                         timeout_count = 0
@@ -240,10 +260,18 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
                         print("\n⚠️  Multiple timeouts - browser stuck, restarting...")
                         try:
                             await asyncio.wait_for(browser.stop(), timeout=10)
-                        except:
+                        except (asyncio.TimeoutError, Exception):
+                            # Browser stop can fail if already crashed - safe to ignore
                             print("    (force killing browser)")
                         await asyncio.sleep(3)
-                        browser = Chrome(options=options)
+                        new_options = ChromiumOptions()
+                        new_options.headless = True
+                        new_options.add_argument('--disable-gpu')
+                        new_options.add_argument('--no-sandbox')
+                        new_options.add_argument('--disable-dev-shm-usage')
+                        if chrome_path:
+                            new_options.binary_location = chrome_path
+                        browser = Chrome(options=new_options)
                         await browser.start()
                         timeout_count = 0
                         blocked_count = 0
@@ -271,10 +299,18 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
                     print("\n⚠️  Multiple failed batches - browser stuck, force restarting...")
                     try:
                         await asyncio.wait_for(browser.stop(), timeout=5)
-                    except:
+                    except (asyncio.TimeoutError, Exception):
+                        # Browser stop can fail if already crashed - safe to ignore
                         print("    (force killing browser)")
                     await asyncio.sleep(3)
-                    browser = Chrome(options=options)
+                    new_options = ChromiumOptions()
+                    new_options.headless = True
+                    new_options.add_argument('--disable-gpu')
+                    new_options.add_argument('--no-sandbox')
+                    new_options.add_argument('--disable-dev-shm-usage')
+                    if chrome_path:
+                        new_options.binary_location = chrome_path
+                    browser = Chrome(options=new_options)
                     await browser.start()
                     timeout_count = 0
                     blocked_count = 0

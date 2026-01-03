@@ -29,7 +29,8 @@ def _is_neon_pooler(url: str) -> bool:
     try:
         parsed = urlparse(url)
         return parsed.hostname is not None and "-pooler" in parsed.hostname
-    except Exception:
+    except (ValueError, AttributeError):
+        # URL parsing can fail on malformed URLs
         return False
 
 
@@ -83,7 +84,9 @@ def set_database_security(dbapi_connection, connection_record):
         # Prevent accidental table drops/truncates from app
         # Note: This requires database-level role restrictions
         # For app-level, we rely on SQLAlchemy's parameterized queries
-    except Exception as e:
+    except (Exception,) as e:
+        # Catch database errors (psycopg2.Error) but still log - this is important for debugging
+        # Using broad Exception here because psycopg2 may not be available at import time
         logger.warning(f"Could not set database security parameters: {e}")
     finally:
         cursor.close()

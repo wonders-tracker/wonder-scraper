@@ -39,7 +39,8 @@ def get_device_type(user_agent_string: str) -> str:
             return "tablet"
         else:
             return "desktop"
-    except:
+    except (ValueError, AttributeError, TypeError):
+        # user-agents library can raise these when parsing malformed UA strings
         return "unknown"
 
 

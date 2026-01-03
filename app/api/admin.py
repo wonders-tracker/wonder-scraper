@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Depends
 from pydantic import BaseModel
 from datetime import datetime, timezone
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from app.api import deps
 from app.core.typing import col
@@ -322,7 +323,8 @@ async def get_admin_stats(
                 text("SELECT pg_size_pretty(pg_database_size(current_database()))")
             ).first()
             db_size = db_size_result[0] if db_size_result else "Unknown"
-        except:
+        except (OperationalError, ProgrammingError):
+            # pg_database_size may fail due to permissions or connection issues
             db_size = "Unknown"
 
         # Top scraped cards (by listing count)
