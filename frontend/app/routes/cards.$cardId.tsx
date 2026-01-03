@@ -12,6 +12,7 @@ const PriceHistoryChart = lazy(() => import('../components/charts/PriceHistoryCh
 import clsx from 'clsx'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
+import { ConfidenceIndicator } from '../components/ConfidenceIndicator'
 import { SellerBadge } from '../components/SellerBadge'
 import { CardActionSplitButton } from '../components/CardActionSplitButton'
 import { ProductSubtypeBadge, getSubtypeColor } from '../components/ProductSubtypeBadge'
@@ -721,6 +722,25 @@ function CardDetail() {
       return Array.from(s) as string[]
   }, [history, isSealed])
 
+  // Unified treatment pricing data - combines floor, ask, FMP, and confidence
+  const unifiedTreatmentData = useMemo(() => {
+      const treatments = new Set<string>()
+      // Collect all treatments from all sources
+      if (card?.floor_by_variant) Object.keys(card.floor_by_variant).forEach(t => treatments.add(t))
+      if (card?.lowest_ask_by_variant) Object.keys(card.lowest_ask_by_variant).forEach(t => treatments.add(t))
+      if (pricingData?.by_treatment) pricingData.by_treatment.forEach(p => treatments.add(p.treatment))
+      if (orderBookData?.by_treatment) orderBookData.by_treatment.forEach(p => treatments.add(p.treatment))
+
+      return Array.from(treatments).map(treatment => ({
+          treatment,
+          floor: card?.floor_by_variant?.[treatment] ?? null,
+          ask: card?.lowest_ask_by_variant?.[treatment] ?? null,
+          fmp: pricingData?.by_treatment?.find(t => t.treatment === treatment)?.fmp ?? null,
+          confidence: orderBookData?.by_treatment?.find(t => t.treatment === treatment)?.confidence ?? 0,
+          salesCount: pricingData?.by_treatment?.find(t => t.treatment === treatment)?.sales_count ?? 0,
+      })).sort((a, b) => (a.floor ?? Infinity) - (b.floor ?? Infinity))
+  }, [card, pricingData, orderBookData])
+
   if (isLoadingCard) {
     return (
         <div className="min-h-screen flex items-center justify-center bg-background text-foreground font-mono">
@@ -837,8 +857,8 @@ function CardDetail() {
                             </div>
                         </div>
 
-                        {/* Metrics Row - Left aligned below title */}
-                        <div className="flex flex-wrap gap-8">
+                        {/* Metrics Row - Grid on mobile, flex on larger screens */}
+                        <div className="grid grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:gap-8">
                             <div>
                                 <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">
                                     Floor Price
@@ -848,7 +868,7 @@ function CardDetail() {
                                         </span>
                                     )}
                                 </div>
-                                <div className="text-4xl font-mono font-bold text-brand-300">
+                                <div className="text-3xl sm:text-4xl font-mono font-bold text-brand-300">
                                     ${(() => {
                                         // Get variant-specific price if filter is active
                                         const variantKey = treatmentFilter === 'all' ? null :
@@ -867,32 +887,32 @@ function CardDetail() {
                                     })()}
                                 </div>
                             </div>
-                            <div className="border-l border-border pl-8">
+                            <div className="sm:border-l sm:border-border sm:pl-8">
                                 <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">
                                     Fair Price
                                 </div>
                                 {isLoggedIn ? (
-                                    <div className="text-4xl font-mono font-bold">
+                                    <div className="text-3xl sm:text-4xl font-mono font-bold">
                                         ${pricingData?.fair_market_price?.toFixed(2) || card.vwap?.toFixed(2) || '---'}
                                     </div>
                                 ) : (
                                     <Tooltip content="Log in to see our Fair Market Price">
-                                        <div className="text-4xl font-mono font-bold blur-sm select-none cursor-help">
+                                        <div className="text-3xl sm:text-4xl font-mono font-bold blur-sm select-none cursor-help">
                                             $XX.XX
                                         </div>
                                     </Tooltip>
                                 )}
                             </div>
-                            <div className="border-l border-border pl-8">
+                            <div className="sm:border-l sm:border-border sm:pl-8">
                                 <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">30d Vol</div>
-                                <div className="text-4xl font-mono font-bold">
+                                <div className="text-3xl sm:text-4xl font-mono font-bold">
                                     {(card.volume_30d || 0).toLocaleString()}
                                 </div>
                             </div>
                             {/* Highest Confirmed Sale */}
-                            <div className="border-l border-border pl-8">
+                            <div className="sm:border-l sm:border-border sm:pl-8">
                                 <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">Highest Sale</div>
-                                <div className="text-4xl font-mono font-bold text-brand-400">
+                                <div className="text-3xl sm:text-4xl font-mono font-bold text-brand-400">
                                     ${card.max_price ? card.max_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '---'}
                                 </div>
                             </div>
@@ -976,7 +996,7 @@ function CardDetail() {
                                                 <button
                                                     onClick={() => setChartType('line')}
                                                     className={clsx(
-                                                        "px-3 py-1.5 text-[10px] font-bold uppercase transition-colors",
+                                                        "px-3 py-2 min-h-[44px] text-[10px] font-bold uppercase transition-colors touch-manipulation",
                                                         chartType === 'line' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                                                     )}
                                                 >
@@ -985,7 +1005,7 @@ function CardDetail() {
                                                 <button
                                                     onClick={() => setChartType('scatter')}
                                                     className={clsx(
-                                                        "px-3 py-1.5 text-[10px] font-bold uppercase transition-colors",
+                                                        "px-3 py-2 min-h-[44px] text-[10px] font-bold uppercase transition-colors touch-manipulation",
                                                         chartType === 'scatter' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                                                     )}
                                                 >
@@ -1000,7 +1020,7 @@ function CardDetail() {
                                                         key={range}
                                                         onClick={() => setTimeRange(range as TimeRange)}
                                                         className={clsx(
-                                                            "px-3 py-1.5 text-[10px] font-bold uppercase transition-colors",
+                                                            "px-3 py-2 min-h-[44px] text-[10px] font-bold uppercase transition-colors touch-manipulation",
                                                             timeRange === range ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                                                         )}
                                                     >
@@ -1083,7 +1103,7 @@ function CardDetail() {
                                                     data={chartData}
                                                     chartType={chartType}
                                                     floorPrice={card.floor_price ?? undefined}
-                                                    fmpPrice={pricingData?.fair_market_price ?? undefined}
+                                                    lowestAsk={card.lowest_ask ?? undefined}
                                                 />
                                             </Suspense>
                                         ) : (
@@ -1119,145 +1139,70 @@ function CardDetail() {
                             </div>
                         </div>
 
-                        {/* Variant Price Table - Shows floor and ask per treatment/subtype */}
-                        {(card.floor_by_variant && Object.keys(card.floor_by_variant).length > 0) ||
-                         (card.lowest_ask_by_variant && Object.keys(card.lowest_ask_by_variant).length > 0) ? (
-                            <div className="border border-border rounded bg-card p-4">
-                                <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    Price by Variant
-                                    <Tooltip content="Floor = avg of 4 lowest sales. Ask = cheapest active listing.">
-                                        <span className="text-muted-foreground cursor-help">ⓘ</span>
-                                    </Tooltip>
+                        {/* Unified Treatment Pricing Table */}
+                        {unifiedTreatmentData.length > 0 && (
+                            <div className="border border-border rounded bg-card relative">
+                                {/* Login gate overlay for FMP column */}
+                                {!isLoggedIn && <LoginUpsellButton title="Sign in to view FMP" />}
+                                <h3 className="text-xs font-bold uppercase tracking-widest p-4 border-b border-border">
+                                    {card.product_type === 'Single' ? 'Treatment' : 'Variant'} Pricing
                                 </h3>
+                                <div className="sm:hidden text-[10px] text-muted-foreground text-center py-2 border-b border-border/50">
+                                    ← Scroll for more →
+                                </div>
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-xs">
+                                    <table className="w-full text-sm">
                                         <thead>
-                                            <tr className="border-b border-border">
-                                                <th className="text-left py-2 text-muted-foreground uppercase tracking-wider">Variant</th>
-                                                <th className="text-right py-2 text-muted-foreground uppercase tracking-wider">Floor</th>
-                                                <th className="text-right py-2 text-muted-foreground uppercase tracking-wider">Ask</th>
-                                                <th className="text-right py-2 text-muted-foreground uppercase tracking-wider">Δ</th>
+                                            <tr className="text-left text-muted-foreground text-xs border-b border-border">
+                                                <th className="p-3">{card.product_type === 'Single' ? 'Treatment' : 'Variant'}</th>
+                                                <th className="p-3 text-right">
+                                                    <Tooltip content="Average of 4 lowest recent sales">
+                                                        <span className="cursor-help">Floor</span>
+                                                    </Tooltip>
+                                                </th>
+                                                <th className="p-3 text-right">
+                                                    <Tooltip content="Lowest active listing price">
+                                                        <span className="cursor-help">Ask</span>
+                                                    </Tooltip>
+                                                </th>
+                                                <th className="p-3 text-right">
+                                                    <Tooltip content="Fair Market Price - MAD-trimmed mean">
+                                                        <span className="cursor-help">FMP</span>
+                                                    </Tooltip>
+                                                </th>
+                                                <th className="p-3 text-center">
+                                                    <Tooltip content="Data confidence based on sample size">
+                                                        <span className="cursor-help">Conf</span>
+                                                    </Tooltip>
+                                                </th>
+                                                <th className="p-3 text-right">Sales</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {/* Combine all variants from both floor and ask maps */}
-                                            {Array.from(new Set([
-                                                ...Object.keys(card.floor_by_variant || {}),
-                                                ...Object.keys(card.lowest_ask_by_variant || {})
-                                            ])).sort((a, b) => {
-                                                // Sort by floor price ascending, then by ask if no floor
-                                                const floorA = card.floor_by_variant?.[a] ?? Infinity
-                                                const floorB = card.floor_by_variant?.[b] ?? Infinity
-                                                if (floorA !== floorB) return floorA - floorB
-                                                const askA = card.lowest_ask_by_variant?.[a] ?? Infinity
-                                                const askB = card.lowest_ask_by_variant?.[b] ?? Infinity
-                                                return askA - askB
-                                            }).map((variant) => {
-                                                const floor = card.floor_by_variant?.[variant]
-                                                const ask = card.lowest_ask_by_variant?.[variant]
-                                                const delta = floor && ask ? ((ask - floor) / floor * 100) : null
-
-                                                return (
-                                                    <tr key={variant} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                                                        <td className="py-2">
-                                                            <TreatmentBadge treatment={variant} size="xs" />
-                                                        </td>
-                                                        <td className="text-right py-2 font-mono">
-                                                            {floor ? `$${floor.toFixed(2)}` : <span className="text-muted-foreground">---</span>}
-                                                        </td>
-                                                        <td className="text-right py-2 font-mono">
-                                                            {ask ? `$${ask.toFixed(2)}` : <span className="text-muted-foreground">---</span>}
-                                                        </td>
-                                                        <td className="text-right py-2 font-mono">
-                                                            {delta !== null ? (
-                                                                <span className={clsx(
-                                                                    delta > 0 ? 'text-red-400' : delta < 0 ? 'text-brand-300' : 'text-muted-foreground'
-                                                                )}>
-                                                                    {delta > 0 ? '+' : ''}{delta.toFixed(0)}%
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-muted-foreground">---</span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                )
-                                            })}
+                                            {unifiedTreatmentData.map(row => (
+                                                <tr key={row.treatment} className="border-b border-border/50 hover:bg-muted/50">
+                                                    <td className="p-3">
+                                                        <TreatmentBadge treatment={row.treatment} size="xs" />
+                                                    </td>
+                                                    <td className="p-3 text-right font-mono text-brand-300">
+                                                        {row.floor ? `$${row.floor.toFixed(2)}` : '---'}
+                                                    </td>
+                                                    <td className="p-3 text-right font-mono text-blue-400">
+                                                        {row.ask ? `$${row.ask.toFixed(2)}` : '---'}
+                                                    </td>
+                                                    <td className="p-3 text-right font-mono text-amber-400">
+                                                        {row.fmp ? `$${row.fmp.toFixed(2)}` : '---'}
+                                                    </td>
+                                                    <td className="p-3 flex justify-center">
+                                                        <ConfidenceIndicator score={row.confidence} size="sm" />
+                                                    </td>
+                                                    <td className="p-3 text-right text-muted-foreground">
+                                                        {row.salesCount || '---'}
+                                                    </td>
+                                                </tr>
+                                            ))}
                                         </tbody>
                                     </table>
-                                </div>
-                            </div>
-                        ) : null}
-
-                        {/* Fair Market Price by Treatment - Horizontal Text Row */}
-                        {pricingData?.by_treatment && pricingData.by_treatment.length > 0 && (
-                            <div className="border border-border rounded bg-card px-4 py-3 relative">
-                                {/* Login gate overlay */}
-                                {!isLoggedIn && <LoginUpsellButton title="Sign in to view" />}
-                                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                                            Fair Market Price by {card.product_type === 'Single' ? 'Treatment' : 'Variant'}
-                                        </span>
-                                    </div>
-                                    <div className="h-4 w-px bg-border hidden sm:block"></div>
-                                    {pricingData.by_treatment.map((item, idx) => (
-                                        <div key={idx} className="flex items-center gap-2">
-                                            <span
-                                                className="px-1.5 py-0.5 rounded text-[9px] uppercase font-bold"
-                                                style={{
-                                                    backgroundColor: `${getTreatmentColor(item.treatment)}20`,
-                                                    color: getTreatmentColor(item.treatment)
-                                                }}
-                                            >
-                                                {simplifyTreatment(item.treatment)}
-                                            </span>
-                                            <span className="font-mono font-bold text-blue-400">
-                                                ${item.fmp?.toFixed(2) || '---'}
-                                            </span>
-                                            <span className="text-[10px] text-muted-foreground font-mono">
-                                                ({item.sales_count})
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Order Book Floor by Treatment - Shows floor from active listings */}
-                        {orderBookData?.by_treatment && orderBookData.by_treatment.some(t => t.floor_estimate !== null) && (
-                            <div className="border border-border rounded bg-card px-4 py-3">
-                                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <span className="w-2 h-2 bg-brand-500 rounded-full"></span>
-                                        <Tooltip content="Floor price based on active listing depth. Confidence reflects data quality.">
-                                            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground cursor-help">
-                                                Floor by Treatment (Live)
-                                            </span>
-                                        </Tooltip>
-                                    </div>
-                                    <div className="h-4 w-px bg-border hidden sm:block"></div>
-                                    {orderBookData.by_treatment
-                                        .filter(item => item.floor_estimate !== null)
-                                        .sort((a, b) => (a.floor_estimate ?? Infinity) - (b.floor_estimate ?? Infinity))
-                                        .map((item, idx) => (
-                                        <div key={idx} className="flex items-center gap-2">
-                                            <TreatmentBadge treatment={item.treatment} size="xs" />
-                                            <span className="font-mono font-bold text-brand-400">
-                                                ${item.floor_estimate?.toFixed(2)}
-                                            </span>
-                                            <Tooltip content={`${item.total_listings} active listings • ${item.source === 'sales_fallback' ? 'Based on recent sales' : 'Based on active listings'}`}>
-                                                <span className={clsx(
-                                                    "text-[10px] font-mono cursor-help",
-                                                    item.confidence >= 0.7 ? "text-green-500" :
-                                                    item.confidence >= 0.4 ? "text-yellow-500" :
-                                                    "text-red-500"
-                                                )}>
-                                                    ({(item.confidence * 100).toFixed(0)}%)
-                                                </span>
-                                            </Tooltip>
-                                        </div>
-                                    ))}
                                 </div>
                             </div>
                         )}

@@ -30,10 +30,10 @@ type Props = {
   data: ChartDataPoint[]
   chartType: 'scatter' | 'line'
   floorPrice?: number
-  fmpPrice?: number
+  lowestAsk?: number
 }
 
-export function PriceHistoryChart({ data, chartType, floorPrice, fmpPrice }: Props) {
+export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk }: Props) {
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -41,6 +41,23 @@ export function PriceHistoryChart({ data, chartType, floorPrice, fmpPrice }: Pro
       </div>
     )
   }
+
+  // Calculate Y-axis domain for log scale
+  const prices = data.map(d => d.price).filter(p => p > 0)
+  const refPrices = [floorPrice, lowestAsk].filter((p): p is number => p !== undefined && p > 0)
+  const allPrices = [...prices, ...refPrices]
+
+  // For log scale, find min/max and add padding in log space
+  const minPrice = Math.min(...allPrices)
+  const maxPrice = Math.max(...allPrices)
+
+  // Pad in log space for even visual padding
+  const logMin = Math.log10(minPrice)
+  const logMax = Math.log10(maxPrice)
+  const logPadding = (logMax - logMin) * 0.1
+
+  const yMin = Math.pow(10, logMin - logPadding)
+  const yMax = Math.pow(10, logMax + logPadding)
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -59,28 +76,30 @@ export function PriceHistoryChart({ data, chartType, floorPrice, fmpPrice }: Pro
           <YAxis
             dataKey="price"
             orientation="right"
-            tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val.toFixed(0)}`}
+            scale="log"
+            domain={[yMin, yMax]}
+            tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val < 10 ? val.toFixed(2) : val.toFixed(0)}`}
             tick={{ fill: '#71717a', fontSize: 10 }}
             axisLine={{ stroke: '#27272a' }}
             tickLine={{ stroke: '#27272a' }}
-            domain={['auto', 'auto']}
+            allowDataOverflow
           />
-          {fmpPrice && fmpPrice > 0 && (
-            <ReferenceLine
-              y={fmpPrice}
-              stroke="#3b82f6"
-              strokeDasharray="5 5"
-              strokeWidth={1.5}
-              label={{ value: `FMP $${fmpPrice.toFixed(2)}`, fill: '#3b82f6', fontSize: 9, position: 'insideTopLeft' }}
-            />
-          )}
           {floorPrice && floorPrice > 0 && (
             <ReferenceLine
               y={floorPrice}
               stroke="#7dd3a8"
               strokeDasharray="3 3"
               strokeWidth={1.5}
-              label={{ value: `Floor $${floorPrice.toFixed(2)}`, fill: '#7dd3a8', fontSize: 9, position: 'insideTopLeft' }}
+              label={{ value: `Floor $${floorPrice.toFixed(2)}`, fill: '#7dd3a8', fontSize: 9, position: 'insideBottomRight' }}
+            />
+          )}
+          {lowestAsk && lowestAsk > 0 && (
+            <ReferenceLine
+              y={lowestAsk}
+              stroke="#3b82f6"
+              strokeDasharray="5 5"
+              strokeWidth={1.5}
+              label={{ value: `Ask $${lowestAsk.toFixed(2)}`, fill: '#3b82f6', fontSize: 9, position: 'insideTopRight' }}
             />
           )}
           <RechartsTooltip
@@ -167,28 +186,30 @@ export function PriceHistoryChart({ data, chartType, floorPrice, fmpPrice }: Pro
           />
           <YAxis
             orientation="right"
-            tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val.toFixed(0)}`}
+            scale="log"
+            domain={[yMin, yMax]}
+            tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val < 10 ? val.toFixed(2) : val.toFixed(0)}`}
             tick={{ fill: '#71717a', fontSize: 10 }}
             axisLine={{ stroke: '#27272a' }}
             tickLine={{ stroke: '#27272a' }}
-            domain={['auto', 'auto']}
+            allowDataOverflow
           />
-          {fmpPrice && fmpPrice > 0 && (
-            <ReferenceLine
-              y={fmpPrice}
-              stroke="#3b82f6"
-              strokeDasharray="5 5"
-              strokeWidth={1.5}
-              label={{ value: `FMP $${fmpPrice.toFixed(2)}`, fill: '#3b82f6', fontSize: 9, position: 'insideTopLeft' }}
-            />
-          )}
           {floorPrice && floorPrice > 0 && (
             <ReferenceLine
               y={floorPrice}
               stroke="#7dd3a8"
               strokeDasharray="3 3"
               strokeWidth={1.5}
-              label={{ value: `Floor $${floorPrice.toFixed(2)}`, fill: '#7dd3a8', fontSize: 9, position: 'insideTopLeft' }}
+              label={{ value: `Floor $${floorPrice.toFixed(2)}`, fill: '#7dd3a8', fontSize: 9, position: 'insideBottomRight' }}
+            />
+          )}
+          {lowestAsk && lowestAsk > 0 && (
+            <ReferenceLine
+              y={lowestAsk}
+              stroke="#3b82f6"
+              strokeDasharray="5 5"
+              strokeWidth={1.5}
+              label={{ value: `Ask $${lowestAsk.toFixed(2)}`, fill: '#3b82f6', fontSize: 9, position: 'insideTopRight' }}
             />
           )}
           <RechartsTooltip
@@ -225,7 +246,35 @@ export function PriceHistoryChart({ data, chartType, floorPrice, fmpPrice }: Pro
             stroke="#7dd3a8"
             strokeWidth={2}
             fill="url(#priceGradient)"
-            dot={false}
+            dot={(props: any) => {
+              const { cx, cy, payload } = props
+              if (!cx || !cy || !payload) return <g />
+
+              if (payload.isActive) {
+                const size = 5
+                return (
+                  <polygon
+                    key={`dot-${cx}-${cy}`}
+                    points={`${cx},${cy-size} ${cx+size},${cy} ${cx},${cy+size} ${cx-size},${cy}`}
+                    fill={payload.treatmentColor || '#3b82f6'}
+                    stroke="#0a0a0a"
+                    strokeWidth={1.5}
+                  />
+                )
+              }
+
+              return (
+                <circle
+                  key={`dot-${cx}-${cy}`}
+                  cx={cx}
+                  cy={cy}
+                  r={4}
+                  fill={payload.treatmentColor || '#7dd3a8'}
+                  stroke="#0a0a0a"
+                  strokeWidth={1.5}
+                />
+              )
+            }}
             activeDot={{ r: 6, fill: '#7dd3a8', stroke: '#0a0a0a', strokeWidth: 2 }}
           />
         </AreaChart>

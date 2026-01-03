@@ -233,43 +233,10 @@ def read_cards(
             active_stats_results = session.execute(active_stats_query, query_params_base).all()
             active_stats_map = {row[0]: {"lowest_ask": row[1], "inventory": row[2]} for row in active_stats_results}
 
-            # Batch calculate floor prices per variant (avg of up to 4 lowest sales)
+            # Batch calculate floor prices per variant using unified FloorPriceService
             # Unified approach: Singles use 'treatment', Sealed uses 'product_subtype'
-            # Use COALESCE(sold_date, scraped_at) as fallback when sold_date is NULL
+            floor_service = get_floor_price_service(session)
             platform_filter_sql = f"AND platform = '{platform}'" if platform else ""
-
-            # Query returns floor price for EACH variant (treatment or product_subtype)
-            # Singles: variant = treatment (Classic Paper, Classic Foil, etc.)
-            # Sealed: variant = product_subtype (Silver Pack, Collector Booster Pack, etc.)
-            floor_by_variant_query = text(f"""
-                SELECT card_id, variant, AVG(price) as floor_price
-                FROM (
-                    SELECT card_id,
-                           CASE
-                               WHEN product_subtype IS NOT NULL AND product_subtype != ''
-                               THEN product_subtype
-                               ELSE treatment
-                           END as variant,
-                           price,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY card_id,
-                                   CASE
-                                       WHEN product_subtype IS NOT NULL AND product_subtype != ''
-                                       THEN product_subtype
-                                       ELSE treatment
-                                   END
-                               ORDER BY price ASC
-                           ) as rn
-                    FROM marketprice
-                    WHERE card_id = ANY(:card_ids)
-                      AND listing_type = 'sold'
-                      AND COALESCE(sold_date, scraped_at) >= :cutoff
-                      {platform_filter_sql}
-                ) ranked
-                WHERE rn <= 4
-                GROUP BY card_id, variant
-                ORDER BY card_id, floor_price ASC
-            """)
 
             # Query for lowest ask per variant (active listings)
             # Note: Must GROUP BY the full CASE expression, not the alias
@@ -294,36 +261,32 @@ def read_cards(
                 ORDER BY card_id, lowest_ask ASC
             """)
 
-            # First try 30 days (use normalized cutoff for consistency with detail endpoint)
-            floor_cutoff_30d = normalize_floor_cutoff(days=30)
-            floor_variant_results = session.execute(
-                floor_by_variant_query, {"card_ids": card_ids, "cutoff": floor_cutoff_30d}
-            ).all()
+            # First try 30 days using FloorPriceService batch method
+            floor_results_30d = floor_service.get_floor_prices_batch(card_ids, days=30, by_variant=True)
 
             # Build floor_by_variant_map and floor_price_map (cheapest variant)
-            for row in floor_variant_results:
-                card_id, variant, floor_price = row[0], row[1], round(float(row[2]), 2)
+            for (card_id, variant), result in floor_results_30d.items():
+                if result.price is None:
+                    continue
                 if card_id not in floor_by_variant_map:
                     floor_by_variant_map[card_id] = {}
-                floor_by_variant_map[card_id][variant] = floor_price
+                floor_by_variant_map[card_id][variant] = result.price
                 # floor_price_map stores the cheapest variant's floor
-                if card_id not in floor_price_map or floor_price < floor_price_map[card_id]:
-                    floor_price_map[card_id] = floor_price
+                if card_id not in floor_price_map or result.price < floor_price_map[card_id]:
+                    floor_price_map[card_id] = result.price
 
             # Fallback: 90 days for cards still missing
             missing_floor_ids = [cid for cid in card_ids if cid not in floor_price_map]
             if missing_floor_ids:
-                floor_cutoff_90d = normalize_floor_cutoff(days=90)
-                floor_variant_results_90d = session.execute(
-                    floor_by_variant_query, {"card_ids": missing_floor_ids, "cutoff": floor_cutoff_90d}
-                ).all()
-                for row in floor_variant_results_90d:
-                    card_id, variant, floor_price = row[0], row[1], round(float(row[2]), 2)
+                floor_results_90d = floor_service.get_floor_prices_batch(missing_floor_ids, days=90, by_variant=True)
+                for (card_id, variant), result in floor_results_90d.items():
+                    if result.price is None:
+                        continue
                     if card_id not in floor_by_variant_map:
                         floor_by_variant_map[card_id] = {}
-                    floor_by_variant_map[card_id][variant] = floor_price
-                    if card_id not in floor_price_map or floor_price < floor_price_map[card_id]:
-                        floor_price_map[card_id] = floor_price
+                    floor_by_variant_map[card_id][variant] = result.price
+                    if card_id not in floor_price_map or result.price < floor_price_map[card_id]:
+                        floor_price_map[card_id] = result.price
 
             # Fetch lowest ask by variant (active listings)
             lowest_ask_variant_results = session.execute(lowest_ask_by_variant_query, {"card_ids": card_ids}).all()
@@ -561,128 +524,102 @@ def read_card(
 
     card = get_card_by_id_or_slug(session, card_id)
 
-    # Fetch rarity name
+    # Fetch rarity name via JOIN in card query or separate lookup
     rarity_name = "Unknown"
     if card.rarity_id:
         rarity = session.get(Rarity, card.rarity_id)
         if rarity:
             rarity_name = rarity.name
 
-    # Fetch latest 2 snapshots to calculate delta
-    # We want to find OLDEST snapshot in the window for meaningful delta
-    # Since this is single card view, let's just get all recent ones and pick
-    # Or simpler: Get latest and one from 24h ago
+    # Fetch latest snapshot for fallback values
     stmt = (
         select(MarketSnapshot)
         .where(MarketSnapshot.card_id == card.id)
         .order_by(desc(MarketSnapshot.timestamp), desc(MarketSnapshot.id))
-        .limit(50)
+        .limit(1)
     )
-    snapshots = session.execute(stmt).scalars().all()
+    latest_snap = session.execute(stmt).scalars().first()
 
-    latest_snap = snapshots[0] if snapshots else None
+    # CONSOLIDATED CTE QUERY: Combines last_sale, vwap, volume, active stats, and price delta
+    # This replaces 6+ separate queries with a single round-trip
+    from sqlalchemy import text
 
-    # Fetch actual last sale using COALESCE for proper date ordering
-    from sqlalchemy import text as sql_text
+    cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
+    cutoff_90d = datetime.now(timezone.utc) - timedelta(days=90)
 
-    last_sale_query = sql_text("""
-        SELECT id, price, treatment, sold_date, scraped_at
-        FROM marketprice
-        WHERE card_id = :card_id AND listing_type = 'sold'
-        ORDER BY COALESCE(sold_date, scraped_at) DESC
-        LIMIT 1
-    """)
-    last_sale_result = session.execute(last_sale_query, {"card_id": card.id}).first()
-
-    real_price = last_sale_result[1] if last_sale_result else (latest_snap.avg_price if latest_snap else None)
-    real_treatment = last_sale_result[2] if last_sale_result else None
-
-    # Calculate MEDIAN price and 30-day volume for single card
-    vwap = None
-    volume_30d = 0
-    try:
-        from sqlalchemy import text
-
-        cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
-
-        # Get AVG price (consistent with list view VWAP calculation)
-        # Use COALESCE(sold_date, scraped_at) for consistent time filtering
-        avg_q = text("""
-            SELECT AVG(price) FROM marketprice
-            WHERE card_id = :cid AND listing_type = 'sold'
-            AND COALESCE(sold_date, scraped_at) >= :cutoff
-        """)
-        avg_res = session.execute(avg_q, {"cid": card.id, "cutoff": cutoff_30d}).first()
-        if avg_res:
-            vwap = avg_res[0]
-
-        # Get volume separately
-        vol_q = text("""
-            SELECT COUNT(*) FROM marketprice
-            WHERE card_id = :cid AND listing_type = 'sold'
-            AND COALESCE(sold_date, scraped_at) >= :cutoff
-        """)
-        vol_res = session.execute(vol_q, {"cid": card.id, "cutoff": cutoff_30d}).first()
-        if vol_res:
-            volume_30d = vol_res[0] or 0
-
-    except Exception:
-        pass
-
-    # Fetch LIVE active stats from MarketPrice table (always fresh)
-    live_lowest_ask = None
-    live_inventory = 0
-    try:
-        active_stats_q = text("""
+    consolidated_query = text("""
+        WITH last_sale AS (
+            SELECT price, treatment
+            FROM marketprice
+            WHERE card_id = :card_id AND listing_type = 'sold' AND is_bulk_lot = FALSE
+            ORDER BY COALESCE(sold_date, scraped_at) DESC
+            LIMIT 1
+        ),
+        sales_30d AS (
+            SELECT AVG(price) as vwap, COUNT(*) as volume
+            FROM marketprice
+            WHERE card_id = :card_id AND listing_type = 'sold' AND is_bulk_lot = FALSE
+              AND COALESCE(sold_date, scraped_at) >= :cutoff_30d
+        ),
+        avg_30d AS (
+            SELECT AVG(price) as avg_price FROM marketprice
+            WHERE card_id = :card_id AND listing_type = 'sold' AND is_bulk_lot = FALSE
+              AND COALESCE(sold_date, scraped_at) >= :cutoff_30d
+        ),
+        avg_90d AS (
+            SELECT AVG(price) as avg_price FROM marketprice
+            WHERE card_id = :card_id AND listing_type = 'sold' AND is_bulk_lot = FALSE
+              AND COALESCE(sold_date, scraped_at) >= :cutoff_90d
+        ),
+        avg_all AS (
+            SELECT AVG(price) as avg_price FROM marketprice
+            WHERE card_id = :card_id AND listing_type = 'sold' AND is_bulk_lot = FALSE
+        ),
+        active_stats AS (
             SELECT MIN(price) as lowest_ask, COUNT(*) as inventory
             FROM marketprice
-            WHERE card_id = :cid AND listing_type = 'active'
-        """)
-        active_res = session.execute(active_stats_q, {"cid": card.id}).first()
-        if active_res:
-            live_lowest_ask = active_res[0]
-            live_inventory = active_res[1] or 0
-    except Exception:
-        pass
+            WHERE card_id = :card_id AND listing_type = 'active'
+        )
+        SELECT
+            (SELECT price FROM last_sale) as last_sale_price,
+            (SELECT treatment FROM last_sale) as last_sale_treatment,
+            (SELECT vwap FROM sales_30d) as vwap,
+            (SELECT volume FROM sales_30d) as volume_30d,
+            (SELECT lowest_ask FROM active_stats) as lowest_ask,
+            (SELECT inventory FROM active_stats) as inventory,
+            COALESCE(
+                (SELECT avg_price FROM avg_30d),
+                (SELECT avg_price FROM avg_90d),
+                (SELECT avg_price FROM avg_all)
+            ) as rolling_avg_price
+    """)
 
-    # Use live data from MarketPrice table (preferred), fallback to snapshot only if None
-    # Note: Use explicit None check since 0 is a valid value (no active listings)
+    # Execute consolidated query
+    consolidated_result = session.execute(consolidated_query, {
+        "card_id": card.id,
+        "cutoff_30d": cutoff_30d,
+        "cutoff_90d": cutoff_90d,
+    }).first()
+
+    # Unpack results with fallbacks
+    real_price = consolidated_result[0] if consolidated_result and consolidated_result[0] else (latest_snap.avg_price if latest_snap else None)
+    real_treatment = consolidated_result[1] if consolidated_result else None
+    vwap = consolidated_result[2] if consolidated_result else None
+    volume_30d = consolidated_result[3] or 0 if consolidated_result else 0
+    live_lowest_ask = consolidated_result[4] if consolidated_result else None
+    live_inventory = consolidated_result[5] or 0 if consolidated_result else 0
+    rolling_avg_price = consolidated_result[6] if consolidated_result else None
+
+    # Use live data from consolidated query, fallback to snapshot only if None
     lowest_ask = live_lowest_ask if live_lowest_ask is not None else (latest_snap.lowest_ask if latest_snap else None)
     inventory = live_inventory if live_inventory is not None else (latest_snap.inventory if latest_snap else 0)
 
-    # Price vs Avg: Rolling window - try 30d, 90d, then all-time
-    # Positive = sold above average (hot/premium)
-    # Negative = sold below average (deal/declining)
+    # Price vs Avg: Calculate from consolidated rolling_avg_price
     price_delta = 0.0
-    avg_price = None
-    try:
-        for days in [30, 90, None]:
-            if days:
-                cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-                avg_q = text("""
-                    SELECT AVG(price) FROM marketprice
-                    WHERE card_id = :cid AND listing_type = 'sold'
-                    AND COALESCE(sold_date, scraped_at) >= :cutoff
-                """)
-                avg_res = session.execute(avg_q, {"cid": card.id, "cutoff": cutoff}).first()
-            else:
-                avg_q = text("""
-                    SELECT AVG(price) FROM marketprice
-                    WHERE card_id = :cid AND listing_type = 'sold'
-                """)
-                avg_res = session.execute(avg_q, {"cid": card.id}).first()
-
-            if avg_res and avg_res[0]:
-                avg_price = avg_res[0]
-                break
-    except Exception:
-        pass
-    if real_price and avg_price and avg_price > 0:
-        price_delta = ((real_price - avg_price) / avg_price) * 100
+    if real_price and rolling_avg_price and rolling_avg_price > 0:
+        price_delta = ((real_price - rolling_avg_price) / rolling_avg_price) * 100
 
     # Last Sale vs Floor: How does last sale compare to current floor?
-    # Positive = sold above floor (premium)
-    # Negative = sold below floor (deal)
     sale_delta = 0.0
     if real_price and lowest_ask and lowest_ask > 0:
         sale_delta = ((real_price - lowest_ask) / lowest_ask) * 100
@@ -705,54 +642,28 @@ def read_card(
 
     # Calculate floor_by_variant and lowest_ask_by_variant for single card
     try:
-        floor_cutoff = normalize_floor_cutoff(days=30)
+        # Use unified FloorPriceService for floor calculation
+        floor_service = get_floor_price_service(session)
 
-        # Floor by variant query
-        floor_variant_query = text("""
-            SELECT variant, AVG(price) as floor_price
-            FROM (
-                SELECT
-                    CASE
-                        WHEN product_subtype IS NOT NULL AND product_subtype != ''
-                        THEN product_subtype
-                        ELSE treatment
-                    END as variant,
-                    price,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY
-                            CASE
-                                WHEN product_subtype IS NOT NULL AND product_subtype != ''
-                                THEN product_subtype
-                                ELSE treatment
-                            END
-                        ORDER BY price ASC
-                    ) as rn
-                FROM marketprice
-                WHERE card_id = :card_id
-                  AND listing_type = 'sold'
-                  AND COALESCE(sold_date, scraped_at) >= :cutoff
-            ) ranked
-            WHERE rn <= 4
-            GROUP BY variant
-            ORDER BY floor_price ASC
-        """)
-        floor_variant_results = session.execute(floor_variant_query, {"card_id": card.id, "cutoff": floor_cutoff}).all()
-
-        if floor_variant_results:
-            floor_by_variant = {row[0]: round(float(row[1]), 2) for row in floor_variant_results}
-            # Always use SQL-calculated floor_price for consistency with list endpoint
-            # (FMP service's floor_price uses different time anchor, causing mismatches)
+        # First try 30 days
+        card_id_int = ensure_int(card.id)
+        floor_results_30d = floor_service.get_floor_prices_batch([card_id_int], days=30, by_variant=True)
+        if floor_results_30d:
+            floor_by_variant = {}
+            for (cid, variant), result in floor_results_30d.items():
+                if result.price is not None:
+                    floor_by_variant[variant] = result.price
             if floor_by_variant:
                 floor_price = min(floor_by_variant.values())
 
         # Fallback: 90 days if no 30-day data (matches list endpoint behavior)
         if not floor_by_variant:
-            floor_cutoff_90d = normalize_floor_cutoff(days=90)
-            floor_variant_results_90d = session.execute(
-                floor_variant_query, {"card_id": card.id, "cutoff": floor_cutoff_90d}
-            ).all()
-            if floor_variant_results_90d:
-                floor_by_variant = {row[0]: round(float(row[1]), 2) for row in floor_variant_results_90d}
+            floor_results_90d = floor_service.get_floor_prices_batch([card_id_int], days=90, by_variant=True)
+            if floor_results_90d:
+                floor_by_variant = {}
+                for (cid, variant), result in floor_results_90d.items():
+                    if result.price is not None:
+                        floor_by_variant[variant] = result.price
                 if floor_by_variant:
                     floor_price = min(floor_by_variant.values())
 

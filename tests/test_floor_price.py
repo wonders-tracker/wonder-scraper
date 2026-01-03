@@ -21,8 +21,17 @@ from app.services.floor_price import (
     ConfidenceLevel,
     FloorPriceConfig,
     get_floor_price_service,
+    clear_floor_cache,
 )
 from app.services.order_book import OrderBookAnalyzer, OrderBookResult, BucketInfo
+
+
+@pytest.fixture(autouse=True)
+def clear_cache():
+    """Clear the floor price cache before each test."""
+    clear_floor_cache()
+    yield
+    clear_floor_cache()
 
 
 class TestFloorPriceService:
@@ -368,6 +377,100 @@ class TestFloorPriceConfig:
         assert config.ORDER_BOOK_MIN_CONFIDENCE == 0.3
         assert config.DEFAULT_LOOKBACK_DAYS == 30
         assert config.EXPANDED_LOOKBACK_DAYS == 90
+
+
+class TestBatchFloorPrice(TestFloorPriceService):
+    """Tests for batch floor price calculation."""
+
+    def test_batch_returns_empty_dict_for_empty_list(self, service):
+        """Should return empty dict when card_ids is empty."""
+        result = service.get_floor_prices_batch([])
+        assert result == {}
+
+    def test_batch_returns_results_keyed_by_card_id(self, service):
+        """Should return dict keyed by card_id when by_variant=False."""
+        mock_sales_data = {
+            1: {"price": 25.00, "count": 4, "platforms": ["ebay"]},
+            2: {"price": 30.00, "count": 4, "platforms": ["opensea"]},
+        }
+
+        with patch.object(service, "_get_sales_floors_batch", return_value=mock_sales_data):
+            result = service.get_floor_prices_batch([1, 2])
+
+        assert 1 in result
+        assert 2 in result
+        assert result[1].price == 25.00
+        assert result[2].price == 30.00
+
+    def test_batch_returns_results_keyed_by_card_variant_tuple(self, service):
+        """Should return dict keyed by (card_id, variant) when by_variant=True."""
+        mock_sales_data = {
+            (1, "Classic Paper"): {"price": 20.00, "count": 4, "platforms": ["ebay"], "variant": "Classic Paper"},
+            (1, "Classic Foil"): {"price": 50.00, "count": 4, "platforms": ["ebay"], "variant": "Classic Foil"},
+        }
+
+        with patch.object(service, "_get_sales_floors_batch", return_value=mock_sales_data):
+            result = service.get_floor_prices_batch([1], by_variant=True)
+
+        assert (1, "Classic Paper") in result
+        assert (1, "Classic Foil") in result
+        assert result[(1, "Classic Paper")].price == 20.00
+        assert result[(1, "Classic Foil")].price == 50.00
+
+    def test_batch_excludes_cards_with_insufficient_sales(self, service):
+        """Should not include cards with less than MIN_SALES_LOW_CONFIDENCE sales."""
+        mock_sales_data = {
+            1: {"price": 25.00, "count": 4, "platforms": ["ebay"]},
+            2: {"price": 30.00, "count": 1, "platforms": ["opensea"]},  # Only 1 sale
+        }
+
+        with patch.object(service, "_get_sales_floors_batch", return_value=mock_sales_data):
+            result = service.get_floor_prices_batch([1, 2])
+
+        assert 1 in result
+        assert 2 not in result  # Excluded due to insufficient sales
+
+    def test_batch_maps_confidence_correctly(self, service):
+        """Should map confidence levels based on sales count."""
+        mock_sales_data = {
+            1: {"price": 25.00, "count": 4, "platforms": ["ebay"]},  # HIGH
+            2: {"price": 30.00, "count": 3, "platforms": ["opensea"]},  # MEDIUM
+            3: {"price": 35.00, "count": 2, "platforms": ["blokpax"]},  # LOW
+        }
+
+        with patch.object(service, "_get_sales_floors_batch", return_value=mock_sales_data):
+            result = service.get_floor_prices_batch([1, 2, 3])
+
+        assert result[1].confidence == ConfidenceLevel.HIGH
+        assert result[1].confidence_score == 1.0
+        assert result[2].confidence == ConfidenceLevel.MEDIUM
+        assert result[2].confidence_score == 0.75
+        assert result[3].confidence == ConfidenceLevel.LOW
+        assert result[3].confidence_score == 0.5
+
+    def test_batch_includes_metadata(self, service):
+        """Should include metadata in results."""
+        mock_sales_data = {
+            1: {"price": 25.00, "count": 4, "platforms": ["ebay", "blokpax"]},
+        }
+
+        with patch.object(service, "_get_sales_floors_batch", return_value=mock_sales_data):
+            result = service.get_floor_prices_batch([1], days=30)
+
+        assert result[1].metadata["sales_count"] == 4
+        assert result[1].metadata["days"] == 30
+        assert "ebay" in result[1].metadata["platforms"]
+
+    def test_batch_all_results_are_sales_source(self, service):
+        """Batch method always uses SALES source (no order book fallback)."""
+        mock_sales_data = {
+            1: {"price": 25.00, "count": 2, "platforms": ["ebay"]},
+        }
+
+        with patch.object(service, "_get_sales_floors_batch", return_value=mock_sales_data):
+            result = service.get_floor_prices_batch([1])
+
+        assert result[1].source == FloorPriceSource.SALES
 
 
 class TestIntegration:

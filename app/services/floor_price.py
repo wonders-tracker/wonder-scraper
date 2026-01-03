@@ -10,10 +10,11 @@ This service is available in both OSS and SaaS modes.
 """
 
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional, overload
 
 from sqlalchemy import text
 from sqlmodel import Session
@@ -22,6 +23,42 @@ from app.db import engine
 from app.services.order_book import OrderBookAnalyzer
 
 logger = logging.getLogger(__name__)
+
+# Module-level cache for floor price results
+# Key: (card_id, treatment, days) -> (FloorPriceResult, timestamp)
+_floor_cache: dict[tuple, tuple[Any, datetime]] = {}
+_cache_lock = threading.Lock()
+_CACHE_TTL = timedelta(minutes=5)
+
+
+def _get_cached_floor(key: tuple) -> Optional[Any]:
+    """Get cached floor price result if still valid."""
+    with _cache_lock:
+        if key in _floor_cache:
+            result, timestamp = _floor_cache[key]
+            if datetime.now(timezone.utc) - timestamp < _CACHE_TTL:
+                return result
+            # Expired - remove from cache
+            del _floor_cache[key]
+    return None
+
+
+def _set_cached_floor(key: tuple, result: Any) -> None:
+    """Cache a floor price result."""
+    with _cache_lock:
+        _floor_cache[key] = (result, datetime.now(timezone.utc))
+        # Simple cache eviction: remove old entries if cache grows too large
+        if len(_floor_cache) > 1000:
+            now = datetime.now(timezone.utc)
+            expired = [k for k, (_, ts) in _floor_cache.items() if now - ts >= _CACHE_TTL]
+            for k in expired:
+                del _floor_cache[k]
+
+
+def clear_floor_cache() -> None:
+    """Clear the floor price cache. Useful for testing."""
+    with _cache_lock:
+        _floor_cache.clear()
 
 
 class FloorPriceSource(str, Enum):
@@ -120,11 +157,18 @@ class FloorPriceService:
         Returns:
             FloorPriceResult with price, source, and confidence
         """
+        # Check cache first
+        cache_key = (card_id, treatment, days, include_blokpax)
+        cached = _get_cached_floor(cache_key)
+        if cached is not None:
+            logger.debug(f"Floor price cache HIT for card_id={card_id}, treatment={treatment}")
+            return cached
+
         # Step 1: Try sales floor (primary source)
         sales_result = self._get_sales_floor(card_id, treatment, days, include_blokpax)
 
         if sales_result and sales_result["count"] >= self.config.MIN_SALES_HIGH_CONFIDENCE:
-            return FloorPriceResult(
+            result = FloorPriceResult(
                 price=sales_result["price"],
                 source=FloorPriceSource.SALES,
                 confidence=ConfidenceLevel.HIGH,
@@ -136,6 +180,8 @@ class FloorPriceService:
                     "platforms": sales_result.get("platforms", []),
                 },
             )
+            _set_cached_floor(cache_key, result)
+            return result
 
         # Step 2: Try order book floor (fallback)
         order_book_result = self.order_book_analyzer.estimate_floor(
@@ -146,7 +192,7 @@ class FloorPriceService:
         )
 
         if order_book_result and order_book_result.confidence > self.config.ORDER_BOOK_MIN_CONFIDENCE:
-            return FloorPriceResult(
+            result = FloorPriceResult(
                 price=order_book_result.floor_estimate,
                 source=FloorPriceSource.ORDER_BOOK,
                 confidence=self._map_confidence(order_book_result.confidence),
@@ -158,6 +204,8 @@ class FloorPriceService:
                     "treatment": treatment,
                 },
             )
+            _set_cached_floor(cache_key, result)
+            return result
 
         # Step 3: Try sales floor with fewer sales
         if sales_result and sales_result["count"] >= self.config.MIN_SALES_LOW_CONFIDENCE:
@@ -167,7 +215,7 @@ class FloorPriceService:
                 if sales_result["count"] >= self.config.MIN_SALES_MEDIUM_CONFIDENCE
                 else ConfidenceLevel.LOW
             )
-            return FloorPriceResult(
+            result = FloorPriceResult(
                 price=sales_result["price"],
                 source=FloorPriceSource.SALES,
                 confidence=confidence,
@@ -179,21 +227,26 @@ class FloorPriceService:
                     "platforms": sales_result.get("platforms", []),
                 },
             )
+            _set_cached_floor(cache_key, result)
+            return result
 
         # Step 4: Try expanded time window (90 days)
+        # Note: Recursive call will cache its own result
         if days < self.config.EXPANDED_LOOKBACK_DAYS:
             return self.get_floor_price(
                 card_id, treatment, self.config.EXPANDED_LOOKBACK_DAYS, include_blokpax
             )
 
         # Step 5: No data available
-        return FloorPriceResult(
+        result = FloorPriceResult(
             price=None,
             source=FloorPriceSource.NONE,
             confidence=ConfidenceLevel.LOW,
             confidence_score=0.0,
             metadata={"reason": "insufficient_data", "days_searched": days},
         )
+        _set_cached_floor(cache_key, result)
+        return result
 
     def _get_sales_floor(
         self,
@@ -299,6 +352,252 @@ class FloorPriceService:
             return ConfidenceLevel.MEDIUM
         else:
             return ConfidenceLevel.LOW
+
+    @overload
+    def get_floor_prices_batch(
+        self,
+        card_ids: list[int],
+        days: int = ...,
+        include_blokpax: bool = ...,
+        by_variant: Literal[False] = ...,
+    ) -> dict[int, FloorPriceResult]: ...
+
+    @overload
+    def get_floor_prices_batch(
+        self,
+        card_ids: list[int],
+        days: int = ...,
+        include_blokpax: bool = ...,
+        by_variant: Literal[True] = ...,
+    ) -> dict[tuple[int, str], FloorPriceResult]: ...
+
+    def get_floor_prices_batch(
+        self,
+        card_ids: list[int],
+        days: int = FloorPriceConfig.DEFAULT_LOOKBACK_DAYS,
+        include_blokpax: bool = True,
+        by_variant: bool = False,
+    ) -> dict[int, FloorPriceResult] | dict[tuple[int, str], FloorPriceResult]:
+        """
+        Batch floor price calculation for multiple cards.
+
+        For performance, uses bulk SQL queries instead of per-card lookups.
+        Does NOT fall back to order book (sales-only for batch efficiency).
+
+        Args:
+            card_ids: List of card database IDs
+            days: Lookback window for sales data
+            include_blokpax: Include Blokpax sales in calculation
+            by_variant: If True, group by (card_id, variant) instead of card_id
+
+        Returns:
+            If by_variant=False: dict[card_id, FloorPriceResult]
+            If by_variant=True: dict[(card_id, variant), FloorPriceResult]
+        """
+        if not card_ids:
+            return {}
+
+        # Get batch sales floors
+        sales_data = self._get_sales_floors_batch(
+            card_ids, days, include_blokpax, by_variant
+        )
+
+        results: dict[Any, FloorPriceResult] = {}
+
+        for key, data in sales_data.items():
+            count = data["count"]
+            if count >= self.config.MIN_SALES_HIGH_CONFIDENCE:
+                confidence = ConfidenceLevel.HIGH
+                confidence_score = 1.0
+            elif count >= self.config.MIN_SALES_MEDIUM_CONFIDENCE:
+                confidence = ConfidenceLevel.MEDIUM
+                confidence_score = count / self.config.MIN_SALES_HIGH_CONFIDENCE
+            elif count >= self.config.MIN_SALES_LOW_CONFIDENCE:
+                confidence = ConfidenceLevel.LOW
+                confidence_score = count / self.config.MIN_SALES_HIGH_CONFIDENCE
+            else:
+                # Not enough sales - skip (will not be in results)
+                continue
+
+            results[key] = FloorPriceResult(
+                price=data["price"],
+                source=FloorPriceSource.SALES,
+                confidence=confidence,
+                confidence_score=confidence_score,
+                metadata={
+                    "sales_count": count,
+                    "days": days,
+                    "platforms": data.get("platforms", []),
+                    "variant": data.get("variant") if by_variant else None,
+                },
+            )
+
+        return results
+
+    def _get_sales_floors_batch(
+        self,
+        card_ids: list[int],
+        days: int,
+        include_blokpax: bool = True,
+        by_variant: bool = False,
+    ) -> dict[Any, dict[str, Any]]:
+        """
+        Batch calculate sales floors for multiple cards.
+
+        Uses window functions to get lowest N sales per card efficiently.
+
+        Returns:
+            If by_variant=False: dict[card_id, {"price": float, "count": int, "platforms": list}]
+            If by_variant=True: dict[(card_id, variant), {"price": float, "count": int, ...}]
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        results: dict[Any, dict[str, Any]] = {}
+
+        # Build variant column expression
+        variant_col = "COALESCE(NULLIF(product_subtype, ''), treatment)" if by_variant else "NULL"
+        group_cols = "card_id, variant" if by_variant else "card_id"
+
+        # Query marketprice (eBay, OpenSea) with window function
+        query = text(f"""
+            WITH ranked_sales AS (
+                SELECT
+                    card_id,
+                    {variant_col} as variant,
+                    price,
+                    platform,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY card_id{', ' + variant_col if by_variant else ''}
+                        ORDER BY price ASC
+                    ) as rn
+                FROM marketprice
+                WHERE card_id = ANY(:card_ids)
+                  AND listing_type = 'sold'
+                  AND COALESCE(sold_date, scraped_at) >= :cutoff
+                  AND is_bulk_lot = FALSE
+            )
+            SELECT
+                {group_cols},
+                ROUND(AVG(price)::numeric, 2) as avg_price,
+                COUNT(*) as sale_count,
+                ARRAY_AGG(DISTINCT platform) as platforms
+            FROM ranked_sales
+            WHERE rn <= :num_sales
+            GROUP BY {group_cols}
+        """)
+
+        try:
+            if self.session:
+                result = self.session.execute(
+                    query,
+                    {"card_ids": card_ids, "cutoff": cutoff, "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE},
+                )
+            else:
+                with engine.connect() as conn:
+                    result = conn.execute(
+                        query,
+                        {"card_ids": card_ids, "cutoff": cutoff, "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE},
+                    )
+
+            for row in result.fetchall():
+                if by_variant:
+                    key = (row[0], row[1])  # (card_id, variant)
+                    results[key] = {
+                        "price": float(row[2]),
+                        "count": int(row[3]),
+                        "platforms": list(row[4]) if row[4] else [],
+                        "variant": row[1],
+                    }
+                else:
+                    key = row[0]  # card_id
+                    results[key] = {
+                        "price": float(row[1]),
+                        "count": int(row[2]),
+                        "platforms": list(row[3]) if row[3] else [],
+                    }
+        except Exception as e:
+            logger.error(f"[FloorPrice] Batch marketprice query failed: {e}")
+
+        # Query blokpaxsale if enabled (no variant support - Blokpax doesn't track treatment)
+        if include_blokpax:
+            bpx_query = text("""
+                WITH ranked_bpx AS (
+                    SELECT
+                        card_id,
+                        price_usd as price,
+                        ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price_usd ASC) as rn
+                    FROM blokpaxsale
+                    WHERE card_id = ANY(:card_ids)
+                      AND filled_at >= :cutoff
+                )
+                SELECT
+                    card_id,
+                    ROUND(AVG(price)::numeric, 2) as avg_price,
+                    COUNT(*) as sale_count
+                FROM ranked_bpx
+                WHERE rn <= :num_sales
+                GROUP BY card_id
+            """)
+
+            try:
+                if self.session:
+                    bpx_result = self.session.execute(
+                        bpx_query,
+                        {"card_ids": card_ids, "cutoff": cutoff, "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE},
+                    )
+                else:
+                    with engine.connect() as conn:
+                        bpx_result = conn.execute(
+                            bpx_query,
+                            {"card_ids": card_ids, "cutoff": cutoff, "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE},
+                        )
+
+                for row in bpx_result.fetchall():
+                    card_id = row[0]
+                    bpx_price = float(row[1])
+                    bpx_count = int(row[2])
+
+                    if by_variant:
+                        # For by_variant mode, add Blokpax to "Base" variant
+                        key = (card_id, "Base")
+                        if key in results:
+                            # Merge with existing - recalculate avg
+                            existing = results[key]
+                            total_count = existing["count"] + bpx_count
+                            merged_price = (existing["price"] * existing["count"] + bpx_price * bpx_count) / total_count
+                            results[key] = {
+                                "price": round(merged_price, 2),
+                                "count": min(total_count, self.config.MIN_SALES_HIGH_CONFIDENCE),
+                                "platforms": existing["platforms"] + ["blokpax"],
+                                "variant": "Base",
+                            }
+                        else:
+                            results[key] = {
+                                "price": bpx_price,
+                                "count": bpx_count,
+                                "platforms": ["blokpax"],
+                                "variant": "Base",
+                            }
+                    else:
+                        # For card-level, merge with marketprice results
+                        if card_id in results:
+                            existing = results[card_id]
+                            total_count = existing["count"] + bpx_count
+                            merged_price = (existing["price"] * existing["count"] + bpx_price * bpx_count) / total_count
+                            results[card_id] = {
+                                "price": round(merged_price, 2),
+                                "count": min(total_count, self.config.MIN_SALES_HIGH_CONFIDENCE),
+                                "platforms": existing["platforms"] + ["blokpax"],
+                            }
+                        else:
+                            results[card_id] = {
+                                "price": bpx_price,
+                                "count": bpx_count,
+                                "platforms": ["blokpax"],
+                            }
+            except Exception as e:
+                logger.error(f"[FloorPrice] Batch blokpaxsale query failed: {e}")
+
+        return results
 
 
 def get_floor_price_service(session: Optional[Session] = None) -> FloorPriceService:

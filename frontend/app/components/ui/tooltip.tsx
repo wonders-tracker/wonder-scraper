@@ -18,41 +18,42 @@ export function Tooltip({
 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [coords, setCoords] = useState({ x: 0, y: 0 })
-  const triggerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLSpanElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  const updatePosition = () => {
+    if (!triggerRef.current) return
+
+    const rect = triggerRef.current.getBoundingClientRect()
+    let x = rect.left + rect.width / 2
+    let y = rect.top
+
+    switch (position) {
+      case 'bottom':
+        y = rect.bottom + 8
+        break
+      case 'left':
+        x = rect.left - 8
+        y = rect.top + rect.height / 2
+        break
+      case 'right':
+        x = rect.right + 8
+        y = rect.top + rect.height / 2
+        break
+      case 'top':
+      default:
+        y = rect.top - 8
+        break
+    }
+
+    setCoords({ x, y })
+  }
+
   const showTooltip = () => {
     timeoutRef.current = setTimeout(() => {
-      if (triggerRef.current) {
-        const rect = triggerRef.current.getBoundingClientRect()
-        const scrollX = window.scrollX
-        const scrollY = window.scrollY
-
-        let x = rect.left + scrollX + rect.width / 2
-        let y = rect.top + scrollY
-
-        switch (position) {
-          case 'bottom':
-            y = rect.bottom + scrollY + 8
-            break
-          case 'left':
-            x = rect.left + scrollX - 8
-            y = rect.top + scrollY + rect.height / 2
-            break
-          case 'right':
-            x = rect.right + scrollX + 8
-            y = rect.top + scrollY + rect.height / 2
-            break
-          case 'top':
-          default:
-            y = rect.top + scrollY - 8
-            break
-        }
-
-        setCoords({ x, y })
-        setIsVisible(true)
-      }
+      updatePosition()
+      setIsVisible(true)
     }, delay)
   }
 
@@ -72,6 +73,18 @@ export function Tooltip({
     }
   }, [])
 
+  // Hide tooltip on scroll
+  useEffect(() => {
+    if (!isVisible) return
+
+    const handleScroll = () => {
+      hideTooltip()
+    }
+
+    window.addEventListener('scroll', handleScroll, true)
+    return () => window.removeEventListener('scroll', handleScroll, true)
+  }, [isVisible])
+
   // Adjust position if tooltip would go off screen
   useEffect(() => {
     if (isVisible && tooltipRef.current) {
@@ -82,17 +95,17 @@ export function Tooltip({
       let newY = coords.y
 
       // Keep tooltip within viewport
-      if (rect.right > window.innerWidth) {
-        newX -= rect.right - window.innerWidth + 10
+      if (rect.right > window.innerWidth - 10) {
+        newX = window.innerWidth - rect.width - 10
       }
-      if (rect.left < 0) {
-        newX -= rect.left - 10
+      if (rect.left < 10) {
+        newX = rect.width / 2 + 10
       }
-      if (rect.bottom > window.innerHeight) {
-        newY -= rect.bottom - window.innerHeight + 10
+      if (rect.bottom > window.innerHeight - 10) {
+        newY = window.innerHeight - rect.height - 10
       }
-      if (rect.top < 0) {
-        newY -= rect.top - 10
+      if (rect.top < 10) {
+        newY = rect.height + 10
       }
 
       if (newX !== coords.x || newY !== coords.y) {
@@ -103,20 +116,22 @@ export function Tooltip({
 
   const getPositionStyles = (): React.CSSProperties => {
     const base: React.CSSProperties = {
-      position: 'absolute',
+      position: 'fixed',
       zIndex: 9999,
+      left: coords.x,
+      top: coords.y,
     }
 
     switch (position) {
       case 'bottom':
-        return { ...base, left: coords.x, top: coords.y, transform: 'translateX(-50%)' }
+        return { ...base, transform: 'translateX(-50%)' }
       case 'left':
-        return { ...base, left: coords.x, top: coords.y, transform: 'translate(-100%, -50%)' }
+        return { ...base, transform: 'translate(-100%, -50%)' }
       case 'right':
-        return { ...base, left: coords.x, top: coords.y, transform: 'translateY(-50%)' }
+        return { ...base, transform: 'translateY(-50%)' }
       case 'top':
       default:
-        return { ...base, left: coords.x, top: coords.y, transform: 'translate(-50%, -100%)' }
+        return { ...base, transform: 'translate(-50%, -100%)' }
     }
   }
 
@@ -124,7 +139,7 @@ export function Tooltip({
     <div
       ref={tooltipRef}
       style={getPositionStyles()}
-      className={`px-2 py-1 text-xs font-medium bg-zinc-900 text-zinc-100 rounded border border-zinc-700 shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in-0 zoom-in-95 duration-100 ${className}`}
+      className={`px-2 py-1 text-xs font-medium bg-zinc-900 text-zinc-100 rounded border border-zinc-700 shadow-lg whitespace-pre-line pointer-events-none animate-in fade-in-0 zoom-in-95 duration-100 ${className}`}
       role="tooltip"
     >
       {content}
@@ -134,7 +149,7 @@ export function Tooltip({
 
   return (
     <>
-      <div
+      <span
         ref={triggerRef}
         onMouseEnter={showTooltip}
         onMouseLeave={hideTooltip}
@@ -143,7 +158,7 @@ export function Tooltip({
         className="inline-flex"
       >
         {children}
-      </div>
+      </span>
       {tooltipElement}
     </>
   )

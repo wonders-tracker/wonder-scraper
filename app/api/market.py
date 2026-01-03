@@ -12,6 +12,7 @@ from app.core.typing import col
 from app.db import get_session
 from app.models.card import Card
 from app.models.market import MarketSnapshot, MarketPrice
+from app.services.floor_price import get_floor_price_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -199,22 +200,12 @@ def read_market_overview(
                 for row in sales_count_results
             }
 
-            # Calculate floor prices (avg of 4 lowest sales per card in period)
-            floor_query = text("""
-                SELECT card_id, AVG(price) as floor_price
-                FROM (
-                    SELECT card_id, price,
-                           ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn
-                    FROM marketprice
-                    WHERE card_id = ANY(:card_ids)
-                      AND listing_type = 'sold'
-                      AND COALESCE(sold_date, scraped_at) >= :period_start
-                ) ranked
-                WHERE rn <= 4
-                GROUP BY card_id
-            """)
-            floor_results = session.execute(floor_query, {"card_ids": card_ids, "period_start": period_start}).all()
-            floor_price_map = {row[0]: round(float(row[1]), 2) for row in floor_results}
+            # Calculate floor prices using unified FloorPriceService
+            period_days_map = {"1h": 1, "24h": 1, "7d": 7, "30d": 30, "90d": 90, "all": 365}
+            period_days = period_days_map.get(time_period, 30)
+            floor_service = get_floor_price_service(session)
+            floor_results = floor_service.get_floor_prices_batch(card_ids, days=period_days)
+            floor_price_map = {cid: r.price for cid, r in floor_results.items() if r.price}
 
         except Exception as e:
             print(f"Error fetching last sales: {e}")
@@ -463,53 +454,26 @@ def read_market_listings(
     vwap_map = {}
 
     if card_ids:
-        # Batch calculate floor prices per variant (avg of 4 lowest sales)
-        # Uses treatment for singles, product_subtype for sealed
+        # Batch calculate floor prices per variant using unified FloorPriceService
         # NOTE: Floor price always uses 90-day lookback regardless of time_period filter
-        # This ensures we have enough sales data for meaningful floor calculations
-        # IMPORTANT: Use LOWER() for case-insensitive matching
-        floor_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
-        floor_by_variant_query = text("""
-            SELECT card_id, variant, AVG(price) as floor_price
-            FROM (
-                SELECT card_id,
-                       LOWER(COALESCE(
-                           NULLIF(product_subtype, ''),
-                           treatment,
-                           'unknown'
-                       )) as variant,
-                       price,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY card_id,
-                               LOWER(COALESCE(
-                                   NULLIF(product_subtype, ''),
-                                   treatment,
-                                   'unknown'
-                               ))
-                           ORDER BY price ASC
-                       ) as rn
-                FROM marketprice
-                WHERE card_id = ANY(:card_ids)
-                  AND listing_type = 'sold'
-                  AND COALESCE(sold_date, scraped_at) >= :cutoff
-            ) ranked
-            WHERE rn <= 4
-            GROUP BY card_id, variant
-        """)
-        floor_results = session.execute(floor_by_variant_query, {"card_ids": card_ids, "cutoff": floor_cutoff}).all()
+        floor_service = get_floor_price_service(session)
+        floor_results = floor_service.get_floor_prices_batch(card_ids, days=90, by_variant=True)
         # Build nested map: {card_id: {variant_lower: price}}
-        floor_by_variant_map = {}
-        for row in floor_results:
-            card_id, variant, price = row[0], row[1], round(float(row[2]), 2)
+        floor_by_variant_map: dict[int, dict[str, float]] = {}
+        for (card_id, variant), result in floor_results.items():
+            if result.price is None:
+                continue
             if card_id not in floor_by_variant_map:
                 floor_by_variant_map[card_id] = {}
             # Store with lowercase key for case-insensitive lookup
-            floor_by_variant_map[card_id][variant.lower() if variant else "unknown"] = price
+            variant_key = variant.lower() if variant else "unknown"
+            floor_by_variant_map[card_id][variant_key] = result.price
         # Also build overall floor map (cheapest variant)
         for card_id, variants in floor_by_variant_map.items():
             floor_price_map[card_id] = min(variants.values())
 
         # Batch calculate VWAP (avg of all sold prices in 30d) as fallback
+        vwap_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
         vwap_query = text("""
             SELECT card_id, AVG(price) as vwap
             FROM marketprice
@@ -518,7 +482,7 @@ def read_market_listings(
               AND COALESCE(sold_date, scraped_at) >= :cutoff
             GROUP BY card_id
         """)
-        vwap_results = session.execute(vwap_query, {"card_ids": card_ids, "cutoff": floor_cutoff}).all()
+        vwap_results = session.execute(vwap_query, {"card_ids": card_ids, "cutoff": vwap_cutoff}).all()
         vwap_map = {row[0]: round(float(row[1]), 2) for row in vwap_results}
 
     # Format results
