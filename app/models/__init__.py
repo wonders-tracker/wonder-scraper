@@ -1,5 +1,5 @@
 from .card import Card, Rarity
-from .market import MarketSnapshot, MarketPrice
+from .market import MarketSnapshot, MarketPrice, FMPSnapshot
 from .user import User
 from .portfolio import PortfolioItem, PortfolioCard, PurchaseSource
 from .analytics import PageView
@@ -10,6 +10,7 @@ __all__ = [
     "Rarity",
     "MarketSnapshot",
     "MarketPrice",
+    "FMPSnapshot",
     "User",
     "PortfolioItem",
     "PortfolioCard",

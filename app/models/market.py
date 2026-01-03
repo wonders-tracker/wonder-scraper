@@ -131,3 +131,41 @@ class Report(SQLModel, table=True):
     report_type: str = Field(index=True)  # 'daily', 'weekly', 'monthly'
     content: str  # CSV content stored as text
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+
+class FMPSnapshot(SQLModel, table=True):
+    """
+    Historical Fair Market Price snapshots for tracking price trends over time.
+
+    Captures daily FMP calculations per card/treatment combination.
+    Can be backfilled from historical sales data.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    card_id: int = Field(foreign_key="card.id", index=True)
+
+    # Treatment/variant (null = aggregate across all treatments)
+    treatment: Optional[str] = Field(default=None, index=True)
+
+    # Price metrics
+    fmp: Optional[float] = Field(default=None)  # Fair Market Price
+    floor_price: Optional[float] = Field(default=None)  # Floor price at this time
+    vwap: Optional[float] = Field(default=None)  # Volume-weighted average
+
+    # Context
+    sales_count: int = Field(default=0)  # Number of sales used in calculation
+    lookback_days: int = Field(default=30)  # Days of data used
+
+    # Timestamp for this snapshot (date the FMP represents)
+    snapshot_date: datetime = Field(index=True)
+
+    # When this record was created (for backfills vs live captures)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Composite indexes for efficient queries
+    __table_args__ = (
+        # Primary query pattern: card + date range
+        Index("ix_fmpsnapshot_card_date", "card_id", "snapshot_date"),
+        # Per-treatment history
+        Index("ix_fmpsnapshot_card_treatment_date", "card_id", "treatment", "snapshot_date"),
+    )

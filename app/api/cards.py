@@ -1071,3 +1071,84 @@ def read_snapshot_history(
 
     snapshots = session.execute(statement).scalars().all()
     return [MarketSnapshotOut.model_validate(s) for s in snapshots]
+
+
+@router.get("/{card_id}/fmp-history")
+def read_fmp_history(
+    card_id: str,  # Accept string to support both ID and slug
+    session: Session = Depends(get_session),
+    treatment: Optional[str] = Query(default=None, description="Filter by treatment/variant"),
+    days: int = Query(default=90, ge=7, le=365, description="Days of history to return"),
+) -> Any:
+    """
+    Get historical FMP/floor price snapshots for a card.
+
+    Returns time-series data for charting price trends over time.
+    Use treatment param to filter by specific treatment/variant.
+    """
+    from app.models.market import FMPSnapshot
+
+    card = get_card_by_id_or_slug(session, card_id)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # Build query
+    stmt = (
+        select(FMPSnapshot)
+        .where(
+            FMPSnapshot.card_id == card.id,
+            FMPSnapshot.snapshot_date >= cutoff,
+        )
+    )
+
+    # Filter by treatment if specified, otherwise get aggregate (treatment=null)
+    if treatment:
+        stmt = stmt.where(FMPSnapshot.treatment == treatment)
+    else:
+        stmt = stmt.where(FMPSnapshot.treatment.is_(None))
+
+    stmt = stmt.order_by(FMPSnapshot.snapshot_date.asc())
+
+    snapshots = session.execute(stmt).scalars().all()
+
+    return [
+        {
+            "date": s.snapshot_date.isoformat(),
+            "floor_price": s.floor_price,
+            "fmp": s.fmp,
+            "vwap": s.vwap,
+            "sales_count": s.sales_count,
+            "treatment": s.treatment,
+        }
+        for s in snapshots
+    ]
+
+
+@router.get("/{card_id}/fmp-history/treatments")
+def read_fmp_history_treatments(
+    card_id: str,
+    session: Session = Depends(get_session),
+) -> Any:
+    """
+    Get list of treatments with FMP history for a card.
+
+    Useful for populating treatment filter dropdown.
+    """
+    from app.models.market import FMPSnapshot
+
+    card = get_card_by_id_or_slug(session, card_id)
+
+    result = session.execute(
+        text("""
+            SELECT DISTINCT treatment, COUNT(*) as snapshot_count
+            FROM fmpsnapshot
+            WHERE card_id = :card_id AND treatment IS NOT NULL
+            GROUP BY treatment
+            ORDER BY snapshot_count DESC
+        """),
+        {"card_id": card.id},
+    ).all()
+
+    return [
+        {"treatment": r[0], "snapshot_count": r[1]}
+        for r in result
+    ]
