@@ -23,8 +23,90 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 from dataclasses import dataclass
 import asyncio
+import random
 
 from sqlmodel import Session, select
+
+from app.core.config import settings
+
+
+# Retry configuration for API calls (values from settings)
+MAX_RETRIES = settings.BLOKPAX_MAX_RETRIES
+RETRY_BASE_DELAY = settings.BLOKPAX_RETRY_BASE_DELAY
+RETRY_MAX_DELAY = settings.BLOKPAX_RETRY_MAX_DELAY
+
+
+async def _retry_request(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    **kwargs,
+) -> httpx.Response:
+    """
+    Execute an HTTP request with exponential backoff retry.
+
+    Retries on:
+    - Connection errors
+    - Timeout errors
+    - 5xx server errors
+    - 429 rate limiting
+
+    Args:
+        client: httpx.AsyncClient instance
+        method: HTTP method ('get', 'post', etc.)
+        url: Request URL
+        **kwargs: Additional arguments passed to client.request()
+
+    Returns:
+        httpx.Response on success
+
+    Raises:
+        httpx.HTTPStatusError: On non-retryable 4xx errors after retries exhausted
+        httpx.RequestError: On connection/timeout errors after retries exhausted
+    """
+    last_exception = None
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            response = await getattr(client, method)(url, **kwargs)
+
+            # Success or non-retryable error
+            if response.status_code < 500 and response.status_code != 429:
+                response.raise_for_status()
+                return response
+
+            # Retryable server error
+            if attempt < MAX_RETRIES:
+                delay = min(
+                    RETRY_BASE_DELAY * (2**attempt) + random.uniform(0, 1),
+                    RETRY_MAX_DELAY,
+                )
+                print(
+                    f"[Blokpax] {response.status_code} error, retrying in {delay:.1f}s "
+                    f"(attempt {attempt + 1}/{MAX_RETRIES})"
+                )
+                await asyncio.sleep(delay)
+            else:
+                response.raise_for_status()
+
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.ReadTimeout) as e:
+            last_exception = e
+            if attempt < MAX_RETRIES:
+                delay = min(
+                    RETRY_BASE_DELAY * (2**attempt) + random.uniform(0, 1),
+                    RETRY_MAX_DELAY,
+                )
+                print(
+                    f"[Blokpax] {type(e).__name__}, retrying in {delay:.1f}s "
+                    f"(attempt {attempt + 1}/{MAX_RETRIES})"
+                )
+                await asyncio.sleep(delay)
+            else:
+                raise
+
+    if last_exception:
+        raise last_exception
+    raise httpx.RequestError(f"Request failed after {MAX_RETRIES} retries")
 
 # Blokpax API base URL
 BLOKPAX_API_BASE = "https://api.blokpax.com/api"
@@ -48,7 +130,7 @@ WOTF_STOREFRONTS = [
 _bpx_price_cache: Dict[str, Any] = {
     "price": None,
     "timestamp": None,
-    "ttl_seconds": 300,  # 5 min cache
+    "ttl_seconds": settings.BLOKPAX_BPX_CACHE_TTL,
 }
 _bpx_cache_lock = asyncio.Lock()
 
@@ -139,7 +221,7 @@ async def get_bpx_price() -> float:
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(GECKO_POOL_URL, timeout=10.0)
+                response = await _retry_request(client, "get", GECKO_POOL_URL, timeout=10.0)
                 data = response.json()
 
                 # Extract base_token_price_usd (BPX is base token)
@@ -158,7 +240,7 @@ async def get_bpx_price() -> float:
             # Fallback to cached or approximate value
             if _bpx_price_cache["price"]:
                 return _bpx_price_cache["price"]
-            return 0.002  # Approximate fallback
+            return settings.BLOKPAX_BPX_FALLBACK_PRICE
 
 
 def bpx_to_float(raw_price: int) -> float:
@@ -180,12 +262,12 @@ def bpx_to_usd(raw_price: int, bpx_price_usd: float) -> float:
 async def fetch_storefront(slug: str) -> Dict[str, Any]:
     """
     Fetches storefront/collection metadata.
+    Includes retry logic for transient failures.
     """
     url = f"{BLOKPAX_API_BASE}/storefront/{slug}"
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, timeout=15.0)
-        response.raise_for_status()
+        response = await _retry_request(client, "get", url, timeout=settings.BLOKPAX_REQUEST_TIMEOUT)
         return response.json()
 
 
@@ -194,6 +276,7 @@ async def fetch_storefront_assets(
 ) -> Dict[str, Any]:
     """
     Fetches assets from a storefront with pagination.
+    Includes retry logic for transient failures.
 
     Args:
         slug: Storefront slug (e.g., 'wotf-existence-collector-boxes')
@@ -206,8 +289,7 @@ async def fetch_storefront_assets(
     params = {"query": "", "pg": page, "perPage": per_page, "sort": sort_by}
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, params=params, timeout=15.0)
-        response.raise_for_status()
+        response = await _retry_request(client, "get", url, params=params, timeout=settings.BLOKPAX_REQUEST_TIMEOUT)
         return response.json()
 
 
@@ -215,12 +297,12 @@ async def fetch_asset_details(slug: str, asset_id: str) -> Dict[str, Any]:
     """
     Fetches detailed information about a specific asset.
     Includes: listings, offers, traits, owner info.
+    Includes retry logic for transient failures.
     """
     url = f"{BLOKPAX_API_BASE}/storefront/{slug}/asset/{asset_id}"
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, timeout=15.0)
-        response.raise_for_status()
+        response = await _retry_request(client, "get", url, timeout=settings.BLOKPAX_REQUEST_TIMEOUT)
         return response.json()
 
 
@@ -232,13 +314,13 @@ async def fetch_storefront_activity(
 ) -> Dict[str, Any]:
     """
     Fetches activity/sales history for a storefront.
+    Includes retry logic for transient failures.
     """
     url = f"{BLOKPAX_API_BASE}/storefront/{slug}/activity"
     params = {"page": page, "per_page": per_page, "type": activity_type}
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, params=params, timeout=15.0)
-        response.raise_for_status()
+        response = await _retry_request(client, "get", url, params=params, timeout=settings.BLOKPAX_REQUEST_TIMEOUT)
         return response.json()
 
 
@@ -357,7 +439,9 @@ def _parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
-async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int = 20) -> List[BlokpaxListing]:
+async def scrape_all_listings(
+    slug: str, max_pages: int = 200, concurrency: int = settings.BLOKPAX_SCRAPER_CONCURRENCY
+) -> List[BlokpaxListing]:
     """
     Scrapes ALL active listings from a storefront using an adaptive strategy.
 
@@ -386,7 +470,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
     # Ensure valid BPX price for USD calculations
     if not bpx_price or bpx_price <= 0:
         print(f"[Blokpax] Warning: Invalid BPX price ({bpx_price}), using fallback")
-        bpx_price = 0.002
+        bpx_price = settings.BLOKPAX_BPX_FALLBACK_PRICE
 
     all_listings: List[BlokpaxListing] = []
     seen_listing_ids = set()
@@ -410,7 +494,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
                         if fl and fl.get("listing_status") == "active":
                             use_small_pages = True
                             break
-        except Exception:
+        except (aiohttp.ClientError, asyncio.TimeoutError, KeyError, TypeError):  # Network/data errors
             pass
 
         # Step 1: Collect all asset IDs from bulk endpoint AND check for floor_listing data
@@ -426,13 +510,13 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
         if use_small_pages:
             print("  Using small page mode (perPage=5) - API quirk requires this for floor_listing")
             # With small pages, we need more pages but can early-exit when listings stop appearing
-            effective_max_pages = max_pages * 20  # Allow up to 4000 pages for small page mode
+            effective_max_pages = max_pages * settings.BLOKPAX_SMALL_PAGE_MULTIPLIER
         else:
             effective_max_pages = max_pages
 
         # Track consecutive pages without new listings (for early exit in small page mode)
         pages_without_listings = 0
-        max_empty_pages = 10  # Exit after 10 consecutive pages with no listings
+        max_empty_pages = settings.BLOKPAX_MAX_EMPTY_PAGES
 
         while page <= min(effective_max_pages, total_pages):
             url = f"{BLOKPAX_API_BASE}/storefront/{slug}/assets"
@@ -496,7 +580,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
                                 break
 
                     page += 1
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(settings.BLOKPAX_PAGE_DELAY)
 
             except Exception as e:
                 print(f"  Error fetching page {page}: {e}")
@@ -570,7 +654,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
 
                     return found_listings if found_listings else None
 
-            except Exception:
+            except (aiohttp.ClientError, asyncio.TimeoutError, KeyError, TypeError):  # Network/data errors
                 return None
 
         # Step 3: Choose strategy based on ID pattern
@@ -613,7 +697,7 @@ async def scrape_all_listings(slug: str, max_pages: int = 200, concurrency: int 
             if checked % 200 == 0 or checked == total_to_check:
                 print(f"    Progress: {checked}/{total_to_check} assets checked, {len(all_listings)} listings found")
 
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(settings.BLOKPAX_PAGE_DELAY)
 
     # Sort by price ascending
     all_listings.sort(key=lambda x: x.price_bpx)
@@ -638,7 +722,7 @@ async def scrape_storefront_floor(slug: str, deep_scan: bool = True) -> Dict[str
     # Ensure valid BPX price for USD calculations
     if not bpx_price or bpx_price <= 0:
         print(f"[Blokpax] Warning: Invalid BPX price ({bpx_price}), using fallback")
-        bpx_price = 0.002
+        bpx_price = settings.BLOKPAX_BPX_FALLBACK_PRICE
 
     # Get first page for metadata
     assets_response = await fetch_storefront_assets(slug, page=1, per_page=24, sort_by="price_asc")
@@ -666,7 +750,7 @@ async def scrape_storefront_floor(slug: str, deep_scan: bool = True) -> Dict[str
     try:
         meta = assets_response.get("meta", {})
         total_tokens = meta.get("total", 0)
-    except Exception:
+    except (KeyError, TypeError, AttributeError):  # Dict access errors
         total_tokens = 0
 
     return {
@@ -688,7 +772,7 @@ async def scrape_recent_sales(slug: str, max_pages: int = 3) -> List[BlokpaxSale
     # Ensure valid BPX price for USD calculations
     if not bpx_price or bpx_price <= 0:
         print(f"[Blokpax] Warning: Invalid BPX price ({bpx_price}), using fallback")
-        bpx_price = 0.002
+        bpx_price = settings.BLOKPAX_BPX_FALLBACK_PRICE
 
     all_sales = []
 
@@ -706,7 +790,7 @@ async def scrape_recent_sales(slug: str, max_pages: int = 3) -> List[BlokpaxSale
                     all_sales.append(sale)
 
             # Rate limiting
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(settings.BLOKPAX_ACTIVITY_DELAY)
 
         except Exception as e:
             print(f"Error fetching activity page {page} for {slug}: {e}")
@@ -730,7 +814,9 @@ def is_wotf_asset(asset_name: str) -> bool:
     return any(kw in name_lower for kw in wotf_keywords)
 
 
-async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 20) -> List[BlokpaxOffer]:
+async def scrape_all_offers(
+    slug: str, max_pages: int = 200, concurrency: int = settings.BLOKPAX_SCRAPER_CONCURRENCY
+) -> List[BlokpaxOffer]:
     """
     Scrapes ALL active offers (bids) from a storefront.
 
@@ -751,7 +837,7 @@ async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 
     # Ensure valid BPX price for USD calculations
     if not bpx_price or bpx_price <= 0:
         print(f"[Blokpax] Warning: Invalid BPX price ({bpx_price}), using fallback")
-        bpx_price = 0.002
+        bpx_price = settings.BLOKPAX_BPX_FALLBACK_PRICE
 
     all_offers: List[BlokpaxOffer] = []
     seen_offer_ids = set()
@@ -782,7 +868,7 @@ async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 
                 break
 
             page += 1
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(settings.BLOKPAX_STOREFRONT_DELAY)
 
         except Exception as e:
             print(f"[Blokpax] Error fetching assets page {page}: {e}")
@@ -831,7 +917,7 @@ async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 
 
                 return offers
 
-        except Exception:
+        except (aiohttp.ClientError, asyncio.TimeoutError, KeyError, TypeError):  # Network/data errors
             return []
 
     # Fetch in concurrent batches
@@ -841,7 +927,7 @@ async def scrape_all_offers(slug: str, max_pages: int = 200, concurrency: int = 
         async def fetch_with_semaphore(asset_id: str):
             async with semaphore:
                 offers = await fetch_asset_offers(session, asset_id)
-                await asyncio.sleep(0.1)  # Rate limiting
+                await asyncio.sleep(settings.BLOKPAX_ASSET_DELAY)  # Rate limiting
                 return offers
 
         tasks = [fetch_with_semaphore(aid) for aid in asset_ids]
@@ -940,7 +1026,7 @@ async def fetch_redemptions(slug: str, max_pages: int = 50) -> List[BlokpaxRedem
                 if page >= last_page:
                     break
 
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(settings.BLOKPAX_STOREFRONT_DELAY)
 
             except Exception as e:
                 print(f"[Blokpax] Error fetching redemptions page {page}: {e}")
@@ -1012,7 +1098,7 @@ async def scrape_preslab_sales(session: Session, max_pages: int = 10, save_to_db
     bpx_price = await get_bpx_price()
     if not bpx_price or bpx_price <= 0:
         print(f"[Blokpax] Warning: Invalid BPX price ({bpx_price}), using fallback")
-        bpx_price = 0.002
+        bpx_price = settings.BLOKPAX_BPX_FALLBACK_PRICE
 
     sales_processed = 0
     sales_matched = 0
@@ -1098,7 +1184,7 @@ async def scrape_preslab_sales(session: Session, max_pages: int = 10, save_to_db
                 session.commit()
 
             # Rate limiting
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(settings.BLOKPAX_ACTIVITY_DELAY)
 
             # Check pagination
             meta = activity.get("meta", {})
@@ -1131,7 +1217,7 @@ async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> 
     bpx_price = await get_bpx_price()
     if not bpx_price or bpx_price <= 0:
         print(f"[Blokpax] Warning: Invalid BPX price ({bpx_price}), using fallback")
-        bpx_price = 0.002
+        bpx_price = settings.BLOKPAX_BPX_FALLBACK_PRICE
 
     listings_processed = 0
     listings_matched = 0
@@ -1149,7 +1235,7 @@ async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> 
             try:
                 # Fetch asset details
                 url = f"{BLOKPAX_API_BASE}/storefront/{slug}/asset/{listing.asset_id}"
-                response = await client.get(url, timeout=15.0)
+                response = await client.get(url, timeout=settings.BLOKPAX_REQUEST_TIMEOUT)
                 if response.status_code != 200:
                     continue
 
@@ -1172,7 +1258,7 @@ async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> 
                 listings_matched += 1
 
                 if not save_to_db:
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(settings.BLOKPAX_ASSET_DELAY)
                     continue
 
                 # Check if we already have this listing
@@ -1216,7 +1302,7 @@ async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> 
                 session.add(mp)
                 listings_saved += 1
 
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(settings.BLOKPAX_ASSET_DELAY)
 
             except Exception as e:
                 print(f"[Blokpax] Error processing listing {listing.listing_id}: {e}")
@@ -1231,6 +1317,7 @@ async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> 
         session.commit()
 
     print(
-        f"[Blokpax] Preslab listings: {listings_processed} processed, {listings_matched} matched, {listings_saved} saved"
+        f"[Blokpax] Preslab listings: {listings_processed} processed, "
+        f"{listings_matched} matched, {listings_saved} saved"
     )
     return listings_processed, listings_matched, listings_saved

@@ -10,9 +10,12 @@ import tempfile
 import subprocess
 import uuid
 
+from app.core.config import settings
 
-# Serialize browser operations - only 1 at a time for stability
-_semaphore = asyncio.Semaphore(1)
+
+# Control concurrent browser tab operations
+# Configured via BROWSER_SEMAPHORE_LIMIT (default 4 tabs for speed vs memory balance)
+_semaphore = asyncio.Semaphore(settings.BROWSER_SEMAPHORE_LIMIT)
 
 # Flag to track if we're in a container environment
 IS_CONTAINER = os.path.exists("/.dockerenv") or os.getenv("RAILWAY_ENVIRONMENT") is not None
@@ -81,7 +84,7 @@ def find_chrome_binary() -> Optional[str]:
             ["find", "/nix/store", "-name", "chromium", "-type", "f", "-executable"],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=settings.BROWSER_CHROME_SEARCH_TIMEOUT,
         )
         if result.returncode == 0 and result.stdout.strip():
             path = result.stdout.strip().split("\n")[0]
@@ -108,12 +111,16 @@ def kill_stale_chrome_processes():
 
     try:
         # Find and kill any chrome processes (with timeout to prevent hanging)
-        result = subprocess.run(["pkill", "-9", "-f", "chrome"], capture_output=True, timeout=10)
+        result = subprocess.run(
+            ["pkill", "-9", "-f", "chrome"],
+            capture_output=True,
+            timeout=settings.BROWSER_PKILL_TIMEOUT,
+        )
         if result.returncode == 0:
             print("[Browser] Killed stale Chrome processes")
     except subprocess.TimeoutExpired:
-        print("[Browser] WARNING: pkill timed out after 10s")
-    except Exception:
+        print(f"[Browser] WARNING: pkill timed out after {settings.BROWSER_PKILL_TIMEOUT}s")
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
         # pkill might not exist or no processes to kill - that's fine
         pass
 
@@ -134,9 +141,11 @@ def cleanup_stale_profiles():
                     if os.path.isdir(path):
                         shutil.rmtree(path, ignore_errors=True)
                         print(f"[Browser] Cleaned up stale profile: {item}")
-                except Exception:
+                except (OSError, PermissionError):
+                    # Directory cleanup can fail due to permissions or locks - safe to ignore
                     pass
-    except Exception:
+    except (OSError, PermissionError):
+        # Listing temp dir can fail in restricted environments - safe to ignore
         pass
 
 
@@ -144,8 +153,10 @@ class BrowserManager:
     _browser: Optional[Chrome] = None
     _lock = asyncio.Lock()
     _restart_count: int = 0
-    _max_restarts: int = 3
-    _startup_timeout: int = 60  # seconds to wait for browser startup
+    _max_restarts: int = settings.BROWSER_MAX_RESTARTS
+    _startup_timeout: int = settings.BROWSER_STARTUP_TIMEOUT
+    _page_count: int = 0
+    _max_pages_before_restart: int = settings.BROWSER_MAX_PAGES_BEFORE_RESTART
 
     @classmethod
     async def get_browser(cls) -> Chrome:
@@ -246,17 +257,31 @@ class BrowserManager:
         # Check if we've hit the restart limit BEFORE incrementing
         if cls._restart_count >= cls._max_restarts:
             print(f"Browser restarted {cls._restart_count} times. Applying extended cooldown...")
-            await asyncio.sleep(10)
+            await asyncio.sleep(settings.BROWSER_EXTENDED_COOLDOWN)
             cls._restart_count = 0
 
         cls._restart_count += 1
+        cls._page_count = 0  # Reset page count on restart
         print(f"Restarting browser instance (attempt {cls._restart_count}/{cls._max_restarts})...")
         await cls.close()
-        await asyncio.sleep(2)
+        await asyncio.sleep(settings.BROWSER_RESTART_DELAY)
         return await cls.get_browser()
 
+    @classmethod
+    async def increment_page_count(cls) -> bool:
+        """
+        Increment page count and restart browser if threshold reached.
+        Returns True if browser was restarted.
+        """
+        cls._page_count += 1
+        if cls._page_count >= cls._max_pages_before_restart:
+            print(f"[Browser] Preventive restart after {cls._page_count} pages to free memory")
+            await cls.restart()
+            return True
+        return False
 
-async def get_page_content(url: str, retries: int = 3) -> str:
+
+async def get_page_content(url: str, retries: int = settings.BROWSER_PAGE_RETRIES) -> str:
     """
     Navigates to a URL and returns the HTML content.
     Uses pydoll for undetected browsing.
@@ -271,19 +296,48 @@ async def get_page_content(url: str, retries: int = 3) -> str:
                 tab = await browser.new_tab()
 
                 # Random delay before navigation (human-like)
-                await asyncio.sleep(random.uniform(1, 3))
+                await asyncio.sleep(
+                    random.uniform(
+                        settings.BROWSER_PRE_NAV_DELAY_MIN,
+                        settings.BROWSER_PRE_NAV_DELAY_MAX,
+                    )
+                )
 
                 # Navigate
                 await tab.go_to(url)
 
                 # Random wait for content to load (human-like)
-                await asyncio.sleep(random.uniform(2, 4))
+                await asyncio.sleep(
+                    random.uniform(
+                        settings.BROWSER_CONTENT_LOAD_DELAY_MIN,
+                        settings.BROWSER_CONTENT_LOAD_DELAY_MAX,
+                    )
+                )
 
                 # Get page content
                 content = await tab.page_source
 
-                if not content or len(content) < 100:
+                if not content or len(content) < settings.BROWSER_MIN_CONTENT_LENGTH:
                     raise Exception("Empty or invalid page content received")
+
+                # Check for eBay blocking indicators
+                content_lower = content.lower()
+                blocking_indicators = [
+                    "please verify yourself",
+                    "robot or human",
+                    "security measure",
+                    "access denied",
+                    "blocked",
+                    "captcha",
+                    "unusual traffic",
+                    "too many requests",
+                ]
+                for indicator in blocking_indicators:
+                    if indicator in content_lower:
+                        raise Exception(f"eBay blocking detected: '{indicator}' found in response")
+
+                # Track page count for preventive restart
+                await BrowserManager.increment_page_count()
 
                 return content
 
@@ -294,11 +348,22 @@ async def get_page_content(url: str, retries: int = 3) -> str:
                 print(f"  Type: {type(e).__name__}")
                 print(f"  Message: {e}")
 
-                # If it's a browser-level error, restart
-                if any(keyword in error_msg for keyword in ["browser", "closed", "crashed", "connection"]):
+                # Handle different error types with appropriate recovery
+                if "blocking detected" in error_msg:
+                    # eBay blocking - restart browser and apply longer cooldown
+                    print("[Browser] eBay blocking detected. Restarting browser with extended cooldown...")
+                    await BrowserManager.restart()
+                    await asyncio.sleep(
+                        random.uniform(
+                            settings.BROWSER_BLOCKING_COOLDOWN_MIN,
+                            settings.BROWSER_BLOCKING_COOLDOWN_MAX,
+                        )
+                    )
+                elif any(keyword in error_msg for keyword in ["browser", "closed", "crashed", "connection"]):
+                    # Browser-level error - restart
                     print("Detected browser issue. Restarting browser...")
                     await BrowserManager.restart()
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(settings.BROWSER_RESTART_DELAY)
                 else:
                     await asyncio.sleep(1)
 
@@ -310,7 +375,8 @@ async def get_page_content(url: str, retries: int = 3) -> str:
                 if tab:
                     try:
                         await tab.close()
-                    except Exception:
+                    except (asyncio.TimeoutError, RuntimeError, OSError):
+                        # Tab close can fail if browser crashed or connection lost - safe to ignore
                         pass
 
     # Should never reach here (loop raises on final attempt), but handle edge case
