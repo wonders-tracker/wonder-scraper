@@ -591,8 +591,8 @@ async def get_admin_stats(
                 "daily_events": daily_events,
                 "external_clicks": external_clicks,
             }
-        except Exception as e:
-            # Table might not exist yet
+        except Exception:
+            # Table might not exist yet - return empty analytics
             analytics_data = {
                 "total_pageviews": 0,
                 "pageviews_24h": 0,
@@ -610,7 +610,7 @@ async def get_admin_stats(
                 "top_events": [],
                 "daily_events": [],
                 "external_clicks": [],
-                "error": str(e),
+                "error": "Analytics data unavailable",
             }
 
         return {

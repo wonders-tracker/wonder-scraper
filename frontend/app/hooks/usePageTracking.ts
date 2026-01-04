@@ -2,13 +2,14 @@ import { useEffect, useRef } from 'react'
 import { useLocation } from '@tanstack/react-router'
 import { api } from '../utils/auth'
 
-// Generate or get session ID
+// Generate or get session ID using cryptographically secure randomness
 function getSessionId(): string {
   if (typeof window === 'undefined') return ''
 
   let sessionId = sessionStorage.getItem('wt_session_id')
   if (!sessionId) {
-    sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    // Use crypto.randomUUID for secure random session IDs
+    sessionId = crypto.randomUUID()
     sessionStorage.setItem('wt_session_id', sessionId)
   }
   return sessionId

@@ -45,10 +45,17 @@ class APIKey(SQLModel, table=True):
 
     @staticmethod
     def hash_key(key: str) -> str:
-        """Hash an API key for storage."""
+        """Hash an API key for storage using HMAC-SHA256 with secret."""
+        import hmac
         import hashlib
+        from app.core.config import settings
 
-        return hashlib.sha256(key.encode()).hexdigest()
+        # Use HMAC with app secret for secure key hashing
+        return hmac.new(
+            settings.SECRET_KEY.encode(),
+            key.encode(),
+            hashlib.sha256
+        ).hexdigest()
 
     @staticmethod
     def get_prefix(key: str) -> str:

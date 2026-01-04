@@ -88,3 +88,4 @@ public/
 # Vercel build output (prevents stale cache issues)
 .vercel/output
 .vercel/builders
+data/ebay_sample.html
