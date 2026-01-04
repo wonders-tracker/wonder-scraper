@@ -504,7 +504,7 @@ def get_card_by_id_or_slug(session: Session, card_identifier: str) -> tuple[Card
     """Resolve card by ID (numeric) or slug (string). Returns (card, rarity_name)."""
 
     # Build query with LEFT JOIN to Rarity
-    stmt = select(Card, Rarity.name).outerjoin(Rarity, Card.rarity_id == Rarity.id)
+    stmt = select(Card, Rarity.name).outerjoin(Rarity, col(Card.rarity_id) == col(Rarity.id))
 
     # Try numeric ID first
     if card_identifier.isdigit():
@@ -1161,11 +1161,11 @@ def read_fmp_history(
 
     # Filter by treatment if specified, otherwise get aggregate (treatment=null)
     if treatment:
-        stmt = stmt.where(FMPSnapshot.treatment == treatment)
+        stmt = stmt.where(col(FMPSnapshot.treatment) == treatment)
     else:
-        stmt = stmt.where(FMPSnapshot.treatment.is_(None))
+        stmt = stmt.where(col(FMPSnapshot.treatment).is_(None))
 
-    stmt = stmt.order_by(FMPSnapshot.snapshot_date.asc())
+    stmt = stmt.order_by(col(FMPSnapshot.snapshot_date).asc())
 
     snapshots = session.execute(stmt).scalars().all()
 
