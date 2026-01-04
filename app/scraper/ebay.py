@@ -1170,7 +1170,8 @@ def _extract_seller_info(item) -> Tuple[Optional[str], Optional[int], Optional[f
     #   <span>seller_name  100% positive (1K)</span>
     secondary_attrs = item.select_one(".su-card-container__attributes__secondary")
     if secondary_attrs:
-        spans = secondary_attrs.select("span.su-styled-text")
+        # eBay uses both span.su-styled-text AND plain span elements
+        spans = secondary_attrs.select("span")
         for i, span in enumerate(spans):
             text = span.get_text(strip=True)
 

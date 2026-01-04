@@ -128,7 +128,10 @@ async def scrape_active_data(
                             existing.scraped_at = datetime.now(timezone.utc)
                             # Don't update listed_at - preserve original "first seen" time
                             existing.image_url = getattr(item, "image_url", existing.image_url)
-                            existing.seller_name = getattr(item, "seller_name", existing.seller_name)
+                            # Only update seller_name if we have a new value - search results don't include seller
+                            new_seller = getattr(item, "seller_name", None)
+                            if new_seller:
+                                existing.seller_name = new_seller
                             existing.condition = getattr(item, "condition", existing.condition)
                             existing.shipping_cost = getattr(item, "shipping_cost", existing.shipping_cost)
                             session.add(existing)
