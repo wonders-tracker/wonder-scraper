@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "clean:temp": "rm -f vite.config.timestamp_*.js app.config.timestamp_*.js",
-    "generate:blog-manifest": "node --import tsx/esm scripts/generate-blog-manifest.ts",
+    "generate:blog-manifest": "./node_modules/.bin/tsx scripts/generate-blog-manifest.ts",
     "dev": "npm run clean:temp && vite",
     "build": "npm run clean:temp && npm run generate:blog-manifest && tsc --noEmit && vite build",
     "build:vercel": "npm run clean:temp && npm run generate:blog-manifest && vite build",
