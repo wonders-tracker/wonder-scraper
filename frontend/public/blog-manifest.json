@@ -1,0 +1,82 @@
+[
+  {
+    "slug": "weekly-movers-2025-12-08",
+    "title": "Weekly Market Report: December 02 - December 08, 2025",
+    "description": "Wonders of the First TCG market report. 74 sales, $6,948 volume.",
+    "publishedAt": "2025-12-24T19:13:49Z",
+    "author": "cody",
+    "category": "analysis",
+    "tags": [
+      "market-report",
+      "weekly-movers",
+      "price-tracking"
+    ]
+  },
+  {
+    "slug": "weekly-movers-2025-12-15",
+    "title": "Weekly Market Report: December 09 - December 15, 2025",
+    "description": "Wonders of the First TCG market report. 54 sales, $3,058 volume.",
+    "publishedAt": "2025-12-24T19:12:13Z",
+    "author": "cody",
+    "category": "analysis",
+    "tags": [
+      "market-report",
+      "weekly-movers",
+      "price-tracking"
+    ]
+  },
+  {
+    "slug": "weekly-movers-2025-12-22",
+    "title": "Weekly Market Report: December 16 - December 22, 2025",
+    "description": "Wonders of the First TCG market report. 20 sales, $426.86 volume.",
+    "publishedAt": "2025-12-24T19:10:36Z",
+    "author": "cody",
+    "category": "analysis",
+    "tags": [
+      "market-report",
+      "weekly-movers",
+      "price-tracking"
+    ]
+  },
+  {
+    "slug": "market-guide",
+    "title": "WoTF Market Guide: From Gameplay to Price",
+    "description": "Understanding what drives card prices in Wonders of The First.",
+    "publishedAt": "2024-12-22T15:00:00Z",
+    "author": "cody",
+    "category": "guide",
+    "tags": [
+      "market",
+      "trading",
+      "investment",
+      "guide"
+    ]
+  },
+  {
+    "slug": "card-evaluation-framework",
+    "title": "Card Evaluation Framework",
+    "description": "A guide to understanding what makes cards valuable in Wonders of The First—for deckbuilding and market insight.",
+    "publishedAt": "2024-12-22T14:00:00Z",
+    "author": "cody",
+    "category": "guide",
+    "tags": [
+      "strategy",
+      "deckbuilding",
+      "market",
+      "guide"
+    ]
+  },
+  {
+    "slug": "welcome-to-wonderstracker",
+    "title": "Welcome to WondersTracker",
+    "description": "Introducing WondersTracker - the premier market tracking platform for Wonders of the First TCG. Track prices, analyze trends, and discover opportunities.",
+    "publishedAt": "2024-12-22T12:00:00Z",
+    "author": "cody",
+    "category": "news",
+    "tags": [
+      "announcement",
+      "guide",
+      "market"
+    ]
+  }
+]
