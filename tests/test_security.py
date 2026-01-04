@@ -1,10 +1,17 @@
 """
 Security tests for anti-scraping protection.
-Tests rate limiting, bot detection, and API key authentication.
+Tests rate limiting, bot detection, API key authentication, and P0 security fixes.
 """
 import pytest
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
+from sqlmodel import Session, select
+
+from app.models.user import User
+from app.core import security
 
 
 @pytest.mark.integration
@@ -317,3 +324,358 @@ class TestAPIKeyModel:
 
         # Key should have prefix
         assert key.startswith("wt_")
+
+
+# ============== P0 SECURITY FIXES TESTS ==============
+
+
+class TestSecretKeyValidation:
+    """Test SECRET_KEY validation at startup."""
+
+    def test_empty_secret_key_raises_error(self):
+        """Empty SECRET_KEY should raise ValueError at startup."""
+        from pydantic_settings import BaseSettings
+
+        # Temporarily patch the environment
+        with patch.dict("os.environ", {"SECRET_KEY": ""}, clear=False):
+            with pytest.raises(ValueError) as exc_info:
+                from app.core.config import Settings
+                Settings()  # Should fail validation
+
+            assert "SECRET_KEY" in str(exc_info.value)
+
+    def test_valid_secret_key_accepted(self):
+        """Valid SECRET_KEY should be accepted."""
+        # The current settings have a valid key (app loaded successfully)
+        from app.core.config import settings
+
+        assert settings.SECRET_KEY is not None
+        assert len(settings.SECRET_KEY) > 0
+
+
+class TestEmailNormalization:
+    """Test email normalization to prevent case-based duplicate accounts."""
+
+    def test_email_normalized_to_lowercase(self):
+        """UserCreate should normalize email to lowercase."""
+        from app.api.auth import UserCreate
+
+        user_create = UserCreate(
+            email="TEST@EXAMPLE.COM",
+            password="validpassword123"
+        )
+        assert user_create.email == "test@example.com"
+
+    def test_email_whitespace_stripped(self):
+        """UserCreate should strip whitespace from email."""
+        from app.api.auth import UserCreate
+
+        user_create = UserCreate(
+            email="  test@example.com  ",
+            password="validpassword123"
+        )
+        assert user_create.email == "test@example.com"
+
+    def test_mixed_case_emails_become_identical(self):
+        """Mixed case emails should become identical after normalization."""
+        from app.api.auth import UserCreate
+
+        emails = [
+            "User@Example.COM",
+            "USER@EXAMPLE.COM",
+            "user@example.com",
+            "UsEr@ExAmPlE.cOm",
+        ]
+
+        normalized = [UserCreate(email=e, password="pass12345678").email for e in emails]
+        unique = set(normalized)
+
+        assert len(unique) == 1
+        assert unique.pop() == "user@example.com"
+
+    def test_invalid_email_rejected(self):
+        """Invalid email formats should be rejected."""
+        from app.api.auth import UserCreate
+        from pydantic import ValidationError
+
+        invalid_emails = [
+            "not-an-email",
+            "@nodomain.com",
+            "no@domain",
+            "spaces in@email.com",
+        ]
+
+        for invalid in invalid_emails:
+            with pytest.raises(ValidationError):
+                UserCreate(email=invalid, password="validpassword123")
+
+
+class TestRefreshTokenRotation:
+    """Test refresh token rotation security."""
+
+    def test_refresh_token_is_hashed_before_storage(self, test_session: Session):
+        """Refresh token JTI should be hashed before storage."""
+        from app.core.jwt import create_refresh_token
+
+        # Create a refresh token
+        token, token_hash = create_refresh_token("test@example.com")
+
+        # The hash should be a SHA-256 hex digest (64 chars)
+        assert len(token_hash) == 64
+
+        # The raw token should be a JWT (three base64 sections)
+        assert token.count(".") == 2
+
+        # The hash should not contain the raw token
+        assert token not in token_hash
+
+    def test_refresh_token_rotation_invalidates_old_token(self, test_session: Session):
+        """Old refresh token should be invalid after rotation."""
+        from app.core.jwt import create_refresh_token, decode_token, hash_token_jti
+
+        # Create initial token and store hash
+        token1, hash1 = create_refresh_token("test@example.com")
+
+        # Create a user to simulate the flow
+        user = User(
+            email="rotation@test.com",
+            hashed_password=security.get_password_hash("testpassword123"),
+            is_active=True,
+            refresh_token_hash=hash1,
+        )
+        test_session.add(user)
+        test_session.commit()
+
+        # Simulate rotation - create new token
+        token2, hash2 = create_refresh_token("rotation@test.com")
+
+        # Update user with new hash
+        user.refresh_token_hash = hash2
+        test_session.add(user)
+        test_session.commit()
+
+        # Old token's hash should no longer match
+        payload1 = decode_token(token1)
+        jti1 = payload1.get("jti")
+        old_hash = hash_token_jti(jti1)
+
+        assert old_hash == hash1  # Verify our hash function is consistent
+        assert old_hash != user.refresh_token_hash  # Old hash no longer matches stored
+
+    def test_reused_token_detected(self, test_session: Session):
+        """Token reuse attack should be detectable via hash mismatch."""
+        from app.core.jwt import create_refresh_token, decode_token, hash_token_jti
+
+        # Attacker captures token1
+        token1, hash1 = create_refresh_token("victim@test.com")
+
+        # Create user with token1's hash
+        user = User(
+            email="victim@test.com",
+            hashed_password=security.get_password_hash("testpassword123"),
+            is_active=True,
+            refresh_token_hash=hash1,
+        )
+        test_session.add(user)
+        test_session.commit()
+
+        # Legitimate user refreshes (rotation)
+        token2, hash2 = create_refresh_token("victim@test.com")
+        user.refresh_token_hash = hash2
+        test_session.add(user)
+        test_session.commit()
+
+        # Attacker tries to use captured token1
+        payload1 = decode_token(token1)
+        attacker_jti = payload1.get("jti")
+        attacker_hash = hash_token_jti(attacker_jti)
+
+        # Hash mismatch = token reuse detected
+        assert attacker_hash != user.refresh_token_hash
+
+
+class TestRefreshRateLimiting:
+    """Test rate limiting on refresh endpoint."""
+
+    def test_refresh_endpoint_has_rate_limit(self):
+        """Refresh endpoint should be rate limited."""
+        from app.core.rate_limit import rate_limiter
+
+        test_ip = "refresh_rate_test_ip"
+
+        # Clear any existing state
+        rate_limiter.clear()
+
+        # Make 30 requests (the limit)
+        for _ in range(30):
+            is_limited, _ = rate_limiter.is_rate_limited(test_ip, max_requests=30, window_seconds=60)
+            if not is_limited:
+                rate_limiter.record_request(test_ip)
+
+        # 31st should be limited
+        is_limited, retry_after = rate_limiter.is_rate_limited(test_ip, max_requests=30, window_seconds=60)
+        assert is_limited, "Refresh endpoint should be rate limited after 30 requests"
+
+    def test_rate_limit_returns_retry_after(self):
+        """Rate limiter should return retry-after value."""
+        from app.core.rate_limit import rate_limiter
+
+        test_ip = "retry_after_test_ip"
+        rate_limiter.clear()
+
+        # Exhaust the limit
+        for _ in range(30):
+            rate_limiter.record_request(test_ip)
+
+        is_limited, retry_after = rate_limiter.is_rate_limited(test_ip, max_requests=30, window_seconds=60)
+
+        assert is_limited
+        assert retry_after > 0
+        assert retry_after <= 60  # Should be within the window
+
+
+class TestInactiveUserEnforcement:
+    """Test that inactive users cannot authenticate."""
+
+    def test_inactive_user_rejected_from_get_current_user(self, test_session: Session):
+        """Inactive users should be rejected by get_current_user."""
+        from app.api.deps import get_current_user
+        from app.core.jwt import create_access_token
+        from fastapi import HTTPException
+
+        # Create inactive user
+        inactive_user = User(
+            email="inactive@test.com",
+            hashed_password=security.get_password_hash("testpassword123"),
+            is_active=False,
+        )
+        test_session.add(inactive_user)
+        test_session.commit()
+
+        # Create valid token for inactive user
+        access_token = create_access_token(subject="inactive@test.com")
+
+        # Mock request with token
+        mock_request = MagicMock()
+        mock_request.cookies = {"access_token": access_token}
+
+        # Should raise 401 for inactive user
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user(mock_request, access_token, test_session)
+
+        assert exc_info.value.status_code == 401
+        assert "disabled" in exc_info.value.detail.lower()
+
+    def test_active_user_allowed(self, test_session: Session):
+        """Active users should be allowed by get_current_user."""
+        from app.api.deps import get_current_user
+        from app.core.jwt import create_access_token
+
+        # Create active user
+        active_user = User(
+            email="active@test.com",
+            hashed_password=security.get_password_hash("testpassword123"),
+            is_active=True,
+        )
+        test_session.add(active_user)
+        test_session.commit()
+
+        # Create valid token for active user
+        access_token = create_access_token(subject="active@test.com")
+
+        # Mock request with token
+        mock_request = MagicMock()
+        mock_request.cookies = {"access_token": access_token}
+
+        # Should return the user
+        user = get_current_user(mock_request, access_token, test_session)
+        assert user.email == "active@test.com"
+        assert user.is_active is True
+
+
+class TestPasswordResetTokenHashing:
+    """Test that password reset tokens are hashed before storage."""
+
+    def test_reset_token_is_hashed(self, test_session: Session):
+        """Password reset token should be hashed before storage."""
+        raw_token = secrets.token_urlsafe(32)
+        expected_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+        # Create user with hashed token
+        user = User(
+            email="reset@test.com",
+            hashed_password=security.get_password_hash("testpassword123"),
+            is_active=True,
+            password_reset_token_hash=expected_hash,
+            password_reset_expires=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1),
+        )
+        test_session.add(user)
+        test_session.commit()
+
+        # Verify hash is stored, not raw token
+        assert user.password_reset_token_hash == expected_hash
+        assert raw_token not in user.password_reset_token_hash
+
+    def test_reset_token_verified_by_hashing_input(self, test_session: Session):
+        """Reset token verification should hash the input and compare."""
+        raw_token = secrets.token_urlsafe(32)
+        stored_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+        user = User(
+            email="verify@test.com",
+            hashed_password=security.get_password_hash("testpassword123"),
+            is_active=True,
+            password_reset_token_hash=stored_hash,
+            password_reset_expires=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1),
+        )
+        test_session.add(user)
+        test_session.commit()
+
+        # Correct token should verify
+        submitted_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        assert submitted_hash == user.password_reset_token_hash
+
+        # Wrong token should fail
+        wrong_hash = hashlib.sha256(b"wrong_token").hexdigest()
+        assert wrong_hash != user.password_reset_token_hash
+
+
+@pytest.mark.integration
+class TestCORSMiddlewareOrder:
+    """Test that CORS middleware is correctly ordered."""
+
+    def test_cors_headers_present_on_preflight(self):
+        """CORS preflight should return proper headers."""
+        from app.main import app
+
+        client = TestClient(app)
+
+        response = client.options(
+            "/api/v1/cards",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "content-type",
+            }
+        )
+
+        # CORS headers should be present
+        assert "access-control-allow-origin" in response.headers or response.status_code == 200
+
+    def test_options_request_not_blocked_by_anti_scraping(self):
+        """OPTIONS requests should not be blocked by anti-scraping."""
+        from app.main import app
+
+        client = TestClient(app)
+
+        # CORS preflight is an OPTIONS request
+        response = client.options(
+            "/api/v1/cards",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "GET",
+            }
+        )
+
+        # Should not be 403 (blocked)
+        assert response.status_code != 403

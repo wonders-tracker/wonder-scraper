@@ -2,8 +2,6 @@ from typing import Optional, Tuple
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
 
-import jwt
-from jwt.exceptions import PyJWTError
 from pydantic import BaseModel
 from sqlmodel import Session, select
 from datetime import datetime, timezone
@@ -13,6 +11,7 @@ from app.models.user import User
 from app.models.api_key import APIKey
 from app.core.config import settings
 from app.core.anti_scraping import api_key_limiter
+from app.core.jwt import decode_token
 
 # Cookie name for auth token
 COOKIE_NAME = "access_token"
@@ -50,6 +49,7 @@ def get_current_user(
 ) -> User:
     """
     Get current user from JWT token (header or cookie).
+    Only accepts access tokens, not refresh tokens.
     """
     token = get_token_from_request(request, header_token)
 
@@ -66,18 +66,28 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-        token_data = TokenData(email=email)
-    except PyJWTError:
+    payload = decode_token(token)
+    if not payload:
         raise credentials_exception
 
-    user = session.exec(select(User).where(User.email == token_data.email)).first()
+    # Only accept access tokens (not refresh tokens)
+    token_type = payload.get("type")
+    if token_type and token_type != "access":
+        raise credentials_exception
+
+    email = payload.get("sub")
+    if email is None or not isinstance(email, str):
+        raise credentials_exception
+
+    user = session.exec(select(User).where(User.email == email)).first()
     if user is None:
         raise credentials_exception
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is disabled",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 
@@ -93,15 +103,21 @@ def get_current_user_optional(
     if not token:
         return None
 
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            return None
-        user = session.exec(select(User).where(User.email == email)).first()
-        return user
-    except PyJWTError:
+    payload = decode_token(token)
+    if not payload:
         return None
+
+    # Only accept access tokens
+    token_type = payload.get("type")
+    if token_type and token_type != "access":
+        return None
+
+    email = payload.get("sub")
+    if email is None or not isinstance(email, str):
+        return None
+
+    user = session.exec(select(User).where(User.email == email)).first()
+    return user
 
 
 def get_current_superuser(
@@ -239,15 +255,16 @@ def get_data_access(
     token = get_token_from_request(request, header_token)
 
     if token:
-        try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            email: str = payload.get("sub")
-            if email:
-                user = session.exec(select(User).where(User.email == email)).first()
-                if user and user.is_active:
-                    return user
-        except PyJWTError:
-            pass
+        payload = decode_token(token)
+        if payload:
+            # Only accept access tokens
+            token_type = payload.get("type")
+            if not token_type or token_type == "access":
+                email = payload.get("sub")
+                if email and isinstance(email, str):
+                    user = session.exec(select(User).where(User.email == email)).first()
+                    if user and user.is_active:
+                        return user
 
     # No valid auth found
     raise HTTPException(
@@ -275,14 +292,15 @@ def get_data_access_optional(
     token = get_token_from_request(request, header_token)
 
     if token:
-        try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            email: str = payload.get("sub")
-            if email:
-                user = session.exec(select(User).where(User.email == email)).first()
-                if user and user.is_active:
-                    return user
-        except PyJWTError:
-            pass
+        payload = decode_token(token)
+        if payload:
+            # Only accept access tokens
+            token_type = payload.get("type")
+            if not token_type or token_type == "access":
+                email = payload.get("sub")
+                if email and isinstance(email, str):
+                    user = session.exec(select(User).where(User.email == email)).first()
+                    if user and user.is_active:
+                        return user
 
     return None

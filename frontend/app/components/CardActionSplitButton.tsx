@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { api, auth } from '../utils/auth'
+import { api } from '../utils/auth'
+import { useCurrentUser } from '../context/UserContext'
 
 interface CardActionSplitButtonProps {
   cardId: number
@@ -14,7 +15,8 @@ export function CardActionSplitButton({
   onAddToPortfolio,
   className = ''
 }: CardActionSplitButtonProps) {
-  const isLoggedIn = auth.isAuthenticated()
+  const { user } = useCurrentUser()
+  const isLoggedIn = !!user
   const [isWatching, setIsWatching] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [showTooltip, setShowTooltip] = useState<'portfolio' | 'alert' | null>(null)
@@ -191,7 +193,8 @@ export function CardActionSplitButtonCompact({
   onAddToPortfolio,
   className = ''
 }: CardActionSplitButtonProps) {
-  const isLoggedIn = auth.isAuthenticated()
+  const { user } = useCurrentUser()
+  const isLoggedIn = !!user
   const [isWatching, setIsWatching] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [showRipple, setShowRipple] = useState<'portfolio' | 'alert' | null>(null)

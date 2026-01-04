@@ -1,0 +1,40 @@
+{
+  "features": [
+    "card_base_price",
+    "rarity_code",
+    "rel_lag1",
+    "rel_roll_mean",
+    "rel_roll_min",
+    "price_lag1",
+    "floor_4",
+    "treatment_mult",
+    "treatment_code",
+    "illiquidity",
+    "card_sales_count",
+    "treatment_sales_count",
+    "listing_count",
+    "has_listings",
+    "ask_relative",
+    "ask_vs_floor"
+  ],
+  "treatment_multipliers": {
+    "Classic Foil": 1.8,
+    "Classic Paper": 1.0,
+    "Classic Regular": 0.9409272770063545,
+    "Epic": 1.0,
+    "Error/Errata": 1.245847176079734,
+    "Formless Foil": 6.263157894736842,
+    "Mythic Rare": 5.294117647058823,
+    "OCM": 0.4033602240149343,
+    "Prerelease": 37.34335839598997,
+    "Preslab TAG": 16.4571768707483,
+    "Preslab TAG 10": 59.09166404199475,
+    "Preslab TAG 8": 3.8727101038715768,
+    "Preslab TAG 9": 18.453219927095994,
+    "Promo": 26.693018480492814,
+    "Sealed": 0.9451336898395721,
+    "Serialized": 45.09922235706489,
+    "Stonefoil": 970.873786407767
+  },
+  "version": 2
+}

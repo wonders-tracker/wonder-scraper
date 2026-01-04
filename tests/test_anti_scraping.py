@@ -236,7 +236,7 @@ class TestAPIKeyRateLimiter:
 
         # Set up 100 requests already made today
         limiter._day_requests[test_key] = 99
-        limiter._day_reset[test_key] = 99999999999  # Far future
+        limiter._day_start[test_key] = 99999999999  # Far future
 
         # Next request should pass (at 99)
         allowed, _ = limiter.check_limit(test_key, per_minute=1000, per_day=100)

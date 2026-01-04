@@ -17,6 +17,8 @@ from typing import Optional, Dict, Any, List, TYPE_CHECKING, Protocol, runtime_c
 if TYPE_CHECKING:
     from sqlmodel import Session
 
+from app.services.order_book import get_order_book_analyzer
+
 
 # Protocol defining the pricing service interface
 # Both the SaaS implementation and OSS stub must satisfy this interface
@@ -106,7 +108,33 @@ except ImportError:
             days: int = 30,
             product_type: str = "Single",
         ) -> Dict[str, Any]:
-            """FMP unavailable in OSS mode."""
+            """
+            FMP formula unavailable in OSS mode, but provides order-book floor.
+
+            Returns the order book floor estimate with confidence score.
+            """
+            analyzer = get_order_book_analyzer(self.session)
+            result = analyzer.estimate_floor(card_id=card_id, treatment=treatment, days=days)
+
+            if result:
+                return {
+                    "fair_market_price": None,  # FMP algorithm requires SaaS
+                    "floor_price": result.floor_estimate,
+                    "floor_confidence": result.confidence,
+                    "floor_source": result.source,
+                    "breakdown": None,
+                    "product_type": product_type,
+                    "calculation_method": "order_book",
+                    "data_quality": {
+                        "has_base_price": False,
+                        "has_floor_price": True,
+                        "using_defaults": False,
+                        "fmp_available": False,
+                        "total_listings": result.total_listings,
+                        "stale_count": result.stale_count,
+                    },
+                }
+
             return {
                 "fair_market_price": None,
                 "floor_price": None,
@@ -119,7 +147,7 @@ except ImportError:
                     "using_defaults": False,
                     "fmp_available": False,
                 },
-                "error": "FMP pricing is not available in OSS mode",
+                "error": "Insufficient market data for floor estimation",
             }
 
         def calculate_fmp_simple(
@@ -135,7 +163,16 @@ except ImportError:
             return []
 
         def calculate_floor_price(self, card_id: int, num_sales: int = 4, days: int = 30) -> Optional[float]:
-            """Floor price unavailable in OSS mode."""
+            """
+            Calculate floor price using order book analysis (OSS mode).
+
+            Uses the OrderBookAnalyzer to find the floor based on active listing
+            liquidity depth. Falls back to sales data if insufficient active listings.
+            """
+            analyzer = get_order_book_analyzer(self.session)
+            result = analyzer.estimate_floor(card_id=card_id, days=days)
+            if result:
+                return result.floor_estimate
             return None
 
         def get_median_price(self, card_id: int, days: int = 30) -> Optional[float]:

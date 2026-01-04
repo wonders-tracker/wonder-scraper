@@ -16,19 +16,56 @@ const getApiUrl = () => {
 
 const API_URL = getApiUrl()
 
+// Track if we're currently refreshing to prevent multiple simultaneous refreshes
+let isRefreshing = false
+let refreshPromise: Promise<boolean> | null = null
+
+/**
+ * Attempt to refresh the access token using the refresh token cookie.
+ * Returns true if refresh succeeded, false otherwise.
+ */
+async function refreshAccessToken(): Promise<boolean> {
+  // If already refreshing, wait for that to complete
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise
+  }
+
+  isRefreshing = true
+  refreshPromise = (async () => {
+    try {
+      const response = await fetch(`${API_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      return response.ok
+    } catch {
+      return false
+    } finally {
+      isRefreshing = false
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
+}
+
 export const api = ky.create({
   prefixUrl: API_URL,
   credentials: 'include', // Send cookies with requests
   hooks: {
-    beforeRequest: [
-      request => {
-        if (typeof window !== 'undefined') {
-          // Also send token from localStorage as fallback (for backwards compatibility)
-          const token = localStorage.getItem('token')
-          if (token) {
-            request.headers.set('Authorization', `Bearer ${token}`)
+    afterResponse: [
+      async (request, options, response) => {
+        // If we get a 401, try to refresh the token
+        if (response.status === 401) {
+          const refreshed = await refreshAccessToken()
+          if (refreshed) {
+            // Retry the original request
+            return ky(request, options)
           }
+          // Refresh failed - user needs to login
+          notifyAuthChange()
         }
+        return response
       },
     ],
   },
@@ -49,11 +86,9 @@ export const auth = {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-      }).json<{ access_token: string }>()
+      }).json<{ access_token: string; expires_in: number }>()
 
       if (res.access_token) {
-        // Store in localStorage as backup (cookie is set by server)
-        localStorage.setItem('token', res.access_token)
         // Notify app of auth state change
         notifyAuthChange()
         return true
@@ -67,13 +102,11 @@ export const auth = {
 
   logout: async (queryClient?: { clear: () => void }) => {
     try {
-      // Call logout endpoint to clear cookie
+      // Call logout endpoint to clear cookies
       await api.post('auth/logout')
     } catch (e) {
       console.error('Logout error:', e)
     }
-    // Clear localStorage
-    localStorage.removeItem('token')
     // Clear ALL cached queries to prevent data leakage between users
     if (queryClient) {
       queryClient.clear()
@@ -83,11 +116,25 @@ export const auth = {
     window.location.href = '/login'
   },
 
-  isAuthenticated: () => {
-    if (typeof window === 'undefined') return false
-    // Check localStorage (cookie is httpOnly so can't check directly)
-    return !!localStorage.getItem('token')
+  /**
+   * Check if user might be authenticated.
+   * Since cookies are httpOnly, we can't check directly.
+   * This is a hint based on whether /me succeeds.
+   */
+  isAuthenticated: async (): Promise<boolean> => {
+    try {
+      await api.get('auth/me')
+      return true
+    } catch {
+      return false
+    }
   },
+
+  /**
+   * Refresh the access token.
+   * Called automatically on 401, but can be called manually.
+   */
+  refreshToken: refreshAccessToken,
 
   // Get current user from API (verifies token is still valid)
   getCurrentUser: async () => {
@@ -99,6 +146,8 @@ export const auth = {
         discord_handle?: string
         is_active: boolean
         onboarding_completed: boolean
+        subscription_tier?: string
+        is_pro?: boolean
       }>()
       return user
     } catch (e) {
@@ -106,4 +155,3 @@ export const auth = {
     }
   },
 }
-

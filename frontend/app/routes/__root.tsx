@@ -1,5 +1,12 @@
 import { Outlet, createRootRoute, Link, useNavigate, redirect, useLocation } from '@tanstack/react-router'
-import { LayoutDashboard, LineChart, Wallet, User, Server, LogOut, Menu, X, Shield, ChevronDown, Settings, Sparkles, Newspaper } from 'lucide-react'
+import { LayoutDashboard, LineChart, Wallet, Server, LogOut, Shield, Newspaper } from 'lucide-react'
+// Animated icons for micro-interactions
+import { MenuIcon, type MenuIconHandle } from '~/components/ui/menu'
+import { XIcon, type XIconHandle } from '~/components/ui/x'
+import { ChevronDownIcon, type ChevronDownIconHandle } from '~/components/ui/chevron-down'
+import { SettingsIcon, type SettingsIconHandle } from '~/components/ui/settings'
+import { SparklesIcon } from '~/components/ui/sparkles'
+import { UserIcon, type UserIconHandle } from '~/components/ui/user'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, auth } from '../utils/auth'
 import { useState, useMemo, useRef, useEffect } from 'react'
@@ -8,6 +15,7 @@ import Marquee from '../components/ui/marquee'
 import { Tooltip } from '../components/ui/tooltip'
 import { Analytics } from '@vercel/analytics/react'
 import { TimePeriodProvider, useTimePeriod } from '../context/TimePeriodContext'
+import { UserProvider } from '../context/UserContext'
 
 type UserProfile = {
     id: number
@@ -42,30 +50,29 @@ export const Route = createRootRoute({
       return
     }
 
-    // Check if user has a token
     if (typeof window === 'undefined') return
-    const token = localStorage.getItem('token')
-    if (!token) return
 
-    // Fetch user profile to check onboarding status
-    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/auth/me`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    })
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem('token')
+    // Fetch user profile to check onboarding status (uses httpOnly cookie)
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/auth/me`, {
+        credentials: 'include',
+      })
+      if (!response.ok) {
+        // Not authenticated, let them continue to page (will show login prompt if needed)
+        return
+      }
+      const user = await response.json()
+      // Check if onboarding is incomplete: either flag is false OR username is empty
+      const needsOnboarding = user && (user.onboarding_completed === false || !user.username)
+      if (needsOnboarding) {
+        throw redirect({ to: '/welcome' })
+      }
+    } catch (e) {
+      // Network error or not authenticated - continue to page
+      if (e instanceof Response || (e && typeof e === 'object' && 'to' in e)) {
+        throw e // Re-throw redirects
       }
       return
-    }
-    const user = await response.json()
-    // Check if onboarding is incomplete: either flag is false OR username is empty
-    const needsOnboarding = user && (user.onboarding_completed === false || !user.username)
-    console.log('[onboarding check] user:', user?.email, 'onboarding_completed:', user?.onboarding_completed, 'username:', user?.username, 'needsOnboarding:', needsOnboarding)
-    if (needsOnboarding) {
-      console.log('[onboarding check] redirecting to /welcome')
-      throw redirect({ to: '/welcome' })
     }
   },
 })
@@ -74,6 +81,9 @@ export const Route = createRootRoute({
 function UserDropdown({ user }: { user: UserProfile }) {
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const settingsIconRef = useRef<SettingsIconHandle>(null)
+  const userIconRef = useRef<UserIconHandle>(null)
+  const chevronIconRef = useRef<ChevronDownIconHandle>(null)
 
   // Close on outside click
   useEffect(() => {
@@ -103,13 +113,21 @@ function UserDropdown({ user }: { user: UserProfile }) {
     <div ref={dropdownRef} className="relative">
       <button
         onClick={() => setOpen(!open)}
+        onMouseEnter={() => {
+          userIconRef.current?.startAnimation()
+          chevronIconRef.current?.startAnimation()
+        }}
+        onMouseLeave={() => {
+          userIconRef.current?.stopAnimation()
+          chevronIconRef.current?.stopAnimation()
+        }}
         className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold uppercase rounded hover:bg-muted transition-colors"
       >
         <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-          <User className="w-3.5 h-3.5 text-primary" />
+          <UserIcon ref={userIconRef} size={14} className="text-primary" />
         </div>
         <span className="hidden sm:block max-w-[100px] truncate">{user.email.split('@')[0]}</span>
-        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDownIcon ref={chevronIconRef} size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
@@ -124,9 +142,11 @@ function UserDropdown({ user }: { user: UserProfile }) {
             <Link
               to="/profile"
               onClick={() => setOpen(false)}
+              onMouseEnter={() => settingsIconRef.current?.startAnimation()}
+              onMouseLeave={() => settingsIconRef.current?.stopAnimation()}
               className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors w-full"
             >
-              <Settings className="w-3.5 h-3.5" />
+              <SettingsIcon ref={settingsIconRef} size={14} />
               <span>Settings</span>
             </Link>
             <button
@@ -171,50 +191,42 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
   const queryClient = useQueryClient()
 
   // Reactive auth state - listens for auth-change events from login/logout
-  const [hasToken, setHasToken] = useState(() =>
-    typeof window !== 'undefined' && !!localStorage.getItem('token')
-  )
 
-  // Listen for auth changes (login/logout from same tab or other tabs)
+  // Listen for auth changes (login/logout)
+  // Since we use httpOnly cookies, we can't detect cross-tab changes via storage
+  // Instead, we rely on the auth-change custom event and periodic revalidation
   useEffect(() => {
     const handleAuthChange = async () => {
-      const newHasToken = !!localStorage.getItem('token')
-      setHasToken(newHasToken)
-      // Invalidate and refetch user query to ensure consistency
+      // Invalidate and refetch user data
       await queryClient.invalidateQueries({ queryKey: ['me'] })
-      if (newHasToken) {
-        // Force refetch to ensure we have fresh data
-        queryClient.refetchQueries({ queryKey: ['me'] })
-      } else {
-        // Logged out - clear user data immediately to prevent stale state
-        queryClient.setQueryData(['me'], null)
+    }
+    // Custom event for auth changes (login/logout in this tab)
+    window.addEventListener('auth-change', handleAuthChange)
+    // Revalidate when tab becomes visible (handles cross-tab logout)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: ['me'] })
       }
     }
-    // Custom event for same-tab auth changes
-    window.addEventListener('auth-change', handleAuthChange)
-    // Storage event for cross-tab auth changes
-    window.addEventListener('storage', handleAuthChange)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       window.removeEventListener('auth-change', handleAuthChange)
-      window.removeEventListener('storage', handleAuthChange)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [queryClient])
 
-  const { data: user } = useQuery({
+  const { data: user, isLoading: userLoading } = useQuery({
       queryKey: ['me'],
       queryFn: async () => {
           try {
               return await api.get('auth/me').json<UserProfile>()
           } catch {
-              // If API fails (e.g. 401), clear local token so app knows we are logged out
-              // This prevents redirect loops where localStorage has token but API rejects it
-              localStorage.removeItem('token')
+              // API failed (e.g. 401) - user is not authenticated
               return null
           }
       },
-      enabled: hasToken, // Only fetch if user has a token
       retry: false,
-      staleTime: 5 * 60 * 1000, // 5 minutes - onboarding check is in beforeLoad now
+      staleTime: 60 * 1000, // 1 minute - shorter for better cross-tab sync
   })
 
   // Note: Onboarding redirect is handled in beforeLoad at the route level
@@ -222,7 +234,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
   // Fetch cards for marquee ticker - uses shared time period
   // Uses same query key as dashboard so data is shared/cached
   // slim=true reduces payload by ~50% for faster loading
-  const { data: cards = [] } = useQuery({
+  const { data: cards = [], isLoading: isLoadingCards } = useQuery({
       queryKey: ['cards', timePeriod, 'all'], // Same key as dashboard with productType='all'
       queryFn: async () => {
           return await api.get(`cards?limit=500&time_period=${timePeriod}&slim=true`).json<Card[]>()
@@ -244,20 +256,27 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
       return { totalVolume, avgVelocity }
   }, [cards])
 
+  // Refs for mobile menu animated icons
+  const menuIconRef = useRef<MenuIconHandle>(null)
+  const xIconRef = useRef<XIconHandle>(null)
+
   // For docs pages, render just the outlet with minimal wrapper
   if (isDocsPage) {
     return (
-      <>
-        <Analytics />
-        <div className="min-h-screen bg-background text-foreground antialiased font-mono">
-          <Outlet />
-        </div>
-      </>
+      <UserProvider user={user ?? null} isLoading={userLoading}>
+        <>
+          <Analytics />
+          <div className="min-h-screen bg-background text-foreground antialiased font-mono">
+            <Outlet />
+          </div>
+        </>
+      </UserProvider>
     )
   }
 
   return (
-    <>
+    <UserProvider user={user ?? null} isLoading={userLoading}>
+      <>
       {/* Vercel Analytics */}
       <Analytics />
 
@@ -265,7 +284,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
         {/* Upgrade Banner for non-pro users */}
         {user && !user.is_pro && (
           <div className="bg-[#7dd3a8] text-gray-900 py-1.5 px-4 text-center text-xs font-bold flex items-center justify-center gap-2">
-            <Sparkles className="w-3.5 h-3.5" />
+            <SparklesIcon size={14} />
             <span>Unlock Pro features: Advanced analytics, API access, and more</span>
             <Link
               to="/upgrade"
@@ -283,9 +302,17 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
             <button
               className="md:hidden p-1.5 text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              onMouseEnter={() => {
+                menuIconRef.current?.startAnimation()
+                xIconRef.current?.startAnimation()
+              }}
+              onMouseLeave={() => {
+                menuIconRef.current?.stopAnimation()
+                xIconRef.current?.stopAnimation()
+              }}
               aria-label="Toggle menu"
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? <XIcon ref={xIconRef} size={20} /> : <MenuIcon ref={menuIconRef} size={20} />}
             </button>
 
             <h1 className="text-lg font-bold tracking-tight uppercase flex items-center gap-2">
@@ -313,7 +340,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
               {user && (
                 <>
                   <Link to="/profile" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
-                    <User className="w-3.5 h-3.5" />
+                    <UserIcon size={14} />
                     <span>Profile</span>
                   </Link>
                   {user.is_superuser && (
@@ -400,7 +427,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
                     className="flex items-center gap-3 px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors text-sm font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <User className="w-4 h-4" />
+                    <UserIcon size={16} />
                     <span>Profile</span>
                   </Link>
                 </>
@@ -411,7 +438,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
                   className="flex items-center gap-3 px-3 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors text-sm font-bold uppercase"
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <User className="w-4 h-4" />
+                  <UserIcon size={16} />
                   <span>Login</span>
                 </Link>
               )}
@@ -459,28 +486,39 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
 
           {/* Scrolling Ticker */}
           <div className="flex-1 min-w-0">
-            <Marquee pauseOnHover className="[--gap:2rem]">
-              {/* Fallback if lists are empty: show top volume items */}
-              {(topGainers.length === 0 && topLosers.length === 0) && topVolume.map(c => (
-                <div key={`ticker-vol-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                  <span className="font-bold uppercase">{c.name}</span>
-                  <span className="text-muted-foreground">${Number(c.latest_price).toFixed(2)}</span>
-                </div>
-              ))}
+            {isLoadingCards ? (
+              <div className="flex items-center gap-8 px-4 h-full">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-2 animate-pulse">
+                    <div className="h-3 w-20 bg-muted rounded" />
+                    <div className="h-3 w-12 bg-muted rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Marquee pauseOnHover className="[--gap:2rem]">
+                {/* Fallback if lists are empty: show top volume items */}
+                {(topGainers.length === 0 && topLosers.length === 0) && topVolume.map(c => (
+                  <div key={`ticker-vol-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
+                    <span className="font-bold uppercase">{c.name}</span>
+                    <span className="text-muted-foreground">${Number(c.latest_price).toFixed(2)}</span>
+                  </div>
+                ))}
 
-              {topGainers.map(c => (
-                <div key={`ticker-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                  <span className="font-bold uppercase">{c.name}</span>
-                  <span className="text-brand-300">+{getDelta(c).toFixed(1)}%</span>
-                </div>
-              ))}
-              {topLosers.map(c => (
-                <div key={`ticker-loss-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                  <span className="font-bold uppercase">{c.name}</span>
-                  <span className="text-red-500">{getDelta(c).toFixed(1)}%</span>
-                </div>
-              ))}
-            </Marquee>
+                {topGainers.map(c => (
+                  <div key={`ticker-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
+                    <span className="font-bold uppercase">{c.name}</span>
+                    <span className="text-brand-300">+{getDelta(c).toFixed(1)}%</span>
+                  </div>
+                ))}
+                {topLosers.map(c => (
+                  <div key={`ticker-loss-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
+                    <span className="font-bold uppercase">{c.name}</span>
+                    <span className="text-red-500">{getDelta(c).toFixed(1)}%</span>
+                  </div>
+                ))}
+              </Marquee>
+            )}
           </div>
         </div>
 
@@ -530,6 +568,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
           </div>
         </footer>
       </div>
-    </>
+      </>
+    </UserProvider>
   )
 }

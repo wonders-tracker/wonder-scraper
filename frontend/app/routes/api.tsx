@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, auth } from '../utils/auth'
+import { api } from '../utils/auth'
 import {
   ArrowLeft,
   Key,
@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { useCurrentUser } from '../context/UserContext'
 
 export const Route = createFileRoute('/api')({
   component: ApiPage,
@@ -195,7 +196,8 @@ function RequestAccessForm() {
 
 function ApiPage() {
   const queryClient = useQueryClient()
-  const isAuthenticated = auth.isAuthenticated()
+  const { user } = useCurrentUser()
+  const isAuthenticated = !!user
   const [newKeyName, setNewKeyName] = useState('')
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState(false)

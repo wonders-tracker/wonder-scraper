@@ -1,7 +1,80 @@
+import re
 import urllib.parse
 
 EBAY_BASE_URL = "https://www.ebay.com/sch/i.html"
 TCG_CATEGORY_ID = "183454"  # CCG Individual Cards
+
+# Patterns that indicate a bulk lot (random/mixed card sales)
+# Note: Only match 2+ items to avoid false positives on "1x" or "X1" listings
+BULK_LOT_PATTERNS = [
+    r"(?i)\b([2-9]|\d{2,})\s*x\s*[-–]?\s*wonders",  # "2X Wonders...", "3x - Wonders..." (2+ items)
+    r"(?i)^x([2-9]|\d{2,})\s",  # "X3 Playset..." (2+ items)
+    r"(?i)\blot\s+of\s+(\d+)",  # "LOT OF 5 COMMONS"
+    r"(?i)\brandom\s+\d+\s+cards?",  # "RANDOM 5 CARDS"
+    r"(?i)\b\d+\s+random\s+",  # "10 RANDOM CARDS"
+    r"(?i)\bmixed\s+lot",  # "MIXED LOT"
+    r"(?i)\bassorted\s+cards?",  # "ASSORTED CARDS"
+    r"(?i)\b(\d+)\s+card\s+lot\b",  # "5 CARD LOT"
+    r"(?i)\bbulk\s+(?:sale|lot)",  # "BULK SALE"
+    r"(?i)\bplayset\b",  # "PLAYSET" (typically 4 copies)
+    r"(?i)\b([2-9]|\d{2,})\s*pcs?\b",  # "5 PCS", "10 PCS" (2+ items)
+]
+
+# Official product names that should NOT be flagged as bulk lots
+# These are specific product names, not generic words
+PRODUCT_EXCEPTIONS = [
+    "play bundle",
+    "blaster box",
+    "collector booster box",
+    "collector booster",
+    "serialized advantage",
+    "starter set",
+    "starter deck",
+    "booster box",
+    "play pack",
+    "collector pack",
+    "silver pack",
+]
+
+
+def is_bulk_lot(title: str, product_type: str = "Single") -> bool:
+    """
+    Detects if a listing is a bulk lot (random assorted cards) vs legitimate product.
+
+    Bulk lots are multi-card sales of random/mixed cards, NOT official sealed products.
+    These corrupt FMP calculations by creating artificial floor prices.
+
+    Examples:
+        - "3X - Wonders of the First Mixed Lot $0.65" → True (bulk lot)
+        - "LOT OF 5 COMMON CARDS" → True (bulk lot)
+        - "2X Play Bundle" → False (selling 2 official bundles)
+        - "Collector Booster Box" → False (sealed product)
+
+    Args:
+        title: Listing title to analyze
+        product_type: Card product type (Single, Box, Pack, Bundle, Lot)
+
+    Returns:
+        True if bulk lot, False otherwise
+    """
+    title_lower = title.lower()
+
+    # Check for official product names first (these are NOT bulk lots)
+    for exception in PRODUCT_EXCEPTIONS:
+        if exception in title_lower:
+            return False
+
+    # Special case: "case" must be followed by "of" to avoid false positives
+    # e.g., "Case of 6 Boxes" is a product, but "showcase" is not
+    if re.search(r"(?i)\bcase\s+of\s+\d+", title_lower):
+        return False
+
+    # Check for bulk lot patterns
+    for pattern in BULK_LOT_PATTERNS:
+        if re.search(pattern, title):
+            return True
+
+    return False
 
 
 def build_ebay_url(card_name: str, set_name: str | None = None, sold_only: bool = True, page: int = 1) -> str:

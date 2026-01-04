@@ -44,3 +44,6 @@ class Card(SQLModel, table=True):
     orbital_color: Optional[str] = Field(default=None)  # Hex color e.g., #a07836
     card_number: Optional[str] = Field(default=None)  # e.g., "143" from Existence_143
     cardeio_image_url: Optional[str] = Field(default=None)  # Official high-res image from Carde.io
+
+    # Meta tracking (tournament competitiveness)
+    is_meta: bool = Field(default=False, index=True)  # Currently played in competitive decks

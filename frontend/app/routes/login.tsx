@@ -7,8 +7,8 @@ import { CardGridBackground } from '~/components/CardGridBackground'
 
 export const Route = createFileRoute('/login')({
   component: Login,
-  beforeLoad: () => {
-    if (typeof window !== 'undefined' && auth.isAuthenticated()) {
+  beforeLoad: async () => {
+    if (typeof window !== 'undefined' && await auth.isAuthenticated()) {
         throw redirect({ to: '/' })
     }
   }

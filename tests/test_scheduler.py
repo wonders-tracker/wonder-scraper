@@ -57,19 +57,19 @@ class TestSchedulerInitialization:
                 # Add jobs but don't start the scheduler
                 test_scheduler.add_job(
                     lambda: None,
-                    IntervalTrigger(minutes=45),
+                    IntervalTrigger(minutes=30),  # Updated from 45m to 30m
                     id="job_update_market_data",
                     max_instances=1,
-                    misfire_grace_time=1800,
+                    misfire_grace_time=900,  # Updated from 1800 to 900
                     coalesce=True,
                     replace_existing=True
                 )
                 test_scheduler.add_job(
                     lambda: None,
-                    IntervalTrigger(minutes=20),
+                    IntervalTrigger(hours=8),
                     id="job_update_blokpax_data",
                     max_instances=1,
-                    misfire_grace_time=600,
+                    misfire_grace_time=3600,
                     coalesce=True,
                     replace_existing=True
                 )
@@ -107,10 +107,10 @@ class TestSchedulerInitialization:
 
         test_scheduler.add_job(
             lambda: None,
-            IntervalTrigger(minutes=45),
+            IntervalTrigger(minutes=30),  # Updated from 45m to 30m
             id="job_update_market_data",
             max_instances=1,
-            misfire_grace_time=1800,
+            misfire_grace_time=900,  # Updated from 1800 to 900
             coalesce=True,
             replace_existing=True
         )
@@ -120,7 +120,7 @@ class TestSchedulerInitialization:
         assert isinstance(job.trigger, IntervalTrigger)
         assert job.max_instances == 1
         assert job.coalesce is True
-        assert job.misfire_grace_time == 1800  # 30 minutes
+        assert job.misfire_grace_time == 900  # 15 minutes (half of 30m interval)
 
     def test_blokpax_job_configuration(self):
         """Verify Blokpax job has correct configuration."""
@@ -128,10 +128,10 @@ class TestSchedulerInitialization:
 
         test_scheduler.add_job(
             lambda: None,
-            IntervalTrigger(minutes=20),
+            IntervalTrigger(hours=8),
             id="job_update_blokpax_data",
             max_instances=1,
-            misfire_grace_time=600,
+            misfire_grace_time=3600,
             coalesce=True,
             replace_existing=True
         )
@@ -140,7 +140,7 @@ class TestSchedulerInitialization:
         assert job is not None
         assert isinstance(job.trigger, IntervalTrigger)
         assert job.max_instances == 1
-        assert job.misfire_grace_time == 600  # 10 minutes
+        assert job.misfire_grace_time == 3600  # 1 hour
 
     def test_market_insights_jobs_configuration(self):
         """Verify market insights jobs use cron triggers."""
@@ -179,8 +179,8 @@ class TestSchedulerInitialization:
         """Verify jobs are configured to prevent overlapping runs."""
         test_scheduler = AsyncIOScheduler()
 
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=45), id="job1", max_instances=1)
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=20), id="job2", max_instances=1)
+        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=30), id="job1", max_instances=1)
+        test_scheduler.add_job(lambda: None, IntervalTrigger(hours=8), id="job2", max_instances=1)
 
         for job in test_scheduler.get_jobs():
             assert job.max_instances == 1, f"Job {job.id} allows concurrent execution"
@@ -196,29 +196,21 @@ class TestScrapeSingleCard:
 
         with patch('app.core.scheduler.scrape_sold_data', new_callable=AsyncMock) as mock_sold, \
              patch('app.core.scheduler.scrape_active_data', new_callable=AsyncMock) as mock_active, \
-             patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'):
+             patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry:
 
             # Mock active data
             mock_active.return_value = (1.50, 10, 1.00)
 
-            # Mock database session
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-
-            # Mock snapshot - use execute().scalars() chain
-            mock_snapshot = Mock(spec=MarketSnapshot)
-            mock_snapshot.card_id = card.id
-            mock_session.execute.return_value.scalars.return_value.first.return_value = mock_snapshot
+            # Mock execute_with_retry_async to return True (snapshot updated)
+            mock_retry.return_value = True
 
             result = await scrape_single_card(card)
 
             assert result is True
             mock_sold.assert_called_once()
             mock_active.assert_called_once()
-            assert mock_snapshot.lowest_ask == 1.50
-            assert mock_snapshot.inventory == 10
-            assert mock_snapshot.highest_bid == 1.00
+            # Verify the update_snapshot function was passed to execute_with_retry_async
+            mock_retry.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_scrape_single_card_handles_error(self, sample_cards):
@@ -239,15 +231,12 @@ class TestScrapeSingleCard:
 
         with patch('app.core.scheduler.scrape_sold_data', new_callable=AsyncMock) as mock_sold, \
              patch('app.core.scheduler.scrape_active_data', new_callable=AsyncMock) as mock_active, \
-             patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'):
+             patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry:
 
             mock_active.return_value = (1.50, 10, 1.00)
 
-            # Mock session with no snapshot - use execute().scalars() chain
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.execute.return_value.scalars.return_value.first.return_value = None
+            # Mock execute_with_retry_async to return False (no snapshot to update)
+            mock_retry.return_value = False
 
             result = await scrape_single_card(card)
 
@@ -262,13 +251,10 @@ class TestScrapeSingleCard:
 
         with patch('app.core.scheduler.scrape_sold_data', new_callable=AsyncMock) as mock_sold, \
              patch('app.core.scheduler.scrape_active_data', new_callable=AsyncMock) as mock_active, \
-             patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'):
+             patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry:
 
             mock_active.return_value = (1.50, 10, 1.00)
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.execute.return_value.scalars.return_value.first.return_value = None
+            mock_retry.return_value = False
 
             await scrape_single_card(card)
 
@@ -289,22 +275,19 @@ class TestJobUpdateMarketData:
         """Test that job updates cards with stale snapshots."""
         mock_card = Mock(spec=Card, id=1, name="Test Card", set_name="Test Set", product_type="Single")
 
-        with patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
+        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
              patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
              patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
              patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
              patch('app.core.scheduler.log_scrape_start'), \
              patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.asyncio.gather', new_callable=AsyncMock) as mock_gather:
+             patch('app.core.scheduler.scraper_metrics'):
 
-            # Mock session to return cards needing update
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.execute.return_value.all.return_value = [mock_card]
+            # First call: check_connection returns True
+            # Second call: get_cards_to_update returns [mock_card]
+            mock_retry.side_effect = [True, [mock_card]]
 
             mock_scrape.return_value = True
-            mock_gather.return_value = [True]
 
             await job_update_market_data()
 
@@ -314,49 +297,44 @@ class TestJobUpdateMarketData:
     @pytest.mark.asyncio
     async def test_updates_random_sample_when_no_stale_cards(self):
         """Test that job updates random cards when none are stale."""
-        mock_card1 = Mock(spec=Card, id=1, name="Card 1")
-        mock_card2 = Mock(spec=Card, id=2, name="Card 2")
-        all_cards = [mock_card1, mock_card2]
+        mock_card1 = Mock(spec=Card, id=1, name="Card 1", set_name="Set 1", product_type="Single")
+        # Random sample happens inside get_cards_to_update, so we mock the final result
 
-        with patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
+        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
              patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
              patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
              patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
              patch('app.core.scheduler.log_scrape_start'), \
              patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.random.sample') as mock_sample:
+             patch('app.core.scheduler.scraper_metrics'):
 
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-
-            # First execute() returns no stale cards, second returns all cards via .scalars()
-            mock_execute = MagicMock()
-            mock_execute.all.return_value = []  # First call (no stale cards)
-            mock_scalars = MagicMock()
-            mock_scalars.all.return_value = all_cards  # Second call (.scalars().all())
-            mock_execute.scalars.return_value = mock_scalars
-            mock_session.execute.return_value = mock_execute
-            mock_sample.return_value = [mock_card1]
+            # First call: check_connection returns True
+            # Second call: get_cards_to_update returns [mock_card1] (random sample)
+            mock_retry.side_effect = [True, [mock_card1]]
             mock_scrape.return_value = True
 
             await job_update_market_data()
 
-            # Verify random sample was used
-            mock_sample.assert_called_once()
+            # Verify card was scraped
             assert mock_scrape.call_count >= 1
 
     @pytest.mark.asyncio
     async def test_browser_retry_logic_success_on_retry(self):
         """Test that browser startup retries work correctly."""
-        with patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
+        mock_card = Mock(spec=Card, id=1, name="Test", set_name="Set", product_type="Single")
+
+        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
              patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock) as mock_browser, \
              patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock) as mock_close, \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock), \
+             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
              patch('app.core.scheduler.log_scrape_start'), \
              patch('app.core.scheduler.log_scrape_complete'), \
+             patch('app.core.scheduler.scraper_metrics'), \
              patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
+
+            # First call: check_connection returns True
+            # Second call: get_cards_to_update returns [mock_card]
+            mock_retry.side_effect = [True, [mock_card]]
 
             # Fail twice, succeed third time
             mock_browser.side_effect = [
@@ -365,9 +343,7 @@ class TestJobUpdateMarketData:
                 None  # Success
             ]
 
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.execute.return_value.all.return_value = [Mock(spec=Card, id=1, name="Test")]
+            mock_scrape.return_value = True
 
             await job_update_market_data()
 
@@ -379,20 +355,22 @@ class TestJobUpdateMarketData:
     @pytest.mark.asyncio
     async def test_browser_retry_logic_all_failures(self):
         """Test that job exits gracefully when browser fails all retries."""
-        with patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
+        mock_card = Mock(spec=Card, id=1, name="Test", set_name="Set", product_type="Single")
+
+        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
              patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock) as mock_browser, \
              patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
              patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
              patch('app.core.scheduler.log_scrape_start'), \
+             patch('app.core.scheduler.scraper_metrics'), \
              patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
+
+            # First call: check_connection returns True
+            # Second call: get_cards_to_update returns [mock_card]
+            mock_retry.side_effect = [True, [mock_card]]
 
             # All attempts fail
             mock_browser.side_effect = Exception("Browser error")
-
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.execute.return_value.all.return_value = [Mock(spec=Card, id=1, name="Test")]
 
             await job_update_market_data()
 
@@ -404,58 +382,55 @@ class TestJobUpdateMarketData:
     @pytest.mark.asyncio
     async def test_batch_processing_with_concurrency(self):
         """Test that cards are processed in batches with proper concurrency."""
-        # Create 8 mock cards (should be 3 batches: 3, 3, 2)
-        mock_cards = [Mock(spec=Card, id=i, name=f"Card {i}") for i in range(8)]
+        # Create 8 mock cards (should be processed in batches of SCHEDULER_CARD_BATCH_SIZE)
+        mock_cards = [
+            Mock(spec=Card, id=i, name=f"Card {i}", set_name="Set", product_type="Single")
+            for i in range(8)
+        ]
 
-        with patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
+        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
              patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
              patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
              patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
              patch('app.core.scheduler.log_scrape_start'), \
              patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock) as mock_sleep, \
-             patch('app.core.scheduler.asyncio.gather', new_callable=AsyncMock) as mock_gather:
+             patch('app.core.scheduler.scraper_metrics'), \
+             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
 
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.execute.return_value.all.return_value = mock_cards
+            # First call: check_connection returns True
+            # Second call: get_cards_to_update returns mock_cards
+            mock_retry.side_effect = [True, mock_cards]
 
-            # Mock gather to return successful results
-            mock_gather.return_value = [True, True, True]
             mock_scrape.return_value = True
 
             await job_update_market_data()
 
-            # Should process in 3 batches
-            # gather should be called 3 times (once per batch)
-            assert mock_gather.call_count == 3
+            # Should have scraped all 8 cards
+            assert mock_scrape.call_count == 8
 
     @pytest.mark.asyncio
     async def test_tracks_success_and_failure_counts(self):
         """Test that job correctly counts successful and failed scrapes."""
-        mock_cards = [Mock(spec=Card, id=i, name=f"Card {i}") for i in range(5)]
+        mock_cards = [
+            Mock(spec=Card, id=i, name=f"Card {i}", set_name="Set", product_type="Single")
+            for i in range(3)
+        ]
 
-        with patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock), \
+        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
+             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
              patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
              patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
              patch('app.core.scheduler.log_scrape_start'), \
              patch('app.core.scheduler.log_scrape_complete') as mock_log_complete, \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock), \
-             patch('app.core.scheduler.asyncio.gather', new_callable=AsyncMock) as mock_gather:
+             patch('app.core.scheduler.scraper_metrics'), \
+             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
 
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.execute.return_value.all.return_value = mock_cards
+            # First call: check_connection returns True
+            # Second call: get_cards_to_update returns mock_cards
+            mock_retry.side_effect = [True, mock_cards]
 
-            # Mix of successes, failures, and exceptions
-            mock_gather.return_value = [
-                True,  # Success
-                False,  # Failure
-                Exception("Error"),  # Exception
-            ]
+            # Mix of successes and failures
+            mock_scrape.side_effect = [True, False, Exception("Error")]
 
             await job_update_market_data()
 
@@ -467,19 +442,12 @@ class TestJobUpdateMarketData:
     @pytest.mark.asyncio
     async def test_handles_no_cards_to_update(self):
         """Test job handles case where no cards exist."""
-        with patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
+        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
              patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape:
 
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-            # Both queries return empty - mock execute().all() and execute().scalars().all()
-            mock_execute = MagicMock()
-            mock_execute.all.return_value = []  # First call
-            mock_scalars = MagicMock()
-            mock_scalars.all.return_value = []  # Second call (.scalars().all())
-            mock_execute.scalars.return_value = mock_scalars
-            mock_session.execute.return_value = mock_execute
+            # First call: check_connection returns True
+            # Second call: get_cards_to_update returns empty list
+            mock_retry.side_effect = [True, []]
 
             await job_update_market_data()
 
@@ -489,20 +457,19 @@ class TestJobUpdateMarketData:
     @pytest.mark.asyncio
     async def test_logs_scrape_start_and_complete(self):
         """Test that job logs start and completion to Discord."""
-        mock_card = Mock(spec=Card, id=1, name="Test Card")
+        mock_card = Mock(spec=Card, id=1, name="Test Card", set_name="Set", product_type="Single")
 
-        with patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
+        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
              patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
              patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
              patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
              patch('app.core.scheduler.log_scrape_start') as mock_log_start, \
              patch('app.core.scheduler.log_scrape_complete') as mock_log_complete, \
-             patch('app.core.scheduler.asyncio.gather', new_callable=AsyncMock):
+             patch('app.core.scheduler.scraper_metrics'):
 
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.execute.return_value.all.return_value = [mock_card]
+            # First call: check_connection returns True
+            # Second call: get_cards_to_update returns [mock_card]
+            mock_retry.side_effect = [True, [mock_card]]
             mock_scrape.return_value = True
 
             await job_update_market_data()
@@ -517,20 +484,20 @@ class TestJobUpdateMarketData:
     @pytest.mark.asyncio
     async def test_handles_scraping_exception(self):
         """Test that job handles and logs exceptions during scraping."""
-        mock_card = Mock(spec=Card, id=1, name="Test Card")
+        mock_card = Mock(spec=Card, id=1, name="Test Card", set_name="Set", product_type="Single")
 
-        with patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock), \
+        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
+             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
              patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
              patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
              patch('app.core.scheduler.log_scrape_start'), \
              patch('app.core.scheduler.log_scrape_error') as mock_log_error, \
+             patch('app.core.scheduler.scraper_metrics'), \
              patch('app.core.scheduler.asyncio.gather', new_callable=AsyncMock) as mock_gather:
 
-            mock_session = MagicMock()
-            mock_session_class.return_value.__enter__.return_value = mock_session
-            mock_session.execute.return_value.all.return_value = [mock_card]
+            # First call: check_connection returns True
+            # Second call: get_cards_to_update returns [mock_card]
+            mock_retry.side_effect = [True, [mock_card]]
 
             # Simulate exception during batch processing
             mock_gather.side_effect = Exception("Unexpected error")
@@ -888,7 +855,7 @@ class TestJobCancellation:
     async def test_scheduler_shutdown_stops_jobs(self):
         """Test that scheduler can be started and shutdown without error."""
         test_scheduler = AsyncIOScheduler()
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=45), id="test_job")
+        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=30), id="test_job")
 
         # Start the scheduler
         test_scheduler.start()
@@ -908,8 +875,8 @@ class TestJobCancellation:
         """Test removing individual jobs from scheduler."""
         test_scheduler = AsyncIOScheduler()
 
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=45), id="job_update_market_data")
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=20), id="job_update_blokpax_data")
+        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=30), id="job_update_market_data")
+        test_scheduler.add_job(lambda: None, IntervalTrigger(hours=8), id="job_update_blokpax_data")
 
         # Remove one job
         test_scheduler.remove_job('job_update_market_data')
@@ -970,15 +937,15 @@ class TestIntervalTriggerConfiguration:
 
         test_scheduler.add_job(
             lambda: None,
-            IntervalTrigger(minutes=45),
+            IntervalTrigger(minutes=30),  # Updated from 45m to 30m
             id="job_update_market_data"
         )
 
         job = test_scheduler.get_job('job_update_market_data')
         trigger = job.trigger
 
-        # 45 minutes = 2700 seconds
-        assert trigger.interval.total_seconds() == 2700
+        # 30 minutes = 1800 seconds
+        assert trigger.interval.total_seconds() == 1800
 
     def test_blokpax_interval(self):
         """Test Blokpax job interval configuration."""
@@ -986,15 +953,15 @@ class TestIntervalTriggerConfiguration:
 
         test_scheduler.add_job(
             lambda: None,
-            IntervalTrigger(minutes=20),
+            IntervalTrigger(hours=8),
             id="job_update_blokpax_data"
         )
 
         job = test_scheduler.get_job('job_update_blokpax_data')
         trigger = job.trigger
 
-        # 20 minutes = 1200 seconds
-        assert trigger.interval.total_seconds() == 1200
+        # 8 hours = 28800 seconds
+        assert trigger.interval.total_seconds() == 28800
 
 
 class TestEdgeCases:
@@ -1006,8 +973,8 @@ class TestEdgeCases:
         # This is enforced by APScheduler itself, we just verify config
         test_scheduler = AsyncIOScheduler()
 
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=45), id="job1", max_instances=1)
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=20), id="job2", max_instances=1)
+        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=30), id="job1", max_instances=1)
+        test_scheduler.add_job(lambda: None, IntervalTrigger(hours=8), id="job2", max_instances=1)
 
         # All jobs should have max_instances=1
         for job in test_scheduler.get_jobs():
@@ -1020,15 +987,15 @@ class TestEdgeCases:
 
         test_scheduler.add_job(
             lambda: None,
-            IntervalTrigger(minutes=45),
+            IntervalTrigger(minutes=30),  # Updated from 45m to 30m
             id="job_update_market_data",
-            misfire_grace_time=1800
+            misfire_grace_time=900  # Updated from 1800 to 900 (15 minutes)
         )
         test_scheduler.add_job(
             lambda: None,
-            IntervalTrigger(minutes=20),
+            IntervalTrigger(hours=8),
             id="job_update_blokpax_data",
-            misfire_grace_time=600
+            misfire_grace_time=3600
         )
         test_scheduler.add_job(
             lambda: None,
@@ -1041,11 +1008,11 @@ class TestEdgeCases:
         blokpax_job = test_scheduler.get_job('job_update_blokpax_data')
         morning_insights = test_scheduler.get_job('job_market_insights_morning')
 
-        # Market data: 30 minutes grace
-        assert market_job.misfire_grace_time == 1800
+        # Market data: 15 minutes grace (half of 30m interval)
+        assert market_job.misfire_grace_time == 900
 
-        # Blokpax: 10 minutes grace
-        assert blokpax_job.misfire_grace_time == 600
+        # Blokpax: 1 hour grace
+        assert blokpax_job.misfire_grace_time == 3600
 
         # Insights: 1 hour grace
         assert morning_insights.misfire_grace_time == 3600
@@ -1056,12 +1023,12 @@ class TestEdgeCases:
         test_scheduler = AsyncIOScheduler()
 
         # Add a job
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=45), id="job1")
+        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=30), id="job1")
         job1 = test_scheduler.get_job("job1")
         assert job1 is not None
 
         # Add same job again with replace_existing=True - should succeed without error
-        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=50), id="job1", replace_existing=True)
+        test_scheduler.add_job(lambda: None, IntervalTrigger(minutes=35), id="job1", replace_existing=True)
 
         # Job should still exist
         job1_after = test_scheduler.get_job("job1")

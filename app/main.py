@@ -118,9 +118,9 @@ origins = [
 # Clean up duplicates and empty strings
 origins = list(set([o for o in origins if o]))
 
-# CRITICAL: Add ProxyHeadersMiddleware FIRST to trust X-Forwarded-* headers from Railway
-# This prevents FastAPI from redirecting HTTPS requests to HTTP
-app.add_middleware(cast(Any, ProxyHeadersMiddleware), trusted_hosts=["*"])
+# Middleware order matters! They execute in REVERSE order of addition.
+# So the LAST added middleware executes FIRST on the request.
+# Order: CORS -> Proxy -> GZip -> Metering -> AntiScraping
 
 # Anti-scraping middleware - detects bots, headless browsers, rate limits
 # Protects /api/v1/cards, /api/v1/market, /api/v1/blokpax endpoints
@@ -133,13 +133,19 @@ app.add_middleware(cast(Any, APIMeteringMiddleware))
 # GZip compression for responses > 1KB (80-90% bandwidth reduction)
 app.add_middleware(cast(Any, GZipMiddleware), minimum_size=1000)
 
+# ProxyHeadersMiddleware to trust X-Forwarded-* headers from Railway
+# This prevents FastAPI from redirecting HTTPS requests to HTTP
+app.add_middleware(cast(Any, ProxyHeadersMiddleware), trusted_hosts=["*"])
+
+# CORS middleware LAST (so it runs FIRST) to handle preflight OPTIONS requests
+# before any other middleware can reject them
 app.add_middleware(
     cast(Any, CORSMiddleware),
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Bot-Warning", "X-Automation-Warning"],  # Expose warning headers
+    expose_headers=["X-Bot-Warning", "X-Automation-Warning"],
 )
 
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
@@ -168,6 +174,134 @@ def health():
     return {"status": "healthy"}
 
 
+@app.get("/health/detailed")
+def health_detailed() -> dict:
+    """
+    Detailed health check for monitoring services.
+
+    Checks:
+    - Database connectivity
+    - Last scrape times
+    - Scheduler status
+    - Memory usage
+
+    Returns 200 if core systems healthy, 503 if critical issues.
+    """
+    from datetime import datetime, timezone, timedelta
+    from sqlmodel import Session, select
+    from sqlalchemy import func, text
+    from app.db import engine, USING_NEON_POOLER
+    from app.models.market import MarketPrice
+    from app.core.scheduler import scheduler
+    from typing import Any
+
+    health_status: dict[str, Any] = {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "checks": {},
+    }
+
+    # Check database connectivity
+    try:
+        with Session(engine) as session:
+            session.execute(text("SELECT 1"))
+        health_status["checks"]["database"] = {
+            "status": "healthy",
+            "pooler": USING_NEON_POOLER,
+        }
+    except Exception as e:
+        health_status["status"] = "unhealthy"
+        health_status["checks"]["database"] = {
+            "status": "unhealthy",
+            "error": str(e)[:100],
+        }
+
+    # Check last scrape times
+    try:
+        with Session(engine) as session:
+            now = datetime.now(timezone.utc)
+
+            # Last sold scrape
+            last_sold = session.execute(
+                select(func.max(MarketPrice.scraped_at)).where(MarketPrice.listing_type == "sold")
+            ).scalar()
+
+            # Last active scrape
+            last_active = session.execute(
+                select(func.max(MarketPrice.scraped_at)).where(MarketPrice.listing_type == "active")
+            ).scalar()
+
+            # Count in last 24h
+            cutoff = now - timedelta(hours=24)
+            sold_24h = (
+                session.execute(
+                    select(func.count(MarketPrice.id)).where(
+                        MarketPrice.listing_type == "sold",
+                        MarketPrice.scraped_at >= cutoff,
+                    )
+                ).scalar()
+                or 0
+            )
+
+            sold_age_hours = (now - last_sold).total_seconds() / 3600 if last_sold else None
+            active_age_hours = (now - last_active).total_seconds() / 3600 if last_active else None
+
+            scraper_status = "healthy"
+            if sold_age_hours and sold_age_hours > 2:
+                scraper_status = "degraded"
+            if sold_age_hours and sold_age_hours > 6:
+                scraper_status = "unhealthy"
+
+            health_status["checks"]["scraper"] = {
+                "status": scraper_status,
+                "last_sold_scrape_hours_ago": round(sold_age_hours, 1) if sold_age_hours else None,
+                "last_active_scrape_hours_ago": round(active_age_hours, 1) if active_age_hours else None,
+                "sold_listings_24h": sold_24h,
+            }
+
+            if scraper_status == "unhealthy":
+                health_status["status"] = "degraded"
+
+    except Exception as e:
+        health_status["checks"]["scraper"] = {
+            "status": "unknown",
+            "error": str(e)[:100],
+        }
+
+    # Check scheduler
+    try:
+        if scheduler.running:
+            jobs = scheduler.get_jobs()
+            health_status["checks"]["scheduler"] = {
+                "status": "healthy",
+                "running": True,
+                "job_count": len(jobs),
+            }
+        else:
+            health_status["checks"]["scheduler"] = {
+                "status": "stopped",
+                "running": False,
+                "note": "Scheduler may be running in separate worker process",
+            }
+    except Exception as e:
+        health_status["checks"]["scheduler"] = {
+            "status": "unknown",
+            "error": str(e)[:100],
+        }
+
+    # Memory usage
+    try:
+        rss_mb = _current_rss_mb()
+        health_status["checks"]["memory"] = {
+            "rss_mb": round(rss_mb, 1),
+        }
+    except (OSError, ValueError, AttributeError):
+        # Memory measurement can fail on some platforms - safe to ignore
+        pass
+
+    return health_status
+
+
 @app.get("/health/mode")
 def health_mode():
     """
@@ -177,3 +311,22 @@ def health_mode():
     Returns whether running in SaaS or OSS mode and feature availability.
     """
     return get_mode_info()
+
+
+@app.get("/health/metrics")
+def health_metrics():
+    """
+    Get scraper job metrics.
+
+    Returns metrics for recent scrape jobs including:
+    - Last run timestamps
+    - Success/failure counts
+    - DB error counts
+    - Success rates
+    """
+    from app.core.metrics import scraper_metrics
+
+    return {
+        "summary": scraper_metrics.get_summary(),
+        "jobs": scraper_metrics.get_all_metrics(),
+    }

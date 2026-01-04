@@ -4,7 +4,7 @@ from app.db import engine
 from app.scraper.browser import get_page_content
 from app.scraper.utils import build_ebay_url
 from app.scraper.ebay import parse_active_results, parse_total_results
-from app.discord_bot.logger import log_new_listing
+from app.discord_bot.logger import log_new_listing, check_and_log_deal
 from typing import Tuple, Optional
 
 
@@ -128,7 +128,10 @@ async def scrape_active_data(
                             existing.scraped_at = datetime.now(timezone.utc)
                             # Don't update listed_at - preserve original "first seen" time
                             existing.image_url = getattr(item, "image_url", existing.image_url)
-                            existing.seller_name = getattr(item, "seller_name", existing.seller_name)
+                            # Only update seller_name if we have a new value - search results don't include seller
+                            new_seller = getattr(item, "seller_name", None)
+                            if new_seller:
+                                existing.seller_name = new_seller
                             existing.condition = getattr(item, "condition", existing.condition)
                             existing.shipping_cost = getattr(item, "shipping_cost", existing.shipping_cost)
                             session.add(existing)
@@ -144,14 +147,28 @@ async def scrape_active_data(
                                 # Send webhook notification for NEW listings only
                                 try:
                                     is_auction = getattr(item, "bid_count", 0) > 0
-                                    log_new_listing(
+                                    treatment = getattr(item, "treatment", None)
+
+                                    # Check for hot deals first (uses smart volatility-based thresholds)
+                                    deal_logged = check_and_log_deal(
+                                        card_id=card_id,
                                         card_name=card_name,
                                         price=item.price,
-                                        treatment=getattr(item, "treatment", None),
+                                        treatment=treatment,
                                         url=item.url,
-                                        is_auction=is_auction,
-                                        floor_price=lowest_ask if lowest_ask > 0 else None,
+                                        min_quality="good",  # Only log "good" or "hot" deals
                                     )
+
+                                    # If not a deal, log as regular listing
+                                    if not deal_logged:
+                                        log_new_listing(
+                                            card_name=card_name,
+                                            price=item.price,
+                                            treatment=treatment,
+                                            url=item.url,
+                                            is_auction=is_auction,
+                                            floor_price=lowest_ask if lowest_ask > 0 else None,
+                                        )
                                 except Exception as webhook_err:
                                     print(f"Discord webhook failed for {card_name}: {webhook_err}")
                             except Exception as insert_err:

@@ -28,9 +28,12 @@ class User(SQLModel, table=True):
     # Email Marketing
     personal_welcome_sent_at: Optional[datetime] = Field(default=None, nullable=True)  # 1-day delayed personal welcome
 
-    # Password Reset
-    password_reset_token: Optional[str] = Field(default=None, nullable=True, index=True)
+    # Password Reset (token is hashed before storage)
+    password_reset_token_hash: Optional[str] = Field(default=None, nullable=True, index=True)
     password_reset_expires: Optional[datetime] = Field(default=None, nullable=True)
+
+    # Refresh Token (hash stored for rotation tracking)
+    refresh_token_hash: Optional[str] = Field(default=None, nullable=True, index=True)
 
     # API Access Request
     api_access_requested: bool = Field(default=False)  # User requested API access

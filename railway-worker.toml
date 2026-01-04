@@ -1,0 +1,14 @@
+# Railway configuration for scheduler worker service
+# Deploy this as a separate service from the web API
+
+[build]
+builder = "dockerfile"
+
+[deploy]
+startCommand = "python scripts/run_scheduler_worker.py"
+restartPolicyType = "always"
+restartPolicyMaxRetries = -1
+
+[env]
+PYTHONUNBUFFERED = "1"
+RUN_SCHEDULER = "false"  # Web service should set this to false when worker is deployed

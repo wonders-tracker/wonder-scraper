@@ -288,5 +288,23 @@ Decision Tree:
 
 ---
 
-*Status: PLANNING*
-*Last Updated: 2025-12-18*
+*Status: IN PROGRESS (Phase 2 Backend Complete)*
+*Last Updated: 2025-12-31*
+
+## Progress Update (2025-12-31)
+
+### Completed Tasks
+- **TASK-003:** OrderBookAnalyzer service - COMPLETED
+  - `/Users/Cody/code_projects/wonder-scraper/app/services/order_book.py`
+  - Unit tests: `/Users/Cody/code_projects/wonder-scraper/tests/test_order_book.py`
+- **TASK-005 (partial):** API endpoint - COMPLETED
+  - `GET /cards/{id}/order-book` endpoint added to `/Users/Cody/code_projects/wonder-scraper/app/api/cards.py`
+
+### Integration with EPIC-002
+- OrderBookAnalyzer excludes bulk lots (uses `is_bulk_lot` flag from EPIC-002)
+- Sales fallback when active listings insufficient
+
+### Remaining Work
+- **TASK-004:** FloorPriceService hybrid logic (OSS stub exists, SaaS integration needed)
+- **TASK-007:** Order book depth chart frontend component
+- **Phase 4:** Observability and documentation

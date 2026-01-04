@@ -35,6 +35,8 @@ user-agents = "^2.2.0"
 polar-sdk = "^0.28.0"
 alembic = "^1.17.2"
 discord-py = ">=2.0"
+numpy = "^2.4.0"
+email-validator = "^2.3.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.1"
@@ -43,6 +45,11 @@ pytest-cov = "^7.0.0"
 argon2-cffi = "^25.1.0"
 ruff = "^0.8.0"
 ty = "^0.0.4"
+jupyter = "^1.1.1"
+jupyterlab = "^4.5.1"
+ipykernel = "^7.1.0"
+pandas = "^2.3.3"
+scikit-learn = "^1.8.0"
 
 [tool.pytest.ini_options]
 markers = [

@@ -5,8 +5,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 from sqlmodel import Session, select
-from sqlalchemy import func
+from sqlalchemy import func, text
+from sqlalchemy.exc import OperationalError, DisconnectionError, InterfaceError
 from app.core.typing import col, ensure_int
+from app.core.db_utils import execute_with_retry_async, is_transient_error
+from app.core.config import settings
 from app.db import engine
 from app.models.card import Card
 from app.models.market import MarketSnapshot
@@ -27,7 +30,16 @@ from app.scraper.opensea import (
     OPENSEA_WOTF_COLLECTIONS,
     scrape_opensea_listings_to_db,
 )
-from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error, log_market_insights
+from app.discord_bot.logger import (
+    log_scrape_start,
+    log_scrape_complete,
+    log_scrape_error,
+    log_market_insights,
+    log_warning,
+)
+from app.models.market import MarketPrice
+from app.core.metrics import scraper_metrics
+from app.services.meta_sync import sync_all_meta_status
 from datetime import datetime, timedelta, timezone
 
 scheduler = AsyncIOScheduler()
@@ -51,8 +63,8 @@ async def scrape_single_card(card: Card):
         # Get active data
         low_ask, inventory, high_bid = await scrape_active_data(card.name, ensure_int(card.id), search_term=search_term)
 
-        # Update snapshot with active data
-        with Session(engine) as session:
+        # Update snapshot with active data (with retry for transient DB failures)
+        def update_snapshot(session: Session):
             statement = (
                 select(MarketSnapshot)
                 .where(MarketSnapshot.card_id == card.id)
@@ -65,24 +77,53 @@ async def scrape_single_card(card: Card):
                 snapshot.highest_bid = high_bid
                 session.add(snapshot)
                 session.commit()
+                return True
+            return False
+
+        try:
+            updated = await execute_with_retry_async(engine, update_snapshot)
+            if updated:
                 print(f"[Polling] Updated {card.name}: Ask=${low_ask}, Inv={inventory}")
+        except (OperationalError, DisconnectionError, InterfaceError) as db_error:
+            print(f"[Polling] DB error updating {card.name} (retries exhausted): {db_error}")
+            return False
 
         return True
     except Exception as e:
-        print(f"[Polling] Error updating {card.name}: {e}")
+        # Distinguish between DB errors and scrape errors for better diagnostics
+        error_type = "DB" if is_transient_error(e) else "Scrape"
+        print(f"[Polling] {error_type} error updating {card.name}: {e}")
         return False
 
 
 async def job_update_market_data():
     """
     Optimized polling job - scrapes cards in batches with concurrency control.
-    Includes robust error handling for browser startup failures.
+    Includes robust error handling for browser startup and database failures.
     """
     print(f"[{datetime.now(timezone.utc)}] Starting Scheduled Market Update...")
     start_time = time.time()
 
-    with Session(engine) as session:
-        # Get cards that haven't been updated in the last hour (or all if none)
+    # Verify database connection before starting heavy work
+    def check_connection(session: Session):
+        session.execute(select(func.count(Card.id)))
+        return True
+
+    try:
+        await execute_with_retry_async(
+            engine,
+            check_connection,
+            max_retries=settings.SCHEDULER_DB_CHECK_MAX_RETRIES,
+            base_delay=settings.SCHEDULER_DB_CHECK_BASE_DELAY,
+        )
+        print("[Polling] Database connection verified")
+    except Exception as e:
+        print(f"[Polling] CRITICAL: Database connection failed after retries: {e}")
+        log_scrape_error("Market Update", f"Database connection failed: {e}")
+        return
+
+    # Fetch cards to update (with retry)
+    def get_cards_to_update(session: Session):
         cutoff_time = datetime.now(timezone.utc) - timedelta(hours=1)
 
         # Subquery for latest snapshot per card
@@ -99,12 +140,22 @@ async def job_update_market_data():
             .where((latest_snapshots.c.latest_timestamp < cutoff_time) | (latest_snapshots.c.latest_timestamp is None))
         )
 
-        cards_to_update = session.execute(cards_query).all()
+        # Use .scalars() to get Card objects directly, not Row tuples
+        cards = list(session.execute(cards_query).scalars().all())
 
         # If no stale cards, update a random sample
-        if not cards_to_update:
-            all_cards = session.execute(select(Card)).scalars().all()
-            cards_to_update = random.sample(all_cards, min(10, len(all_cards)))
+        if not cards:
+            all_cards = list(session.execute(select(Card)).scalars().all())
+            cards = random.sample(all_cards, min(settings.SCHEDULER_RANDOM_SAMPLE_SIZE, len(all_cards)))
+
+        return cards
+
+    try:
+        cards_to_update = await execute_with_retry_async(engine, get_cards_to_update)
+    except Exception as e:
+        print(f"[Polling] CRITICAL: Failed to fetch cards: {e}")
+        log_scrape_error("Market Update", f"Failed to fetch cards: {e}")
+        return
 
     if not cards_to_update:
         print("[Polling] No cards to update.")
@@ -112,11 +163,14 @@ async def job_update_market_data():
 
     print(f"[Polling] Updating {len(cards_to_update)} cards...")
 
+    # Record metrics start
+    scraper_metrics.record_start("ebay_market_update")
+
     # Log scrape start to Discord
     log_scrape_start(len(cards_to_update), scrape_type="scheduled")
 
     # Initialize browser with retry logic
-    max_browser_retries = 3
+    max_browser_retries = settings.SCHEDULER_MAX_BROWSER_RETRIES
     browser_started = False
 
     for attempt in range(max_browser_retries):
@@ -131,7 +185,7 @@ async def job_update_market_data():
             # Clean up any partial state
             await BrowserManager.close()
             if attempt < max_browser_retries - 1:
-                wait_time = (attempt + 1) * 10  # 10s, 20s, 30s
+                wait_time = (attempt + 1) * settings.SCHEDULER_BROWSER_RETRY_BASE_DELAY
                 print(f"[Polling] Waiting {wait_time}s before retry...")
                 await asyncio.sleep(wait_time)
 
@@ -140,46 +194,131 @@ async def job_update_market_data():
         return
 
     try:
-        # Process cards with controlled concurrency (max 3 concurrent)
-        batch_size = 3
+        # Process cards with controlled concurrency
+        # Batch size configured via settings (matches 2x browser semaphore)
+        batch_size = settings.SCHEDULER_CARD_BATCH_SIZE
         successful = 0
         failed = 0
+        db_errors = 0
+        consecutive_db_failures = 0
+        consecutive_scrape_failures = 0  # Circuit breaker for eBay blocking
+        max_consecutive_db_failures = settings.SCHEDULER_MAX_DB_FAILURES
+        max_consecutive_scrape_failures = settings.SCHEDULER_MAX_SCRAPE_FAILURES
 
         for i in range(0, len(cards_to_update), batch_size):
             batch = cards_to_update[i : i + batch_size]
+
+            # Periodically verify DB connection is still healthy
+            if i > 0 and i % settings.SCHEDULER_CONNECTION_CHECK_INTERVAL == 0:
+                try:
+                    await execute_with_retry_async(engine, check_connection, max_retries=2)
+                    print(f"[Polling] Connection verified at batch {i // batch_size}")
+                    consecutive_db_failures = 0  # Reset on success
+                except Exception as e:
+                    print(f"[Polling] WARNING: Connection check failed at batch {i // batch_size}: {e}")
+                    consecutive_db_failures += 1
+                    if consecutive_db_failures >= max_consecutive_db_failures:
+                        print("[Polling] CRITICAL: Too many consecutive DB failures, aborting job")
+                        log_scrape_error("Market Update", f"Aborted: {consecutive_db_failures} consecutive DB failures")
+                        break
 
             # Process batch concurrently
             tasks = [scrape_single_card(card) for card in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Count successes/failures
+            # Count successes/failures with detailed error tracking
+            batch_db_errors = 0
             for result in results:
                 if isinstance(result, Exception):
                     failed += 1
+                    if is_transient_error(result):
+                        db_errors += 1
+                        batch_db_errors += 1
                 elif result:
                     successful += 1
+                    consecutive_db_failures = 0  # Reset on any success
                 else:
                     failed += 1
 
+            # Track consecutive DB failures
+            if batch_db_errors == len(batch):
+                consecutive_db_failures += 1
+                if consecutive_db_failures >= max_consecutive_db_failures:
+                    print("[Polling] CRITICAL: All cards in batch had DB errors, aborting job")
+                    log_scrape_error(
+                        "Market Update", f"Aborted: {consecutive_db_failures} consecutive batch DB failures"
+                    )
+                    break
+
+            # Circuit breaker: detect eBay blocking (all scrapes failed, no DB errors)
+            batch_scrape_failures = len(
+                [r for r in results if r is False or (isinstance(r, Exception) and not is_transient_error(r))]
+            )
+            if batch_scrape_failures == len(batch) and batch_db_errors == 0:
+                consecutive_scrape_failures += 1
+                print(
+                    f"[Polling] WARNING: Entire batch failed scraping "
+                    f"({consecutive_scrape_failures}/{max_consecutive_scrape_failures})"
+                )
+                if consecutive_scrape_failures >= max_consecutive_scrape_failures:
+                    print("[Polling] CIRCUIT BREAKER: eBay likely blocking us, aborting job early")
+                    log_warning(
+                        "🔴 eBay Scraper Blocked",
+                        f"Market update aborted after {consecutive_scrape_failures} consecutive batch failures.\n"
+                        f"Progress: {successful}/{len(cards_to_update)} cards successful.\n"
+                        "eBay may be rate-limiting or blocking our requests.",
+                    )
+                    break
+            else:
+                consecutive_scrape_failures = 0  # Reset on any success
+
             # Brief delay between batches
             if i + batch_size < len(cards_to_update):
-                await asyncio.sleep(5)
+                await asyncio.sleep(settings.SCHEDULER_BATCH_DELAY)
 
-        print(f"[Polling] Results: {successful} successful, {failed} failed out of {len(cards_to_update)} cards")
+        # Detailed results
+        total_cards = len(cards_to_update)
+        print(f"[Polling] Results: {successful}/{total_cards} successful, {failed} failed ({db_errors} DB errors)")
+
+        # Alert if high DB error rate
+        high_error_rate = db_errors > failed * settings.SCHEDULER_DB_ERROR_RATE_THRESHOLD
+        if high_error_rate and db_errors > settings.SCHEDULER_DB_ERROR_MIN_COUNT:
+            log_warning(
+                "⚠️ High DB Error Rate",
+                f"Market update had {db_errors} database errors out of {failed} total failures.\n"
+                "This may indicate Neon connection issues or resource exhaustion.",
+            )
 
         # Log scrape complete to Discord
         duration = time.time() - start_time
         log_scrape_complete(
-            cards_processed=len(cards_to_update),
+            cards_processed=total_cards,
             new_listings=0,  # Scheduled scrapes don't track new listings separately
             new_sales=0,
             duration_seconds=duration,
             errors=failed,
         )
 
+        # Record metrics
+        scraper_metrics.record_complete(
+            "ebay_market_update",
+            cards_processed=total_cards,
+            successful=successful,
+            failed=failed,
+            db_errors=db_errors,
+        )
+
     except Exception as e:
         print(f"[Polling] ERROR during scraping: {type(e).__name__}: {e}")
         log_scrape_error("Scheduled Job", str(e))
+        # Record failed metrics
+        scraper_metrics.record_complete(
+            "ebay_market_update",
+            cards_processed=0,
+            successful=0,
+            failed=1,
+            db_errors=0,
+        )
 
     finally:
         await BrowserManager.close()
@@ -195,6 +334,7 @@ async def job_update_blokpax_data():
     print(f"[{datetime.now(timezone.utc)}] Starting Blokpax Update...")
     start_time = time.time()
 
+    scraper_metrics.record_start("blokpax_opensea_update")
     log_scrape_start(len(WOTF_STOREFRONTS), scrape_type="blokpax")
 
     errors = 0
@@ -290,6 +430,15 @@ async def job_update_blokpax_data():
     opensea_listings = 0
     try:
         print(f"[{datetime.now(timezone.utc)}] Scraping OpenSea Active Listings...")
+
+        # Ensure browser is in clean state before OpenSea (may have stale state from eBay)
+        try:
+            await BrowserManager.close()
+            await asyncio.sleep(2)
+        except (asyncio.TimeoutError, RuntimeError, OSError):
+            # Browser cleanup can fail if already closed or crashed - safe to ignore
+            pass
+
         with Session(engine) as session:
             for collection_slug, card_name in OPENSEA_WOTF_COLLECTIONS.items():
                 try:
@@ -316,20 +465,39 @@ async def job_update_blokpax_data():
         print(f"[OpenSea] Fatal error: {e}")
         log_scrape_error("OpenSea Scheduled", str(e))
         errors += 1
+    finally:
+        # Clean up browser after OpenSea scraping
+        try:
+            await BrowserManager.close()
+        except (asyncio.TimeoutError, RuntimeError, OSError):
+            # Browser cleanup can fail if already closed or crashed - safe to ignore
+            pass
 
     total_listings += opensea_listings
 
     duration = time.time() - start_time
+    total_processed = len(WOTF_STOREFRONTS) + len(OPENSEA_WOTF_COLLECTIONS)
+
     log_scrape_complete(
-        cards_processed=len(WOTF_STOREFRONTS) + len(OPENSEA_WOTF_COLLECTIONS),
+        cards_processed=total_processed,
         new_listings=total_listings,
         new_sales=total_sales,
         duration_seconds=duration,
         errors=errors,
     )
 
+    # Record metrics
+    scraper_metrics.record_complete(
+        "blokpax_opensea_update",
+        cards_processed=total_processed,
+        successful=total_processed - errors,
+        failed=errors,
+        db_errors=0,
+    )
+
     print(
-        f"[{datetime.now(timezone.utc)}] NFT Update Complete. Duration: {duration:.1f}s, Listings: {total_listings}, Sales: {total_sales}"
+        f"[{datetime.now(timezone.utc)}] NFT Update Complete. "
+        f"Duration: {duration:.1f}s, Listings: {total_listings}, Sales: {total_sales}"
     )
 
 
@@ -602,54 +770,110 @@ async def job_check_price_alerts():
         print(f"[Alerts] Error checking price alerts: {e}")
 
 
-async def job_backfill_seller_data():
+async def _fetch_seller_for_item(browser, item_id: str, mp_id: int, session) -> tuple[bool, str]:
     """
-    Periodic job to backfill missing seller data from eBay item pages.
-    Runs daily at 3 AM UTC (off-peak hours).
-    Processes up to 100 items per run to avoid overloading eBay.
+    Helper to fetch seller data for a single item using shared browser.
+    Returns (success: bool, reason: str).
     """
-    print(f"[{datetime.now(timezone.utc)}] Starting Seller Data Backfill...")
+    from app.scraper.seller import extract_seller_from_html
+
+    tab = None
+    try:
+        tab = await browser.new_tab()
+        item_url = f"https://www.ebay.com/itm/{item_id}"
+        await tab.go_to(item_url, timeout=30)
+        await asyncio.sleep(2)
+
+        result = await asyncio.wait_for(
+            tab.execute_script("return document.documentElement.outerHTML;", return_by_value=True),
+            timeout=30,
+        )
+
+        html = None
+        if isinstance(result, dict):
+            inner = result.get("result", {})
+            if isinstance(inner, dict):
+                html = inner.get("result", {}).get("value")
+
+        if not html:
+            return False, "no_html"
+
+        if "Pardon Our Interruption" in html or "Security Measure" in html:
+            return False, "blocked"
+
+        seller_name, feedback_score, feedback_percent = extract_seller_from_html(html)
+
+        if seller_name:
+            session.execute(
+                text("""
+                UPDATE marketprice
+                SET seller_name = :seller,
+                    seller_feedback_score = :score,
+                    seller_feedback_percent = :pct
+                WHERE id = :id
+            """),
+                {"seller": seller_name, "score": feedback_score, "pct": feedback_percent, "id": mp_id},
+            )
+            session.commit()
+            return True, "success"
+        else:
+            return False, "no_seller"
+
+    except asyncio.TimeoutError:
+        return False, "timeout"
+    except Exception as e:
+        return False, str(e)[:30]
+    finally:
+        if tab:
+            try:
+                await tab.close()
+            except (asyncio.TimeoutError, Exception):
+                # Tab close can fail if browser crashed - safe to ignore
+                pass
+
+
+async def job_seller_priority_queue():
+    """
+    Priority job to fetch seller data for NEW listings (added in last 6 hours).
+    Runs hourly to ensure new listings get seller data quickly.
+
+    Uses shared BrowserManager for resource efficiency.
+    """
+    print(f"[{datetime.now(timezone.utc)}] Starting Seller Priority Queue...")
 
     try:
-        from pydoll.browser import Chrome
-        from pydoll.browser.options import ChromiumOptions
-        from app.scraper.seller import extract_seller_from_html
         import re
 
-        # Setup browser
-        options = ChromiumOptions()
-        options.headless = True
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-
-        browser = Chrome(options=options)
-        await browser.start()
-        print("[Seller] Browser started")
-
+        # Find new listings (added in last 6 hours) missing seller data
         with Session(engine) as session:
-            # Get listings missing seller data (prioritize recent sold items)
-            from sqlalchemy import text
-
             query = text("""
                 SELECT id, external_id, url, title
                 FROM marketprice
-                WHERE listing_type = 'sold'
-                AND seller_name IS NULL
+                WHERE seller_name IS NULL
                 AND platform = 'ebay'
+                AND listing_type = 'active'
+                AND listed_at >= NOW() - INTERVAL '6 hours'
                 AND (url IS NOT NULL OR external_id IS NOT NULL)
-                ORDER BY sold_date DESC NULLS LAST
-                LIMIT 100
+                ORDER BY listed_at DESC
+                LIMIT 50
             """)
 
             results = session.execute(query).all()
-            print(f"[Seller] Found {len(results)} items to process")
+
+            if not results:
+                print("[Seller Priority] No new listings need seller data")
+                return
+
+            print(f"[Seller Priority] Processing {len(results)} new listings...")
+
+            # Use shared browser manager
+            browser = await BrowserManager.get_browser()
 
             updated = 0
             failed = 0
+            blocked = False
 
             for mp_id, external_id, url, title in results:
-                # Extract item ID
                 item_id = external_id
                 if not item_id and url:
                     match = re.search(r"/itm/(?:[^/]+/)?(\d+)", url)
@@ -660,66 +884,99 @@ async def job_backfill_seller_data():
                     failed += 1
                     continue
 
-                try:
-                    # Fetch page
-                    tab = await browser.new_tab()
-                    item_url = f"https://www.ebay.com/itm/{item_id}"
-                    await tab.go_to(item_url, timeout=30)
-                    await asyncio.sleep(2)
+                success, reason = await _fetch_seller_for_item(browser, item_id, mp_id, session)
 
-                    result = await tab.execute_script(
-                        "return document.documentElement.outerHTML;", return_by_value=True
-                    )
-
-                    html = None
-                    if isinstance(result, dict):
-                        inner = result.get("result", {})
-                        if isinstance(inner, dict):
-                            html = inner.get("result", {}).get("value")
-
-                    await tab.close()
-
-                    if not html:
-                        failed += 1
-                        continue
-
-                    # Check for block
-                    if "Pardon Our Interruption" in html or "Security Measure" in html:
-                        print("[Seller] Blocked by eBay, stopping early")
+                if success:
+                    updated += 1
+                else:
+                    failed += 1
+                    if reason == "blocked":
+                        print("[Seller Priority] Blocked by eBay, stopping early")
+                        blocked = True
                         break
 
-                    # Extract seller info
-                    seller_name, feedback_score, feedback_percent = extract_seller_from_html(html)
+                await asyncio.sleep(1.5)
 
-                    if seller_name:
-                        session.execute(
-                            text("""
-                            UPDATE marketprice
-                            SET seller_name = :seller,
-                                seller_feedback_score = :score,
-                                seller_feedback_percent = :pct
-                            WHERE id = :id
-                        """),
-                            {"seller": seller_name, "score": feedback_score, "pct": feedback_percent, "id": mp_id},
-                        )
-                        session.commit()
-                        updated += 1
-                    else:
-                        failed += 1
+            print(f"[Seller Priority] Complete: {updated} updated, {failed} failed" + (" (blocked)" if blocked else ""))
 
-                    # Rate limit
-                    await asyncio.sleep(1)
+    except Exception as e:
+        print(f"[Seller Priority] Fatal error: {e}")
+        log_scrape_error("Seller Priority Queue", str(e))
 
-                except Exception as e:
-                    print(f"[Seller] Error on ID {mp_id}: {e}")
+
+async def job_backfill_seller_data():
+    """
+    Background job to backfill missing seller data from eBay item pages.
+    Runs every 4 hours, processing up to 100 items per run.
+
+    Uses shared BrowserManager for resource efficiency.
+    Handles backlog while job_seller_priority_queue handles new listings.
+    """
+    print(f"[{datetime.now(timezone.utc)}] Starting Seller Data Backfill...")
+
+    try:
+        import re
+
+        with Session(engine) as session:
+            # Get listings missing seller data (exclude recent ones handled by priority queue)
+            query = text("""
+                SELECT id, external_id, url, title
+                FROM marketprice
+                WHERE seller_name IS NULL
+                AND platform = 'ebay'
+                AND (url IS NOT NULL OR external_id IS NOT NULL)
+                AND (listed_at IS NULL OR listed_at < NOW() - INTERVAL '6 hours')
+                ORDER BY
+                    CASE WHEN listing_type = 'active' THEN 0 ELSE 1 END,
+                    scraped_at DESC
+                LIMIT 100
+            """)
+
+            results = session.execute(query).all()
+
+            if not results:
+                print("[Seller] No items to backfill")
+                return
+
+            print(f"[Seller] Found {len(results)} items to process")
+
+            # Use shared browser manager
+            browser = await BrowserManager.get_browser()
+
+            updated = 0
+            failed = 0
+            blocked = False
+
+            for mp_id, external_id, url, title in results:
+                item_id = external_id
+                if not item_id and url:
+                    match = re.search(r"/itm/(?:[^/]+/)?(\d+)", url)
+                    if match:
+                        item_id = match.group(1)
+
+                if not item_id:
                     failed += 1
-                    try:
-                        await tab.close()
-                    except:
-                        pass
+                    continue
 
-        await browser.stop()
-        print(f"[{datetime.now(timezone.utc)}] Seller Backfill Complete: {updated} updated, {failed} failed")
+                success, reason = await _fetch_seller_for_item(browser, item_id, mp_id, session)
+
+                if success:
+                    updated += 1
+                else:
+                    failed += 1
+                    if reason == "blocked":
+                        print("[Seller] Blocked by eBay, stopping early")
+                        blocked = True
+                        break
+
+                # Rate limit
+                await asyncio.sleep(1)
+
+            blocked_suffix = " (blocked)" if blocked else ""
+            print(
+                f"[{datetime.now(timezone.utc)}] Seller Backfill Complete: "
+                f"{updated} updated, {failed} failed{blocked_suffix}"
+            )
 
     except Exception as e:
         print(f"[Seller] Fatal error: {e}")
@@ -757,32 +1014,199 @@ async def job_market_insights():
         log_scrape_error("Market Insights", str(e))
 
 
+async def job_scraper_health_check():
+    """
+    Check scraper health - alert on issues.
+
+    Alerts on:
+    1. Zero sold listings in 24h (critical)
+    2. Less than 10 sold in 24h (warning - might be a partial failure)
+    3. Zero active listings in 24h (critical)
+    4. Multi-day gaps in scraping (checks last 7 days)
+
+    This would have caught the Dec 19-30 gap where the sold scraper failed.
+    Runs every 4 hours to detect issues early.
+    """
+    print(f"[{datetime.now(timezone.utc)}] Running scraper health check...")
+
+    try:
+        with Session(engine) as session:
+            now = datetime.now(timezone.utc)
+            cutoff_24h = now - timedelta(hours=24)
+
+            # Count sold listings in last 24h
+            sold_count_24h = (
+                session.execute(
+                    select(func.count(MarketPrice.id)).where(
+                        MarketPrice.listing_type == "sold", MarketPrice.scraped_at >= cutoff_24h
+                    )
+                ).scalar()
+                or 0
+            )
+
+            # Count active listings in last 24h
+            active_count_24h = (
+                session.execute(
+                    select(func.count(MarketPrice.id)).where(
+                        MarketPrice.listing_type == "active", MarketPrice.scraped_at >= cutoff_24h
+                    )
+                ).scalar()
+                or 0
+            )
+
+            print(f"[Health] Last 24h: {sold_count_24h} sold, {active_count_24h} active")
+
+            # Check for multi-day gaps in sold scraping (last 7 days)
+            days_with_scrapes = []
+            for days_ago in range(7):
+                day_start = (now - timedelta(days=days_ago)).replace(hour=0, minute=0, second=0, microsecond=0)
+                day_end = day_start + timedelta(days=1)
+
+                day_count = (
+                    session.execute(
+                        select(func.count(MarketPrice.id)).where(
+                            MarketPrice.listing_type == "sold",
+                            MarketPrice.scraped_at >= day_start,
+                            MarketPrice.scraped_at < day_end,
+                        )
+                    ).scalar()
+                    or 0
+                )
+
+                days_with_scrapes.append((day_start.strftime("%b %d"), day_count))
+
+            # Find consecutive gaps
+            gap_days = [d for d, c in days_with_scrapes if c == 0]
+            low_volume_days = [d for d, c in days_with_scrapes if 0 < c < 10]
+
+            # Build status report
+            status_lines = [f"**{d}:** {c}" for d, c in days_with_scrapes]
+            status_report = "\n".join(status_lines)
+
+            # Determine alert level
+            if sold_count_24h == 0 and active_count_24h == 0:
+                # Critical - both scrapers are broken
+                log_warning(
+                    "🚨 Scraper Health Critical",
+                    "Both sold and active scrapers appear to be broken!\n\n"
+                    f"**Sold (24h):** {sold_count_24h}\n"
+                    f"**Active (24h):** {active_count_24h}\n\n"
+                    f"**Last 7 days:**\n{status_report}\n\n"
+                    "Check server logs and Railway deployment status.",
+                )
+            elif sold_count_24h == 0:
+                # Sold scraper down
+                log_warning(
+                    "🔴 Sold Scraper Down",
+                    f"No sold listings scraped in the last 24 hours.\n\n"
+                    f"**Sold (24h):** {sold_count_24h}\n"
+                    f"**Active (24h):** {active_count_24h}\n\n"
+                    f"**Last 7 days:**\n{status_report}\n\n"
+                    "This may indicate a browser crash, eBay blocking, or scheduler issue.",
+                )
+            elif sold_count_24h < 10:
+                # Low volume warning
+                log_warning(
+                    "⚠️ Sold Scraper Low Volume",
+                    f"Only {sold_count_24h} sold listings scraped in 24 hours (expected 20+).\n\n"
+                    f"**Sold (24h):** {sold_count_24h}\n"
+                    f"**Active (24h):** {active_count_24h}\n\n"
+                    f"**Last 7 days:**\n{status_report}\n\n"
+                    "The scraper may be partially failing or running infrequently.",
+                )
+            elif len(gap_days) >= 2:
+                # Multi-day gap detected
+                log_warning(
+                    "⚠️ Scraper Gap Detected",
+                    f"Found {len(gap_days)} days with zero sold scrapes in the last 7 days.\n\n"
+                    f"**Gap days:** {', '.join(gap_days)}\n\n"
+                    f"**Last 7 days:**\n{status_report}\n\n"
+                    "This suggests the scraper was down intermittently.",
+                )
+            elif active_count_24h == 0:
+                # Active scraper down
+                log_warning(
+                    "🔴 Active Scraper Down",
+                    f"No active listings scraped in the last 24 hours.\n\n"
+                    f"**Sold (24h):** {sold_count_24h}\n"
+                    f"**Active (24h):** {active_count_24h}\n\n"
+                    "This may indicate a browser crash or eBay blocking.",
+                )
+            else:
+                print(f"[Health] Scrapers healthy. Gap days: {len(gap_days)}, Low days: {len(low_volume_days)}")
+
+            # Check seller data coverage for active listings
+            seller_coverage = session.execute(
+                text("""
+                    SELECT
+                        COUNT(*) as total,
+                        COUNT(seller_name) FILTER (WHERE seller_name IS NOT NULL) as with_seller
+                    FROM marketprice
+                    WHERE listing_type = 'active' AND platform = 'ebay'
+                """)
+            ).fetchone()
+
+            if seller_coverage and seller_coverage[0] > 0:
+                coverage_pct = (seller_coverage[1] / seller_coverage[0]) * 100
+                print(f"[Health] Seller coverage: {coverage_pct:.1f}% ({seller_coverage[1]}/{seller_coverage[0]})")
+
+                # Alert if coverage drops below 50%
+                if coverage_pct < 50:
+                    log_warning(
+                        "⚠️ Low Seller Data Coverage",
+                        f"Only {coverage_pct:.1f}% of active listings have seller data.\n\n"
+                        f"**With seller:** {seller_coverage[1]}\n"
+                        f"**Total active:** {seller_coverage[0]}\n\n"
+                        "The seller backfill jobs may be failing or blocked by eBay.",
+                    )
+
+    except Exception as e:
+        print(f"[Health] Error during health check: {e}")
+        log_scrape_error("Health Check", str(e))
+
+
+async def job_sync_meta_status():
+    """
+    Sync is_meta field for cards based on user votes.
+    Lightweight job - only updates cards with vote changes.
+    """
+    print("[Meta] Starting meta status sync...")
+    try:
+        stats = sync_all_meta_status()
+        print(f"[Meta] Sync complete: {stats['updated']} updated, {stats['unchanged']} unchanged")
+    except Exception as e:
+        print(f"[Meta] Error during sync: {e}")
+        log_scrape_error("Meta Sync", str(e))
+
+
 def start_scheduler():
     # Job configuration for durability:
     # - max_instances=1: Prevent overlapping runs
     # - misfire_grace_time: Allow late execution if within grace period (then skip)
     # - coalesce=True: If multiple runs were missed, only run once when catching up
 
-    # eBay scraping: 45 min interval (realistic for full card scan)
-    # Grace time of 30 min - if job is late by <30 min, still run it
+    # eBay scraping: 30 min interval
+    # With semaphore=4 and batch_size=8, full cycle takes ~22 min
+    # Grace time of 15 min - if job is late by <15 min, still run it
     scheduler.add_job(
         job_update_market_data,
-        IntervalTrigger(minutes=45),
+        IntervalTrigger(minutes=30),
         id="job_update_market_data",
         max_instances=1,
-        misfire_grace_time=1800,  # 30 minutes
+        misfire_grace_time=900,  # 15 minutes
         coalesce=True,
         replace_existing=True,
     )
 
-    # Blokpax scraping: 20 min interval (API-based, faster)
-    # Grace time of 10 min
+    # Blokpax + OpenSea scraping: 8 hour interval
+    # Reduced from 20 min to save resources (NFT markets move slower than eBay)
+    # Grace time of 1 hour
     scheduler.add_job(
         job_update_blokpax_data,
-        IntervalTrigger(minutes=20),
+        IntervalTrigger(hours=8),
         id="job_update_blokpax_data",
         max_instances=1,
-        misfire_grace_time=600,  # 10 minutes
+        misfire_grace_time=3600,  # 1 hour
         coalesce=True,
         replace_existing=True,
     )
@@ -852,12 +1276,50 @@ def start_scheduler():
         replace_existing=True,
     )
 
-    # Seller data backfill daily at 3 AM UTC (off-peak hours)
-    # Grace time of 2 hours - not time-critical
+    # Seller data priority queue - processes NEW listings (hourly)
+    # Ensures new listings get seller data within 1-2 hours
+    # eBay removed seller info from search results, so individual page visits required
+    scheduler.add_job(
+        job_seller_priority_queue,
+        IntervalTrigger(hours=1),
+        id="job_seller_priority_queue",
+        max_instances=1,
+        misfire_grace_time=1800,  # 30 minutes
+        coalesce=True,
+        replace_existing=True,
+    )
+
+    # Seller data backfill every 4 hours (background cleanup)
+    # Handles backlog of older listings missing seller data
     scheduler.add_job(
         job_backfill_seller_data,
-        CronTrigger(hour=3, minute=0),
+        IntervalTrigger(hours=4),
         id="job_backfill_seller_data",
+        max_instances=1,
+        misfire_grace_time=3600,  # 1 hour
+        coalesce=True,
+        replace_existing=True,
+    )
+
+    # Scraper health check every 2 hours
+    # Alerts on: zero listings, low volume (<10), multi-day gaps
+    # Would have caught the Dec 19-30 gap where sold scraper failed
+    scheduler.add_job(
+        job_scraper_health_check,
+        IntervalTrigger(hours=2),
+        id="job_scraper_health_check",
+        max_instances=1,
+        misfire_grace_time=1800,  # 30 minutes
+        coalesce=True,
+        replace_existing=True,
+    )
+
+    # Meta status sync daily at 4 AM UTC (after seller backfill)
+    # Computes is_meta from user votes
+    scheduler.add_job(
+        job_sync_meta_status,
+        CronTrigger(hour=4, minute=0),
+        id="job_sync_meta_status",
         max_instances=1,
         misfire_grace_time=7200,  # 2 hours
         coalesce=True,
@@ -866,11 +1328,14 @@ def start_scheduler():
 
     scheduler.start()
     print("Scheduler started (with misfire handling):")
-    print("  - job_update_market_data (eBay): 45m interval, 30m grace")
-    print("  - job_update_blokpax_data (Blokpax): 20m interval, 10m grace")
+    print("  - job_update_market_data (eBay): 30m interval, 15m grace [batch=8, 4 concurrent tabs]")
+    print("  - job_update_blokpax_data (Blokpax+OpenSea): 8h interval, 1h grace")
     print("  - job_market_insights (Discord AI): 9:00 & 18:00 UTC, 1h grace")
+    print("  - job_sync_meta_status (Meta): 4:00 UTC daily, 2h grace")
     print("  - job_send_daily_digests (Email): 9:15 UTC daily, 1h grace")
     print("  - job_send_personal_welcome_emails (Email): 10:00 UTC daily, 1h grace")
     print("  - job_send_weekly_reports (Email): Mon 9:30 UTC, 2h grace")
     print("  - job_check_price_alerts (Email): 30m interval, 15m grace")
-    print("  - job_backfill_seller_data (Seller): 3:00 UTC daily, 2h grace")
+    print("  - job_seller_priority_queue (Seller): 1h interval, 30m grace")
+    print("  - job_backfill_seller_data (Seller): 4h interval, 1h grace")
+    print("  - job_scraper_health_check (Monitoring): 2h interval, 30m grace")

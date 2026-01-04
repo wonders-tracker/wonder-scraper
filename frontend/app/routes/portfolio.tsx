@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, auth } from '../utils/auth'
+import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { ArrowLeft, TrendingUp, Trash2, Search, Edit, X, TrendingDown, BarChart3, Plus, Filter, Package } from 'lucide-react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel } from '@tanstack/react-table'
@@ -11,6 +11,7 @@ import { TreatmentBadge } from '../components/TreatmentBadge'
 import { Tooltip } from '../components/ui/tooltip'
 import { SimpleDropdown } from '../components/ui/dropdown'
 import { LoginUpsellOverlay } from '../components/LoginUpsellOverlay'
+import { useCurrentUser } from '../context/UserContext'
 
 // New individual card tracking type
 type PortfolioCard = {
@@ -125,8 +126,8 @@ function Portfolio() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [deleteConfirmCard, setDeleteConfirmCard] = useState<PortfolioCard | null>(null)
 
-  // Check if user is logged in
-  const isLoggedIn = auth.isAuthenticated()
+  const { user } = useCurrentUser()
+  const isLoggedIn = !!user
 
   // Track portfolio access
   useEffect(() => {
