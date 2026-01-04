@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     CARDS_CACHE_MAXSIZE: int = 250
     CARDS_CACHE_TTL_SECONDS: int = 300
     CARDS_DEFAULT_LIMIT: int = 200
-    CARDS_MAX_LIMIT: int = 300
+    CARDS_MAX_LIMIT: int = 500  # Allow fetching all ~355 cards at once
 
     # ===== Browser Scraper Settings =====
     # Concurrent browser tab operations (4 tabs balances speed vs memory)
