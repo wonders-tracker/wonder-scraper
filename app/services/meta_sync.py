@@ -13,6 +13,7 @@ import logging
 from typing import Optional
 from sqlmodel import Session, select, func
 
+from app.core.typing import col
 from app.db import engine
 from app.models.card import Card
 from app.models.meta_vote import CardMetaVote
@@ -132,7 +133,7 @@ def get_meta_cards(session: Optional[Session] = None) -> list[Card]:
         session = Session(engine)
 
     try:
-        return list(session.exec(select(Card).where(Card.is_meta.is_(True))).all())
+        return list(session.exec(select(Card).where(col(Card.is_meta).is_(True))).all())
     finally:
         if should_close:
             session.close()

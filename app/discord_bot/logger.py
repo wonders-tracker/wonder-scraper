@@ -335,7 +335,7 @@ def log_hot_deal(
     return _send_log(
         title=f"{config['emoji']} {config['label']}!",
         description=description,
-        color=config["color"],
+        color=int(config["color"]),
         fields=fields,
         webhook_url=webhook_url,
         username="Wonders Deals",

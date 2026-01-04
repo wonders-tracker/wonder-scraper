@@ -161,6 +161,7 @@ class BrowserManager:
         async with cls._lock:
             if not cls._browser:
                 await cls._start_browser_internal()
+            assert cls._browser is not None  # Guaranteed by _start_browser_internal
             return cls._browser
 
     @classmethod

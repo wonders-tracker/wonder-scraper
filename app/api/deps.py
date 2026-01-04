@@ -297,8 +297,8 @@ def get_data_access_optional(
             # Only accept access tokens
             token_type = payload.get("type")
             if not token_type or token_type == "access":
-                email: str = payload.get("sub")
-                if email:
+                email = payload.get("sub")
+                if email and isinstance(email, str):
                     user = session.exec(select(User).where(User.email == email)).first()
                     if user and user.is_active:
                         return user
