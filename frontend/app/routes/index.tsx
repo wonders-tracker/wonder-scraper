@@ -3,8 +3,14 @@ import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel, getPaginationRowModel } from '@tanstack/react-table'
-import { useState, useMemo, useEffect } from 'react'
-import { ArrowUpDown, Search, ArrowUp, ArrowDown, Calendar, TrendingUp, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Plus, Package, Layers, Gem, Archive, Store, ShoppingCart, ExternalLink, Info } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { ArrowUpDown, ArrowUp, ArrowDown, Calendar, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Package, Layers, Gem, Archive, Store, ExternalLink, Info } from 'lucide-react'
+// Animated icons for micro-interactions
+import { SearchIcon } from '~/components/ui/search'
+import { PlusIcon, type PlusIconHandle } from '~/components/ui/plus'
+import { TrendingUpIcon } from '~/components/ui/trending-up'
+import { RefreshCWIcon } from '~/components/ui/refresh-cw'
+import { DollarSignIcon, type DollarSignIconHandle } from '~/components/ui/dollar-sign'
 import clsx from 'clsx'
 import { Tooltip } from '../components/ui/tooltip'
 import { SimpleDropdown } from '../components/ui/dropdown'
@@ -15,24 +21,86 @@ import { TreatmentBadge } from '../components/TreatmentBadge'
 
 const CARDS_FETCH_LIMIT = Number(import.meta.env.VITE_CARDS_FETCH_LIMIT ?? '200')
 
-// Card thumbnail that only renders if src provided and loads successfully
+// Card thumbnail with placeholder fallback for missing/failed images
 // Uses image_url from API response (blob storage URLs with hash)
 function CardThumbnail({ src, alt, className }: { src?: string; alt: string; className: string }) {
-  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
 
-  // Don't render anything if no src or error
-  if (!src || error) return null
+  // Show placeholder if no src or image failed to load
+  if (!src || error) {
+    return (
+      <div className={clsx(className, "bg-muted flex items-center justify-center")}>
+        <svg className="w-4 h-4 text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      </div>
+    )
+  }
 
   return (
     <img
       src={src}
       alt={alt}
       loading="lazy"
-      className={clsx(className, !loaded && 'hidden')}
-      onLoad={() => setLoaded(true)}
+      className={className}
       onError={() => setError(true)}
     />
+  )
+}
+
+// Track button with animated PlusIcon that responds to button hover
+function TrackButton({ onClick, tooltip }: { onClick: () => void; tooltip: string }) {
+  const iconRef = useRef<PlusIconHandle>(null)
+
+  return (
+    <Tooltip content={tooltip}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          onClick()
+        }}
+        onMouseEnter={() => iconRef.current?.startAnimation()}
+        onMouseLeave={() => iconRef.current?.stopAnimation()}
+        className="p-1.5 rounded border border-border hover:bg-primary hover:text-primary-foreground transition-colors group"
+      >
+        <PlusIcon ref={iconRef} size={14} />
+      </button>
+    </Tooltip>
+  )
+}
+
+// Dashboard tab button styles
+const DASH_TAB_BASE = "flex items-center gap-2 px-4 h-9 text-xs font-bold uppercase tracking-wider border transition-colors"
+const DASH_TAB_ACTIVE = "bg-primary text-primary-foreground border-primary"
+const DASH_TAB_INACTIVE = "bg-background text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground"
+
+// Dashboard tab buttons with animated icons
+function ProductsTabButton({ isActive, onClick }: { isActive: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={isActive}
+      className={clsx(DASH_TAB_BASE, "rounded-l", isActive ? DASH_TAB_ACTIVE : DASH_TAB_INACTIVE)}
+    >
+      <Package className="w-4 h-4 transition-transform hover:scale-110" />
+      Products
+    </button>
+  )
+}
+
+function ListingsTabButton({ isActive, onClick }: { isActive: boolean; onClick: () => void }) {
+  const iconRef = useRef<DollarSignIconHandle>(null)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => iconRef.current?.startAnimation()}
+      onMouseLeave={() => iconRef.current?.stopAnimation()}
+      aria-pressed={isActive}
+      className={clsx(DASH_TAB_BASE, "rounded-r border-l-0", isActive ? DASH_TAB_ACTIVE : DASH_TAB_INACTIVE)}
+    >
+      <DollarSignIcon ref={iconRef} size={16} />
+      Listings
+    </button>
   )
 }
 
@@ -584,22 +652,16 @@ function Home() {
         cell: ({ row }) => {
             return (
                 <div className="flex justify-center">
-                    <Tooltip content={user ? "Add to Portfolio" : "Login to track"}>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                if (!user) {
-                                    // Redirect to login if not logged in
-                                    navigate({ to: '/login' })
-                                    return
-                                }
-                                setTrackingCard(row.original)
-                            }}
-                            className="p-1.5 rounded border border-border hover:bg-primary hover:text-primary-foreground transition-colors group"
-                        >
-                            <Plus className="w-3.5 h-3.5" />
-                        </button>
-                    </Tooltip>
+                    <TrackButton
+                      tooltip={user ? "Add to Portfolio" : "Login to track"}
+                      onClick={() => {
+                        if (!user) {
+                          navigate({ to: '/login' })
+                          return
+                        }
+                        setTrackingCard(row.original)
+                      }}
+                    />
                 </div>
             )
         }
@@ -687,48 +749,33 @@ function Home() {
             <div className="p-3 md:p-4 border-b border-border flex flex-col xl:flex-row xl:items-center justify-between bg-muted/20 gap-4">
                 <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-8 w-full">
                     {/* Dashboard Tabs */}
-                    <div className="flex items-center gap-1 shrink-0">
-                        <button
+                    <div className="flex items-center shrink-0">
+                        <ProductsTabButton
+                            isActive={activeTab === 'products'}
                             onClick={() => setActiveTab('products')}
-                            className={clsx(
-                                "flex items-center gap-2 px-3 py-1.5 text-sm font-bold uppercase tracking-wider rounded-l border transition-colors",
-                                activeTab === 'products'
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-background text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground"
-                            )}
-                        >
-                            <Package className="w-4 h-4" />
-                            Products
-                        </button>
-                        <button
+                        />
+                        <ListingsTabButton
+                            isActive={activeTab === 'listings'}
                             onClick={() => setActiveTab('listings')}
-                            className={clsx(
-                                "flex items-center gap-2 px-3 py-1.5 text-sm font-bold uppercase tracking-wider rounded-r border border-l-0 transition-colors",
-                                activeTab === 'listings'
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-background text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground"
-                            )}
-                        >
-                            <ShoppingCart className="w-4 h-4" />
-                            Listings
-                        </button>
+                        />
                     </div>
                     
                     {/* Filters & Controls inside Header - conditional based on tab */}
                     {activeTab === 'products' ? (
                       <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2 md:gap-4 w-full">
                           <div className="relative w-full flex-1">
-                               <Search className="absolute left-3 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                               <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                               <input
                                   type="text"
                                   placeholder="SEARCH..."
-                                  className="w-full bg-background pl-9 pr-4 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
+                                  className="w-full h-9 bg-background pl-9 pr-4 rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
                                   value={globalFilter}
                                   onChange={e => setGlobalFilter(e.target.value)}
                               />
                           </div>
                           {isFetching && !isLoading && (
-                            <div className="flex items-center text-[10px] uppercase tracking-widest text-muted-foreground">
+                            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+                              <RefreshCWIcon size={12} className="animate-spin" />
                               Refreshing…
                             </div>
                           )}
@@ -792,11 +839,11 @@ function Home() {
                       /* Listings tab filters */
                       <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2 md:gap-4 w-full">
                           <div className="relative w-full flex-1">
-                               <Search className="absolute left-3 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                               <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                               <input
                                   type="text"
                                   placeholder="SEARCH LISTINGS..."
-                                  className="w-full bg-background pl-9 pr-4 py-1.5 rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
+                                  className="w-full h-9 bg-background pl-9 pr-4 rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
                                   value={listingSearch}
                                   onChange={e => setListingSearch(e.target.value)}
                               />

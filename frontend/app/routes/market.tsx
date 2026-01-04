@@ -2,7 +2,12 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
-import { ArrowLeft, TrendingUp, ArrowUp, ArrowDown, Activity, Zap, BarChart3, DollarSign, TableIcon, PieChartIcon, LineChart, Tag } from 'lucide-react'
+import { ArrowLeft, ArrowUp, ArrowDown, Activity, Zap, BarChart3, DollarSign, TableIcon, Tag } from 'lucide-react'
+// Animated icons for micro-interactions
+import { TrendingUpIcon, type TrendingUpIconHandle } from '~/components/ui/trending-up'
+import { SearchIcon } from '~/components/ui/search'
+import { ZapIcon, type ZapHandle } from '~/components/ui/zap'
+import { SparklesIcon, type SparklesIconHandle } from '~/components/ui/sparkles'
 import { Tooltip } from '../components/ui/tooltip'
 import { lazy, Suspense } from 'react'
 import { useCurrentUser } from '../context/UserContext'
@@ -10,7 +15,7 @@ import { useCurrentUser } from '../context/UserContext'
 // Lazy load recharts components (368KB) - only loads when user clicks Sentiment tab
 const SentimentChart = lazy(() => import('../components/charts/SentimentChart'))
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getPaginationRowModel } from '@tanstack/react-table'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef, type ComponentType } from 'react'
 import clsx from 'clsx'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock } from 'lucide-react'
 import { TreatmentBadge } from '../components/TreatmentBadge'
@@ -46,6 +51,109 @@ type MarketCard = {
 
 type AnalyticsTab = 'table' | 'volume' | 'sentiment' | 'prices' | 'deals'
 
+// Card image with error fallback for deals
+function DealCardImage({ src, alt }: { src?: string | null; alt: string }) {
+  const [error, setError] = useState(false)
+
+  if (!src || error) {
+    return (
+      <div className="w-14 h-20 bg-muted rounded flex-shrink-0 flex items-center justify-center">
+        <Tag className="w-6 h-6 text-muted-foreground/50" />
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      className="w-14 h-20 object-cover rounded flex-shrink-0"
+      onError={() => setError(true)}
+    />
+  )
+}
+
+// Common tab button styles
+const TAB_BUTTON_BASE = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap"
+const TAB_BUTTON_ACTIVE = "bg-primary text-primary-foreground"
+const TAB_BUTTON_INACTIVE = "text-muted-foreground hover:text-foreground hover:bg-muted"
+
+// Base tab button props
+interface TabButtonProps {
+  isActive: boolean
+  onClick: () => void
+  label?: string
+}
+
+// Animated tab button with TrendingUpIcon
+function PricesTabButton({ isActive, onClick, label = "Prices" }: TabButtonProps) {
+  const iconRef = useRef<TrendingUpIconHandle>(null)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => iconRef.current?.startAnimation()}
+      onMouseLeave={() => iconRef.current?.stopAnimation()}
+      aria-pressed={isActive}
+      className={clsx(TAB_BUTTON_BASE, isActive ? TAB_BUTTON_ACTIVE : TAB_BUTTON_INACTIVE)}
+    >
+      <TrendingUpIcon ref={iconRef} size={14} />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  )
+}
+
+// Animated tab button with SparklesIcon
+function SentimentTabButton({ isActive, onClick, label = "Sentiment" }: TabButtonProps) {
+  const iconRef = useRef<SparklesIconHandle>(null)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => iconRef.current?.startAnimation()}
+      onMouseLeave={() => iconRef.current?.stopAnimation()}
+      aria-pressed={isActive}
+      className={clsx(TAB_BUTTON_BASE, isActive ? TAB_BUTTON_ACTIVE : TAB_BUTTON_INACTIVE)}
+    >
+      <SparklesIcon ref={iconRef} size={14} />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  )
+}
+
+// Animated tab button with ZapIcon
+function DealsTabButton({ isActive, onClick, label = "Deals" }: TabButtonProps) {
+  const iconRef = useRef<ZapHandle>(null)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => iconRef.current?.startAnimation()}
+      onMouseLeave={() => iconRef.current?.stopAnimation()}
+      aria-pressed={isActive}
+      className={clsx(TAB_BUTTON_BASE, isActive ? TAB_BUTTON_ACTIVE : TAB_BUTTON_INACTIVE)}
+    >
+      <ZapIcon ref={iconRef} size={14} />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  )
+}
+
+// Static tab button for tabs without animated icons
+function StaticTabButton({ isActive, onClick, icon: Icon, label }: Omit<TabButtonProps, 'label'> & {
+  icon: ComponentType<{ className?: string }>
+  label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={isActive}
+      className={clsx(TAB_BUTTON_BASE, isActive ? TAB_BUTTON_ACTIVE : TAB_BUTTON_INACTIVE)}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  )
+}
+
 function MarketAnalysis() {
   const navigate = useNavigate()
   const [sorting, setSorting] = useState<SortingState>([{ id: 'volume_30d', desc: true }])
@@ -64,7 +172,7 @@ function MarketAnalysis() {
 
   // Fetch actual deal listings (active listings below floor price)
   // Only show listings scraped in the last 24 hours to avoid showing ended listings
-  const { data: dealListings, isLoading: dealsLoading } = useQuery({
+  const { data: dealData, isLoading: dealsLoading } = useQuery({
     queryKey: ['market-deals', timeFrame],
     queryFn: async () => {
       // Get active listings sorted by price ascending, only from last 24h to ensure freshness
@@ -92,7 +200,7 @@ function MarketAnalysis() {
 
       // Filter to only listings below floor price and calculate deal %
       const now = Date.now()
-      return data.items
+      const allDeals = data.items
         .filter(l => l.floor_price && l.price < l.floor_price)
         .map(l => {
           // Calculate hours since last seen (scraped_at)
@@ -105,18 +213,24 @@ function MarketAnalysis() {
           // Use listing_format from API (properly detected by scraper)
           // Fallback: if bid_count > 0, it's definitely an auction
           const listingFormat = l.listing_format ?? ((l.bid_count ?? 0) > 0 ? 'auction' : null)
+          const isAuction = listingFormat === 'auction' || (l.bid_count ?? 0) > 0
 
           return {
             ...l,
             dealPct: l.floor_price ? ((l.floor_price - l.price) / l.floor_price) * 100 : 0,
             listingFormat,
+            isAuction,
             bidCount: l.bid_count ?? 0,
             hoursSinceSeen,
             // Listing is "fresh" if seen in last 6 hours (or if no scraped_at data)
             isFresh: !l.scraped_at || hoursSinceSeen < 6
           }
         })
-        // Prioritize fresh listings, then sort by deal %
+
+      // Separate Buy Now deals from Auctions
+      // Buy Now = buy_it_now, best_offer, or unknown (null) with no bids
+      const buyNowDeals = allDeals
+        .filter(l => !l.isAuction)
         .sort((a, b) => {
           // Fresh listings first
           if (a.isFresh !== b.isFresh) return a.isFresh ? -1 : 1
@@ -124,6 +238,19 @@ function MarketAnalysis() {
           return b.dealPct - a.dealPct
         })
         .slice(0, 30)
+
+      // Auctions = auction format or has bids
+      const auctionDeals = allDeals
+        .filter(l => l.isAuction)
+        .sort((a, b) => {
+          // Fresh listings first
+          if (a.isFresh !== b.isFresh) return a.isFresh ? -1 : 1
+          // Then by deal percentage
+          return b.dealPct - a.dealPct
+        })
+        .slice(0, 20)
+
+      return { buyNowDeals, auctionDeals }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
     enabled: activeTab === 'deals', // Only fetch when deals tab is active
@@ -787,27 +914,30 @@ function MarketAnalysis() {
 
                     {/* Tab Navigation */}
                     <div className="border-b border-border bg-muted/20 flex items-center gap-1 p-1 overflow-x-auto">
-                        {[
-                            { id: 'table' as AnalyticsTab, label: 'Table', icon: TableIcon },
-                            { id: 'volume' as AnalyticsTab, label: 'Volume', icon: BarChart3 },
-                            { id: 'sentiment' as AnalyticsTab, label: 'Sentiment', icon: PieChartIcon },
-                            { id: 'prices' as AnalyticsTab, label: 'Prices', icon: LineChart },
-                            { id: 'deals' as AnalyticsTab, label: 'Deals', icon: Tag },
-                        ].map(tab => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={clsx(
-                                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap",
-                                    activeTab === tab.id
-                                        ? "bg-primary text-primary-foreground"
-                                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                                )}
-                            >
-                                <tab.icon className="w-3.5 h-3.5" />
-                                <span className="hidden sm:inline">{tab.label}</span>
-                            </button>
-                        ))}
+                        <StaticTabButton
+                            isActive={activeTab === 'table'}
+                            onClick={() => setActiveTab('table')}
+                            icon={TableIcon}
+                            label="Table"
+                        />
+                        <StaticTabButton
+                            isActive={activeTab === 'volume'}
+                            onClick={() => setActiveTab('volume')}
+                            icon={BarChart3}
+                            label="Volume"
+                        />
+                        <SentimentTabButton
+                            isActive={activeTab === 'sentiment'}
+                            onClick={() => setActiveTab('sentiment')}
+                        />
+                        <PricesTabButton
+                            isActive={activeTab === 'prices'}
+                            onClick={() => setActiveTab('prices')}
+                        />
+                        <DealsTabButton
+                            isActive={activeTab === 'deals'}
+                            onClick={() => setActiveTab('deals')}
+                        />
                     </div>
 
                     {/* Tab Content */}
@@ -1039,7 +1169,7 @@ function MarketAnalysis() {
                                     {/* Top Gainers */}
                                     <div className="border border-brand-500/30 rounded-lg p-3 bg-brand-500/5">
                                         <div className="flex items-center gap-2 mb-3">
-                                            <TrendingUp className="w-4 h-4 text-brand-400" />
+                                            <TrendingUpIcon size={16} className="text-brand-400" />
                                             <span className="text-xs font-bold uppercase text-brand-400">Top Gainers</span>
                                         </div>
                                         <div className="space-y-2">
@@ -1212,47 +1342,43 @@ function MarketAnalysis() {
                         {/* Deals Tab - Active listings below floor price */}
                         {activeTab === 'deals' && (
                             <div className="p-4 flex flex-col h-full overflow-auto">
-                                {/* Summary Stats Row */}
+                                {/* Summary Stats Row - Focus on Buy Now deals */}
                                 <div className="grid grid-cols-4 gap-3 mb-4">
-                                    <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">Deals Found</div>
-                                        <div className="text-2xl font-bold font-mono text-brand-300">{dealListings?.length ?? 0}</div>
-                                        <div className="text-[10px] text-muted-foreground">below floor price</div>
+                                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-3">
+                                        <div className="text-[10px] uppercase text-emerald-400">Buy Now Deals</div>
+                                        <div className="text-2xl font-bold font-mono text-emerald-400">{dealData?.buyNowDeals?.length ?? 0}</div>
+                                        <div className="text-[10px] text-muted-foreground">instant purchase</div>
                                     </div>
                                     <div className="bg-muted/30 rounded p-3">
                                         <div className="text-[10px] uppercase text-muted-foreground">Best Deal</div>
                                         <div className="text-2xl font-bold font-mono text-brand-300">
-                                            {dealListings?.[0]?.dealPct ? `${dealListings[0].dealPct.toFixed(0)}%` : '-'}
+                                            {dealData?.buyNowDeals?.[0]?.dealPct ? `${dealData.buyNowDeals[0].dealPct.toFixed(0)}%` : '-'}
                                         </div>
                                         <div className="text-[10px] text-muted-foreground">max discount</div>
                                     </div>
                                     <div className="bg-muted/30 rounded p-3">
                                         <div className="text-[10px] uppercase text-muted-foreground">Avg Discount</div>
                                         <div className="text-2xl font-bold font-mono">
-                                            {dealListings && dealListings.length > 0
-                                                ? `${(dealListings.reduce((acc, l) => acc + l.dealPct, 0) / dealListings.length).toFixed(0)}%`
+                                            {dealData?.buyNowDeals && dealData.buyNowDeals.length > 0
+                                                ? `${(dealData.buyNowDeals.reduce((acc, l) => acc + l.dealPct, 0) / dealData.buyNowDeals.length).toFixed(0)}%`
                                                 : '-'}
                                         </div>
                                         <div className="text-[10px] text-muted-foreground">below floor</div>
                                     </div>
-                                    <div className="bg-muted/30 rounded p-3">
-                                        <div className="text-[10px] uppercase text-muted-foreground">Total Savings</div>
-                                        <div className="text-2xl font-bold font-mono text-brand-300">
-                                            {dealListings && dealListings.length > 0
-                                                ? `$${dealListings.reduce((acc, l) => acc + ((l.floor_price || 0) - l.price), 0).toFixed(0)}`
-                                                : '-'}
-                                        </div>
-                                        <div className="text-[10px] text-muted-foreground">vs floor prices</div>
+                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded p-3">
+                                        <div className="text-[10px] uppercase text-amber-400">Auctions</div>
+                                        <div className="text-2xl font-bold font-mono text-amber-400">{dealData?.auctionDeals?.length ?? 0}</div>
+                                        <div className="text-[10px] text-muted-foreground">price may change</div>
                                     </div>
                                 </div>
 
-                                {/* Deals Grid */}
+                                {/* Main Content */}
                                 <div className="flex-1">
                                     {dealsLoading ? (
                                         <div className="flex items-center justify-center h-64">
                                             <div className="text-sm text-muted-foreground animate-pulse">Finding deals...</div>
                                         </div>
-                                    ) : !dealListings || dealListings.length === 0 ? (
+                                    ) : (!dealData?.buyNowDeals?.length && !dealData?.auctionDeals?.length) ? (
                                         <div className="flex flex-col items-center justify-center h-64 text-center border border-dashed border-border rounded-lg">
                                             <Tag className="w-12 h-12 text-muted-foreground/30 mb-3" />
                                             <div className="text-lg font-bold text-muted-foreground mb-1">No Deals Right Now</div>
@@ -1261,90 +1387,147 @@ function MarketAnalysis() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                                            {dealListings.map((listing) => (
-                                                <a
-                                                    key={listing.id}
-                                                    href={listing.url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    onClick={() => analytics.trackExternalLinkClick(listing.platform, listing.card_id, listing.title)}
-                                                    className="border border-border rounded-lg p-3 hover:border-brand-300 hover:bg-brand-300/5 transition-all group"
-                                                >
-                                                    {/* Deal Badge + Listing Type */}
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <span className="px-2 py-1 bg-brand-300/20 text-brand-300 text-xs font-bold rounded">
-                                                            {listing.dealPct.toFixed(0)}% OFF
-                                                        </span>
-                                                        <div className="flex items-center gap-1.5">
-                                                            {/* Listing Type Badge */}
-                                                            {listing.listingFormat === 'auction' ? (
-                                                                <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] font-bold rounded uppercase">
-                                                                    Auction{listing.bidCount > 0 && ` (${listing.bidCount})`}
-                                                                </span>
-                                                            ) : listing.listingFormat === 'best_offer' ? (
-                                                                <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] font-bold rounded uppercase">
-                                                                    Best Offer
-                                                                </span>
-                                                            ) : listing.listingFormat === 'buy_it_now' ? (
-                                                                <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded uppercase">
-                                                                    Buy Now
-                                                                </span>
-                                                            ) : (
-                                                                <span className="px-1.5 py-0.5 bg-gray-500/20 text-gray-400 text-[10px] font-bold rounded uppercase">
-                                                                    Listing
-                                                                </span>
-                                                            )}
-                                                            <span className="text-[10px] text-muted-foreground uppercase font-medium">{listing.platform}</span>
-                                                        </div>
-                                                    </div>
-                                                    {/* Freshness indicator - warn if not seen recently */}
-                                                    {!listing.isFresh && listing.hoursSinceSeen != null && (
-                                                        <div className="mb-2 px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-400">
-                                                            ⚠️ Last seen {Math.round(listing.hoursSinceSeen)}h ago — may have ended
-                                                        </div>
-                                                    )}
-
-                                                    {/* Card Info */}
-                                                    <div className="flex gap-3">
-                                                        {listing.card_image_url ? (
-                                                            <img
-                                                                src={listing.card_image_url}
-                                                                alt={listing.card_name}
-                                                                loading="lazy"
-                                                                className="w-14 h-20 object-cover rounded flex-shrink-0"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-14 h-20 bg-muted rounded flex-shrink-0 flex items-center justify-center">
-                                                                <Tag className="w-6 h-6 text-muted-foreground/50" />
-                                                            </div>
-                                                        )}
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="font-bold text-sm truncate group-hover:text-brand-300 transition-colors">
-                                                                {listing.card_name}
-                                                            </div>
-                                                            {listing.treatment && (
-                                                                <div className="text-xs text-brand-300/70 mb-1">{listing.treatment}</div>
-                                                            )}
-                                                            {/* Pricing */}
-                                                            <div className="mt-2">
-                                                                <div className="text-xl font-bold font-mono text-brand-300">${listing.price.toFixed(2)}</div>
-                                                                <div className="flex items-center gap-2 text-xs">
-                                                                    <span className="font-mono text-muted-foreground line-through">${listing.floor_price?.toFixed(2)}</span>
-                                                                    <span className="font-mono text-brand-300 font-medium">Save ${((listing.floor_price || 0) - listing.price).toFixed(2)}</span>
+                                        <div className="space-y-6">
+                                            {/* BUY NOW DEALS SECTION */}
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
+                                                    <h3 className="text-sm font-bold uppercase text-emerald-400">Buy Now Deals</h3>
+                                                    <span className="text-xs text-muted-foreground">— Instant purchase at fixed price</span>
+                                                </div>
+                                                {dealData?.buyNowDeals && dealData.buyNowDeals.length > 0 ? (
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                                        {dealData.buyNowDeals.map((listing) => (
+                                                            <a
+                                                                key={listing.id}
+                                                                href={listing.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                onClick={() => analytics.trackExternalLinkClick(listing.platform, listing.card_id, listing.title)}
+                                                                className="border border-emerald-500/30 bg-emerald-500/5 rounded-lg p-3 hover:border-emerald-400 hover:bg-emerald-500/10 transition-all group"
+                                                            >
+                                                                {/* Deal Badge + Listing Type */}
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded">
+                                                                        {listing.dealPct.toFixed(0)}% OFF
+                                                                    </span>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        {listing.listingFormat === 'best_offer' ? (
+                                                                            <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] font-bold rounded uppercase">
+                                                                                Best Offer
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded uppercase">
+                                                                                Buy Now
+                                                                            </span>
+                                                                        )}
+                                                                        <span className="text-[10px] text-muted-foreground uppercase font-medium">{listing.platform}</span>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        </div>
+                                                                {/* Freshness indicator */}
+                                                                {!listing.isFresh && listing.hoursSinceSeen != null && (
+                                                                    <div className="mb-2 px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-400">
+                                                                        ⚠️ Last seen {Math.round(listing.hoursSinceSeen)}h ago — may have ended
+                                                                    </div>
+                                                                )}
+                                                                {/* Card Info */}
+                                                                <div className="flex gap-3">
+                                                                    <DealCardImage src={listing.card_image_url} alt={listing.card_name} />
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="font-bold text-sm truncate group-hover:text-emerald-400 transition-colors">
+                                                                            {listing.card_name}
+                                                                        </div>
+                                                                        {listing.treatment && (
+                                                                            <div className="text-xs text-emerald-400/70 mb-1">{listing.treatment}</div>
+                                                                        )}
+                                                                        <div className="mt-2">
+                                                                            <div className="text-xl font-bold font-mono text-emerald-400">${listing.price.toFixed(2)}</div>
+                                                                            <div className="flex items-center gap-2 text-xs">
+                                                                                <span className="font-mono text-muted-foreground line-through">${listing.floor_price?.toFixed(2)}</span>
+                                                                                <span className="font-mono text-emerald-400 font-medium">Save ${((listing.floor_price || 0) - listing.price).toFixed(2)}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </a>
+                                                        ))}
                                                     </div>
-                                                </a>
-                                            ))}
+                                                ) : (
+                                                    <div className="border border-dashed border-emerald-500/30 rounded-lg p-6 text-center">
+                                                        <div className="text-sm text-muted-foreground">No Buy Now deals found below floor price</div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* AUCTIONS SECTION */}
+                                            {dealData?.auctionDeals && dealData.auctionDeals.length > 0 && (
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <div className="w-2 h-2 bg-amber-400 rounded-full"></div>
+                                                        <h3 className="text-sm font-bold uppercase text-amber-400">Auctions Below Floor</h3>
+                                                        <span className="text-xs text-muted-foreground">— Current bid is under floor, but price may increase</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                                        {dealData.auctionDeals.map((listing) => (
+                                                            <a
+                                                                key={listing.id}
+                                                                href={listing.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                onClick={() => analytics.trackExternalLinkClick(listing.platform, listing.card_id, listing.title)}
+                                                                className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-3 hover:border-amber-400 hover:bg-amber-500/10 transition-all group"
+                                                            >
+                                                                {/* Deal Badge + Listing Type */}
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <span className="px-2 py-1 bg-amber-500/20 text-amber-400 text-xs font-bold rounded">
+                                                                        {listing.dealPct.toFixed(0)}% OFF
+                                                                    </span>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] font-bold rounded uppercase">
+                                                                            Auction{listing.bidCount > 0 && ` (${listing.bidCount})`}
+                                                                        </span>
+                                                                        <span className="text-[10px] text-muted-foreground uppercase font-medium">{listing.platform}</span>
+                                                                    </div>
+                                                                </div>
+                                                                {/* Freshness indicator */}
+                                                                {!listing.isFresh && listing.hoursSinceSeen != null && (
+                                                                    <div className="mb-2 px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-400">
+                                                                        ⚠️ Last seen {Math.round(listing.hoursSinceSeen)}h ago — may have ended
+                                                                    </div>
+                                                                )}
+                                                                {/* Card Info */}
+                                                                <div className="flex gap-3">
+                                                                    <DealCardImage src={listing.card_image_url} alt={listing.card_name} />
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="font-bold text-sm truncate group-hover:text-amber-400 transition-colors">
+                                                                            {listing.card_name}
+                                                                        </div>
+                                                                        {listing.treatment && (
+                                                                            <div className="text-xs text-amber-400/70 mb-1">{listing.treatment}</div>
+                                                                        )}
+                                                                        <div className="mt-2">
+                                                                            <div className="text-xl font-bold font-mono text-amber-400">${listing.price.toFixed(2)}</div>
+                                                                            <div className="flex items-center gap-2 text-xs">
+                                                                                <span className="font-mono text-muted-foreground line-through">${listing.floor_price?.toFixed(2)}</span>
+                                                                                <span className="font-mono text-amber-400 font-medium">
+                                                                                    {listing.bidCount > 0 ? `${listing.bidCount} bids` : 'No bids yet'}
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </a>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Footer Note */}
                                 <div className="mt-4 pt-3 border-t border-border text-center text-[10px] text-muted-foreground">
-                                    Floor = avg of 4 lowest recent sales per card + treatment. Click any deal to buy on marketplace.
+                                    Floor = avg of 4 lowest recent sales per card + treatment. Buy Now deals are guaranteed prices. Auction prices may change.
                                 </div>
                             </div>
                         )}

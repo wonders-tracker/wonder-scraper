@@ -47,6 +47,43 @@ type Props = {
   floorHistory?: FloorHistoryPoint[]
 }
 
+// Generate well-spaced log scale ticks
+function generateLogTicks(min: number, max: number): number[] {
+  const ticks: number[] = []
+  const logMin = Math.floor(Math.log10(min))
+  const logMax = Math.ceil(Math.log10(max))
+
+  // Standard "nice" multipliers for log scale
+  const multipliers = [1, 2, 5]
+
+  for (let power = logMin; power <= logMax; power++) {
+    for (const mult of multipliers) {
+      const val = mult * Math.pow(10, power)
+      if (val >= min * 0.9 && val <= max * 1.1) {
+        ticks.push(val)
+      }
+    }
+  }
+
+  // If we have too many ticks (>7), reduce to just powers of 10 and maybe 5s
+  if (ticks.length > 7) {
+    const filtered = ticks.filter(t => {
+      const mantissa = t / Math.pow(10, Math.floor(Math.log10(t)))
+      return mantissa === 1 || mantissa === 5
+    })
+    // If still too many, just use powers of 10
+    if (filtered.length > 6) {
+      return ticks.filter(t => {
+        const mantissa = t / Math.pow(10, Math.floor(Math.log10(t)))
+        return mantissa === 1
+      })
+    }
+    return filtered
+  }
+
+  return ticks
+}
+
 export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floorHistory }: Props) {
   // Transform floor history to chart format
   const floorHistoryData = useMemo(() => {
@@ -123,13 +160,16 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
   const yMin = Math.pow(10, logMin - logPadding)
   const yMax = Math.pow(10, logMax + logPadding)
 
+  // Generate clean log scale ticks
+  const yTicks = generateLogTicks(yMin, yMax)
+
   // Check if we have floor history to show
   const hasFloorHistory = floorHistoryData.length > 1
 
   return (
     <ResponsiveContainer width="100%" height="100%">
       {chartType === 'scatter' ? (
-        <ScatterChart margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
+        <ScatterChart margin={{ top: 20, right: 50, bottom: 30, left: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} />
           <XAxis
             dataKey="timestamp"
@@ -145,6 +185,7 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
             orientation="right"
             scale="log"
             domain={[yMin, yMax]}
+            ticks={yTicks}
             tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val < 10 ? val.toFixed(2) : val.toFixed(0)}`}
             tick={{ fill: '#71717a', fontSize: 10 }}
             axisLine={{ stroke: '#27272a' }}
@@ -157,7 +198,7 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
               stroke="#7dd3a8"
               strokeDasharray="3 3"
               strokeWidth={1.5}
-              label={{ value: `Floor $${floorPrice.toFixed(2)}`, fill: '#7dd3a8', fontSize: 9, position: 'insideBottomRight' }}
+              label={{ value: `Floor $${floorPrice >= 1000 ? `${(floorPrice/1000).toFixed(1)}k` : floorPrice.toFixed(0)}`, fill: '#7dd3a8', fontSize: 9, position: 'insideBottomRight' }}
             />
           )}
           {lowestAsk && lowestAsk > 0 && (
@@ -166,7 +207,7 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
               stroke="#3b82f6"
               strokeDasharray="5 5"
               strokeWidth={1.5}
-              label={{ value: `Ask $${lowestAsk.toFixed(2)}`, fill: '#3b82f6', fontSize: 9, position: 'insideTopRight' }}
+              label={{ value: `Ask $${lowestAsk >= 1000 ? `${(lowestAsk/1000).toFixed(1)}k` : lowestAsk.toFixed(0)}`, fill: '#3b82f6', fontSize: 9, position: 'insideTopRight' }}
             />
           )}
           <RechartsTooltip
@@ -234,15 +275,11 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
           />
         </ScatterChart>
       ) : (
-        <ComposedChart data={hasFloorHistory ? combinedData : data} margin={{ top: 20, right: 60, bottom: 30, left: 20 }}>
+        <ComposedChart data={hasFloorHistory ? combinedData : data} margin={{ top: 20, right: 50, bottom: 30, left: 20 }}>
           <defs>
             <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#7dd3a8" stopOpacity={0.15}/>
               <stop offset="95%" stopColor="#7dd3a8" stopOpacity={0}/>
-            </linearGradient>
-            <linearGradient id="floorGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/>
-              <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} />
@@ -259,6 +296,7 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
             orientation="right"
             scale="log"
             domain={[yMin, yMax]}
+            ticks={yTicks}
             tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val < 10 ? val.toFixed(2) : val.toFixed(0)}`}
             tick={{ fill: '#71717a', fontSize: 10 }}
             axisLine={{ stroke: '#27272a' }}
@@ -272,7 +310,7 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
               stroke="#7dd3a8"
               strokeDasharray="3 3"
               strokeWidth={1.5}
-              label={{ value: `Floor $${floorPrice.toFixed(2)}`, fill: '#7dd3a8', fontSize: 9, position: 'insideBottomRight' }}
+              label={{ value: `Floor $${floorPrice >= 1000 ? `${(floorPrice/1000).toFixed(1)}k` : floorPrice.toFixed(0)}`, fill: '#7dd3a8', fontSize: 9, position: 'insideBottomRight' }}
             />
           )}
           {lowestAsk && lowestAsk > 0 && (
@@ -281,7 +319,7 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
               stroke="#3b82f6"
               strokeDasharray="5 5"
               strokeWidth={1.5}
-              label={{ value: `Ask $${lowestAsk.toFixed(2)}`, fill: '#3b82f6', fontSize: 9, position: 'insideTopRight' }}
+              label={{ value: `Ask $${lowestAsk >= 1000 ? `${(lowestAsk/1000).toFixed(1)}k` : lowestAsk.toFixed(0)}`, fill: '#3b82f6', fontSize: 9, position: 'insideTopRight' }}
             />
           )}
           <RechartsTooltip
@@ -293,7 +331,7 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
                   <div className="bg-black/90 border border-border rounded p-3 shadow-lg">
                     {d.price && <div className="text-brand-300 font-bold font-mono text-lg">${d.price.toFixed(2)}</div>}
                     {d.historicalFloor && (
-                      <div className="text-amber-400 font-mono text-sm mt-1">
+                      <div className="text-gray-400 font-mono text-sm mt-1">
                         Floor: ${d.historicalFloor.toFixed(2)}
                       </div>
                     )}
@@ -317,13 +355,14 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
               return null
             }}
           />
-          {/* Historical floor price trend line */}
+          {/* Historical floor price trend line - rendered first so it's behind price line */}
           {hasFloorHistory && (
             <Line
               type="monotone"
               dataKey="historicalFloor"
-              stroke="#f59e0b"
-              strokeWidth={2}
+              stroke="#6b7280"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
               dot={false}
               connectNulls
               name="Floor Trend"

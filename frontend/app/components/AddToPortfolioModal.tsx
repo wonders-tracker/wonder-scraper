@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { api } from '../utils/auth'
-import { X, Plus, Minus, Wallet, Link as LinkIcon, Loader2 } from 'lucide-react'
+import { Minus, Wallet, Link as LinkIcon, Loader2 } from 'lucide-react'
+// Animated icons
+import { XIcon } from '~/components/ui/x'
+import { PlusIcon } from '~/components/ui/plus'
+import { CheckIcon } from '~/components/ui/check'
 import clsx from 'clsx'
 import { SimpleDropdown } from './ui/dropdown'
 
@@ -337,7 +341,7 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                             onClick={onClose}
                             className="text-muted-foreground hover:text-foreground transition-colors"
                         >
-                            <X className="w-5 h-5" />
+                            <XIcon size={20} />
                         </button>
                     </div>
                 </div>
@@ -566,7 +570,7 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                                 className="w-10 h-10 flex items-center justify-center bg-muted hover:bg-muted/80 rounded transition-colors"
                                 disabled={form.quantity >= 100}
                             >
-                                <Plus className="w-4 h-4" />
+                                <PlusIcon size={16} />
                             </button>
                             {form.quantity > 1 && (
                                 <span className="text-xs text-muted-foreground">
@@ -624,7 +628,7 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                                     onClick={addSplitCard}
                                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-primary text-primary rounded text-sm uppercase font-bold hover:bg-primary/10 transition-colors"
                                 >
-                                    <Plus className="w-4 h-4" /> Add {form.quantity > 1 ? `${form.quantity} Cards` : 'Card'}
+                                    <PlusIcon size={16} /> Add {form.quantity > 1 ? `${form.quantity} Cards` : 'Card'}
                                 </button>
                                 <button
                                     type="button"
