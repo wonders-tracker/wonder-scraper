@@ -100,9 +100,7 @@ def sync_all_meta_status() -> dict:
 
     with Session(engine) as session:
         # Get all cards that have at least one vote
-        cards_with_votes = session.exec(
-            select(CardMetaVote.card_id).distinct()
-        ).all()
+        cards_with_votes = session.exec(select(CardMetaVote.card_id).distinct()).all()
 
         for card_id in cards_with_votes:
             card = session.get(Card, card_id)

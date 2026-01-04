@@ -146,6 +146,7 @@ class FloorPriceService:
         """Lazy-load MarketPatternsService."""
         if self._market_patterns is None:
             from app.services.market_patterns import MarketPatternsService
+
             self._market_patterns = MarketPatternsService(self.session)
         return self._market_patterns
 
@@ -244,9 +245,7 @@ class FloorPriceService:
         # Step 4: Try expanded time window (90 days)
         # Note: Recursive call will cache its own result
         if days < self.config.EXPANDED_LOOKBACK_DAYS:
-            return self.get_floor_price(
-                card_id, treatment, self.config.EXPANDED_LOOKBACK_DAYS, include_blokpax
-            )
+            return self.get_floor_price(card_id, treatment, self.config.EXPANDED_LOOKBACK_DAYS, include_blokpax)
 
         # Step 5: Treatment multiplier fallback (when specific treatment has no data)
         if treatment:
@@ -495,9 +494,7 @@ class FloorPriceService:
             return {}
 
         # Get batch sales floors
-        sales_data = self._get_sales_floors_batch(
-            card_ids, days, include_blokpax, by_variant
-        )
+        sales_data = self._get_sales_floors_batch(card_ids, days, include_blokpax, by_variant)
 
         results: dict[Any, FloorPriceResult] = {}
         cards_with_results: set[int] = set()
@@ -538,9 +535,7 @@ class FloorPriceService:
             missing_card_ids = [cid for cid in card_ids if cid not in cards_with_results]
             if missing_card_ids:
                 for card_id in missing_card_ids:
-                    ob_result = self.order_book_analyzer.estimate_floor(
-                        card_id=card_id, treatment=None, days=days
-                    )
+                    ob_result = self.order_book_analyzer.estimate_floor(card_id=card_id, treatment=None, days=days)
                     if ob_result and ob_result.confidence > self.config.ORDER_BOOK_MIN_CONFIDENCE:
                         floor_result = FloorPriceResult(
                             price=round(ob_result.floor_estimate, 2),
@@ -674,7 +669,11 @@ class FloorPriceService:
                     with engine.connect() as conn:
                         bpx_result = conn.execute(
                             bpx_query,
-                            {"card_ids": card_ids, "cutoff": cutoff, "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE},
+                            {
+                                "card_ids": card_ids,
+                                "cutoff": cutoff,
+                                "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE,
+                            },
                         )
 
                 for row in bpx_result.fetchall():

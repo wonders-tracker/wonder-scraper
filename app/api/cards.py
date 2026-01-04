@@ -504,23 +504,16 @@ def get_card_by_id_or_slug(session: Session, card_identifier: str) -> tuple[Card
     """Resolve card by ID (numeric) or slug (string). Returns (card, rarity_name)."""
 
     # Build query with LEFT JOIN to Rarity
-    stmt = (
-        select(Card, Rarity.name)
-        .outerjoin(Rarity, Card.rarity_id == Rarity.id)
-    )
+    stmt = select(Card, Rarity.name).outerjoin(Rarity, Card.rarity_id == Rarity.id)
 
     # Try numeric ID first
     if card_identifier.isdigit():
-        result = session.execute(
-            stmt.where(Card.id == int(card_identifier))
-        ).first()
+        result = session.execute(stmt.where(Card.id == int(card_identifier))).first()
         if result:
             return result[0], result[1] or "Unknown"
 
     # Try slug lookup
-    result = session.execute(
-        stmt.where(Card.slug == card_identifier)
-    ).first()
+    result = session.execute(stmt.where(Card.slug == card_identifier)).first()
     if result:
         return result[0], result[1] or "Unknown"
 
@@ -672,11 +665,14 @@ def read_card(
     """)
 
     # Execute consolidated query
-    consolidated_result = session.execute(consolidated_query, {
-        "card_id": card.id,
-        "cutoff_30d": cutoff_30d,
-        "cutoff_90d": cutoff_90d,
-    }).first()
+    consolidated_result = session.execute(
+        consolidated_query,
+        {
+            "card_id": card.id,
+            "cutoff_30d": cutoff_30d,
+            "cutoff_90d": cutoff_90d,
+        },
+    ).first()
 
     # Unpack results with fallbacks (indices: 0-9 for the 10 SELECT columns)
     real_price = consolidated_result[0] if consolidated_result and consolidated_result[0] else None
@@ -1032,21 +1028,25 @@ def read_card_order_book_by_treatment(
             days=days,
         )
         if result:
-            results.append({
-                "treatment": treatment,
-                "floor_estimate": result.floor_estimate,
-                "confidence": result.confidence,
-                "total_listings": result.total_listings,
-                "source": result.source,
-            })
+            results.append(
+                {
+                    "treatment": treatment,
+                    "floor_estimate": result.floor_estimate,
+                    "confidence": result.confidence,
+                    "total_listings": result.total_listings,
+                    "source": result.source,
+                }
+            )
         else:
-            results.append({
-                "treatment": treatment,
-                "floor_estimate": None,
-                "confidence": 0,
-                "total_listings": 0,
-                "source": None,
-            })
+            results.append(
+                {
+                    "treatment": treatment,
+                    "floor_estimate": None,
+                    "confidence": 0,
+                    "total_listings": 0,
+                    "source": None,
+                }
+            )
 
     # Also get overall floor (all treatments combined)
     overall = analyzer.estimate_floor(card_id=ensure_int(card.id), days=days)
@@ -1154,12 +1154,9 @@ def read_fmp_history(
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     # Build query
-    stmt = (
-        select(FMPSnapshot)
-        .where(
-            FMPSnapshot.card_id == card.id,
-            FMPSnapshot.snapshot_date >= cutoff,
-        )
+    stmt = select(FMPSnapshot).where(
+        FMPSnapshot.card_id == card.id,
+        FMPSnapshot.snapshot_date >= cutoff,
     )
 
     # Filter by treatment if specified, otherwise get aggregate (treatment=null)
@@ -1209,7 +1206,4 @@ def read_fmp_history_treatments(
         {"card_id": card.id},
     ).all()
 
-    return [
-        {"treatment": r[0], "snapshot_count": r[1]}
-        for r in result
-    ]
+    return [{"treatment": r[0], "snapshot_count": r[1]} for r in result]

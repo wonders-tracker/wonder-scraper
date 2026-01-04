@@ -15,7 +15,7 @@ class Settings(BaseSettings):
         if not self.SECRET_KEY:
             raise ValueError(
                 "SECRET_KEY environment variable is required. "
-                "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+                'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
             )
 
     # Discord OAuth

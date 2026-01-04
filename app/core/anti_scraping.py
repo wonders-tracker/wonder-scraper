@@ -411,6 +411,7 @@ class APIKeyRateLimiter:
     def _get_day_start(self) -> float:
         """Get the start of the current UTC day as a timestamp."""
         from datetime import datetime, timezone
+
         now = datetime.now(timezone.utc)
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         return day_start.timestamp()

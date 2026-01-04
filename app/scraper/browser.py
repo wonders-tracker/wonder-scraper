@@ -394,13 +394,19 @@ async def get_page_content(
 
                 # Determine if this is a browser-level error requiring restart
                 browser_error_keywords = [
-                    "browser", "closed", "crashed", "connection",
-                    "websocket", "connect call failed", "errno 61",
-                    "invalidstate", "target", "timeout",
+                    "browser",
+                    "closed",
+                    "crashed",
+                    "connection",
+                    "websocket",
+                    "connect call failed",
+                    "errno 61",
+                    "invalidstate",
+                    "target",
+                    "timeout",
                 ]
-                is_browser_error = (
-                    error_type in ("OSError", "ConnectionError", "WebSocketException") or
-                    any(keyword in error_msg for keyword in browser_error_keywords)
+                is_browser_error = error_type in ("OSError", "ConnectionError", "WebSocketException") or any(
+                    keyword in error_msg for keyword in browser_error_keywords
                 )
 
                 # Handle different error types with appropriate recovery

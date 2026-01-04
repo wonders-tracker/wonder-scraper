@@ -1,0 +1,11 @@
+price_lag1
+price_lag2
+price_roll_mean_5
+price_roll_min_4
+days_since_last_sale
+card_total_sales
+treatment_mult
+rarity_mult
+rarity_mean
+listing_count
+lowest_ask

@@ -251,10 +251,9 @@ async def job_update_market_data():
                     break
 
             # Circuit breaker: detect eBay blocking (all scrapes failed, no DB errors)
-            batch_scrape_failures = len([
-                r for r in results
-                if r is False or (isinstance(r, Exception) and not is_transient_error(r))
-            ])
+            batch_scrape_failures = len(
+                [r for r in results if r is False or (isinstance(r, Exception) and not is_transient_error(r))]
+            )
             if batch_scrape_failures == len(batch) and batch_db_errors == 0:
                 consecutive_scrape_failures += 1
                 print(

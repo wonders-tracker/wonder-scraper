@@ -130,6 +130,7 @@ class OrderBookAnalyzer:
         """Lazy-load MarketPatternsService to avoid circular imports."""
         if self._market_patterns is None:
             from app.services.market_patterns import MarketPatternsService
+
             self._market_patterns = MarketPatternsService(self.session)
         return self._market_patterns
 
@@ -223,9 +224,7 @@ class OrderBookAnalyzer:
             volatility_cv=round(volatility_cv, 3),
         )
 
-    def _fetch_active_listings(
-        self, card_id: int, treatment: Optional[str], days: int
-    ) -> list[dict]:
+    def _fetch_active_listings(self, card_id: int, treatment: Optional[str], days: int) -> list[dict]:
         """Fetch active listings from database, excluding bulk lots."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -243,23 +242,17 @@ class OrderBookAnalyzer:
         try:
             # Use provided session or create new one
             if self.session:
-                result = self.session.execute(
-                    query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
-                )
+                result = self.session.execute(query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment})
                 return [dict(row._mapping) for row in result.fetchall()]
             else:
                 with engine.connect() as conn:
-                    result = conn.execute(
-                        query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
-                    )
+                    result = conn.execute(query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment})
                     return [dict(row._mapping) for row in result.fetchall()]
         except Exception as e:
             logger.error(f"[OrderBook] Failed to fetch active listings for card {card_id}: {e}")
             return []
 
-    def _filter_outliers(
-        self, prices: list[float]
-    ) -> tuple[list[float], int]:
+    def _filter_outliers(self, prices: list[float]) -> tuple[list[float], int]:
         """
         Filter outliers based on local price gaps.
         Removes prices where gap to nearest neighbor is >2σ from mean gap.
@@ -342,9 +335,7 @@ class OrderBookAnalyzer:
         """
         return max(buckets, key=lambda b: (b.count, -b.min_price))
 
-    def _calculate_confidence(
-        self, deepest_bucket: BucketInfo, total_listings: int, stale_count: int
-    ) -> float:
+    def _calculate_confidence(self, deepest_bucket: BucketInfo, total_listings: int, stale_count: int) -> float:
         """
         DEPRECATED: Old confidence calculation (kept for backwards compatibility).
         Use _calculate_confidence_v2 instead.
@@ -383,9 +374,7 @@ class OrderBookAnalyzer:
             volatility_weight=self.config.VOLATILITY_WEIGHT,
         )
 
-    def _fetch_sold_listings(
-        self, card_id: int, treatment: Optional[str], days: int
-    ) -> list[dict]:
+    def _fetch_sold_listings(self, card_id: int, treatment: Optional[str], days: int) -> list[dict]:
         """Fetch sold listings from database, excluding bulk lots."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -402,15 +391,11 @@ class OrderBookAnalyzer:
 
         try:
             if self.session:
-                result = self.session.execute(
-                    query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
-                )
+                result = self.session.execute(query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment})
                 return [dict(row._mapping) for row in result.fetchall()]
             else:
                 with engine.connect() as conn:
-                    result = conn.execute(
-                        query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
-                    )
+                    result = conn.execute(query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment})
                     return [dict(row._mapping) for row in result.fetchall()]
         except Exception as e:
             logger.error(f"[OrderBook] Failed to fetch sold listings for card {card_id}: {e}")

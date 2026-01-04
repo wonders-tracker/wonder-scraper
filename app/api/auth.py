@@ -229,9 +229,7 @@ def refresh_access_token(request: Request, session: Session = Depends(get_sessio
         )
 
     # Find user with row lock to prevent race conditions
-    user = session.exec(
-        select(User).where(User.email == email).with_for_update()
-    ).first()
+    user = session.exec(select(User).where(User.email == email).with_for_update()).first()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -395,15 +393,11 @@ async def callback_discord(code: str, session: Session = Depends(get_session)):
 
         # Find or Create User with proper transaction handling
         # Use SELECT FOR UPDATE to prevent race conditions
-        user = session.exec(
-            select(User).where(User.discord_id == discord_id).with_for_update()
-        ).first()
+        user = session.exec(select(User).where(User.discord_id == discord_id).with_for_update()).first()
 
         if not user and email:
             # Check by email with lock
-            user = session.exec(
-                select(User).where(User.email == email).with_for_update()
-            ).first()
+            user = session.exec(select(User).where(User.email == email).with_for_update()).first()
             if user:
                 # Link Discord account to existing user
                 user.discord_id = discord_id

@@ -97,8 +97,7 @@ async def _retry_request(
                     RETRY_MAX_DELAY,
                 )
                 print(
-                    f"[Blokpax] {type(e).__name__}, retrying in {delay:.1f}s "
-                    f"(attempt {attempt + 1}/{MAX_RETRIES})"
+                    f"[Blokpax] {type(e).__name__}, retrying in {delay:.1f}s " f"(attempt {attempt + 1}/{MAX_RETRIES})"
                 )
                 await asyncio.sleep(delay)
             else:
@@ -107,6 +106,7 @@ async def _retry_request(
     if last_exception:
         raise last_exception
     raise httpx.RequestError(f"Request failed after {MAX_RETRIES} retries")
+
 
 # Blokpax API base URL
 BLOKPAX_API_BASE = "https://api.blokpax.com/api"

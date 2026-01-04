@@ -1,0 +1,252 @@
+card_id,card_name,treatment,prediction_date,predicted_floor,confidence,source,total_listings,next_sale_date,next_sale_price,error,absolute_error,percentage_error,days_to_sale
+411,Existence Play Booster Bundle,Play Bundle,2025-10-07T00:00:00+00:00,26.98,0.33,sales_fallback,14,2025-10-08T00:00:00+00:00,35.99,-9.01,9.01,25.03,1
+411,Existence Play Booster Bundle,Play Bundle,2025-10-09T00:00:00+00:00,26.98,0.33,sales_fallback,16,2025-10-09T00:00:00+00:00,49.95,-22.97,22.97,45.99,0
+411,Existence Play Booster Bundle,Play Bundle,2025-10-14T00:00:00+00:00,24.27,0.33,sales_fallback,19,2025-10-15T00:00:00+00:00,29.33,-5.06,5.06,17.25,1
+411,Existence Play Booster Bundle,Play Bundle,2025-10-18T00:00:00+00:00,23.86,0.33,sales_fallback,22,2025-10-25T00:00:00+00:00,35.99,-12.13,12.13,33.7,7
+411,Existence Play Booster Bundle,Play Bundle,2025-10-27T00:00:00+00:00,30.95,0.334,sales_fallback,16,2025-10-28T00:00:00+00:00,25.0,5.95,5.95,23.8,1
+411,Existence Play Booster Bundle,Play Bundle,2025-11-05T00:00:00+00:00,27.7,0.334,sales_fallback,15,2025-11-06T00:00:00+00:00,45.0,-17.3,17.3,38.44,1
+411,Existence Play Booster Bundle,Play Bundle,2025-11-12T00:00:00+00:00,30.82,0.341,sales_fallback,12,2025-11-12T00:00:00+00:00,39.99,-9.17,9.17,22.93,0
+411,Existence Play Booster Bundle,Play Bundle,2025-11-17T00:00:00+00:00,32.22,0.33,sales_fallback,12,2025-11-18T00:00:00+00:00,45.0,-12.78,12.78,28.4,1
+411,Existence Play Booster Bundle,Play Bundle,2025-11-21T00:00:00+00:00,32.22,0.33,sales_fallback,14,2025-11-24T00:00:00+00:00,30.0,2.22,2.22,7.4,3
+411,Existence Play Booster Bundle,Play Bundle,2025-12-02T00:00:00+00:00,30.6,0.33,sales_fallback,12,2025-12-07T00:00:00+00:00,49.0,-18.4,18.4,37.55,5
+411,Existence Play Booster Bundle,Play Bundle,2025-12-16T00:00:00+00:00,30.62,0.33,sales_fallback,9,2025-12-18T00:00:00+00:00,23.0,7.62,7.62,33.13,2
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-10-06T00:00:00+00:00,155.0,0.313,sales_fallback,6,2025-10-06T00:00:00+00:00,45.0,110.0,110.0,244.44,0
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-10-06T00:00:00+00:00,155.0,0.313,sales_fallback,6,2025-10-06T00:00:00+00:00,49.95,105.05,105.05,210.31,0
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-10-13T00:00:00+00:00,47.48,0.33,sales_fallback,10,2025-10-13T00:00:00+00:00,100.0,-52.52,52.52,52.52,0
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-10-15T00:00:00+00:00,47.48,0.33,sales_fallback,10,2025-10-15T00:00:00+00:00,199.99,-152.51,152.51,76.26,0
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-10-16T00:00:00+00:00,47.48,0.33,sales_fallback,12,2025-10-16T00:00:00+00:00,22.5,24.98,24.98,111.02,0
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-10-22T00:00:00+00:00,33.75,0.33,sales_fallback,12,2025-10-22T00:00:00+00:00,200.0,-166.25,166.25,83.12,0
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-10-22T00:00:00+00:00,33.75,0.33,sales_fallback,12,2025-10-22T00:00:00+00:00,238.0,-204.25,204.25,85.82,0
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-10-23T00:00:00+00:00,33.75,0.33,sales_fallback,16,2025-10-23T00:00:00+00:00,115.0,-81.25,81.25,70.65,0
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-10-23T00:00:00+00:00,33.75,0.33,sales_fallback,16,2025-10-23T00:00:00+00:00,100.0,-66.25,66.25,66.25,0
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-10-27T00:00:00+00:00,33.75,0.33,sales_fallback,18,2025-10-27T00:00:00+00:00,349.99,-316.24,316.24,90.36,0
+361,Pinkspore Dreamcap,Formless Foil Alt Art,2025-11-13T00:00:00+00:00,61.25,0.33,sales_fallback,14,2025-11-13T00:00:00+00:00,19.99,41.26,41.26,206.4,0
+410,Character Proofs,Character Proof,2025-10-08T03:05:59+00:00,379.12,0.273,sales_fallback,3,2025-10-15T12:40:35+00:00,116.768366,262.35,262.35,224.68,7
+410,Character Proofs,Character Proof,2025-10-15T12:41:47+00:00,148.29,0.313,sales_fallback,6,2025-10-15T13:44:11+00:00,163.1314305,-14.84,14.84,9.1,0
+410,Character Proofs,Character Proof,2025-10-24T00:05:11+00:00,128.15,0.33,sales_fallback,9,2025-10-30T18:58:35+00:00,298.1512,-170.0,170.0,57.02,6
+410,Character Proofs,Character Proof,2025-11-08T20:04:23+00:00,125.91,0.33,sales_fallback,8,2025-11-09T23:30:59+00:00,1074.318,-948.41,948.41,88.28,1
+410,Character Proofs,Character Proof,2025-11-10T23:02:35+00:00,125.91,0.33,sales_fallback,11,2025-11-11T17:07:47+00:00,872.0525,-746.14,746.14,85.56,0
+410,Character Proofs,Character Proof,2025-12-03T21:17:23+00:00,511.02,0.313,sales_fallback,6,2025-12-03T21:34:59+00:00,157.493,353.53,353.53,224.47,0
+410,Character Proofs,Character Proof,2025-12-03T23:26:23+00:00,241.8,0.33,sales_fallback,9,2025-12-03T23:30:59+00:00,191.0016,50.8,50.8,26.6,0
+410,Character Proofs,Character Proof,2025-12-03T23:59:11+00:00,166.75,0.33,sales_fallback,12,2025-12-03T23:59:35+00:00,191.85,-25.1,25.1,13.08,0
+410,Character Proofs,Character Proof,2025-12-04T00:04:23+00:00,146.13,0.33,sales_fallback,15,2025-12-04T00:37:47+00:00,366.20485,-220.07,220.07,60.1,0
+410,Character Proofs,Character Proof,2025-12-05T15:30:35+00:00,117.49,0.33,sales_fallback,18,2025-12-05T15:30:59+00:00,156.6825,-39.19,39.19,25.01,0
+408,Collector Booster Box,Collector Booster Box,2025-10-11T00:00:00+00:00,400.0,0.36,sales_fallback,1,2025-10-11T00:00:00+00:00,499.99,-99.99,99.99,20.0,0
+408,Collector Booster Box,Collector Booster Box,2025-10-11T00:00:00+00:00,400.0,0.36,sales_fallback,1,2025-10-25T00:00:00+00:00,500.0,-100.0,100.0,20.0,14
+408,Collector Booster Box,Collector Booster Box,2025-10-25T00:00:00+00:00,499.5,0.399,sales_fallback,2,2025-10-25T00:00:00+00:00,475.0,24.5,24.5,5.16,0
+408,Collector Booster Box,Collector Booster Box,2025-10-25T00:00:00+00:00,499.5,0.399,sales_fallback,2,2025-10-26T00:00:00+00:00,499.0,0.5,0.5,0.1,1
+408,Collector Booster Box,Collector Booster Box,2025-10-26T00:00:00+00:00,493.5,0.42,sales_fallback,4,2025-10-28T00:00:00+00:00,699.99,-206.49,206.49,29.5,2
+408,Collector Booster Box,Collector Booster Box,2025-10-28T00:00:00+00:00,493.25,0.433,sales_fallback,5,2025-11-06T00:00:00+00:00,469.95,23.3,23.3,4.96,9
+408,Collector Booster Box,Collector Booster Box,2025-11-06T00:00:00+00:00,493.25,0.32,sales_fallback,6,2025-11-09T00:00:00+00:00,575.0,-81.75,81.75,14.22,3
+408,Collector Booster Box,Collector Booster Box,2025-11-09T00:00:00+00:00,485.74,0.325,sales_fallback,7,2025-11-19T00:00:00+00:00,405.0,80.74,80.74,19.94,10
+408,Collector Booster Box,Collector Booster Box,2025-11-19T00:00:00+00:00,485.99,0.316,sales_fallback,6,2025-11-19T00:00:00+00:00,525.0,-39.01,39.01,7.43,0
+408,Collector Booster Box,Collector Booster Box,2025-11-19T00:00:00+00:00,485.99,0.316,sales_fallback,6,2025-12-07T00:00:00+00:00,472.0,13.99,13.99,2.96,18
+408,Collector Booster Box,Collector Booster Box,2025-12-07T00:00:00+00:00,501.67,0.293,sales_fallback,3,2025-12-07T00:00:00+00:00,498.0,3.67,3.67,0.74,0
+408,Collector Booster Box,Collector Booster Box,2025-12-07T00:00:00+00:00,501.67,0.293,sales_fallback,3,2025-12-12T00:00:00+00:00,575.0,-73.33,73.33,12.75,5
+438,Collector Booster Box (NFT),Dragon Box,2025-10-31T15:49:23+00:00,690.12,0.36,sales_fallback,1,2025-11-04T03:44:35+00:00,948.5034,-258.38,258.38,27.24,3
+438,Collector Booster Box (NFT),Dragon Box,2025-11-04T03:44:35+00:00,701.83,0.387,sales_fallback,2,2025-11-22T13:37:59+00:00,597.212,104.62,104.62,17.52,18
+438,Collector Booster Box (NFT),Dragon Box,2025-11-22T13:37:59+00:00,784.06,0.305,sales_fallback,3,2025-11-22T13:38:47+00:00,515.7455,268.31,268.31,52.02,0
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-10-15T00:00:00+00:00,19.99,0.4,sales_fallback,2,2025-10-15T00:00:00+00:00,12.0,7.99,7.99,66.58,0
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-10-15T00:00:00+00:00,19.99,0.4,sales_fallback,2,2025-10-19T00:00:00+00:00,30.0,-10.01,10.01,33.37,4
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-10-19T00:00:00+00:00,15.99,0.315,sales_fallback,4,2025-10-28T00:00:00+00:00,15.0,0.99,0.99,6.6,9
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-10-28T00:00:00+00:00,18.0,0.273,sales_fallback,3,2025-10-30T00:00:00+00:00,4.5,13.5,13.5,300.0,2
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-10-30T00:00:00+00:00,17.25,0.29,sales_fallback,4,2025-10-31T00:00:00+00:00,14.99,2.26,2.26,15.08,1
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-10-31T00:00:00+00:00,10.88,0.303,sales_fallback,5,2025-11-05T00:00:00+00:00,14.0,-3.12,3.12,22.29,5
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-05T00:00:00+00:00,10.87,0.313,sales_fallback,6,2025-11-05T00:00:00+00:00,14.0,-3.13,3.13,22.36,0
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-05T00:00:00+00:00,10.87,0.313,sales_fallback,6,2025-11-06T00:00:00+00:00,15.0,-4.13,4.13,27.53,1
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-06T00:00:00+00:00,10.62,0.33,sales_fallback,8,2025-11-10T00:00:00+00:00,14.84,-4.22,4.22,28.44,4
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-10T00:00:00+00:00,10.62,0.33,sales_fallback,9,2025-11-10T00:00:00+00:00,13.5,-2.88,2.88,21.33,0
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-10T00:00:00+00:00,10.62,0.33,sales_fallback,9,2025-11-10T00:00:00+00:00,13.5,-2.88,2.88,21.33,0
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-10T00:00:00+00:00,10.62,0.33,sales_fallback,9,2025-11-12T00:00:00+00:00,19.99,-9.37,9.37,46.87,2
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-12T00:00:00+00:00,10.5,0.33,sales_fallback,12,2025-11-12T00:00:00+00:00,19.99,-9.49,9.49,47.47,0
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-12T00:00:00+00:00,10.5,0.33,sales_fallback,12,2025-11-21T00:00:00+00:00,14.0,-3.5,3.5,25.0,9
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-21T00:00:00+00:00,11.38,0.33,sales_fallback,11,2025-11-21T00:00:00+00:00,12.99,-1.61,1.61,12.39,0
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-21T00:00:00+00:00,11.38,0.33,sales_fallback,11,2025-11-22T00:00:00+00:00,16.97,-5.59,5.59,32.94,1
+238,"Emma ""Fixem"" Shockbite",Classic Paper,2025-11-22T00:00:00+00:00,11.12,0.33,sales_fallback,13,2025-11-30T00:00:00+00:00,14.99,-3.87,3.87,25.82,8
+55,Rus Trooper,Classic Foil,2025-11-02T00:00:00+00:00,30.0,0.423,sales_fallback,3,2025-11-02T00:00:00+00:00,24.5,5.5,5.5,22.45,0
+55,Rus Trooper,Classic Foil,2025-11-02T00:00:00+00:00,30.0,0.423,sales_fallback,3,2025-11-02T00:00:00+00:00,24.5,5.5,5.5,22.45,0
+55,Rus Trooper,Classic Foil,2025-11-02T00:00:00+00:00,30.0,0.423,sales_fallback,3,2025-11-13T00:00:00+00:00,19.99,10.01,10.01,50.08,11
+55,Rus Trooper,Classic Foil,2025-11-13T00:00:00+00:00,25.88,0.382,sales_fallback,6,2025-11-13T00:00:00+00:00,19.99,5.89,5.89,29.46,0
+55,Rus Trooper,Classic Foil,2025-11-13T00:00:00+00:00,25.88,0.382,sales_fallback,6,2025-11-13T00:00:00+00:00,19.99,5.89,5.89,29.46,0
+55,Rus Trooper,Classic Paper,2025-11-04T00:00:00+00:00,16.5,0.423,sales_fallback,3,2025-11-04T00:00:00+00:00,18.97,-2.47,2.47,13.02,0
+55,Rus Trooper,Classic Paper,2025-11-04T00:00:00+00:00,16.5,0.423,sales_fallback,3,2025-11-04T00:00:00+00:00,18.97,-2.47,2.47,13.02,0
+181,Iron Citadel,Formless Foil,2025-10-29T00:00:00+00:00,16.5,0.365,sales_fallback,4,2025-10-29T00:00:00+00:00,19.5,-3.0,3.0,15.38,0
+181,Iron Citadel,Formless Foil,2025-10-29T00:00:00+00:00,16.5,0.365,sales_fallback,4,2025-11-05T00:00:00+00:00,17.25,-0.75,0.75,4.35,7
+180,Indra's Citadel,Classic Paper,2025-10-22T00:00:00+00:00,3.75,0.36,sales_fallback,1,2025-10-22T00:00:00+00:00,8.99,-5.24,5.24,58.29,0
+180,Indra's Citadel,Classic Paper,2025-10-22T00:00:00+00:00,3.75,0.36,sales_fallback,1,2025-10-22T00:00:00+00:00,8.99,-5.24,5.24,58.29,0
+180,Indra's Citadel,Classic Paper,2025-10-22T00:00:00+00:00,3.75,0.36,sales_fallback,1,2025-11-28T00:00:00+00:00,2.99,0.76,0.76,25.42,37
+29,John Breakbang,Classic Paper,2025-10-19T00:00:00+00:00,16.5,0.4,sales_fallback,2,2025-10-19T00:00:00+00:00,19.99,-3.49,3.49,17.46,0
+29,John Breakbang,Classic Paper,2025-10-19T00:00:00+00:00,16.5,0.4,sales_fallback,2,2025-10-19T00:00:00+00:00,19.99,-3.49,3.49,17.46,0
+29,John Breakbang,Classic Paper,2025-10-19T00:00:00+00:00,16.5,0.4,sales_fallback,2,2025-11-08T00:00:00+00:00,22.5,-6.0,6.0,26.67,20
+29,John Breakbang,Classic Paper,2025-11-08T00:00:00+00:00,19.99,0.423,sales_fallback,3,2025-11-08T00:00:00+00:00,22.5,-2.51,2.51,11.16,0
+29,John Breakbang,Classic Paper,2025-11-08T00:00:00+00:00,19.99,0.423,sales_fallback,3,2025-11-08T00:00:00+00:00,22.5,-2.51,2.51,11.16,0
+29,John Breakbang,Classic Paper,2025-11-08T00:00:00+00:00,19.99,0.423,sales_fallback,3,2025-11-09T00:00:00+00:00,25.0,-5.01,5.01,20.04,1
+29,John Breakbang,Classic Paper,2025-11-09T00:00:00+00:00,20.62,0.416,sales_fallback,6,2025-11-09T00:00:00+00:00,25.0,-4.38,4.38,17.52,0
+29,John Breakbang,Classic Paper,2025-11-09T00:00:00+00:00,20.62,0.416,sales_fallback,6,2025-11-09T00:00:00+00:00,25.0,-4.38,4.38,17.52,0
+51,Raziya Balakai,Classic Foil,2025-10-19T00:00:00+00:00,28.0,0.423,sales_fallback,3,2025-10-19T00:00:00+00:00,45.0,-17.0,17.0,37.78,0
+51,Raziya Balakai,Classic Foil,2025-10-19T00:00:00+00:00,28.0,0.423,sales_fallback,3,2025-10-19T00:00:00+00:00,45.0,-17.0,17.0,37.78,0
+51,Raziya Balakai,Classic Foil,2025-10-19T00:00:00+00:00,28.0,0.423,sales_fallback,3,2025-10-28T00:00:00+00:00,35.0,-7.0,7.0,20.0,9
+51,Raziya Balakai,Classic Foil,2025-10-28T00:00:00+00:00,32.25,0.34,sales_fallback,6,2025-12-11T00:00:00+00:00,30.0,2.25,2.25,7.5,44
+51,Raziya Balakai,Classic Paper,2025-10-18T00:00:00+00:00,16.0,0.36,sales_fallback,1,2025-10-18T00:00:00+00:00,19.99,-3.99,3.99,19.96,0
+51,Raziya Balakai,Classic Paper,2025-10-18T00:00:00+00:00,16.0,0.36,sales_fallback,1,2025-10-18T00:00:00+00:00,19.99,-3.99,3.99,19.96,0
+51,Raziya Balakai,Classic Paper,2025-10-18T00:00:00+00:00,16.0,0.36,sales_fallback,1,2025-10-23T00:00:00+00:00,25.0,-9.0,9.0,36.0,5
+51,Raziya Balakai,Classic Paper,2025-10-23T00:00:00+00:00,18.99,0.353,sales_fallback,4,2025-10-23T00:00:00+00:00,25.0,-6.01,6.01,24.04,0
+51,Raziya Balakai,Classic Paper,2025-10-23T00:00:00+00:00,18.99,0.353,sales_fallback,4,2025-10-23T00:00:00+00:00,25.0,-6.01,6.01,24.04,0
+51,Raziya Balakai,Classic Paper,2025-10-23T00:00:00+00:00,18.99,0.353,sales_fallback,4,2025-11-04T00:00:00+00:00,3.0,15.99,15.99,533.0,12
+51,Raziya Balakai,Classic Paper,2025-11-04T00:00:00+00:00,21.24,0.376,sales_fallback,6,2025-11-04T00:00:00+00:00,3.0,18.24,18.24,608.0,0
+51,Raziya Balakai,Classic Paper,2025-11-04T00:00:00+00:00,21.24,0.376,sales_fallback,6,2025-11-27T00:00:00+00:00,15.0,6.24,6.24,41.6,23
+51,Raziya Balakai,Classic Paper,2025-11-27T00:00:00+00:00,3.0,0.4,sales_fallback,2,2025-12-11T00:00:00+00:00,23.0,-20.0,20.0,86.96,14
+150,Cairnvox Soulforger,OCM Serialized,2025-10-18T00:00:00+00:00,78.33,0.398,sales_fallback,3,2025-10-27T00:00:00+00:00,135.0,-56.67,56.67,41.98,9
+150,Cairnvox Soulforger,OCM Serialized,2025-10-27T00:00:00+00:00,80.0,0.423,sales_fallback,3,2025-10-27T00:00:00+00:00,135.0,-55.0,55.0,40.74,0
+150,Cairnvox Soulforger,OCM Serialized,2025-10-27T00:00:00+00:00,80.0,0.423,sales_fallback,3,2025-10-31T00:00:00+00:00,50.0,30.0,30.0,60.0,4
+150,Cairnvox Soulforger,OCM Serialized,2025-10-31T00:00:00+00:00,93.75,0.327,sales_fallback,5,2025-12-15T00:00:00+00:00,126.96,-33.21,33.21,26.16,45
+61,The Great Usurper,Classic Foil,2025-10-19T00:00:00+00:00,10.5,0.4,sales_fallback,2,2025-10-19T00:00:00+00:00,45.0,-34.5,34.5,76.67,0
+61,The Great Usurper,Classic Foil,2025-10-19T00:00:00+00:00,10.5,0.4,sales_fallback,2,2025-10-19T00:00:00+00:00,45.0,-34.5,34.5,76.67,0
+61,The Great Usurper,Classic Foil,2025-10-19T00:00:00+00:00,10.5,0.4,sales_fallback,2,2025-11-04T00:00:00+00:00,35.0,-24.5,24.5,70.0,16
+61,The Great Usurper,Classic Foil,2025-11-04T00:00:00+00:00,45.0,0.423,sales_fallback,3,2025-11-04T00:00:00+00:00,35.0,10.0,10.0,28.57,0
+61,The Great Usurper,Classic Foil,2025-11-04T00:00:00+00:00,45.0,0.423,sales_fallback,3,2025-11-04T00:00:00+00:00,35.0,10.0,10.0,28.57,0
+61,The Great Usurper,Classic Foil,2025-11-04T00:00:00+00:00,45.0,0.423,sales_fallback,3,2025-11-27T00:00:00+00:00,16.0,29.0,29.0,181.25,23
+46,Purpuria the Mystic Flame,Classic Paper,2025-10-22T00:00:00+00:00,9.5,0.4,sales_fallback,2,2025-10-31T00:00:00+00:00,18.75,-9.25,9.25,49.33,9
+46,Purpuria the Mystic Flame,Classic Paper,2025-10-31T00:00:00+00:00,21.33,0.273,sales_fallback,3,2025-10-31T00:00:00+00:00,18.75,2.58,2.58,13.76,0
+46,Purpuria the Mystic Flame,Classic Paper,2025-10-31T00:00:00+00:00,21.33,0.273,sales_fallback,3,2025-11-05T00:00:00+00:00,25.0,-3.67,3.67,14.68,5
+46,Purpuria the Mystic Flame,Classic Paper,2025-11-05T00:00:00+00:00,14.12,0.303,sales_fallback,5,2025-11-05T00:00:00+00:00,25.0,-10.88,10.88,43.52,0
+46,Purpuria the Mystic Flame,Classic Paper,2025-11-05T00:00:00+00:00,14.12,0.303,sales_fallback,5,2025-12-16T00:00:00+00:00,18.75,-4.63,4.63,24.69,41
+3,Aetherion of Boundless,Classic Foil,2025-10-09T00:00:00+00:00,22.25,0.344,sales_fallback,4,2025-10-09T00:00:00+00:00,13.45,8.8,8.8,65.43,0
+3,Aetherion of Boundless,Classic Foil,2025-10-09T00:00:00+00:00,22.25,0.344,sales_fallback,4,2025-10-19T00:00:00+00:00,19.99,2.26,2.26,11.31,10
+3,Aetherion of Boundless,Classic Foil,2025-10-19T00:00:00+00:00,16.48,0.333,sales_fallback,6,2025-10-19T00:00:00+00:00,19.99,-3.51,3.51,17.56,0
+3,Aetherion of Boundless,Classic Foil,2025-10-19T00:00:00+00:00,16.48,0.333,sales_fallback,6,2025-12-12T00:00:00+00:00,28.5,-12.02,12.02,42.18,54
+3,Aetherion of Boundless,Classic Paper,2025-10-09T00:00:00+00:00,25.0,0.36,sales_fallback,1,2025-10-13T00:00:00+00:00,17.95,7.05,7.05,39.28,4
+3,Aetherion of Boundless,Classic Paper,2025-10-13T00:00:00+00:00,19.23,0.269,sales_fallback,2,2025-10-19T00:00:00+00:00,19.99,-0.76,0.76,3.8,6
+3,Aetherion of Boundless,Classic Paper,2025-10-19T00:00:00+00:00,18.8,0.293,sales_fallback,3,2025-10-23T00:00:00+00:00,19.99,-1.19,1.19,5.95,4
+3,Aetherion of Boundless,Classic Paper,2025-10-23T00:00:00+00:00,19.1,0.309,sales_fallback,4,2025-10-23T00:00:00+00:00,19.99,-0.89,0.89,4.45,0
+3,Aetherion of Boundless,Classic Paper,2025-10-23T00:00:00+00:00,19.1,0.309,sales_fallback,4,2025-10-23T00:00:00+00:00,19.99,-0.89,0.89,4.45,0
+86,Dark Magic Hydra,Classic Foil,2025-10-13T00:00:00+00:00,9.0,0.4,sales_fallback,2,2025-10-13T00:00:00+00:00,17.99,-8.99,8.99,49.97,0
+86,Dark Magic Hydra,Classic Foil,2025-10-13T00:00:00+00:00,9.0,0.4,sales_fallback,2,2025-10-20T00:00:00+00:00,15.0,-6.0,6.0,40.0,7
+86,Dark Magic Hydra,Classic Foil,2025-10-20T00:00:00+00:00,13.49,0.305,sales_fallback,4,2025-10-20T00:00:00+00:00,10.0,3.49,3.49,34.9,0
+86,Dark Magic Hydra,Classic Foil,2025-10-20T00:00:00+00:00,13.49,0.305,sales_fallback,4,2025-10-20T00:00:00+00:00,10.0,3.49,3.49,34.9,0
+86,Dark Magic Hydra,Classic Foil,2025-10-20T00:00:00+00:00,13.49,0.305,sales_fallback,4,2025-10-20T00:00:00+00:00,10.0,3.49,3.49,34.9,0
+86,Dark Magic Hydra,Classic Foil,2025-10-20T00:00:00+00:00,13.49,0.305,sales_fallback,4,2025-10-28T00:00:00+00:00,10.5,2.99,2.99,28.48,8
+86,Dark Magic Hydra,Classic Foil,2025-10-28T00:00:00+00:00,9.5,0.345,sales_fallback,8,2025-10-28T00:00:00+00:00,10.5,-1.0,1.0,9.52,0
+261,Keeper of Beauty,Formless Foil,2025-10-20T00:00:00+00:00,9.0,0.4,sales_fallback,2,2025-10-29T00:00:00+00:00,19.95,-10.95,10.95,54.89,9
+261,Keeper of Beauty,Formless Foil,2025-10-29T00:00:00+00:00,11.5,0.36,sales_fallback,1,2025-10-29T00:00:00+00:00,19.95,-8.45,8.45,42.36,0
+261,Keeper of Beauty,Formless Foil,2025-10-29T00:00:00+00:00,11.5,0.36,sales_fallback,1,2025-10-30T00:00:00+00:00,22.5,-11.0,11.0,48.89,1
+261,Keeper of Beauty,Formless Foil,2025-10-30T00:00:00+00:00,17.13,0.296,sales_fallback,3,2025-10-30T00:00:00+00:00,22.5,-5.37,5.37,23.87,0
+261,Keeper of Beauty,Formless Foil,2025-10-30T00:00:00+00:00,17.13,0.296,sales_fallback,3,2025-11-07T00:00:00+00:00,5.0,12.13,12.13,242.6,8
+261,Keeper of Beauty,Formless Foil,2025-11-07T00:00:00+00:00,18.48,0.319,sales_fallback,5,2025-11-07T00:00:00+00:00,5.0,13.48,13.48,269.6,0
+87,Deathmarcher Knight,Classic Paper,2025-11-13T00:00:00+00:00,4.17,0.315,sales_fallback,3,2025-11-13T00:00:00+00:00,6.98,-2.81,2.81,40.26,0
+87,Deathmarcher Knight,Classic Paper,2025-11-13T00:00:00+00:00,4.17,0.315,sales_fallback,3,2025-11-13T00:00:00+00:00,6.98,-2.81,2.81,40.26,0
+413,Wonders of the First Booster Box,Collector Booster Box,2025-10-10T00:00:00+00:00,42.25,0.313,sales_fallback,6,2025-11-11T00:00:00+00:00,68.0,-25.75,25.75,37.87,32
+413,Wonders of the First Booster Box,Collector Booster Box,2025-11-18T00:00:00+00:00,68.0,0.36,sales_fallback,1,2025-11-19T00:00:00+00:00,1425.0,-1357.0,1357.0,95.23,1
+413,Wonders of the First Booster Box,Collector Booster Box,2025-11-19T00:00:00+00:00,618.5,0.25,sales_fallback,2,2025-11-24T00:00:00+00:00,22.5,596.0,596.0,2648.89,5
+413,Wonders of the First Booster Box,Collector Booster Box,2025-11-24T00:00:00+00:00,887.33,0.273,sales_fallback,3,2025-12-07T00:00:00+00:00,498.0,389.33,389.33,78.18,13
+413,Wonders of the First Booster Box,Collector Booster Box,2025-12-07T00:00:00+00:00,671.12,0.29,sales_fallback,4,2025-12-07T00:00:00+00:00,49.0,622.12,622.12,1269.63,0
+413,Wonders of the First Booster Box,Collector Booster Box,2025-12-07T00:00:00+00:00,671.12,0.29,sales_fallback,4,2025-12-07T00:00:00+00:00,472.0,199.12,199.12,42.19,0
+413,Wonders of the First Booster Box,Collector Booster Box,2025-12-07T00:00:00+00:00,671.12,0.29,sales_fallback,4,2025-12-09T00:00:00+00:00,34.99,636.13,636.13,1818.03,2
+413,Wonders of the First Booster Box,Collector Booster Box,2025-12-09T00:00:00+00:00,152.88,0.322,sales_fallback,7,2025-12-12T00:00:00+00:00,575.0,-422.12,422.12,73.41,3
+81,Cindermaw the Scalder,Classic Foil,2025-10-19T00:00:00+00:00,19.99,0.4,sales_fallback,2,2025-10-19T00:00:00+00:00,19.99,0.0,0.0,0.0,0
+81,Cindermaw the Scalder,Classic Foil,2025-10-19T00:00:00+00:00,19.99,0.4,sales_fallback,2,2025-11-03T00:00:00+00:00,11.25,8.74,8.74,77.69,15
+81,Cindermaw the Scalder,Classic Foil,2025-11-03T00:00:00+00:00,19.99,0.44,sales_fallback,4,2025-11-03T00:00:00+00:00,11.25,8.74,8.74,77.69,0
+81,Cindermaw the Scalder,Classic Foil,2025-11-03T00:00:00+00:00,19.99,0.44,sales_fallback,4,2025-12-10T00:00:00+00:00,8.25,11.74,11.74,142.3,37
+60,The Great Core of Alderok,Classic Paper,2025-10-15T00:00:00+00:00,19.99,0.4,sales_fallback,2,2025-10-15T00:00:00+00:00,6.75,13.24,13.24,196.15,0
+60,The Great Core of Alderok,Classic Paper,2025-10-15T00:00:00+00:00,19.99,0.4,sales_fallback,2,2025-11-13T00:00:00+00:00,19.98,0.01,0.01,0.05,29
+60,The Great Core of Alderok,Classic Paper,2025-11-13T00:00:00+00:00,6.75,0.4,sales_fallback,2,2025-11-13T00:00:00+00:00,19.98,-13.23,13.23,66.22,0
+60,The Great Core of Alderok,Classic Paper,2025-11-13T00:00:00+00:00,6.75,0.4,sales_fallback,2,2025-12-07T00:00:00+00:00,12.99,-6.24,6.24,48.04,24
+60,The Great Core of Alderok,Classic Paper,2025-12-07T00:00:00+00:00,19.98,0.4,sales_fallback,2,2025-12-09T00:00:00+00:00,14.99,4.99,4.99,33.29,2
+415,Existence Sealed Pack,Silver Pack,2025-10-25T00:00:00+00:00,70.0,0.36,sales_fallback,1,2025-10-26T00:00:00+00:00,60.0,10.0,10.0,16.67,1
+415,Existence Sealed Pack,Silver Pack,2025-10-26T00:00:00+00:00,99.97,0.269,sales_fallback,2,2025-10-26T00:00:00+00:00,41.75,58.22,58.22,139.45,0
+415,Existence Sealed Pack,Silver Pack,2025-10-26T00:00:00+00:00,99.97,0.269,sales_fallback,2,2025-10-26T00:00:00+00:00,42.5,57.47,57.47,135.22,0
+415,Existence Sealed Pack,Silver Pack,2025-10-26T00:00:00+00:00,99.97,0.269,sales_fallback,2,2025-11-08T00:00:00+00:00,59.99,39.98,39.98,66.64,13
+415,Existence Sealed Pack,Silver Pack,2025-11-08T00:00:00+00:00,53.56,0.303,sales_fallback,5,2025-11-19T00:00:00+00:00,66.5,-12.94,12.94,19.46,11
+415,Existence Sealed Pack,Silver Pack,2025-11-19T00:00:00+00:00,51.06,0.303,sales_fallback,5,2025-11-30T00:00:00+00:00,99.0,-47.94,47.94,48.42,11
+415,Existence Sealed Pack,Silver Pack,2025-11-30T00:00:00+00:00,63.25,0.359,sales_fallback,2,2025-12-12T00:00:00+00:00,51.0,12.25,12.25,24.02,12
+385,The Betrayer of Ironskin Clan,OCM Serialized,2025-10-27T00:00:00+00:00,110.0,0.4,sales_fallback,2,2025-10-27T00:00:00+00:00,82.5,27.5,27.5,33.33,0
+385,The Betrayer of Ironskin Clan,OCM Serialized,2025-10-27T00:00:00+00:00,110.0,0.4,sales_fallback,2,2025-10-28T00:00:00+00:00,82.5,27.5,27.5,33.33,1
+385,The Betrayer of Ironskin Clan,OCM Serialized,2025-10-28T00:00:00+00:00,96.25,0.332,sales_fallback,4,2025-10-28T00:00:00+00:00,82.5,13.75,13.75,16.67,0
+45,Princess Aurora Waveheart,Classic Paper,2025-10-08T00:00:00+00:00,7.5,0.36,sales_fallback,1,2025-10-08T00:00:00+00:00,20.0,-12.5,12.5,62.5,0
+45,Princess Aurora Waveheart,Classic Paper,2025-10-08T00:00:00+00:00,7.5,0.36,sales_fallback,1,2025-10-22T00:00:00+00:00,20.0,-12.5,12.5,62.5,14
+45,Princess Aurora Waveheart,Classic Paper,2025-10-22T00:00:00+00:00,15.83,0.273,sales_fallback,3,2025-10-22T00:00:00+00:00,20.0,-4.17,4.17,20.85,0
+45,Princess Aurora Waveheart,Classic Paper,2025-10-22T00:00:00+00:00,15.83,0.273,sales_fallback,3,2025-11-03T00:00:00+00:00,13.5,2.33,2.33,17.26,12
+45,Princess Aurora Waveheart,Classic Paper,2025-11-03T00:00:00+00:00,20.0,0.44,sales_fallback,4,2025-11-03T00:00:00+00:00,13.5,6.5,6.5,48.15,0
+45,Princess Aurora Waveheart,Classic Paper,2025-11-03T00:00:00+00:00,20.0,0.44,sales_fallback,4,2025-11-13T00:00:00+00:00,12.99,7.01,7.01,53.96,10
+45,Princess Aurora Waveheart,Classic Paper,2025-11-13T00:00:00+00:00,16.75,0.295,sales_fallback,4,2025-11-13T00:00:00+00:00,12.99,3.76,3.76,28.95,0
+417,Wonders of the First Starter Pack,Play Booster Pack,2025-10-19T00:00:00+00:00,38.0,0.279,sales_fallback,2,2025-11-03T00:00:00+00:00,45.0,-7.0,7.0,15.56,15
+417,Wonders of the First Starter Pack,Play Booster Pack,2025-11-03T00:00:00+00:00,30.0,0.36,sales_fallback,1,2025-11-08T00:00:00+00:00,17.0,13.0,13.0,76.47,5
+417,Wonders of the First Starter Pack,Play Booster Pack,2025-11-08T00:00:00+00:00,37.5,0.25,sales_fallback,2,2025-11-30T00:00:00+00:00,60.0,-22.5,22.5,37.5,22
+417,Wonders of the First Starter Pack,Play Booster Pack,2025-11-30T00:00:00+00:00,31.0,0.25,sales_fallback,2,2025-12-07T00:00:00+00:00,18.0,13.0,13.0,72.22,7
+22,Eternitum the Space Lich,Classic Paper,2025-10-16T00:00:00+00:00,12.5,0.4,sales_fallback,2,2025-10-16T00:00:00+00:00,22.0,-9.5,9.5,43.18,0
+22,Eternitum the Space Lich,Classic Paper,2025-10-16T00:00:00+00:00,12.5,0.4,sales_fallback,2,2025-10-16T00:00:00+00:00,23.99,-11.49,11.49,47.89,0
+22,Eternitum the Space Lich,Classic Paper,2025-10-16T00:00:00+00:00,12.5,0.4,sales_fallback,2,2025-10-16T00:00:00+00:00,22.0,-9.5,9.5,43.18,0
+22,Eternitum the Space Lich,Classic Paper,2025-10-16T00:00:00+00:00,12.5,0.4,sales_fallback,2,2025-10-16T00:00:00+00:00,22.0,-9.5,9.5,43.18,0
+22,Eternitum the Space Lich,Classic Paper,2025-10-16T00:00:00+00:00,12.5,0.4,sales_fallback,2,2025-10-16T00:00:00+00:00,23.99,-11.49,11.49,47.89,0
+22,Eternitum the Space Lich,Classic Paper,2025-10-16T00:00:00+00:00,12.5,0.4,sales_fallback,2,2025-11-04T00:00:00+00:00,34.95,-22.45,22.45,64.23,19
+22,Eternitum the Space Lich,Classic Paper,2025-11-04T00:00:00+00:00,22.5,0.429,sales_fallback,6,2025-11-04T00:00:00+00:00,34.95,-12.45,12.45,35.62,0
+22,Eternitum the Space Lich,Classic Paper,2025-11-04T00:00:00+00:00,22.5,0.429,sales_fallback,6,2025-11-04T00:00:00+00:00,34.95,-12.45,12.45,35.62,0
+22,Eternitum the Space Lich,Classic Paper,2025-11-04T00:00:00+00:00,22.5,0.429,sales_fallback,6,2025-12-08T00:00:00+00:00,25.0,-2.5,2.5,10.0,34
+19,Drogothar the Destroyer,Classic Paper,2025-10-10T00:00:00+00:00,39.99,0.4,sales_fallback,2,2025-10-10T00:00:00+00:00,39.97,0.02,0.02,0.05,0
+19,Drogothar the Destroyer,Classic Paper,2025-10-10T00:00:00+00:00,39.99,0.4,sales_fallback,2,2025-10-28T00:00:00+00:00,20.5,19.49,19.49,95.07,18
+19,Drogothar the Destroyer,Classic Paper,2025-10-28T00:00:00+00:00,39.97,0.4,sales_fallback,2,2025-10-28T00:00:00+00:00,20.5,19.47,19.47,94.98,0
+19,Drogothar the Destroyer,Classic Paper,2025-10-28T00:00:00+00:00,39.97,0.4,sales_fallback,2,2025-12-09T00:00:00+00:00,17.79,22.18,22.18,124.68,42
+116,Orionis Skydreamer,Formless Foil,2025-11-03T00:00:00+00:00,37.5,0.423,sales_fallback,3,2025-11-03T00:00:00+00:00,26.25,11.25,11.25,42.86,0
+116,Orionis Skydreamer,Formless Foil,2025-11-03T00:00:00+00:00,37.5,0.423,sales_fallback,3,2025-11-03T00:00:00+00:00,26.25,11.25,11.25,42.86,0
+116,Orionis Skydreamer,Formless Foil,2025-11-03T00:00:00+00:00,37.5,0.423,sales_fallback,3,2025-11-03T00:00:00+00:00,55.5,-18.0,18.0,32.43,0
+116,Orionis Skydreamer,Formless Foil,2025-11-03T00:00:00+00:00,37.5,0.423,sales_fallback,3,2025-12-12T00:00:00+00:00,50.0,-12.5,12.5,25.0,39
+395,Vulcan Vale,Formless Foil,2025-10-29T00:00:00+00:00,4.5,0.4,sales_fallback,2,2025-10-29T00:00:00+00:00,5.25,-0.75,0.75,14.29,0
+395,Vulcan Vale,Formless Foil,2025-10-29T00:00:00+00:00,4.5,0.4,sales_fallback,2,2025-11-30T00:00:00+00:00,4.75,-0.25,0.25,5.26,32
+228,Arcane Grasp,Formless Foil,2025-10-29T00:00:00+00:00,9.0,0.4,sales_fallback,2,2025-10-29T00:00:00+00:00,10.5,-1.5,1.5,14.29,0
+228,Arcane Grasp,Formless Foil,2025-10-29T00:00:00+00:00,9.0,0.4,sales_fallback,2,2025-10-30T00:00:00+00:00,10.0,-1.0,1.0,10.0,1
+228,Arcane Grasp,Formless Foil,2025-10-30T00:00:00+00:00,9.75,0.377,sales_fallback,4,2025-10-30T00:00:00+00:00,10.0,-0.25,0.25,2.5,0
+228,Arcane Grasp,Formless Foil,2025-10-30T00:00:00+00:00,9.75,0.377,sales_fallback,4,2025-11-02T00:00:00+00:00,3.85,5.9,5.9,153.25,3
+228,Arcane Grasp,Formless Foil,2025-11-02T00:00:00+00:00,9.5,0.401,sales_fallback,6,2025-11-02T00:00:00+00:00,3.85,5.65,5.65,146.75,0
+11,Cedarshade Ruins,Classic Paper,2025-11-13T00:00:00+00:00,17.49,0.4,sales_fallback,2,2025-11-13T00:00:00+00:00,12.99,4.5,4.5,34.64,0
+11,Cedarshade Ruins,Classic Paper,2025-11-13T00:00:00+00:00,17.49,0.4,sales_fallback,2,2025-12-15T00:00:00+00:00,19.99,-2.5,2.5,12.51,32
+338,"Floki, Born in Fire",Formless Foil,2025-10-29T00:00:00+00:00,5.68,0.295,sales_fallback,3,2025-10-29T00:00:00+00:00,4.5,1.18,1.18,26.22,0
+302,Thought Tempest,Formless Foil,2025-10-06T00:00:00+00:00,9.83,0.329,sales_fallback,3,2025-10-06T00:00:00+00:00,14.99,-5.16,5.16,34.42,0
+302,Thought Tempest,Formless Foil,2025-10-06T00:00:00+00:00,9.83,0.329,sales_fallback,3,2025-10-06T00:00:00+00:00,9.99,-0.16,0.16,1.6,0
+302,Thought Tempest,Formless Foil,2025-10-06T00:00:00+00:00,9.83,0.329,sales_fallback,3,2025-10-06T00:00:00+00:00,9.99,-0.16,0.16,1.6,0
+302,Thought Tempest,Formless Foil,2025-10-06T00:00:00+00:00,9.83,0.329,sales_fallback,3,2025-10-18T00:00:00+00:00,15.0,-5.17,5.17,34.47,12
+302,Thought Tempest,Formless Foil,2025-10-18T00:00:00+00:00,9.5,0.338,sales_fallback,6,2025-10-18T00:00:00+00:00,15.0,-5.5,5.5,36.67,0
+302,Thought Tempest,Formless Foil,2025-10-18T00:00:00+00:00,9.5,0.338,sales_fallback,6,2025-10-18T00:00:00+00:00,15.0,-5.5,5.5,36.67,0
+245,Deep Pincer,Formless Foil,2025-10-29T00:00:00+00:00,9.0,0.353,sales_fallback,4,2025-10-29T00:00:00+00:00,7.5,1.5,1.5,20.0,0
+245,Deep Pincer,Formless Foil,2025-10-29T00:00:00+00:00,9.0,0.353,sales_fallback,4,2025-11-08T00:00:00+00:00,14.99,-5.99,5.99,39.96,10
+245,Deep Pincer,Formless Foil,2025-11-08T00:00:00+00:00,7.75,0.355,sales_fallback,6,2025-11-08T00:00:00+00:00,14.99,-7.24,7.24,48.3,0
+67,Utterly Complex Compound Bow,Classic Foil,2025-10-08T00:00:00+00:00,45.0,0.36,sales_fallback,1,2025-10-08T00:00:00+00:00,19.99,25.01,25.01,125.11,0
+67,Utterly Complex Compound Bow,Classic Foil,2025-10-08T00:00:00+00:00,45.0,0.36,sales_fallback,1,2025-10-08T00:00:00+00:00,19.99,25.01,25.01,125.11,0
+67,Utterly Complex Compound Bow,Classic Foil,2025-10-08T00:00:00+00:00,45.0,0.36,sales_fallback,1,2025-12-12T00:00:00+00:00,32.5,12.5,12.5,38.46,65
+14,Corruption Warp,Classic Foil,2025-11-06T00:00:00+00:00,38.0,0.4,sales_fallback,2,2025-11-06T00:00:00+00:00,25.0,13.0,13.0,52.0,0
+14,Corruption Warp,Classic Foil,2025-11-06T00:00:00+00:00,38.0,0.4,sales_fallback,2,2025-11-13T00:00:00+00:00,19.99,18.01,18.01,90.1,7
+14,Corruption Warp,Classic Foil,2025-11-13T00:00:00+00:00,31.5,0.319,sales_fallback,4,2025-11-13T00:00:00+00:00,19.99,11.51,11.51,57.58,0
+42,Phoenix Quill,Classic Paper,2025-10-07T00:00:00+00:00,224.99,0.4,sales_fallback,2,2025-10-07T00:00:00+00:00,299.99,-75.0,75.0,25.0,0
+42,Phoenix Quill,Classic Paper,2025-10-07T00:00:00+00:00,224.99,0.4,sales_fallback,2,2025-10-09T00:00:00+00:00,250.0,-25.01,25.01,10.0,2
+42,Phoenix Quill,Classic Paper,2025-10-09T00:00:00+00:00,262.49,0.332,sales_fallback,4,2025-10-09T00:00:00+00:00,250.0,12.49,12.49,5.0,0
+42,Phoenix Quill,Classic Paper,2025-10-09T00:00:00+00:00,262.49,0.332,sales_fallback,4,2025-10-16T00:00:00+00:00,300.0,-37.51,37.51,12.5,7
+42,Phoenix Quill,Classic Paper,2025-10-16T00:00:00+00:00,237.5,0.355,sales_fallback,6,2025-10-16T00:00:00+00:00,300.0,-62.5,62.5,20.83,0
+42,Phoenix Quill,Classic Paper,2025-10-16T00:00:00+00:00,237.5,0.355,sales_fallback,6,2025-12-08T00:00:00+00:00,300.0,-62.5,62.5,20.83,53
+243,Darkiron City,Formless Foil,2025-10-20T00:00:00+00:00,9.0,0.4,sales_fallback,2,2025-10-25T00:00:00+00:00,19.99,-10.99,10.99,54.98,5
+243,Darkiron City,Formless Foil,2025-10-25T00:00:00+00:00,11.5,0.36,sales_fallback,1,2025-10-25T00:00:00+00:00,12.0,-0.5,0.5,4.17,0
+243,Darkiron City,Formless Foil,2025-10-25T00:00:00+00:00,11.5,0.36,sales_fallback,1,2025-10-25T00:00:00+00:00,19.99,-8.49,8.49,42.47,0
+243,Darkiron City,Formless Foil,2025-10-25T00:00:00+00:00,11.5,0.36,sales_fallback,1,2025-10-25T00:00:00+00:00,12.0,-0.5,0.5,4.17,0
+243,Darkiron City,Formless Foil,2025-10-25T00:00:00+00:00,11.5,0.36,sales_fallback,1,2025-11-02T00:00:00+00:00,7.25,4.25,4.25,58.62,8
+243,Darkiron City,Formless Foil,2025-11-02T00:00:00+00:00,13.87,0.326,sales_fallback,5,2025-11-02T00:00:00+00:00,7.25,6.62,6.62,91.31,0
+171,Galactic Sovereign Throne,Formless Foil,2025-11-05T00:00:00+00:00,15.0,0.4,sales_fallback,2,2025-11-05T00:00:00+00:00,22.5,-7.5,7.5,33.33,0
+171,Galactic Sovereign Throne,Formless Foil,2025-11-05T00:00:00+00:00,15.0,0.4,sales_fallback,2,2025-11-05T00:00:00+00:00,22.5,-7.5,7.5,33.33,0
+63,The Mind,Classic Paper,2025-10-13T00:00:00+00:00,18.0,0.4,sales_fallback,2,2025-10-13T00:00:00+00:00,5.0,13.0,13.0,260.0,0
+63,The Mind,Classic Paper,2025-10-13T00:00:00+00:00,18.0,0.4,sales_fallback,2,2025-10-31T00:00:00+00:00,13.5,4.5,4.5,33.33,18
+63,The Mind,Classic Paper,2025-10-31T00:00:00+00:00,11.5,0.29,sales_fallback,4,2025-10-31T00:00:00+00:00,13.5,-2.0,2.0,14.81,0
+63,The Mind,Classic Paper,2025-10-31T00:00:00+00:00,11.5,0.29,sales_fallback,4,2025-11-05T00:00:00+00:00,25.0,-13.5,13.5,54.0,5
+63,The Mind,Classic Paper,2025-11-05T00:00:00+00:00,9.25,0.313,sales_fallback,6,2025-11-05T00:00:00+00:00,25.0,-15.75,15.75,63.0,0
+63,The Mind,Classic Paper,2025-11-05T00:00:00+00:00,9.25,0.313,sales_fallback,6,2025-12-05T00:00:00+00:00,17.95,-8.7,8.7,48.47,30
+63,The Mind,Classic Paper,2025-12-05T00:00:00+00:00,25.0,0.4,sales_fallback,2,2025-12-08T00:00:00+00:00,19.95,5.05,5.05,25.31,3
+155,Cooking Pot of the Eternal Fire,Classic Paper,2025-11-07T00:00:00+00:00,2.62,0.388,sales_fallback,6,2025-11-07T00:00:00+00:00,0.99,1.63,1.63,164.65,0
+175,Gleaming Power Cell,Formless Foil,2025-10-13T00:00:00+00:00,15.0,0.36,sales_fallback,1,2025-10-13T00:00:00+00:00,18.0,-3.0,3.0,16.67,0
+175,Gleaming Power Cell,Formless Foil,2025-10-13T00:00:00+00:00,15.0,0.36,sales_fallback,1,2025-10-16T00:00:00+00:00,19.99,-4.99,4.99,24.96,3
+175,Gleaming Power Cell,Formless Foil,2025-10-16T00:00:00+00:00,17.0,0.348,sales_fallback,3,2025-10-16T00:00:00+00:00,19.99,-2.99,2.99,14.96,0
+32,Lo Lynn,Classic Paper,2025-10-22T00:00:00+00:00,12.0,0.4,sales_fallback,2,2025-10-22T00:00:00+00:00,15.3,-3.3,3.3,21.57,0
+32,Lo Lynn,Classic Paper,2025-10-22T00:00:00+00:00,12.0,0.4,sales_fallback,2,2025-10-27T00:00:00+00:00,5.75,6.25,6.25,108.7,5
+32,Lo Lynn,Classic Paper,2025-10-27T00:00:00+00:00,13.65,0.346,sales_fallback,4,2025-10-27T00:00:00+00:00,5.75,7.9,7.9,137.39,0
+32,Lo Lynn,Classic Paper,2025-10-27T00:00:00+00:00,13.65,0.346,sales_fallback,4,2025-10-28T00:00:00+00:00,4.25,9.4,9.4,221.18,1
+32,Lo Lynn,Classic Paper,2025-10-28T00:00:00+00:00,8.88,0.313,sales_fallback,6,2025-10-28T00:00:00+00:00,4.25,4.63,4.63,108.94,0
+32,Lo Lynn,Classic Paper,2025-10-28T00:00:00+00:00,8.88,0.313,sales_fallback,6,2025-11-27T00:00:00+00:00,12.99,-4.11,4.11,31.64,30
+187,Onglepod,Classic Paper,2025-10-28T00:00:00+00:00,5.0,0.4,sales_fallback,2,2025-10-28T00:00:00+00:00,0.99,4.01,4.01,405.05,0
+187,Onglepod,Classic Paper,2025-10-28T00:00:00+00:00,5.0,0.4,sales_fallback,2,2025-10-28T00:00:00+00:00,0.99,4.01,4.01,405.05,0
+37,Nexus Phasebringer,Classic Paper,2025-10-15T00:00:00+00:00,35.0,0.423,sales_fallback,3,2025-10-31T00:00:00+00:00,60.0,-25.0,25.0,41.67,16
+37,Nexus Phasebringer,Classic Paper,2025-10-31T00:00:00+00:00,41.25,0.314,sales_fallback,4,2025-10-31T00:00:00+00:00,60.0,-18.75,18.75,31.25,0

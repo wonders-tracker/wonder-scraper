@@ -11,8 +11,7 @@ from cachetools import TTLCache
 from app.core.typing import col
 from app.db import get_session
 from app.models.card import Card
-from app.models.market import MarketSnapshot, MarketPrice
-from app.services.floor_price import get_floor_price_service
+from app.models.market import MarketPrice
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -182,15 +181,30 @@ def read_market_overview(
         ORDER BY c.name
     """)
 
-    results = session.execute(consolidated_query, {
-        "cutoff_time": cutoff_time,
-        "floor_cutoff": floor_cutoff,
-    }).all()
+    results = session.execute(
+        consolidated_query,
+        {
+            "cutoff_time": cutoff_time,
+            "floor_cutoff": floor_cutoff,
+        },
+    ).all()
 
     overview_data = []
     for row in results:
-        (card_id, slug, name, set_name, rarity_id, latest_price, vwap,
-         floor_price, volume_period, dollar_volume, price_delta, deal_rating) = row
+        (
+            card_id,
+            slug,
+            name,
+            set_name,
+            rarity_id,
+            latest_price,
+            vwap,
+            floor_price,
+            volume_period,
+            dollar_volume,
+            price_delta,
+            deal_rating,
+        ) = row
 
         overview_data.append(
             {
@@ -429,11 +443,14 @@ def read_market_listings(
             SELECT 'vwap' as query_type, card_id, NULL as key, vwap as value FROM vwap
         """)
 
-        combined_results = session.execute(combined_query, {
-            "card_ids": card_ids,
-            "floor_cutoff": floor_cutoff,
-            "vwap_cutoff": vwap_cutoff,
-        }).all()
+        combined_results = session.execute(
+            combined_query,
+            {
+                "card_ids": card_ids,
+                "floor_cutoff": floor_cutoff,
+                "vwap_cutoff": vwap_cutoff,
+            },
+        ).all()
 
         # Parse results into maps
         for query_type, card_id, key, value in combined_results:
