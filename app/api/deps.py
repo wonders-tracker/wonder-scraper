@@ -75,8 +75,8 @@ def get_current_user(
     if token_type and token_type != "access":
         raise credentials_exception
 
-    email: str = payload.get("sub")
-    if email is None:
+    email = payload.get("sub")
+    if email is None or not isinstance(email, str):
         raise credentials_exception
 
     user = session.exec(select(User).where(User.email == email)).first()
@@ -112,8 +112,8 @@ def get_current_user_optional(
     if token_type and token_type != "access":
         return None
 
-    email: str = payload.get("sub")
-    if email is None:
+    email = payload.get("sub")
+    if email is None or not isinstance(email, str):
         return None
 
     user = session.exec(select(User).where(User.email == email)).first()
@@ -260,8 +260,8 @@ def get_data_access(
             # Only accept access tokens
             token_type = payload.get("type")
             if not token_type or token_type == "access":
-                email: str = payload.get("sub")
-                if email:
+                email = payload.get("sub")
+                if email and isinstance(email, str):
                     user = session.exec(select(User).where(User.email == email)).first()
                     if user and user.is_active:
                         return user
