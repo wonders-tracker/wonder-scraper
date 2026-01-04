@@ -28,6 +28,7 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from app.db import engine
+from app.services.confidence import calculate_orderbook_confidence
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -127,8 +128,6 @@ def simulate_orderbook_at_date(
     Algorithm v2: Uses LOWEST ASK as floor estimate (not bucket midpoint).
     Confidence based on listing count, spread, and recency.
     """
-    from math import log2
-
     cutoff = as_of_date - timedelta(days=lookback_days)
 
     # Get active listings that existed at that time
@@ -173,25 +172,19 @@ def simulate_orderbook_at_date(
     else:
         spread_pct = 0.0
 
-    # v2: New confidence calculation
-    # 1. Listing count score (logarithmic)
-    count_score = min(0.9, 0.3 + 0.2 * log2(max(1, len(prices))))
-
-    # 2. Spread score
-    if spread_pct <= 0:
-        spread_score = 1.0
-    elif spread_pct <= 20:
-        spread_score = 1.0 - (spread_pct / 40)
-    elif spread_pct <= 50:
-        spread_score = 0.5 - ((spread_pct - 20) / 60)
-    else:
-        spread_score = max(0.0, 0.2 - (spread_pct - 50) / 500)
-
-    # 3. Recency (simplified - assume all fresh for simulation)
-    recency_score = 1.0
-
-    # Weighted combination
-    confidence = round(0.4 * count_score + 0.3 * spread_score + 0.3 * recency_score, 3)
+    # Use shared confidence calculation
+    # For backtest simulation: no stale count, default volatility
+    # Use simplified weights that match original backtest behavior
+    confidence = calculate_orderbook_confidence(
+        total_listings=len(prices),
+        spread_pct=spread_pct,
+        stale_count=0,  # Assume all fresh for simulation
+        volatility_cv=0.5,  # Default volatility
+        listing_count_weight=0.4,
+        spread_weight=0.3,
+        recency_weight=0.15,
+        volatility_weight=0.15,
+    )
 
     return {
         "floor_estimate": round(lowest_ask, 2),
@@ -209,8 +202,6 @@ def simulate_sales_fallback_at_date(
     lookback_days: int = 30,
 ) -> Optional[dict]:
     """Simulate sales fallback prediction at a specific date (v2 algorithm)."""
-    from math import log2
-
     cutoff = as_of_date - timedelta(days=lookback_days)
 
     query = text("""
@@ -245,31 +236,25 @@ def simulate_sales_fallback_at_date(
     floor_sample = sorted_prices[:4]
     floor_estimate = sum(floor_sample) / len(floor_sample)
 
-    # v2: New confidence calculation with sales fallback penalty
     # Calculate spread
     if len(prices) > 1:
         spread_pct = ((max(prices) - min(prices)) / min(prices)) * 100
     else:
         spread_pct = 0.0
 
-    # Listing count score
-    count_score = min(0.9, 0.3 + 0.2 * log2(max(1, len(prices))))
-
-    # Spread score
-    if spread_pct <= 0:
-        spread_score = 1.0
-    elif spread_pct <= 20:
-        spread_score = 1.0 - (spread_pct / 40)
-    elif spread_pct <= 50:
-        spread_score = 0.5 - ((spread_pct - 20) / 60)
-    else:
-        spread_score = max(0.0, 0.2 - (spread_pct - 50) / 500)
-
-    recency_score = 1.0  # Assume recent for simulation
-
-    # Base confidence with 0.5x sales fallback penalty
-    base_confidence = 0.4 * count_score + 0.3 * spread_score + 0.3 * recency_score
-    confidence = round(base_confidence * 0.5, 3)
+    # Use shared confidence calculation with sales fallback penalty (0.5x)
+    # For backtest simulation: no stale count, default volatility
+    base_confidence = calculate_orderbook_confidence(
+        total_listings=len(prices),
+        spread_pct=spread_pct,
+        stale_count=0,  # Assume recent for simulation
+        volatility_cv=0.5,  # Default volatility
+        listing_count_weight=0.4,
+        spread_weight=0.3,
+        recency_weight=0.15,
+        volatility_weight=0.15,
+    )
+    confidence = round(base_confidence * 0.5, 3)  # Sales fallback penalty
 
     return {
         "floor_estimate": round(floor_estimate, 2),

@@ -45,16 +45,21 @@ def infer_listing_format(price: MarketPrice) -> str | None:
     return None
 
 
+BATCH_SIZE = 1000  # Process in batches to avoid memory issues
+
+
 def backfill_listing_format(dry_run: bool = False):
     """Backfill listing_format for records that don't have it set."""
-    with Session(engine) as session:
-        # Only get records without listing_format
-        print("Fetching market prices without listing_format...")
-        stmt = select(MarketPrice).where(col(MarketPrice.listing_format).is_(None))
-        prices = session.exec(stmt).all()
-        print(f"Found {len(prices)} prices to process.")
+    from sqlalchemy import func
 
-        if len(prices) == 0:
+    with Session(engine) as session:
+        # Get count first
+        total_count = session.exec(
+            select(func.count(MarketPrice.id)).where(col(MarketPrice.listing_format).is_(None))
+        ).one()
+        print(f"Found {total_count} prices to process (batches of {BATCH_SIZE}).")
+
+        if total_count == 0:
             print("Nothing to backfill!")
             return
 
@@ -67,24 +72,40 @@ def backfill_listing_format(dry_run: bool = False):
         }
 
         updated_count = 0
-        for i, price in enumerate(prices):
-            listing_format = infer_listing_format(price)
+        processed = 0
 
-            if listing_format:
-                stats[listing_format] += 1
-                if not dry_run:
-                    price.listing_format = listing_format
-                    session.add(price)
-                updated_count += 1
-            else:
-                stats["unknown"] += 1
+        while True:
+            # Fetch batch (use ID ordering for consistent pagination)
+            batch = session.exec(
+                select(MarketPrice)
+                .where(col(MarketPrice.listing_format).is_(None))
+                .order_by(MarketPrice.id)
+                .limit(BATCH_SIZE)
+            ).all()
 
-            # Progress update every 1000 records
-            if (i + 1) % 1000 == 0:
-                print(f"  Processed {i + 1}/{len(prices)}...")
+            if not batch:
+                break
 
-        if not dry_run:
-            session.commit()
+            batch_updates = 0
+            for price in batch:
+                listing_format = infer_listing_format(price)
+
+                if listing_format:
+                    stats[listing_format] += 1
+                    if not dry_run:
+                        price.listing_format = listing_format
+                        session.add(price)
+                    batch_updates += 1
+                else:
+                    stats["unknown"] += 1
+
+            # Commit after each batch
+            if not dry_run and batch_updates > 0:
+                session.commit()
+
+            updated_count += batch_updates
+            processed += len(batch)
+            print(f"  Processed {processed}/{total_count} ({updated_count} updated)")
 
         print(f"\n{'[DRY RUN] ' if dry_run else ''}Results:")
         print(f"  Auction:    {stats['auction']:,}")
