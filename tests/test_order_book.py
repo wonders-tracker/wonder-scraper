@@ -132,9 +132,7 @@ class TestOrderBookAnalyzer:
     @patch.object(OrderBookAnalyzer, '_fetch_active_listings')
     def test_estimate_floor_insufficient_data_no_fallback(self, mock_fetch, analyzer):
         """Test that insufficient data returns None when fallback is disabled."""
-        mock_fetch.return_value = [
-            {"price": 10.0, "scraped_at": datetime.now(timezone.utc)},
-        ]  # Only 1 listing, below MIN_LISTINGS
+        mock_fetch.return_value = []  # No listings (MIN_LISTINGS is now 1)
 
         result = analyzer.estimate_floor(card_id=123, allow_sales_fallback=False)
         assert result is None
@@ -189,6 +187,7 @@ class TestOrderBookResult:
         result = OrderBookResult(
             floor_estimate=12.5,
             confidence=0.75,
+            lowest_ask=10.0,
             deepest_bucket=deepest,
             total_listings=8,
             outliers_removed=2,

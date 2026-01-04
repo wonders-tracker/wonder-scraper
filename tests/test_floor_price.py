@@ -57,6 +57,7 @@ class TestFloorPriceService:
         return OrderBookResult(
             floor_estimate=28.50,
             confidence=0.85,
+            lowest_ask=25.00,
             deepest_bucket=BucketInfo(min_price=25.0, max_price=30.0, count=8),
             total_listings=12,
             outliers_removed=2,
@@ -128,6 +129,7 @@ class TestOrderBookFallback(TestFloorPriceService):
         ob_result = OrderBookResult(
             floor_estimate=30.0,
             confidence=0.75,
+            lowest_ask=25.0,
             deepest_bucket=BucketInfo(25.0, 35.0, 10),
             total_listings=15,
             outliers_removed=0,
@@ -147,6 +149,7 @@ class TestOrderBookFallback(TestFloorPriceService):
         ob_result = OrderBookResult(
             floor_estimate=30.0,
             confidence=0.55,
+            lowest_ask=25.0,
             deepest_bucket=BucketInfo(25.0, 35.0, 5),
             total_listings=10,
             outliers_removed=0,
@@ -166,6 +169,7 @@ class TestOrderBookFallback(TestFloorPriceService):
         ob_result = OrderBookResult(
             floor_estimate=30.0,
             confidence=0.35,
+            lowest_ask=25.0,
             deepest_bucket=BucketInfo(25.0, 35.0, 3),
             total_listings=8,
             outliers_removed=0,
@@ -190,6 +194,7 @@ class TestLowConfidenceSales(TestFloorPriceService):
         low_ob_result = OrderBookResult(
             floor_estimate=25.0,
             confidence=0.2,  # Below threshold
+            lowest_ask=20.0,
             deepest_bucket=BucketInfo(20.0, 30.0, 2),
             total_listings=3,
             outliers_removed=0,
