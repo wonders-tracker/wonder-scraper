@@ -295,7 +295,8 @@ def health_detailed() -> dict:
         health_status["checks"]["memory"] = {
             "rss_mb": round(rss_mb, 1),
         }
-    except Exception:
+    except (OSError, ValueError, AttributeError):
+        # Memory measurement can fail on some platforms - safe to ignore
         pass
 
     return health_status

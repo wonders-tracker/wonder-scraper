@@ -96,6 +96,10 @@ class MarketPrice(SQLModel, table=True):
         Index("ix_marketprice_card_treatment", "card_id", "treatment"),
         # For listing type + sold_date range scans
         Index("ix_marketprice_listing_sold", "listing_type", "sold_date"),
+        # For listings page default sort (listing_type + scraped_at DESC)
+        Index("ix_marketprice_listing_scraped", "listing_type", "scraped_at"),
+        # For platform filter on listings page
+        Index("ix_marketprice_platform", "platform"),
     )
 
 

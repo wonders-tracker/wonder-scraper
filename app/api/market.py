@@ -17,8 +17,8 @@ from app.services.floor_price import get_floor_price_service
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Thread-safe cache with TTL (2 min for market data - it changes frequently)
-_market_cache = TTLCache(maxsize=50, ttl=120)
+# Thread-safe cache with TTL (5 min for market data - balance freshness vs performance)
+_market_cache = TTLCache(maxsize=100, ttl=300)
 _market_cache_lock = threading.Lock()
 
 
@@ -82,13 +82,16 @@ def read_market_overview(
 ) -> Any:
     """
     Get robust market overview statistics with temporal data.
-    Cached for 2 minutes to improve performance.
+    OPTIMIZED: Single CTE query replaces 6+ separate queries.
+    Cached for 5 minutes (longer periods get longer cache).
     """
     # Check cache first
     cache_key = f"market_overview_{time_period}"
     cached = get_market_cache(cache_key)
     if cached:
         return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
+
+    from sqlalchemy import text
 
     # Calculate time cutoff
     time_cutoffs = {
@@ -97,194 +100,120 @@ def read_market_overview(
         "7d": timedelta(days=7),
         "30d": timedelta(days=30),
         "90d": timedelta(days=90),
-        "all": None,
+        "all": timedelta(days=3650),  # ~10 years for "all"
     }
-    cutoff_delta = time_cutoffs.get(time_period)
-    cutoff_time = datetime.now(timezone.utc) - cutoff_delta if cutoff_delta else None
+    cutoff_delta = time_cutoffs.get(time_period, timedelta(days=30))
+    cutoff_time = datetime.now(timezone.utc) - cutoff_delta
 
-    # Fetch all cards
-    cards = session.execute(select(Card)).scalars().all()
-    if not cards:
-        return []
+    # Floor price lookback (use longer window for floor calculation)
+    floor_days = {"1h": 30, "24h": 30, "7d": 30, "30d": 30, "90d": 90, "all": 365}.get(time_period, 30)
+    floor_cutoff = datetime.now(timezone.utc) - timedelta(days=floor_days)
 
-    card_ids = [c.id for c in cards]
+    # SINGLE CONSOLIDATED CTE QUERY - replaces 6+ separate queries
+    consolidated_query = text("""
+        WITH card_sales AS (
+            -- All sold listings with effective date
+            SELECT
+                card_id,
+                price,
+                COALESCE(sold_date, scraped_at) as sale_date,
+                ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY COALESCE(sold_date, scraped_at) DESC) as rn_desc,
+                ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn_price
+            FROM marketprice
+            WHERE listing_type = 'sold' AND is_bulk_lot = FALSE
+        ),
+        last_sale AS (
+            -- Most recent sale per card (any time)
+            SELECT card_id, price as last_price
+            FROM card_sales WHERE rn_desc = 1
+        ),
+        period_stats AS (
+            -- Stats for the selected time period
+            SELECT
+                card_id,
+                COUNT(*) as sale_count,
+                SUM(price) as total_value,
+                AVG(price) as vwap
+            FROM card_sales
+            WHERE sale_date >= :cutoff_time
+            GROUP BY card_id
+        ),
+        floor_prices AS (
+            -- Floor = avg of 4 lowest prices in floor window
+            SELECT card_id, ROUND(AVG(price)::numeric, 2) as floor_price
+            FROM (
+                SELECT card_id, price,
+                       ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn
+                FROM card_sales
+                WHERE sale_date >= :floor_cutoff
+            ) ranked
+            WHERE rn <= 4
+            GROUP BY card_id
+        )
+        SELECT
+            c.id,
+            c.slug,
+            c.name,
+            c.set_name,
+            c.rarity_id,
+            COALESCE(ls.last_price, 0) as latest_price,
+            COALESCE(ps.vwap, 0) as vwap,
+            fp.floor_price,
+            COALESCE(ps.sale_count, 0) as volume_period,
+            COALESCE(ps.total_value, 0) as dollar_volume,
+            -- Price delta: compare last sale to floor (shows premium/discount)
+            CASE
+                WHEN ls.last_price IS NOT NULL AND fp.floor_price IS NOT NULL AND fp.floor_price > 0 AND ps.sale_count >= 2
+                THEN LEAST(200, GREATEST(-200, ((ls.last_price - fp.floor_price) / fp.floor_price) * 100))
+                WHEN ls.last_price IS NOT NULL AND ps.vwap IS NOT NULL AND ps.vwap > 0
+                THEN LEAST(200, GREATEST(-200, ((ls.last_price - ps.vwap) / ps.vwap) * 100))
+                ELSE 0
+            END as price_delta_period,
+            -- Deal rating: compare last sale to VWAP
+            CASE
+                WHEN ls.last_price IS NOT NULL AND ps.vwap IS NOT NULL AND ps.vwap > 0
+                THEN LEAST(100, GREATEST(-100, ((ls.last_price - ps.vwap) / ps.vwap) * 100))
+                ELSE 0
+            END as deal_rating
+        FROM card c
+        LEFT JOIN last_sale ls ON c.id = ls.card_id
+        LEFT JOIN period_stats ps ON c.id = ps.card_id
+        LEFT JOIN floor_prices fp ON c.id = fp.card_id
+        ORDER BY c.name
+    """)
 
-    # Batch fetch snapshots
-    snapshot_query = select(MarketSnapshot).where(col(MarketSnapshot.card_id).in_(card_ids))
-    if cutoff_time:
-        snapshot_query = snapshot_query.where(col(MarketSnapshot.timestamp) >= cutoff_time)
-    snapshot_query = snapshot_query.order_by(col(MarketSnapshot.card_id), col(MarketSnapshot.timestamp).desc())
-    all_snapshots = session.execute(snapshot_query).scalars().all()
-
-    snapshots_by_card = {}
-    for snap in all_snapshots:
-        if snap.card_id not in snapshots_by_card:
-            snapshots_by_card[snap.card_id] = []
-        snapshots_by_card[snap.card_id].append(snap)
-
-    # Batch fetch actual LAST SALE price (Postgres DISTINCT ON)
-    last_sale_map = {}
-    vwap_map = {}
-    sales_count_map = {}
-    floor_price_map = {}
-    if card_ids:
-        try:
-            from sqlalchemy import text
-
-            period_start = cutoff_time if cutoff_time else datetime.now(timezone.utc) - timedelta(hours=24)
-
-            # Use parameterized queries to prevent SQL injection
-            # Use COALESCE(sold_date, scraped_at) to include sales with NULL sold_date
-            query = text("""
-                SELECT DISTINCT ON (card_id) card_id, price, treatment, COALESCE(sold_date, scraped_at) as effective_date
-                FROM marketprice
-                WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
-                ORDER BY card_id, COALESCE(sold_date, scraped_at) DESC
-            """)
-            results = session.execute(query, {"card_ids": card_ids}).all()
-            last_sale_map = {row[0]: {"price": row[1], "treatment": row[2], "date": row[3]} for row in results}
-
-            # Calculate VWAP with proper parameter binding
-            # Use COALESCE(sold_date, scraped_at) as fallback when sold_date is NULL
-            if cutoff_time:
-                vwap_query = text("""
-                    SELECT card_id, AVG(price) as vwap
-                    FROM marketprice
-                    WHERE card_id = ANY(:card_ids)
-                    AND listing_type = 'sold'
-                    AND COALESCE(sold_date, scraped_at) >= :cutoff_time
-                    GROUP BY card_id
-                """)
-                vwap_results = session.execute(vwap_query, {"card_ids": card_ids, "cutoff_time": cutoff_time}).all()
-            else:
-                vwap_query = text("""
-                    SELECT card_id, AVG(price) as vwap
-                    FROM marketprice
-                    WHERE card_id = ANY(:card_ids)
-                    AND listing_type = 'sold'
-                    GROUP BY card_id
-                """)
-                vwap_results = session.execute(vwap_query, {"card_ids": card_ids}).all()
-            vwap_map = {row[0]: row[1] for row in vwap_results}
-
-            # Get oldest sale in period for delta calculation
-            # Use COALESCE(sold_date, scraped_at) as fallback when sold_date is NULL
-            oldest_sale_query = text("""
-                SELECT DISTINCT ON (card_id) card_id, price, COALESCE(sold_date, scraped_at) as effective_date
-                FROM marketprice
-                WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
-                AND COALESCE(sold_date, scraped_at) >= :period_start
-                ORDER BY card_id, COALESCE(sold_date, scraped_at) ASC
-            """)
-            oldest_results = session.execute(
-                oldest_sale_query, {"card_ids": card_ids, "period_start": period_start}
-            ).all()
-            {row[0]: {"price": row[1], "date": row[2]} for row in oldest_results}
-
-            # Count sales in period for each card AND calculate total dollar volume
-            sales_count_query = text("""
-                SELECT card_id,
-                       COUNT(*) as sale_count,
-                       COUNT(DISTINCT DATE(COALESCE(sold_date, scraped_at))) as unique_days,
-                       SUM(price) as total_value
-                FROM marketprice
-                WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
-                AND COALESCE(sold_date, scraped_at) >= :period_start
-                GROUP BY card_id
-            """)
-            sales_count_results = session.execute(
-                sales_count_query, {"card_ids": card_ids, "period_start": period_start}
-            ).all()
-            sales_count_map = {
-                row[0]: {"count": row[1], "unique_days": row[2], "total_value": float(row[3]) if row[3] else 0}
-                for row in sales_count_results
-            }
-
-            # Calculate floor prices using unified FloorPriceService
-            period_days_map = {"1h": 1, "24h": 1, "7d": 7, "30d": 30, "90d": 90, "all": 365}
-            period_days = period_days_map.get(time_period, 30)
-            floor_service = get_floor_price_service(session)
-            floor_results = floor_service.get_floor_prices_batch(card_ids, days=period_days)
-            floor_price_map = {cid: r.price for cid, r in floor_results.items() if r.price}
-
-        except Exception as e:
-            print(f"Error fetching last sales: {e}")
+    results = session.execute(consolidated_query, {
+        "cutoff_time": cutoff_time,
+        "floor_cutoff": floor_cutoff,
+    }).all()
 
     overview_data = []
-    for card in cards:
-        card_snaps = snapshots_by_card.get(card.id, [])
-        latest_snap = card_snaps[0] if card_snaps else None
-        oldest_snap = card_snaps[-1] if card_snaps else None
-
-        last_sale_data = last_sale_map.get(card.id)
-        last_price = last_sale_data["price"] if last_sale_data else None
-
-        if last_price is None and latest_snap:
-            last_price = latest_snap.avg_price
-
-        # Get VWAP
-        vwap = vwap_map.get(card.id)
-        effective_price = vwap if vwap else (latest_snap.avg_price if latest_snap else 0.0)
-
-        # Market Trend Delta - Compare last sale to VWAP (more stable than oldest vs newest)
-        # This shows if the most recent sale was above or below the period average
-        avg_delta = 0.0
-        sales_stats = sales_count_map.get(card.id)
-        floor_price = floor_price_map.get(card.id)
-
-        # Primary method: Compare last sale to floor price (shows premium/discount to floor)
-        if last_price and floor_price and floor_price > 0 and sales_stats and sales_stats["count"] >= 2:
-            avg_delta = ((last_price - floor_price) / floor_price) * 100
-            # Cap extreme values at ±200% to filter outliers
-            avg_delta = max(-200, min(200, avg_delta))
-        # Fallback: Compare last sale to VWAP
-        elif last_price and vwap and vwap > 0:
-            avg_delta = ((last_price - vwap) / vwap) * 100
-            avg_delta = max(-200, min(200, avg_delta))
-        # Last fallback: snapshot comparison
-        elif latest_snap and oldest_snap and oldest_snap.avg_price > 0 and latest_snap.id != oldest_snap.id:
-            avg_delta = ((latest_snap.avg_price - oldest_snap.avg_price) / oldest_snap.avg_price) * 100
-            avg_delta = max(-200, min(200, avg_delta))
-
-        # Deal Rating Delta - compare last sale to VWAP (more stable than snapshot avg)
-        deal_delta = 0.0
-        # Use VWAP for comparison as it's more accurate than snapshot avg_price
-        comparison_price = (
-            vwap if vwap and vwap > 0 else (latest_snap.avg_price if latest_snap and latest_snap.avg_price > 0 else 0)
-        )
-        if last_price and comparison_price > 0:
-            deal_delta = ((last_price - comparison_price) / comparison_price) * 100
-            # Cap at ±100% to avoid extreme outliers
-            deal_delta = max(-100, min(100, deal_delta))
-
-        # Use actual sales count from MarketPrice (more accurate than snapshot volume)
-        period_volume = sales_stats["count"] if sales_stats else 0
-        # Total dollar volume = sum of all sale prices in period
-        total_dollar_volume = sales_stats["total_value"] if sales_stats else 0
+    for row in results:
+        (card_id, slug, name, set_name, rarity_id, latest_price, vwap,
+         floor_price, volume_period, dollar_volume, price_delta, deal_rating) = row
 
         overview_data.append(
             {
-                "id": card.id,
-                "slug": card.slug if hasattr(card, "slug") else None,
-                "name": card.name,
-                "set_name": card.set_name,
-                "rarity_id": card.rarity_id,
-                "latest_price": last_price or 0.0,
-                "avg_price": latest_snap.avg_price if latest_snap else 0.0,
-                "vwap": effective_price,
-                "floor_price": floor_price_map.get(card.id),  # Avg of 4 lowest sales
-                "volume_period": period_volume,
-                "volume_change": 0,  # TODO: Calculate from previous period if needed
-                "price_delta_period": avg_delta,
-                "deal_rating": deal_delta,
-                "dollar_volume": total_dollar_volume,  # Total $ traded in period
+                "id": card_id,
+                "slug": slug,
+                "name": name,
+                "set_name": set_name,
+                "rarity_id": rarity_id,
+                "latest_price": float(latest_price) if latest_price else 0.0,
+                "avg_price": float(vwap) if vwap else 0.0,
+                "vwap": float(vwap) if vwap else 0.0,
+                "floor_price": float(floor_price) if floor_price else None,
+                "volume_period": int(volume_period) if volume_period else 0,
+                "volume_change": 0,
+                "price_delta_period": float(price_delta) if price_delta else 0.0,
+                "deal_rating": float(deal_rating) if deal_rating else 0.0,
+                "dollar_volume": float(dollar_volume) if dollar_volume else 0.0,
             }
         )
 
     # Cache the result
     set_market_cache(cache_key, overview_data)
-
-    return JSONResponse(content=overview_data, headers={"X-Cache": "MISS"})
+    return overview_data
 
 
 @router.get("/activity")
@@ -419,9 +348,9 @@ def read_market_listings(
             )
         )
 
-    # Get total count before pagination
-    count_query = select(func.count()).select_from(query.subquery())
-    total = session.execute(count_query).scalar_one()
+    # SKIP expensive COUNT entirely - use "hasMore" pagination instead
+    # Fetch limit+1 to check if there are more results
+    total = None  # Not calculated - frontend should use hasMore instead
 
     # Apply sorting - use explicit Any typing for SQLAlchemy column expressions
     sort_key = sort_by if sort_by else "scraped_at"
@@ -443,47 +372,83 @@ def read_market_listings(
     else:
         query = query.order_by(desc(sort_column), col(MarketPrice.id).desc())
 
-    # Apply pagination
-    query = query.offset(offset).limit(limit)
+    # Apply pagination - fetch limit+1 to determine hasMore
+    query = query.offset(offset).limit(limit + 1)
 
     results = session.execute(query).all()
 
+    # Check if there are more results
+    has_more = len(results) > limit
+    if has_more:
+        results = results[:limit]  # Trim to requested limit
+
     # Get unique card IDs to batch fetch floor prices and VWAP
     card_ids = list(set(listing.card_id for listing, _ in results))
-    floor_price_map = {}
-    vwap_map = {}
+    floor_by_variant_map: dict[int, dict[str, float]] = {}
+    floor_price_map: dict[int, float] = {}
+    vwap_map: dict[int, float] = {}
 
     if card_ids:
-        # Batch calculate floor prices per variant using unified FloorPriceService
-        # NOTE: Floor price always uses 90-day lookback regardless of time_period filter
-        floor_service = get_floor_price_service(session)
-        floor_results = floor_service.get_floor_prices_batch(card_ids, days=90, by_variant=True)
-        # Build nested map: {card_id: {variant_lower: price}}
-        floor_by_variant_map: dict[int, dict[str, float]] = {}
-        for (card_id, variant), result in floor_results.items():
-            if result.price is None:
+        # Single CTE query for both floor prices by variant AND VWAP
+        # Much faster than calling FloorPriceService.get_floor_prices_batch()
+        floor_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+        vwap_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+
+        combined_query = text("""
+            WITH floor_by_variant AS (
+                SELECT
+                    card_id,
+                    LOWER(COALESCE(NULLIF(product_subtype, ''), treatment, 'unknown')) as variant,
+                    ROUND(AVG(price)::numeric, 2) as floor_price
+                FROM (
+                    SELECT card_id, product_subtype, treatment, price,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY card_id, COALESCE(NULLIF(product_subtype, ''), treatment, 'unknown')
+                               ORDER BY price ASC
+                           ) as rn
+                    FROM marketprice
+                    WHERE card_id = ANY(:card_ids)
+                      AND listing_type = 'sold'
+                      AND is_bulk_lot = FALSE
+                      AND COALESCE(sold_date, scraped_at) >= :floor_cutoff
+                ) ranked
+                WHERE rn <= 4
+                GROUP BY card_id, LOWER(COALESCE(NULLIF(product_subtype, ''), treatment, 'unknown'))
+            ),
+            vwap AS (
+                SELECT card_id, ROUND(AVG(price)::numeric, 2) as vwap
+                FROM marketprice
+                WHERE card_id = ANY(:card_ids)
+                  AND listing_type = 'sold'
+                  AND is_bulk_lot = FALSE
+                  AND COALESCE(sold_date, scraped_at) >= :vwap_cutoff
+                GROUP BY card_id
+            )
+            SELECT 'floor' as query_type, card_id, variant as key, floor_price as value FROM floor_by_variant
+            UNION ALL
+            SELECT 'vwap' as query_type, card_id, NULL as key, vwap as value FROM vwap
+        """)
+
+        combined_results = session.execute(combined_query, {
+            "card_ids": card_ids,
+            "floor_cutoff": floor_cutoff,
+            "vwap_cutoff": vwap_cutoff,
+        }).all()
+
+        # Parse results into maps
+        for query_type, card_id, key, value in combined_results:
+            if value is None:
                 continue
-            if card_id not in floor_by_variant_map:
-                floor_by_variant_map[card_id] = {}
-            # Store with lowercase key for case-insensitive lookup
-            variant_key = variant.lower() if variant else "unknown"
-            floor_by_variant_map[card_id][variant_key] = result.price
-        # Also build overall floor map (cheapest variant)
+            if query_type == "floor":
+                if card_id not in floor_by_variant_map:
+                    floor_by_variant_map[card_id] = {}
+                floor_by_variant_map[card_id][key] = float(value)
+            elif query_type == "vwap":
+                vwap_map[card_id] = float(value)
+
+        # Build overall floor map (cheapest variant per card)
         for card_id, variants in floor_by_variant_map.items():
             floor_price_map[card_id] = min(variants.values())
-
-        # Batch calculate VWAP (avg of all sold prices in 30d) as fallback
-        vwap_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-        vwap_query = text("""
-            SELECT card_id, AVG(price) as vwap
-            FROM marketprice
-            WHERE card_id = ANY(:card_ids)
-              AND listing_type = 'sold'
-              AND COALESCE(sold_date, scraped_at) >= :cutoff
-            GROUP BY card_id
-        """)
-        vwap_results = session.execute(vwap_query, {"card_ids": card_ids, "cutoff": vwap_cutoff}).all()
-        vwap_map = {row[0]: round(float(row[1]), 2) for row in vwap_results}
 
     # Format results
     listings = []
@@ -540,10 +505,10 @@ def read_market_listings(
 
     result = {
         "items": listings,
-        "total": total,
+        "total": total,  # None - COUNT skipped for performance
         "offset": offset,
         "limit": limit,
-        "hasMore": offset + len(listings) < total,
+        "hasMore": has_more,  # Determined by fetching limit+1
     }
 
     # Cache the result for 2 minutes

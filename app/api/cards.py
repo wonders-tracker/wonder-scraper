@@ -499,18 +499,105 @@ def read_cards(
     return JSONResponse(content=response_data, headers={"X-Cache": "MISS"})
 
 
-def get_card_by_id_or_slug(session: Session, card_identifier: str) -> Card:
-    """Resolve card by ID (numeric) or slug (string)."""
+def get_card_by_id_or_slug(session: Session, card_identifier: str) -> tuple[Card, str]:
+    """Resolve card by ID (numeric) or slug (string). Returns (card, rarity_name)."""
+    from sqlalchemy.orm import aliased
+
+    # Build query with LEFT JOIN to Rarity
+    stmt = (
+        select(Card, Rarity.name)
+        .outerjoin(Rarity, Card.rarity_id == Rarity.id)
+    )
+
     # Try numeric ID first
     if card_identifier.isdigit():
-        card = session.get(Card, int(card_identifier))
-        if card:
-            return card
+        result = session.execute(
+            stmt.where(Card.id == int(card_identifier))
+        ).first()
+        if result:
+            return result[0], result[1] or "Unknown"
+
     # Try slug lookup
-    card = session.execute(select(Card).where(Card.slug == card_identifier)).scalars().first()
-    if card:
-        return card
+    result = session.execute(
+        stmt.where(Card.slug == card_identifier)
+    ).first()
+    if result:
+        return result[0], result[1] or "Unknown"
+
     raise HTTPException(status_code=404, detail="Card not found")
+
+
+@router.get("/meta/cards")
+def get_meta_cards(
+    session: Session = Depends(get_session),
+) -> Any:
+    """
+    Get all cards marked as meta (competitive) with their current pricing data.
+    Returns cards sorted by floor price descending.
+    """
+    from sqlalchemy import text
+
+    # Check cache
+    cache_key = get_cache_key("meta_cards_v1")
+    cached = get_cached(cache_key)
+    if cached:
+        return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
+
+    cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
+
+    # Get meta cards with floor prices in a single query
+    query = text("""
+        SELECT
+            c.id,
+            c.name,
+            c.slug,
+            c.image_url,
+            r.name as rarity,
+            (
+                SELECT ROUND(AVG(price)::numeric, 2)
+                FROM (
+                    SELECT price
+                    FROM marketprice
+                    WHERE card_id = c.id
+                        AND listing_type = 'sold'
+                        AND is_bulk_lot = FALSE
+                        AND COALESCE(sold_date, scraped_at) >= :cutoff
+                    ORDER BY price ASC
+                    LIMIT 4
+                ) lowest_4
+            ) as floor_price,
+            (
+                SELECT COUNT(*)
+                FROM marketprice
+                WHERE card_id = c.id
+                    AND listing_type = 'sold'
+                    AND is_bulk_lot = FALSE
+                    AND COALESCE(sold_date, scraped_at) >= :cutoff
+            ) as sales_30d
+        FROM card c
+        LEFT JOIN rarity r ON c.rarity_id = r.id
+        WHERE c.is_meta = TRUE AND c.product_type = 'Single'
+        ORDER BY floor_price DESC NULLS LAST
+    """)
+
+    result = session.execute(query, {"cutoff": cutoff_30d}).fetchall()
+
+    cards = [
+        {
+            "id": row.id,
+            "name": row.name,
+            "slug": row.slug,
+            "image_url": row.image_url,
+            "rarity": row.rarity,
+            "floor_price": float(row.floor_price) if row.floor_price else None,
+            "sales_30d": row.sales_30d,
+        }
+        for row in result
+    ]
+
+    response = {"cards": cards, "count": len(cards)}
+    set_cache(cache_key, response)
+    return response
 
 
 @router.get("/{card_id}", response_model=CardOut)
@@ -524,26 +611,10 @@ def read_card(
     if cached:
         return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
 
-    card = get_card_by_id_or_slug(session, card_id)
-
-    # Fetch rarity name via JOIN in card query or separate lookup
-    rarity_name = "Unknown"
-    if card.rarity_id:
-        rarity = session.get(Rarity, card.rarity_id)
-        if rarity:
-            rarity_name = rarity.name
-
-    # Fetch latest snapshot for fallback values
-    stmt = (
-        select(MarketSnapshot)
-        .where(MarketSnapshot.card_id == card.id)
-        .order_by(desc(MarketSnapshot.timestamp), desc(MarketSnapshot.id))
-        .limit(1)
-    )
-    latest_snap = session.execute(stmt).scalars().first()
+    card, rarity_name = get_card_by_id_or_slug(session, card_id)
 
     # CONSOLIDATED CTE QUERY: Combines last_sale, vwap, volume, active stats, and price delta
-    # This replaces 6+ separate queries with a single round-trip
+    # This replaces 6+ separate queries with a single round-trip (including MarketSnapshot)
     from sqlalchemy import text
 
     cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
@@ -551,11 +622,16 @@ def read_card(
 
     consolidated_query = text("""
         WITH last_sale AS (
-            SELECT price, treatment
+            SELECT price, treatment, COALESCE(sold_date, scraped_at) as sale_date
             FROM marketprice
             WHERE card_id = :card_id AND listing_type = 'sold' AND is_bulk_lot = FALSE
             ORDER BY COALESCE(sold_date, scraped_at) DESC
             LIMIT 1
+        ),
+        all_sales AS (
+            SELECT AVG(price) as avg_price, MAX(price) as max_price
+            FROM marketprice
+            WHERE card_id = :card_id AND listing_type = 'sold' AND is_bulk_lot = FALSE
         ),
         sales_30d AS (
             SELECT AVG(price) as vwap, COUNT(*) as volume
@@ -573,10 +649,6 @@ def read_card(
             WHERE card_id = :card_id AND listing_type = 'sold' AND is_bulk_lot = FALSE
               AND COALESCE(sold_date, scraped_at) >= :cutoff_90d
         ),
-        avg_all AS (
-            SELECT AVG(price) as avg_price FROM marketprice
-            WHERE card_id = :card_id AND listing_type = 'sold' AND is_bulk_lot = FALSE
-        ),
         active_stats AS (
             SELECT MIN(price) as lowest_ask, COUNT(*) as inventory
             FROM marketprice
@@ -592,8 +664,11 @@ def read_card(
             COALESCE(
                 (SELECT avg_price FROM avg_30d),
                 (SELECT avg_price FROM avg_90d),
-                (SELECT avg_price FROM avg_all)
-            ) as rolling_avg_price
+                (SELECT avg_price FROM all_sales)
+            ) as rolling_avg_price,
+            (SELECT max_price FROM all_sales) as max_price,
+            (SELECT avg_price FROM all_sales) as avg_price,
+            (SELECT sale_date FROM last_sale) as last_updated
     """)
 
     # Execute consolidated query
@@ -603,18 +678,17 @@ def read_card(
         "cutoff_90d": cutoff_90d,
     }).first()
 
-    # Unpack results with fallbacks
-    real_price = consolidated_result[0] if consolidated_result and consolidated_result[0] else (latest_snap.avg_price if latest_snap else None)
+    # Unpack results with fallbacks (indices: 0-9 for the 10 SELECT columns)
+    real_price = consolidated_result[0] if consolidated_result and consolidated_result[0] else None
     real_treatment = consolidated_result[1] if consolidated_result else None
     vwap = consolidated_result[2] if consolidated_result else None
     volume_30d = consolidated_result[3] or 0 if consolidated_result else 0
-    live_lowest_ask = consolidated_result[4] if consolidated_result else None
-    live_inventory = consolidated_result[5] or 0 if consolidated_result else 0
+    lowest_ask = consolidated_result[4] if consolidated_result else None
+    inventory = consolidated_result[5] or 0 if consolidated_result else 0
     rolling_avg_price = consolidated_result[6] if consolidated_result else None
-
-    # Use live data from consolidated query, fallback to snapshot only if None
-    lowest_ask = live_lowest_ask if live_lowest_ask is not None else (latest_snap.lowest_ask if latest_snap else None)
-    inventory = live_inventory if live_inventory is not None else (latest_snap.inventory if latest_snap else 0)
+    max_price = consolidated_result[7] if consolidated_result else None
+    avg_price = consolidated_result[8] if consolidated_result else None
+    last_updated = consolidated_result[9] if consolidated_result else None
 
     # Price vs Avg: Calculate from consolidated rolling_avg_price
     price_delta = 0.0
@@ -645,31 +719,19 @@ def read_card(
     # Calculate floor_by_variant and lowest_ask_by_variant for single card
     try:
         # Use unified FloorPriceService for floor calculation
+        # Single call with 90-day window + order book fallback (replaces two sequential calls)
         floor_service = get_floor_price_service(session)
-
-        # First try 30 days
         card_id_int = ensure_int(card.id)
-        floor_results_30d = floor_service.get_floor_prices_batch([card_id_int], days=30, by_variant=True)
-        if floor_results_30d:
+        floor_results = floor_service.get_floor_prices_batch(
+            [card_id_int], days=90, by_variant=True, include_order_book_fallback=True
+        )
+        if floor_results:
             floor_by_variant = {}
-            for (cid, variant), result in floor_results_30d.items():
+            for (cid, variant), result in floor_results.items():
                 if result.price is not None:
                     floor_by_variant[variant] = result.price
             if floor_by_variant:
                 floor_price = min(floor_by_variant.values())
-
-        # Fallback: 90 days + order book if no 30-day data
-        if not floor_by_variant:
-            floor_results_90d = floor_service.get_floor_prices_batch(
-                [card_id_int], days=90, by_variant=True, include_order_book_fallback=True
-            )
-            if floor_results_90d:
-                floor_by_variant = {}
-                for (cid, variant), result in floor_results_90d.items():
-                    if result.price is not None:
-                        floor_by_variant[variant] = result.price
-                if floor_by_variant:
-                    floor_price = min(floor_by_variant.values())
 
         # Lowest ask by variant query
         # Note: Must GROUP BY the full CASE expression, not the alias
@@ -715,10 +777,10 @@ def read_card(
         lowest_ask_by_variant=lowest_ask_by_variant,
         inventory=inventory,
         product_type=card.product_type if hasattr(card, "product_type") else "Single",
-        max_price=latest_snap.max_price if latest_snap else None,
-        avg_price=latest_snap.avg_price if latest_snap else None,
-        vwap=vwap if vwap else (latest_snap.avg_price if latest_snap else None),
-        last_updated=latest_snap.timestamp if latest_snap else None,
+        max_price=float(max_price) if max_price else None,
+        avg_price=float(avg_price) if avg_price else None,
+        vwap=float(vwap) if vwap else (float(avg_price) if avg_price else None),
+        last_updated=last_updated,
         fair_market_price=fair_market_price,
         floor_price=floor_price,
         floor_by_variant=floor_by_variant,
@@ -746,7 +808,7 @@ def read_market_data(
     """
     Get latest market snapshot for a card.
     """
-    card = get_card_by_id_or_slug(session, card_id)
+    card, _ = get_card_by_id_or_slug(session, card_id)
     statement = (
         select(MarketSnapshot)
         .where(MarketSnapshot.card_id == card.id)
@@ -775,7 +837,7 @@ def read_sales_history(
     By default returns array of items (backwards compatible).
     Use paginated=true to get {items, total, hasMore} format.
     """
-    card = get_card_by_id_or_slug(session, card_id)
+    card, _ = get_card_by_id_or_slug(session, card_id)
 
     # Fetch results
     statement = (
@@ -818,7 +880,7 @@ def read_active_listings(
     """
     Get active listings for a card.
     """
-    card = get_card_by_id_or_slug(session, card_id)
+    card, _ = get_card_by_id_or_slug(session, card_id)
     statement = (
         select(MarketPrice)
         .where(MarketPrice.card_id == card.id, MarketPrice.listing_type == "active")
@@ -845,7 +907,7 @@ def read_card_pricing(
             status_code=403, detail="FMP pricing is not available in OSS mode. This feature requires SaaS access."
         )
 
-    card = get_card_by_id_or_slug(session, card_id)
+    card, _ = get_card_by_id_or_slug(session, card_id)
 
     # Fetch rarity name
     rarity_name = "Unknown"
@@ -905,7 +967,7 @@ def read_card_order_book(
 
     Falls back to sales data if insufficient active listings (<3).
     """
-    card = get_card_by_id_or_slug(session, card_id)
+    card, _ = get_card_by_id_or_slug(session, card_id)
 
     analyzer = get_order_book_analyzer(session)
     result = analyzer.estimate_floor(
@@ -948,7 +1010,7 @@ def read_card_order_book_by_treatment(
     - Comparing floor prices across treatments
     - Showing price breakdown in the UI when FMP is unavailable
     """
-    card = get_card_by_id_or_slug(session, card_id)
+    card, _ = get_card_by_id_or_slug(session, card_id)
     analyzer = get_order_book_analyzer(session)
 
     # Standard treatments for Singles
@@ -1028,7 +1090,7 @@ def read_card_floor_price(
     - confidence_score: Raw 0.0-1.0 score
     - metadata: Source-specific details (sales_count, platforms, bucket_depth, etc.)
     """
-    card = get_card_by_id_or_slug(session, card_id)
+    card, _ = get_card_by_id_or_slug(session, card_id)
 
     service = get_floor_price_service(session)
     result = service.get_floor_price(
@@ -1058,7 +1120,7 @@ def read_snapshot_history(
     Useful for OpenSea/NFT items that don't have individual sales records.
     Returns aggregate market data over time.
     """
-    card = get_card_by_id_or_slug(session, card_id)
+    card, _ = get_card_by_id_or_slug(session, card_id)
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -1088,7 +1150,7 @@ def read_fmp_history(
     """
     from app.models.market import FMPSnapshot
 
-    card = get_card_by_id_or_slug(session, card_id)
+    card, _ = get_card_by_id_or_slug(session, card_id)
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     # Build query
@@ -1135,7 +1197,7 @@ def read_fmp_history_treatments(
     """
     from app.models.market import FMPSnapshot
 
-    card = get_card_by_id_or_slug(session, card_id)
+    card, _ = get_card_by_id_or_slug(session, card_id)
 
     result = session.execute(
         text("""
