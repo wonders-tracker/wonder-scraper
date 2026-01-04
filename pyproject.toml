@@ -47,6 +47,9 @@ ruff = "^0.8.0"
 ty = "^0.0.4"
 jupyter = "^1.1.1"
 jupyterlab = "^4.5.1"
+ipykernel = "^7.1.0"
+pandas = "^2.3.3"
+scikit-learn = "^1.8.0"
 
 [tool.pytest.ini_options]
 markers = [
