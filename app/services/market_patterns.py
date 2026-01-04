@@ -11,9 +11,10 @@ Multipliers are derived from historical analysis (see scripts/discover_market_pa
 """
 
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import text
 from sqlmodel import Session
@@ -21,6 +22,43 @@ from sqlmodel import Session
 from app.db import engine
 
 logger = logging.getLogger(__name__)
+
+# Module-level cache for volatility results
+# Key: (card_id, treatment, days) -> (CardVolatility, timestamp)
+_volatility_cache: dict[tuple, tuple[Any, datetime]] = {}
+_cache_lock = threading.Lock()
+_CACHE_TTL = timedelta(minutes=5)
+_CACHE_MAX_SIZE = 1000
+
+
+def _get_cached_volatility(key: tuple) -> Optional[Any]:
+    """Get cached volatility result if still valid."""
+    with _cache_lock:
+        if key in _volatility_cache:
+            result, timestamp = _volatility_cache[key]
+            if datetime.now(timezone.utc) - timestamp < _CACHE_TTL:
+                return result
+            # Expired - remove from cache
+            del _volatility_cache[key]
+    return None
+
+
+def _set_cached_volatility(key: tuple, result: Any) -> None:
+    """Cache a volatility result with TTL and max-size eviction."""
+    with _cache_lock:
+        _volatility_cache[key] = (result, datetime.now(timezone.utc))
+        # Evict expired entries when cache grows too large
+        if len(_volatility_cache) > _CACHE_MAX_SIZE:
+            now = datetime.now(timezone.utc)
+            expired = [k for k, (_, ts) in _volatility_cache.items() if now - ts >= _CACHE_TTL]
+            for k in expired:
+                del _volatility_cache[k]
+
+
+def clear_volatility_cache() -> None:
+    """Clear the volatility cache. Useful for testing."""
+    with _cache_lock:
+        _volatility_cache.clear()
 
 
 # Treatment multipliers derived from market analysis
@@ -53,7 +91,7 @@ DEFAULT_VOLATILITY = 0.5
 
 # Volatility thresholds for deal detection
 VOLATILITY_THRESHOLDS = {
-    "stable": 0.3,    # CV < 0.3: stable pricing
+    "stable": 0.3,  # CV < 0.3: stable pricing
     "moderate": 0.5,  # CV 0.3-0.5: moderate volatility
     "volatile": 1.0,  # CV > 0.5: high volatility
 }
@@ -107,7 +145,6 @@ class MarketPatternsService:
 
     def __init__(self, session: Optional[Session] = None):
         self.session = session
-        self._volatility_cache: dict[tuple, CardVolatility] = {}
 
     def get_treatment_multiplier(
         self,
@@ -183,8 +220,9 @@ class MarketPatternsService:
             CardVolatility with CV, range %, and deal threshold
         """
         cache_key = (card_id, treatment, days)
-        if cache_key in self._volatility_cache:
-            return self._volatility_cache[cache_key]
+        cached = _get_cached_volatility(cache_key)
+        if cached is not None:
+            return cached
 
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -244,7 +282,7 @@ class MarketPatternsService:
                     sales_count=int(row[4]) if row and row[4] else 0,
                 )
 
-            self._volatility_cache[cache_key] = volatility
+            _set_cached_volatility(cache_key, volatility)
             return volatility
 
         except Exception as e:
@@ -322,10 +360,7 @@ class MarketPatternsService:
                 with engine.connect() as conn:
                     result = conn.execute(query, {"card_id": card_id, "cutoff": cutoff})
 
-            return {
-                row[0]: {"floor": float(row[1]), "count": int(row[2])}
-                for row in result.fetchall()
-            }
+            return {row[0]: {"floor": float(row[1]), "count": int(row[2])} for row in result.fetchall()}
         except Exception as e:
             logger.error(f"[MarketPatterns] Failed to get treatments for card {card_id}: {e}")
             return {}
@@ -382,6 +417,7 @@ class DealDetector:
         """Lazy-load FloorPriceService to avoid circular imports."""
         if self._floor_service is None:
             from app.services.floor_price import FloorPriceService
+
             self._floor_service = FloorPriceService(self.session)
         return self._floor_service
 
@@ -508,4 +544,5 @@ __all__ = [
     "RARITY_MULTIPLIERS",
     "get_market_patterns_service",
     "get_deal_detector",
+    "clear_volatility_cache",
 ]

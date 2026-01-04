@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from app.db import engine
+from app.services.confidence import calculate_orderbook_confidence
 
 logger = logging.getLogger(__name__)
 
@@ -367,56 +368,20 @@ class OrderBookAnalyzer:
         """
         Calculate confidence score for floor estimate (v2.1 - with volatility).
 
-        Confidence is based on four factors:
-        1. Listing count (more listings = higher confidence, with diminishing returns)
-        2. Price spread (tighter spread = higher confidence)
-        3. Recency (fewer stale listings = higher confidence)
-        4. Volatility (stable cards = higher confidence in floor estimate)
+        Delegates to the shared calculate_orderbook_confidence function.
 
         Returns: 0.0 to 1.0
         """
-        from math import log2
-
-        if total_listings == 0:
-            return 0.0
-
-        # 1. Listing count score (logarithmic - diminishing returns)
-        # 1 listing = 0.3, 3 listings = 0.5, 10 listings = 0.7, 30+ = 0.9
-        count_score = min(0.9, 0.3 + 0.2 * log2(max(1, total_listings)))
-
-        # 2. Spread score (lower spread = higher confidence)
-        # 0% spread = 1.0, 50% spread = 0.5, 100%+ spread = 0.2
-        if spread_pct <= 0:
-            spread_score = 1.0
-        elif spread_pct <= 20:
-            spread_score = 1.0 - (spread_pct / 40)  # 0-20% -> 1.0-0.5
-        elif spread_pct <= 50:
-            spread_score = 0.5 - ((spread_pct - 20) / 60)  # 20-50% -> 0.5-0.0
-        else:
-            spread_score = max(0.0, 0.2 - (spread_pct - 50) / 500)  # 50%+ -> small penalty
-
-        # 3. Recency score (fewer stale = higher confidence)
-        stale_ratio = stale_count / total_listings
-        recency_score = 1.0 - (stale_ratio * 0.5)  # Max 50% penalty for all stale
-
-        # 4. Volatility score (lower CV = higher confidence)
-        # CV 0.0 = 1.0 (very stable), CV 0.3 = 0.85, CV 0.5 = 0.5, CV 1.0+ = 0.2
-        if volatility_cv <= 0.3:
-            volatility_score = 1.0 - (volatility_cv * 0.5)  # 0-0.3 -> 1.0-0.85
-        elif volatility_cv <= 0.5:
-            volatility_score = 0.85 - ((volatility_cv - 0.3) * 1.75)  # 0.3-0.5 -> 0.85-0.5
-        else:
-            volatility_score = max(0.2, 0.5 - (volatility_cv - 0.5) * 0.6)  # 0.5+ -> 0.5-0.2
-
-        # Weighted combination
-        confidence = (
-            self.config.LISTING_COUNT_WEIGHT * count_score +
-            self.config.SPREAD_WEIGHT * spread_score +
-            self.config.RECENCY_WEIGHT * recency_score +
-            self.config.VOLATILITY_WEIGHT * volatility_score
+        return calculate_orderbook_confidence(
+            total_listings=total_listings,
+            spread_pct=spread_pct,
+            stale_count=stale_count,
+            volatility_cv=volatility_cv,
+            listing_count_weight=self.config.LISTING_COUNT_WEIGHT,
+            spread_weight=self.config.SPREAD_WEIGHT,
+            recency_weight=self.config.RECENCY_WEIGHT,
+            volatility_weight=self.config.VOLATILITY_WEIGHT,
         )
-
-        return round(min(1.0, max(0.0, confidence)), 3)
 
     def _fetch_sold_listings(
         self, card_id: int, treatment: Optional[str], days: int
