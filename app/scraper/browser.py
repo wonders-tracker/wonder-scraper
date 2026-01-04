@@ -306,10 +306,19 @@ class BrowserManager:
         return False
 
 
-async def get_page_content(url: str, retries: int = settings.BROWSER_PAGE_RETRIES) -> str:
+async def get_page_content(
+    url: str,
+    retries: int = settings.BROWSER_PAGE_RETRIES,
+    extra_wait: float = 0,
+) -> str:
     """
     Navigates to a URL and returns the HTML content.
     Uses pydoll for undetected browsing.
+
+    Args:
+        url: The URL to navigate to
+        retries: Number of retry attempts
+        extra_wait: Additional seconds to wait after content load (for JS-heavy sites)
     """
     last_error = None
 
@@ -339,31 +348,36 @@ async def get_page_content(url: str, retries: int = settings.BROWSER_PAGE_RETRIE
                     )
                 )
 
+                # Extra wait for JS-heavy sites like OpenSea
+                if extra_wait > 0:
+                    await asyncio.sleep(extra_wait)
+
                 # Get page content
                 content = await tab.page_source
 
                 if not content or len(content) < settings.BROWSER_MIN_CONTENT_LENGTH:
                     raise Exception("Empty or invalid page content received")
 
-                # Check for eBay blocking indicators
+                # Check for eBay blocking indicators (only for eBay URLs)
                 # Only trigger if we DON'T have real listing content AND have blocking phrases
-                content_lower = content.lower()
-                has_listings = "s-item__link" in content or "srp-results" in content
+                if "ebay.com" in url.lower():
+                    content_lower = content.lower()
+                    has_listings = "s-item__link" in content or "srp-results" in content
 
-                if not has_listings:
-                    # More specific blocking phrases (avoid false positives from JS/CSS)
-                    blocking_phrases = [
-                        "please verify yourself",
-                        "robot or human",
-                        "security measure",
-                        "access to this page has been denied",
-                        "unusual traffic from your computer",
-                        "too many requests",
-                        "complete the captcha",
-                    ]
-                    for phrase in blocking_phrases:
-                        if phrase in content_lower:
-                            raise Exception(f"eBay blocking detected: '{phrase}' found")
+                    if not has_listings:
+                        # More specific blocking phrases (avoid false positives from JS/CSS)
+                        blocking_phrases = [
+                            "please verify yourself",
+                            "robot or human",
+                            "security measure",
+                            "access to this page has been denied",
+                            "unusual traffic from your computer",
+                            "too many requests",
+                            "complete the captcha",
+                        ]
+                        for phrase in blocking_phrases:
+                            if phrase in content_lower:
+                                raise Exception(f"eBay blocking detected: '{phrase}' found")
 
                 # Track page count for preventive restart
                 await BrowserManager.increment_page_count()

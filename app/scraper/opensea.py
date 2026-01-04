@@ -34,11 +34,24 @@ class OpenSeaSale:
     traits: Optional[List[str]] = None  # NFT traits (e.g., ["Rare", "Fire", "Level 5"])
 
 
-async def scrape_opensea_collection(collection_url: str) -> Dict[str, Any]:
+async def scrape_opensea_collection(collection_slug_or_url: str) -> Dict[str, Any]:
     """
     Scrapes an OpenSea collection page for stats (Floor Price, Volume, etc).
+
+    Args:
+        collection_slug_or_url: Either a collection slug (e.g., 'wonders-of-the-first')
+                               or a full URL (e.g., 'https://opensea.io/collection/...')
     """
-    print(f"Scraping OpenSea Collection: {collection_url}")
+    # Normalize input to full URL
+    if collection_slug_or_url.startswith("http"):
+        collection_url = collection_slug_or_url
+        # Extract slug from URL for later use
+        collection_slug = collection_url.split("/collection/")[-1].split("/")[0].split("?")[0]
+    else:
+        collection_slug = collection_slug_or_url
+        collection_url = f"https://opensea.io/collection/{collection_slug}"
+
+    print(f"Scraping OpenSea Collection: {collection_slug}")
 
     # Fetch ETH price for conversion
     eth_price_usd = 0.0
@@ -53,7 +66,8 @@ async def scrape_opensea_collection(collection_url: str) -> Dict[str, Any]:
     max_browser_retries = 3
     for attempt in range(max_browser_retries):
         try:
-            html = await get_page_content(collection_url)
+            # OpenSea needs extra wait time for URQL/GraphQL data to hydrate
+            html = await get_page_content(collection_url, extra_wait=5)
             break
         except Exception as browser_error:
             print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}")
@@ -257,17 +271,15 @@ async def scrape_opensea_sales(collection_slug: str, limit: int = 50, event_type
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, headers=headers, params=params) as response:
                 if response.status == 401:
-                    print("[OpenSea] API key required. Set OPENSEA_API_KEY env var.")
-                    print("[OpenSea] Skipping slow web fallback - returning empty.")
-                    return []
+                    print("[OpenSea] No API key. Falling back to web scraping.")
+                    return await _scrape_opensea_sales_web(collection_slug, eth_price_usd, limit)
 
                 if response.status == 429:
-                    print("[OpenSea] Rate limited. Try again later.")
-                    return []
+                    print("[OpenSea] Rate limited. Falling back to web scraping.")
+                    return await _scrape_opensea_sales_web(collection_slug, eth_price_usd, limit)
 
                 if response.status != 200:
-                    print(f"[OpenSea] API error: {response.status}")
-                    # Try web scraping fallback
+                    print(f"[OpenSea] API error: {response.status}. Falling back to web scraping.")
                     return await _scrape_opensea_sales_web(collection_slug, eth_price_usd, limit)
 
                 data = await response.json()
@@ -380,7 +392,8 @@ async def _scrape_opensea_sales_web(collection_slug: str, eth_price_usd: float, 
     max_browser_retries = 3
     for attempt in range(max_browser_retries):
         try:
-            html = await get_page_content(activity_url)
+            # OpenSea needs extra wait time for URQL/GraphQL data to hydrate
+            html = await get_page_content(activity_url, extra_wait=5)
             break
         except Exception as browser_error:
             print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}")
@@ -591,13 +604,12 @@ async def scrape_opensea_listings(collection_slug: str, limit: int = 100) -> Lis
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, headers=headers, params=params) as response:
                 if response.status == 401:
-                    print("[OpenSea] API key required. Set OPENSEA_API_KEY env var.")
-                    print("[OpenSea] Skipping slow web fallback - returning empty.")
-                    return []
+                    print("[OpenSea] No API key. Falling back to web scraping.")
+                    return await _scrape_opensea_listings_web(collection_slug, eth_price_usd, limit)
 
                 if response.status == 429:
-                    print("[OpenSea] Rate limited. Try again later.")
-                    return []
+                    print("[OpenSea] Rate limited. Falling back to web scraping.")
+                    return await _scrape_opensea_listings_web(collection_slug, eth_price_usd, limit)
 
                 if response.status != 200:
                     print(f"[OpenSea] API error: {response.status}")
@@ -682,7 +694,8 @@ async def _scrape_opensea_listings_web(
     max_browser_retries = 3
     for attempt in range(max_browser_retries):
         try:
-            html = await get_page_content(collection_url)
+            # OpenSea needs extra wait time for URQL/GraphQL data to hydrate
+            html = await get_page_content(collection_url, extra_wait=5)
             break
         except Exception as browser_error:
             print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}")
