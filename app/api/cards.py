@@ -7,6 +7,7 @@ from typing import Any, List, Optional
 from cachetools import TTLCache
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from sqlmodel import Session, desc, func, select
 
 from app.core.config import settings
@@ -501,7 +502,6 @@ def read_cards(
 
 def get_card_by_id_or_slug(session: Session, card_identifier: str) -> tuple[Card, str]:
     """Resolve card by ID (numeric) or slug (string). Returns (card, rarity_name)."""
-    from sqlalchemy.orm import aliased
 
     # Build query with LEFT JOIN to Rarity
     stmt = (
@@ -1195,7 +1195,6 @@ def read_fmp_history_treatments(
 
     Useful for populating treatment filter dropdown.
     """
-    from app.models.market import FMPSnapshot
 
     card, _ = get_card_by_id_or_slug(session, card_id)
 
