@@ -140,6 +140,7 @@ def force_kill_all_chrome():
             pass
     # Give OS time to clean up
     import time
+
     time.sleep(2)
     print("[Browser] Force kill complete")
 

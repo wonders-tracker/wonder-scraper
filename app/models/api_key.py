@@ -51,11 +51,7 @@ class APIKey(SQLModel, table=True):
         from app.core.config import settings
 
         # Use HMAC with app secret for secure key hashing
-        return hmac.new(
-            settings.SECRET_KEY.encode(),
-            key.encode(),
-            hashlib.sha256
-        ).hexdigest()
+        return hmac.new(settings.SECRET_KEY.encode(), key.encode(), hashlib.sha256).hexdigest()
 
     @staticmethod
     def get_prefix(key: str) -> str:
