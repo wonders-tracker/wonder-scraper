@@ -94,11 +94,36 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        # Graceful shutdown
+        logger.info("Shutting down gracefully...")
+
         if memory_task:
             memory_task.cancel()
             with suppress(asyncio.CancelledError):
                 await memory_task
-    # Shutdown (scheduler stops automatically usually or we can stop it)
+
+        # Stop scheduler first to prevent new jobs
+        if settings.RUN_SCHEDULER:
+            from app.core.scheduler import scheduler
+
+            if scheduler.running:
+                logger.info("Stopping scheduler...")
+                scheduler.shutdown(wait=False)
+
+        # Clean up browser resources
+        try:
+            from app.scraper.browser import BrowserManager, kill_stale_chrome_processes
+
+            logger.info("Closing browser...")
+            await BrowserManager.close()
+            # Give time for graceful close, then force kill orphans
+            await asyncio.sleep(2)
+            kill_stale_chrome_processes()
+            logger.info("Browser cleanup complete")
+        except Exception as e:
+            logger.warning(f"Browser cleanup error: {e}")
+
+        logger.info("Shutdown complete")
 
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json", lifespan=lifespan)

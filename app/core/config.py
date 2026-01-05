@@ -51,9 +51,11 @@ class Settings(BaseSettings):
     ANTI_SCRAPING_STATE_TTL_SECONDS: int = 900
     ANTI_SCRAPING_MAX_TRACKED_IPS: int = 5000
 
-    # Database pool
-    DB_POOL_SIZE: int = 10
-    DB_MAX_OVERFLOW: int = 5
+    # Database pool - sized for concurrent scraper operations
+    # With SCHEDULER_CARD_BATCH_SIZE=8 and BROWSER_SEMAPHORE_LIMIT=2,
+    # we can have up to 8*2*2=32 concurrent DB operations
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 15
 
     # Auth tokens
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # Short-lived access token

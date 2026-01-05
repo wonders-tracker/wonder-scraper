@@ -1,6 +1,13 @@
 # Use pydoll for undetected browser automation
 from pydoll.browser.chromium.chrome import Chrome
 from pydoll.browser.options import ChromiumOptions
+from pydoll.exceptions import (
+    CommandExecutionTimeout,
+    WebSocketConnectionClosed,
+    BrowserNotRunning,
+    FailedToStartBrowser,
+    ConnectionFailed,
+)
 from typing import Optional
 import asyncio
 import os
@@ -323,9 +330,12 @@ class BrowserManager:
         Increment page count and restart browser if threshold reached.
         Returns True if browser was restarted.
         """
-        cls._page_count += 1
-        cls._consecutive_timeouts = 0  # Reset timeout counter on success
-        if cls._page_count >= cls._max_pages_before_restart:
+        async with cls._lock:
+            cls._page_count += 1
+            cls._consecutive_timeouts = 0  # Reset timeout counter on success
+            should_restart = cls._page_count >= cls._max_pages_before_restart
+
+        if should_restart:
             print(f"[Browser] Preventive restart after {cls._page_count} pages to free memory")
             await cls.restart()
             return True
@@ -337,16 +347,20 @@ class BrowserManager:
         Handle a timeout error - track consecutive timeouts and force restart if needed.
         Returns True if a hard restart was performed.
         """
-        cls._consecutive_timeouts += 1
-        print(f"[Browser] Timeout #{cls._consecutive_timeouts}/{cls._max_consecutive_timeouts}")
+        async with cls._lock:
+            cls._consecutive_timeouts += 1
+            timeout_count = cls._consecutive_timeouts
+            should_hard_restart = timeout_count >= cls._max_consecutive_timeouts
 
-        if cls._consecutive_timeouts >= cls._max_consecutive_timeouts:
+        print(f"[Browser] Timeout #{timeout_count}/{cls._max_consecutive_timeouts}")
+
+        if should_hard_restart:
             print("[Browser] Too many consecutive timeouts - forcing hard restart!")
-            cls._consecutive_timeouts = 0
-            # Nuclear option - kill everything
+            # Nuclear option - kill everything (must be done before acquiring lock to avoid deadlock)
             force_kill_all_chrome()
-            # Clear browser reference
+            # Clear browser reference under lock
             async with cls._lock:
+                cls._consecutive_timeouts = 0
                 cls._browser = None
                 cls._restart_count = 0
             # Start fresh
@@ -442,25 +456,31 @@ async def get_page_content(
                 print(f"  Type: {error_type}")
                 print(f"  Message: {e}")
 
-                # Determine if this is a browser-level error requiring restart
-                browser_error_keywords = [
-                    "browser",
-                    "closed",
-                    "crashed",
-                    "connection",
-                    "websocket",
-                    "connect call failed",
-                    "errno 61",
-                    "invalidstate",
-                    "target",
-                    "timeout",
-                ]
-                is_browser_error = error_type in ("OSError", "ConnectionError", "WebSocketException") or any(
-                    keyword in error_msg for keyword in browser_error_keywords
+                # Use pydoll-specific exception types for reliable detection
+                is_pydoll_error = isinstance(
+                    e,
+                    (
+                        CommandExecutionTimeout,
+                        WebSocketConnectionClosed,
+                        BrowserNotRunning,
+                        FailedToStartBrowser,
+                        ConnectionFailed,
+                    ),
                 )
 
-                # Handle different error types with appropriate recovery
-                is_timeout = "timeout" in error_msg or error_type == "TimeoutError"
+                # Fallback to keyword matching for non-pydoll errors
+                is_browser_error = (
+                    is_pydoll_error
+                    or error_type
+                    in (
+                        "OSError",
+                        "ConnectionError",
+                    )
+                    or any(kw in error_msg for kw in ["browser", "closed", "crashed", "connection", "websocket"])
+                )
+
+                # Timeout detection - pydoll CommandExecutionTimeout or asyncio.TimeoutError
+                is_timeout = isinstance(e, (CommandExecutionTimeout, asyncio.TimeoutError)) or ("timeout" in error_msg)
 
                 if "blocking detected" in error_msg:
                     # eBay blocking - restart browser and apply longer cooldown
@@ -494,8 +514,11 @@ async def get_page_content(
             finally:
                 if tab:
                     try:
-                        await tab.close()
-                    except (asyncio.TimeoutError, RuntimeError, OSError):
+                        # Timeout on tab.close() - can hang if browser frozen
+                        await asyncio.wait_for(tab.close(), timeout=5)
+                    except asyncio.TimeoutError:
+                        print("[Browser] tab.close() timed out - browser may be hung")
+                    except (RuntimeError, OSError, Exception):
                         # Tab close can fail if browser crashed or connection lost - safe to ignore
                         pass
 
