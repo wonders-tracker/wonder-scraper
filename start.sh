@@ -81,9 +81,28 @@ echo ""
 cleanup() {
     echo ""
     echo -e "${YELLOW}Shutting down services...${NC}"
+
+    # Send SIGTERM for graceful shutdown
     kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
-    kill_port 8000 "Backend" 2>/dev/null
-    kill_port 3000 "Frontend" 2>/dev/null
+
+    # Wait up to 5 seconds for graceful shutdown (browser cleanup takes time)
+    echo -e "${GRAY}Waiting for graceful shutdown...${NC}"
+    local waited=0
+    while [ $waited -lt 5 ]; do
+        if ! kill -0 $BACKEND_PID 2>/dev/null && ! kill -0 $FRONTEND_PID 2>/dev/null; then
+            break
+        fi
+        sleep 1
+        ((waited++))
+    done
+
+    # Force kill any stragglers
+    kill -9 $BACKEND_PID $FRONTEND_PID 2>/dev/null
+
+    # Also kill any Chrome processes spawned by pydoll
+    pkill -9 -f "chrome.*--headless" 2>/dev/null
+    pkill -9 -f "pydoll_profile" 2>/dev/null
+
     echo -e "${GREEN}Done.${NC}"
     exit 0
 }

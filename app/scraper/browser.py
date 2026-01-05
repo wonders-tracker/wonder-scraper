@@ -184,14 +184,29 @@ class BrowserManager:
     _max_pages_before_restart: int = settings.BROWSER_MAX_PAGES_BEFORE_RESTART
     _restarting: bool = False  # Flag to coordinate concurrent restart requests
     _last_restart_time: float = 0  # Timestamp of last restart
+    _last_health_check: float = 0  # Timestamp of last health check
+    _health_check_interval: float = 30  # Seconds between health checks
     _consecutive_timeouts: int = 0  # Track consecutive timeout errors
     _max_consecutive_timeouts: int = 3  # Force hard restart after this many
 
     @classmethod
     async def get_browser(cls) -> Chrome:
+        import time
+
         async with cls._lock:
             if not cls._browser:
                 await cls._start_browser_internal()
+                cls._last_health_check = time.time()
+            elif time.time() - cls._last_health_check > cls._health_check_interval:
+                # Periodic health check - verify Chrome is still responsive
+                try:
+                    await asyncio.wait_for(cls._browser.get_version(), timeout=5)
+                    cls._last_health_check = time.time()
+                except Exception as e:
+                    print(f"[Browser] Health check failed: {e}. Restarting...")
+                    await cls._close_internal()
+                    await cls._start_browser_internal()
+                    cls._last_health_check = time.time()
             assert cls._browser is not None  # Guaranteed by _start_browser_internal
             return cls._browser
 
