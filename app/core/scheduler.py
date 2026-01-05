@@ -902,6 +902,12 @@ async def job_seller_priority_queue():
     except Exception as e:
         print(f"[Seller Priority] Fatal error: {e}")
         log_scrape_error("Seller Priority Queue", str(e))
+    finally:
+        # Always close browser to prevent resource leaks
+        try:
+            await BrowserManager.close()
+        except (asyncio.TimeoutError, RuntimeError, OSError):
+            pass
 
 
 async def job_backfill_seller_data():
@@ -981,6 +987,12 @@ async def job_backfill_seller_data():
     except Exception as e:
         print(f"[Seller] Fatal error: {e}")
         log_scrape_error("Seller Backfill", str(e))
+    finally:
+        # Always close browser to prevent resource leaks
+        try:
+            await BrowserManager.close()
+        except (asyncio.TimeoutError, RuntimeError, OSError):
+            pass
 
 
 async def job_market_insights():

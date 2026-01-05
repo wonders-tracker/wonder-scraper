@@ -376,7 +376,8 @@ async def get_page_content(
             tab = None
             try:
                 browser = await BrowserManager.get_browser()
-                tab = await browser.new_tab()
+                # Timeout on new_tab - can hang if Chrome is frozen
+                tab = await asyncio.wait_for(browser.new_tab(), timeout=10)
 
                 # Random delay before navigation (human-like)
                 await asyncio.sleep(
@@ -386,8 +387,8 @@ async def get_page_content(
                     )
                 )
 
-                # Navigate
-                await tab.go_to(url)
+                # Navigate with explicit timeout (default 300s is way too long)
+                await tab.go_to(url, timeout=30)
 
                 # Random wait for content to load (human-like)
                 await asyncio.sleep(
@@ -401,8 +402,8 @@ async def get_page_content(
                 if extra_wait > 0:
                     await asyncio.sleep(extra_wait)
 
-                # Get page content
-                content = await tab.page_source
+                # Get page content with timeout (can hang if Chrome frozen)
+                content = await asyncio.wait_for(tab.page_source, timeout=30)
 
                 if not content or len(content) < settings.BROWSER_MIN_CONTENT_LENGTH:
                     raise Exception("Empty or invalid page content received")

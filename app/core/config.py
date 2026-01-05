@@ -76,7 +76,8 @@ class Settings(BaseSettings):
     # Seconds to wait for browser to start
     BROWSER_STARTUP_TIMEOUT: int = 60
     # Restart browser after this many page fetches to prevent memory leaks
-    BROWSER_MAX_PAGES_BEFORE_RESTART: int = 50
+    # Reduced from 50 to 25 - Chrome can accumulate 200-500MB per tab
+    BROWSER_MAX_PAGES_BEFORE_RESTART: int = 25
     # Extended cooldown (seconds) after hitting max restarts
     BROWSER_EXTENDED_COOLDOWN: int = 10
     # Delay (seconds) between browser restarts
