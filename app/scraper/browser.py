@@ -123,6 +123,27 @@ def kill_stale_chrome_processes():
         pass
 
 
+def force_kill_all_chrome():
+    """Aggressively kill ALL Chrome/Chromium processes - nuclear option."""
+    print("[Browser] FORCE KILLING all Chrome processes...")
+    kill_commands = [
+        ["pkill", "-9", "-f", "chrome"],
+        ["pkill", "-9", "-f", "chromium"],
+        ["killall", "-9", "chrome"],
+        ["killall", "-9", "chromium"],
+        ["killall", "-9", "Google Chrome"],
+    ]
+    for cmd in kill_commands:
+        try:
+            subprocess.run(cmd, capture_output=True, timeout=5)
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+            pass
+    # Give OS time to clean up
+    import time
+    time.sleep(2)
+    print("[Browser] Force kill complete")
+
+
 def cleanup_stale_profiles():
     """Clean up old profile directories from previous sessions."""
 
@@ -155,6 +176,8 @@ class BrowserManager:
     _max_pages_before_restart: int = settings.BROWSER_MAX_PAGES_BEFORE_RESTART
     _restarting: bool = False  # Flag to coordinate concurrent restart requests
     _last_restart_time: float = 0  # Timestamp of last restart
+    _consecutive_timeouts: int = 0  # Track consecutive timeout errors
+    _max_consecutive_timeouts: int = 3  # Force hard restart after this many
 
     @classmethod
     async def get_browser(cls) -> Chrome:
@@ -300,8 +323,32 @@ class BrowserManager:
         Returns True if browser was restarted.
         """
         cls._page_count += 1
+        cls._consecutive_timeouts = 0  # Reset timeout counter on success
         if cls._page_count >= cls._max_pages_before_restart:
             print(f"[Browser] Preventive restart after {cls._page_count} pages to free memory")
+            await cls.restart()
+            return True
+        return False
+
+    @classmethod
+    async def handle_timeout_error(cls):
+        """
+        Handle a timeout error - track consecutive timeouts and force restart if needed.
+        Returns True if a hard restart was performed.
+        """
+        cls._consecutive_timeouts += 1
+        print(f"[Browser] Timeout #{cls._consecutive_timeouts}/{cls._max_consecutive_timeouts}")
+
+        if cls._consecutive_timeouts >= cls._max_consecutive_timeouts:
+            print("[Browser] Too many consecutive timeouts - forcing hard restart!")
+            cls._consecutive_timeouts = 0
+            # Nuclear option - kill everything
+            force_kill_all_chrome()
+            # Clear browser reference
+            async with cls._lock:
+                cls._browser = None
+                cls._restart_count = 0
+            # Start fresh
             await cls.restart()
             return True
         return False
@@ -411,6 +458,8 @@ async def get_page_content(
                 )
 
                 # Handle different error types with appropriate recovery
+                is_timeout = "timeout" in error_msg or error_type == "TimeoutError"
+
                 if "blocking detected" in error_msg:
                     # eBay blocking - restart browser and apply longer cooldown
                     print("[Browser] eBay blocking detected. Restarting browser with extended cooldown...")
@@ -421,6 +470,13 @@ async def get_page_content(
                             settings.BROWSER_BLOCKING_COOLDOWN_MAX,
                         )
                     )
+                elif is_timeout:
+                    # Timeout error - track consecutive timeouts for hard restart
+                    hard_restarted = await BrowserManager.handle_timeout_error()
+                    if not hard_restarted:
+                        # Normal restart if we haven't hit threshold
+                        await BrowserManager.restart()
+                    await asyncio.sleep(settings.BROWSER_RESTART_DELAY)
                 elif is_browser_error:
                     # Browser-level error - restart
                     print("[Browser] Detected browser issue. Restarting browser...")
