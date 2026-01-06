@@ -89,19 +89,129 @@ Use the deploy script for reliable Vercel deployments:
 
 **Important:** Never commit `.vercel/output` - it causes Vercel to skip builds and serve stale content. This is already in `.gitignore`.
 
+## Development Workflow
+
+### Environment Strategy
+
+```
+Feature Branch → Staging → Production
+      ↓             ↓           ↓
+  Local DB     Neon Staging   Neon Prod
+```
+
+| Environment | Backend | Frontend | Database |
+|-------------|---------|----------|----------|
+| **Local** | `localhost:8000` | `localhost:5173` | Docker PostgreSQL |
+| **Staging** | `wonder-scraper-staging-staging.up.railway.app` | Vercel preview | Neon staging branch |
+| **Production** | `api.wonderstracker.com` | `wonderstracker.com` | Neon main branch |
+
+### Staging Environment
+
+**Backend URL:** https://wonder-scraper-staging-staging.up.railway.app
+
+**Health Checks:**
+```bash
+# Basic health
+curl https://wonder-scraper-staging-staging.up.railway.app/health
+
+# Detailed health (DB, scheduler, scraper status)
+curl https://wonder-scraper-staging-staging.up.railway.app/health/detailed
+
+# Circuit breaker status
+curl https://wonder-scraper-staging-staging.up.railway.app/health/circuits
+```
+
+**Database:** Neon staging branch (copy of production data)
+
+**Discord webhooks:** Disabled (to avoid polluting production channels)
+
+### Feature Development Process
+
+1. **Create feature branch** from `main`
+   ```bash
+   git checkout -b feature/my-feature main
+   ```
+
+2. **Develop locally** with Docker Compose
+   ```bash
+   docker-compose up -d postgres
+   poetry run uvicorn app.main:app --reload
+   cd frontend && npm run dev
+   ```
+
+3. **Push and create PR to staging**
+   ```bash
+   git push -u origin feature/my-feature
+   gh pr create --base staging
+   ```
+
+4. **CI runs all checks** (tests, lint, type check, security scan)
+
+5. **Merge to staging** → Auto-deploys to staging environment
+   - Backend: Railway staging service
+   - Frontend: Vercel staging preview
+   - Database: Neon staging branch
+
+6. **Test on staging** → Verify feature works end-to-end
+   ```bash
+   curl https://wonder-scraper-staging-staging.up.railway.app/health/detailed
+   ```
+
+7. **Create PR from staging to main**
+   ```bash
+   gh pr create --base main --head staging --title "Release: feature description"
+   ```
+
+8. **Merge to main** → Auto-deploys to production
+
+### Quick Commands
+
+```bash
+# Create feature branch
+git checkout -b feature/my-feature main
+
+# Create PR to staging
+gh pr create --base staging
+
+# Create release PR (staging → main)
+gh pr create --base main --head staging
+
+# Check staging health
+curl -s https://wonder-scraper-staging-staging.up.railway.app/health/detailed | python -m json.tool
+
+# Check production health
+curl -s https://api.wonderstracker.com/health/detailed | python -m json.tool
+```
+
+### Database Migrations
+
+**Safe migration workflow:**
+1. Write migration with `alembic revision --autogenerate -m "description"`
+2. Test locally: `poetry run alembic upgrade head`
+3. Push to feature branch → CI tests migration on fresh DB
+4. Merge to staging → Migration runs on Neon staging branch
+5. Verify staging works correctly
+6. Merge to main → Migration runs on Neon production
+
+**CI checks for dangerous operations:**
+- DROP TABLE/COLUMN detection
+- Column type changes
+- NOT NULL without defaults
+
 ## CI/CD
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push to main/staging/preview:
 
+**All branches:**
 - **backend-test**: Runs pytest with PostgreSQL
 - **backend-lint**: Runs ruff check/format and ty type check
 - **frontend-test**: Runs typecheck, lint, and build
-- **frontend-bundle-integrity**: Validates production bundle structure:
-  - React vendor chunk exists and contains runtime
-  - Router and main entry chunks exist
-  - All JS files pass syntax validation
-  - Reports bundle sizes
+- **frontend-bundle-integrity**: Validates production bundle structure
 - **security-scan**: Trivy vulnerability scanner
+- **migration-check**: Detects dangerous database migrations (PRs only)
+
+**Staging branch only:**
+- **staging-smoke-test**: Health checks and API tests after deploy
 
 ## Key Directories
 

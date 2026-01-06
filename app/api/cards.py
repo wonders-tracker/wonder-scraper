@@ -170,6 +170,7 @@ def read_cards(
     floor_by_variant_map = {}  # Floor price per variant {card_id: {variant: price}}
     lowest_ask_by_variant_map = {}  # Lowest ask per variant {card_id: {variant: price}}
     volume_map = {}  # Volume filtered by time period
+    avg_price_map = {}  # Average price for price delta calculation
 
     # Build platform filter clause for SQL queries
     platform_clause = "AND platform = :platform" if platform else ""
@@ -330,8 +331,6 @@ def read_cards(
             # Try 30d first, fallback to 90d, then all-time
             # Delta = how does latest sale compare to historical average?
             # Use COALESCE(sold_date, scraped_at) for consistent time filtering
-            avg_price_map = {}
-
             for days, label in [(30, "30d"), (90, "90d"), (None, "all")]:
                 if days:
                     cutoff = datetime.now(timezone.utc) - timedelta(days=days)

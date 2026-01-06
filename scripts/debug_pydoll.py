@@ -1,6 +1,7 @@
 from pydoll.browser import Chrome
 import asyncio
 
+
 async def check_page_source():
     browser = Chrome()
     await browser.start()
@@ -11,12 +12,12 @@ async def check_page_source():
         if asyncio.iscoroutine(prop):
             print("It is a coroutine object (property).")
         elif asyncio.iscoroutinefunction(prop):
-             print("It is a coroutine function.")
+            print("It is a coroutine function.")
         else:
-             print("It is something else.")
+            print("It is something else.")
     finally:
         await browser.stop()
 
+
 if __name__ == "__main__":
     asyncio.run(check_page_source())
-

@@ -1,6 +1,7 @@
 import asyncio
 from app.scraper.browser import get_page_content
 
+
 async def test_browser():
     print("Testing Pydoll...")
     url = "https://example.com"
@@ -15,6 +16,6 @@ async def test_browser():
     except Exception as e:
         print(f"Error: {e}")
 
+
 if __name__ == "__main__":
     asyncio.run(test_browser())
-

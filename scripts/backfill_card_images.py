@@ -34,12 +34,11 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlmodel import Session, select, desc
+from sqlmodel import Session, select
 from sqlalchemy import text
 
 from app.db import engine
 from app.models.card import Card
-from app.models.market import MarketPrice
 from app.services.blob_storage import get_blob_service
 
 

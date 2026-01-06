@@ -1,9 +1,8 @@
 """
 Tests for anti-scraping protection system.
 """
-import pytest
-from unittest.mock import MagicMock, patch
-from fastapi.testclient import TestClient
+
+from unittest.mock import MagicMock
 
 
 class TestAntiScrapingMiddleware:
@@ -59,7 +58,7 @@ class TestAntiScrapingMiddleware:
         }
 
         is_headless, reason = middleware._is_headless_browser(headless_request)
-        assert is_headless, f"Should detect HeadlessChrome"
+        assert is_headless, "Should detect HeadlessChrome"
         assert "headless" in reason.lower()
 
         # Puppeteer in UA
@@ -123,7 +122,6 @@ class TestAntiScrapingMiddleware:
     def test_burst_detection(self):
         """Test burst request detection (too many requests too fast)."""
         from app.core.anti_scraping import AntiScrapingMiddleware
-        import time
 
         middleware = AntiScrapingMiddleware(app=None, enabled=True)
 

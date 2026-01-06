@@ -8,4 +8,3 @@ for name, member in inspect.getmembers(Chrome):
 
 print("\nInit signature:")
 print(inspect.signature(Chrome.__init__))
-

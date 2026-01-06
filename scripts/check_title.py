@@ -8,4 +8,3 @@ print(f"Title: {soup.title.string if soup.title else 'No Title'}")
 
 # Print text of body to see if it says "Security Measure"
 print(soup.get_text()[:500])
-

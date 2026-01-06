@@ -250,6 +250,12 @@ class OrderBookAnalyzer:
                     return [dict(row._mapping) for row in result.fetchall()]
         except Exception as e:
             logger.error(f"[OrderBook] Failed to fetch active listings for card {card_id}: {e}")
+            # Rollback session to clear invalid transaction state
+            if self.session:
+                try:
+                    self.session.rollback()
+                except Exception:
+                    pass  # Session may already be closed
             return []
 
     def _filter_outliers(self, prices: list[float]) -> tuple[list[float], int]:
@@ -399,6 +405,12 @@ class OrderBookAnalyzer:
                     return [dict(row._mapping) for row in result.fetchall()]
         except Exception as e:
             logger.error(f"[OrderBook] Failed to fetch sold listings for card {card_id}: {e}")
+            # Rollback session to clear invalid transaction state
+            if self.session:
+                try:
+                    self.session.rollback()
+                except Exception:
+                    pass  # Session may already be closed
             return []
 
     def _estimate_from_sales(

@@ -1,6 +1,7 @@
 from sqlmodel import Session, text
 from app.db import engine
 
+
 def migrate():
     with Session(engine) as session:
         print("Checking for 'platform' column in 'marketprice' table...")
@@ -19,6 +20,6 @@ def migrate():
                 session.rollback()
                 print(f"Failed to add column: {e}")
 
+
 if __name__ == "__main__":
     migrate()
-

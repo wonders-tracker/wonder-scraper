@@ -9,7 +9,6 @@ Tests cover:
 - Connection health checks
 """
 
-import asyncio
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from sqlalchemy.exc import OperationalError, DisconnectionError, InterfaceError
@@ -27,41 +26,50 @@ from app.core.db_utils import (
 class TestIsTransientError:
     """Tests for is_transient_error function."""
 
-    @pytest.mark.parametrize("error_msg", [
-        "server closed the connection unexpectedly",
-        "connection refused",
-        "connection reset by peer",
-        "ssl connection has been closed unexpectedly",
-        "SSL Connection Has Been Closed Unexpectedly",  # Case variation
-        "terminating connection due to administrator command",
-        "connection timed out",
-        "could not connect to server",
-        "the database system is starting up",
-        "the database system is shutting down",
-    ])
+    @pytest.mark.parametrize(
+        "error_msg",
+        [
+            "server closed the connection unexpectedly",
+            "connection refused",
+            "connection reset by peer",
+            "ssl connection has been closed unexpectedly",
+            "SSL Connection Has Been Closed Unexpectedly",  # Case variation
+            "terminating connection due to administrator command",
+            "connection timed out",
+            "could not connect to server",
+            "the database system is starting up",
+            "the database system is shutting down",
+        ],
+    )
     def test_detects_transient_errors(self, error_msg):
         """Should detect all known transient error messages."""
         error = Exception(error_msg)
         assert is_transient_error(error) is True
 
-    @pytest.mark.parametrize("error_msg", [
-        "Server Closed The Connection Unexpectedly",  # Case insensitive
-        "CONNECTION REFUSED",
-        "The Database System Is Starting Up",
-    ])
+    @pytest.mark.parametrize(
+        "error_msg",
+        [
+            "Server Closed The Connection Unexpectedly",  # Case insensitive
+            "CONNECTION REFUSED",
+            "The Database System Is Starting Up",
+        ],
+    )
     def test_case_insensitive(self, error_msg):
         """Should match error messages case-insensitively."""
         error = Exception(error_msg)
         assert is_transient_error(error) is True
 
-    @pytest.mark.parametrize("error_msg", [
-        "relation 'cards' does not exist",
-        "duplicate key value violates unique constraint",
-        "column 'foo' does not exist",
-        "permission denied for table users",
-        "syntax error at or near 'SELECT'",
-        "",
-    ])
+    @pytest.mark.parametrize(
+        "error_msg",
+        [
+            "relation 'cards' does not exist",
+            "duplicate key value violates unique constraint",
+            "column 'foo' does not exist",
+            "permission denied for table users",
+            "syntax error at or near 'SELECT'",
+            "",
+        ],
+    )
     def test_rejects_non_transient_errors(self, error_msg):
         """Should reject non-transient database errors."""
         error = Exception(error_msg)
@@ -69,11 +77,7 @@ class TestIsTransientError:
 
     def test_with_operational_error(self):
         """Should work with SQLAlchemy OperationalError."""
-        error = OperationalError(
-            "server closed the connection unexpectedly",
-            None,
-            None
-        )
+        error = OperationalError("server closed the connection unexpectedly", None, None)
         assert is_transient_error(error) is True
 
 
@@ -82,6 +86,7 @@ class TestExecuteWithRetry:
 
     def test_success_on_first_try(self, test_engine):
         """Should return result on successful first try."""
+
         def operation(session):
             return "success"
 
@@ -96,11 +101,7 @@ class TestExecuteWithRetry:
             nonlocal call_count
             call_count += 1
             if call_count < 3:
-                raise OperationalError(
-                    "server closed the connection unexpectedly",
-                    None,
-                    None
-                )
+                raise OperationalError("server closed the connection unexpectedly", None, None)
             return "success after retry"
 
         with patch("app.core.db_utils.time.sleep"):  # Skip actual delays
@@ -116,11 +117,7 @@ class TestExecuteWithRetry:
         def operation(session):
             nonlocal call_count
             call_count += 1
-            raise OperationalError(
-                "server closed the connection unexpectedly",
-                None,
-                None
-            )
+            raise OperationalError("server closed the connection unexpectedly", None, None)
 
         with patch("app.core.db_utils.time.sleep"):
             with pytest.raises(OperationalError):
@@ -135,11 +132,7 @@ class TestExecuteWithRetry:
         def operation(session):
             nonlocal call_count
             call_count += 1
-            raise OperationalError(
-                "relation 'cards' does not exist",
-                None,
-                None
-            )
+            raise OperationalError("relation 'cards' does not exist", None, None)
 
         with pytest.raises(OperationalError):
             execute_with_retry(test_engine, operation)
@@ -157,11 +150,7 @@ class TestExecuteWithRetry:
         def operation(session):
             nonlocal call_count
             call_count += 1
-            raise OperationalError(
-                "server closed the connection unexpectedly",
-                None,
-                None
-            )
+            raise OperationalError("server closed the connection unexpectedly", None, None)
 
         with patch("app.core.db_utils.time.sleep", side_effect=mock_sleep):
             with pytest.raises(OperationalError):
@@ -219,6 +208,7 @@ class TestExecuteWithRetryAsync:
     @pytest.mark.asyncio
     async def test_success_on_first_try(self, test_engine):
         """Should return result on successful first try."""
+
         def operation(session):
             return "async success"
 
@@ -234,11 +224,7 @@ class TestExecuteWithRetryAsync:
             nonlocal call_count
             call_count += 1
             if call_count < 3:
-                raise OperationalError(
-                    "connection timed out",
-                    None,
-                    None
-                )
+                raise OperationalError("connection timed out", None, None)
             return "async success after retry"
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -255,11 +241,7 @@ class TestExecuteWithRetryAsync:
         def operation(session):
             nonlocal call_count
             call_count += 1
-            raise OperationalError(
-                "could not connect to server",
-                None,
-                None
-            )
+            raise OperationalError("could not connect to server", None, None)
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
             with pytest.raises(OperationalError):
@@ -279,11 +261,7 @@ class TestExecuteWithRetryAsync:
         def operation(session):
             nonlocal call_count
             call_count += 1
-            raise OperationalError(
-                "ssl connection has been closed unexpectedly",
-                None,
-                None
-            )
+            raise OperationalError("ssl connection has been closed unexpectedly", None, None)
 
         with patch("asyncio.sleep", side_effect=mock_sleep):
             with pytest.raises(OperationalError):
@@ -306,6 +284,7 @@ class TestDbRetryDecorator:
 
     def test_sync_function_success(self):
         """Should work with sync functions."""
+
         @db_retry(max_retries=2)
         def my_func():
             return "decorated success"
@@ -322,11 +301,7 @@ class TestDbRetryDecorator:
             nonlocal call_count
             call_count += 1
             if call_count < 2:
-                raise OperationalError(
-                    "terminating connection due to administrator command",
-                    None,
-                    None
-                )
+                raise OperationalError("terminating connection due to administrator command", None, None)
             return "recovered"
 
         with patch("app.core.db_utils.time.sleep"):
@@ -338,6 +313,7 @@ class TestDbRetryDecorator:
     @pytest.mark.asyncio
     async def test_async_function_success(self):
         """Should work with async functions."""
+
         @db_retry(max_retries=2)
         async def my_async_func():
             return "async decorated success"
@@ -355,11 +331,7 @@ class TestDbRetryDecorator:
             nonlocal call_count
             call_count += 1
             if call_count < 2:
-                raise OperationalError(
-                    "the database system is starting up",
-                    None,
-                    None
-                )
+                raise OperationalError("the database system is starting up", None, None)
             return "async recovered"
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -378,11 +350,7 @@ class TestDbRetryDecorator:
 
         @db_retry(max_retries=5, base_delay=1.0, max_delay=3.0)
         def always_fails():
-            raise OperationalError(
-                "server closed the connection unexpectedly",
-                None,
-                None
-            )
+            raise OperationalError("server closed the connection unexpectedly", None, None)
 
         with patch("app.core.db_utils.time.sleep", side_effect=mock_sleep):
             with pytest.raises(OperationalError):
@@ -406,11 +374,7 @@ class TestDbRetryDecorator:
             nonlocal call_count
             call_count += 1
             if call_count <= 3:
-                raise OperationalError(
-                    "connection refused",
-                    None,
-                    None
-                )
+                raise OperationalError("connection refused", None, None)
             return "success"
 
         with patch("app.core.db_utils.time.sleep", side_effect=mock_sleep):
@@ -449,9 +413,7 @@ class TestCheckDbConnection:
         mock_engine = MagicMock()
 
         with patch("app.core.db_utils.Session") as mock_session:
-            mock_session.return_value.__enter__ = MagicMock(
-                side_effect=Exception("test error")
-            )
+            mock_session.return_value.__enter__ = MagicMock(side_effect=Exception("test error"))
             mock_session.return_value.__exit__ = MagicMock(return_value=False)
 
             with patch("app.core.db_utils.logger") as mock_logger:

@@ -7,7 +7,6 @@ from app.db import engine
 from app.models.card import Card, Rarity
 from app.models.market import MarketSnapshot, MarketPrice
 from app.scraper.browser import get_page_content
-from app.scraper.simple_http import get_page_simple
 from app.scraper.utils import build_ebay_url
 from app.scraper.ebay import parse_search_results, parse_total_results
 from app.services.math import calculate_stats
@@ -15,7 +14,17 @@ from app.scraper.browser import BrowserManager
 from app.scraper.active import scrape_active_data
 from app.discord_bot.logger import log_new_sale
 
-async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", search_term: Optional[str] = None, set_name: str = "", product_type: str = "Single", max_pages: int = 3, is_backfill: bool = False):
+
+async def scrape_card(
+    card_name: str,
+    card_id: int = 0,
+    rarity_name: str = "",
+    search_term: Optional[str] = None,
+    set_name: str = "",
+    product_type: str = "Single",
+    max_pages: int = 3,
+    is_backfill: bool = False,
+):
     """
     Scrape eBay for a card with OPTIMIZED query generation.
 
@@ -70,7 +79,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
         if not has_wonders_prefix:
             unique_queries.append(f"Wonders of the First Existence {card_name}")
         # For very specific cards, add rarity if available
-        if rarity_name and rarity_name.lower() not in ['common', 'uncommon']:
+        if rarity_name and rarity_name.lower() not in ["common", "uncommon"]:
             unique_queries.append(f"{card_name} {rarity_name} Wonders")
 
     # Deduplicate (case-insensitive)
@@ -81,7 +90,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
             deduped.append(q)
             seen.add(q.lower())
     unique_queries = deduped
-            
+
     # Override max_pages for historical backfills to capture more data
     if is_backfill and max_pages < 10:
         max_pages = 10
@@ -90,10 +99,12 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
     print(f"--- Scraping: {card_name} (Rarity: {rarity_name}) ---")
     print(f"Search Queries: {unique_queries}")
     print(f"Max Pages: {max_pages} | Backfill: {is_backfill}")
-    
+
     # 1. Active Data (Use the primary query)
     print("Fetching active listings...")
-    active_ask, active_inv, highest_bid = await scrape_active_data(card_name, card_id, search_term=unique_queries[0], product_type=product_type)
+    active_ask, active_inv, highest_bid = await scrape_active_data(
+        card_name, card_id, search_term=unique_queries[0], product_type=product_type
+    )
 
     # Fallback: If scraper found no active listings, check existing DB records
     # Active listings within the last 24 hours are still relevant
@@ -114,11 +125,13 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                 active_inv = len(existing_active)
                 # Check for bids
                 for p in existing_active:
-                    bid_count = getattr(p, 'bid_count', 0)
+                    bid_count = getattr(p, "bid_count", 0)
                     if bid_count > 0 and p.price > highest_bid:
                         highest_bid = p.price
-                print(f"Using {len(existing_active)} recent active listings from DB: Ask=${active_ask:.2f}, Inv={active_inv}")
-    
+                print(
+                    f"Using {len(existing_active)} recent active listings from DB: Ask=${active_ask:.2f}, Inv={active_inv}"
+                )
+
     # 2. Scrape SOLD listings using variations if needed
     all_prices = []  # For saving to DB (new listings only)
     all_prices_for_stats = []  # For calculating stats (all listings)
@@ -146,13 +159,23 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                 break
 
             # Parse this page - get ALL listings for stats calculation
-            page_prices_for_stats = parse_search_results(html, card_id=card_id, card_name=clean_name,
-                                                         target_rarity=rarity_name, return_all=True,
-                                                         product_type=product_type)
+            page_prices_for_stats = parse_search_results(
+                html,
+                card_id=card_id,
+                card_name=clean_name,
+                target_rarity=rarity_name,
+                return_all=True,
+                product_type=product_type,
+            )
             # Parse this page - get only NEW listings for saving to DB
-            page_prices = parse_search_results(html, card_id=card_id, card_name=clean_name,
-                                              target_rarity=rarity_name, return_all=False,
-                                              product_type=product_type)
+            page_prices = parse_search_results(
+                html,
+                card_id=card_id,
+                card_name=clean_name,
+                target_rarity=rarity_name,
+                return_all=False,
+                product_type=product_type,
+            )
 
             if not page_prices_for_stats:
                 break
@@ -198,13 +221,15 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
 
                     query_prices_for_stats.append(mp)
                     all_prices_for_stats.append(mp)
-            
+
             # Get total from first page of FIRST query only (best approximation)
             if page == 1 and query == unique_queries[0]:
                 total_volume = parse_total_results(html)
             await asyncio.sleep(1)
 
-        print(f"Found {len(query_prices)} new listings to save, {len(query_prices_for_stats)} total for stats. Total unique: {len(all_prices_for_stats)}")
+        print(
+            f"Found {len(query_prices)} new listings to save, {len(query_prices_for_stats)} total for stats. Total unique: {len(all_prices_for_stats)}"
+        )
 
         # Early stopping: If we have enough data, stop trying more queries
         # Threshold based on product type (singles need less, boxes need more variety)
@@ -246,8 +271,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                 # If no 30-day records, get ALL sold records
                 if not existing_prices:
                     existing_prices = fallback_session.exec(
-                        select(MarketPrice)
-                        .where(MarketPrice.card_id == card_id, MarketPrice.listing_type == "sold")
+                        select(MarketPrice).where(MarketPrice.card_id == card_id, MarketPrice.listing_type == "sold")
                     ).all()
                     if existing_prices:
                         print(f"Using {len(existing_prices)} ALL-TIME sold records (none in last 30 days)")
@@ -259,8 +283,9 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                     print(f"Calculated from {len(existing_prices)} existing DB records: {stats}")
 
                     # Also get last sale for snapshot
-                    sorted_existing = sorted([p for p in existing_prices if p.sold_date],
-                                            key=lambda x: x.sold_date, reverse=True)
+                    sorted_existing = sorted(
+                        [p for p in existing_prices if p.sold_date], key=lambda x: x.sold_date, reverse=True
+                    )
                     if sorted_existing:
                         last_sale_price = sorted_existing[0].price
                         last_sale_date = sorted_existing[0].sold_date
@@ -277,16 +302,12 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
         print(f"Stats: {stats} (Matched listings: {len(prices_for_stats)}, Header estimate: {total_volume})")
 
         # Get most recent sale (sort by sold_date descending)
-        sorted_by_date = sorted(
-            [p for p in prices_for_stats if p.sold_date],
-            key=lambda x: x.sold_date,
-            reverse=True
-        )
+        sorted_by_date = sorted([p for p in prices_for_stats if p.sold_date], key=lambda x: x.sold_date, reverse=True)
         if sorted_by_date:
             last_sale_price = sorted_by_date[0].price
             last_sale_date = sorted_by_date[0].sold_date
             print(f"Last Sale: ${last_sale_price:.2f} on {last_sale_date.strftime('%Y-%m-%d')}")
-    
+
     # 5. Save to DB
     if card_id > 0:
         with Session(engine) as session:
@@ -299,14 +320,16 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                 discord_notifications = []
 
                 # Batch fetch existing active listings by external_id for this card
-                sold_external_ids = [p.external_id for p in prices_to_save if p.external_id and p.listing_type == "sold"]
+                sold_external_ids = [
+                    p.external_id for p in prices_to_save if p.external_id and p.listing_type == "sold"
+                ]
                 active_by_external_id = {}
                 if sold_external_ids:
                     existing_active = session.exec(
                         select(MarketPrice).where(
                             MarketPrice.card_id == card_id,
                             MarketPrice.listing_type == "active",
-                            MarketPrice.external_id.in_(sold_external_ids)
+                            MarketPrice.external_id.in_(sold_external_ids),
                         )
                     ).all()
                     active_by_external_id = {a.external_id: a for a in existing_active}
@@ -357,7 +380,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                             treatment=sale.treatment,
                             url=sale.url,
                             sold_date=sold_date_str,
-                            floor_price=active_ask if active_ask > 0 else None
+                            floor_price=active_ask if active_ask > 0 else None,
                         )
                     except Exception as e:
                         print(f"Discord notification failed: {e}")
@@ -367,7 +390,7 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
             has_active_data = active_ask > 0 or active_inv > 0
 
             if not has_sold_data and not has_active_data:
-                print(f"Skipping snapshot - no data found for this card")
+                print("Skipping snapshot - no data found for this card")
                 session.commit()  # Still commit any prices_to_save
             else:
                 snapshot = MarketSnapshot(
@@ -380,12 +403,13 @@ async def scrape_card(card_name: str, card_id: int = 0, rarity_name: str = "", s
                     highest_bid=highest_bid,
                     inventory=active_inv,
                     last_sale_price=last_sale_price,
-                    last_sale_date=last_sale_date
+                    last_sale_date=last_sale_date,
                 )
                 session.add(snapshot)
                 session.commit()
                 session.refresh(snapshot)
                 print(f"Saved Snapshot ID: {snapshot.id}")
+
 
 async def main():
     # 1. Get a card from DB
@@ -393,7 +417,7 @@ async def main():
         # Try to find 'Aerius of Thalwind'
         statement = select(Card).where(Card.name == "Aerius of Thalwind")
         card = session.exec(statement).first()
-        
+
         if not card:
             print("Card not found in DB. Using dummy ID.")
             card_name = "Aerius of Thalwind"
@@ -408,11 +432,12 @@ async def main():
             set_name = card.set_name
             rarity = session.get(Rarity, card.rarity_id)
             rarity_name = rarity.name if rarity else ""
-            
+
     await scrape_card(card_name, card_id, rarity_name, search_term=search_term, set_name=set_name)
-    
+
     # Close browser
     await BrowserManager.close()
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

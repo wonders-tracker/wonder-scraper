@@ -16,9 +16,9 @@ print(f"Classes: {title_span.get('class')}")
 current = title_span
 for i in range(10):
     current = current.parent
-    if not current: break
+    if not current:
+        break
     print(f"Parent {i}: Tag={current.name}, Class={current.get('class')}, ID={current.get('id')}")
     if current.name == "li" or "s-item" in str(current.get("class")):
         print(">>> FOUND ITEM CONTAINER")
         break
-

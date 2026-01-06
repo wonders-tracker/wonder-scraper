@@ -15,14 +15,11 @@ Tests cover:
 """
 
 import pytest
-import asyncio
-import sys
-from datetime import datetime, timedelta
-from unittest.mock import Mock, AsyncMock, patch, MagicMock, call
+from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.core.scheduler import (
     scheduler,
@@ -30,10 +27,8 @@ from app.core.scheduler import (
     job_update_market_data,
     job_update_blokpax_data,
     job_market_insights,
-    start_scheduler,
 )
 from app.models.card import Card
-from app.models.market import MarketSnapshot
 
 
 class TestSchedulerInitialization:
@@ -48,12 +43,13 @@ class TestSchedulerInitialization:
         # Create a fresh scheduler for testing
         test_scheduler = AsyncIOScheduler()
 
-        with patch('app.core.scheduler.scheduler', test_scheduler):
+        with patch("app.core.scheduler.scheduler", test_scheduler):
             # Mock the actual job functions to prevent execution
-            with patch('app.core.scheduler.job_update_market_data'), \
-                 patch('app.core.scheduler.job_update_blokpax_data'), \
-                 patch('app.core.scheduler.job_market_insights'):
-
+            with (
+                patch("app.core.scheduler.job_update_market_data"),
+                patch("app.core.scheduler.job_update_blokpax_data"),
+                patch("app.core.scheduler.job_market_insights"),
+            ):
                 # Add jobs but don't start the scheduler
                 test_scheduler.add_job(
                     lambda: None,
@@ -62,7 +58,7 @@ class TestSchedulerInitialization:
                     max_instances=1,
                     misfire_grace_time=900,  # Updated from 1800 to 900
                     coalesce=True,
-                    replace_existing=True
+                    replace_existing=True,
                 )
                 test_scheduler.add_job(
                     lambda: None,
@@ -71,7 +67,7 @@ class TestSchedulerInitialization:
                     max_instances=1,
                     misfire_grace_time=3600,
                     coalesce=True,
-                    replace_existing=True
+                    replace_existing=True,
                 )
                 test_scheduler.add_job(
                     lambda: None,
@@ -80,7 +76,7 @@ class TestSchedulerInitialization:
                     max_instances=1,
                     misfire_grace_time=3600,
                     coalesce=True,
-                    replace_existing=True
+                    replace_existing=True,
                 )
                 test_scheduler.add_job(
                     lambda: None,
@@ -89,17 +85,17 @@ class TestSchedulerInitialization:
                     max_instances=1,
                     misfire_grace_time=3600,
                     coalesce=True,
-                    replace_existing=True
+                    replace_existing=True,
                 )
 
                 # Verify all jobs are registered
                 jobs = test_scheduler.get_jobs()
                 job_ids = [job.id for job in jobs]
 
-                assert 'job_update_market_data' in job_ids
-                assert 'job_update_blokpax_data' in job_ids
-                assert 'job_market_insights_morning' in job_ids
-                assert 'job_market_insights_evening' in job_ids
+                assert "job_update_market_data" in job_ids
+                assert "job_update_blokpax_data" in job_ids
+                assert "job_market_insights_morning" in job_ids
+                assert "job_market_insights_evening" in job_ids
 
     def test_market_data_job_configuration(self):
         """Verify market data job has correct configuration."""
@@ -112,10 +108,10 @@ class TestSchedulerInitialization:
             max_instances=1,
             misfire_grace_time=900,  # Updated from 1800 to 900
             coalesce=True,
-            replace_existing=True
+            replace_existing=True,
         )
 
-        job = test_scheduler.get_job('job_update_market_data')
+        job = test_scheduler.get_job("job_update_market_data")
         assert job is not None
         assert isinstance(job.trigger, IntervalTrigger)
         assert job.max_instances == 1
@@ -133,10 +129,10 @@ class TestSchedulerInitialization:
             max_instances=1,
             misfire_grace_time=3600,
             coalesce=True,
-            replace_existing=True
+            replace_existing=True,
         )
 
-        job = test_scheduler.get_job('job_update_blokpax_data')
+        job = test_scheduler.get_job("job_update_blokpax_data")
         assert job is not None
         assert isinstance(job.trigger, IntervalTrigger)
         assert job.max_instances == 1
@@ -153,7 +149,7 @@ class TestSchedulerInitialization:
             max_instances=1,
             misfire_grace_time=3600,
             coalesce=True,
-            replace_existing=True
+            replace_existing=True,
         )
         test_scheduler.add_job(
             lambda: None,
@@ -162,11 +158,11 @@ class TestSchedulerInitialization:
             max_instances=1,
             misfire_grace_time=3600,
             coalesce=True,
-            replace_existing=True
+            replace_existing=True,
         )
 
-        morning_job = test_scheduler.get_job('job_market_insights_morning')
-        evening_job = test_scheduler.get_job('job_market_insights_evening')
+        morning_job = test_scheduler.get_job("job_market_insights_morning")
+        evening_job = test_scheduler.get_job("job_market_insights_evening")
 
         assert morning_job is not None
         assert evening_job is not None
@@ -194,10 +190,11 @@ class TestScrapeSingleCard:
         """Test successful card scraping."""
         card = sample_cards[0]
 
-        with patch('app.core.scheduler.scrape_sold_data', new_callable=AsyncMock) as mock_sold, \
-             patch('app.core.scheduler.scrape_active_data', new_callable=AsyncMock) as mock_active, \
-             patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry:
-
+        with (
+            patch("app.core.scheduler.scrape_sold_data", new_callable=AsyncMock) as mock_sold,
+            patch("app.core.scheduler.scrape_active_data", new_callable=AsyncMock) as mock_active,
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+        ):
             # Mock active data
             mock_active.return_value = (1.50, 10, 1.00)
 
@@ -217,7 +214,7 @@ class TestScrapeSingleCard:
         """Test error handling in scrape_single_card."""
         card = sample_cards[0]
 
-        with patch('app.core.scheduler.scrape_sold_data', new_callable=AsyncMock) as mock_sold:
+        with patch("app.core.scheduler.scrape_sold_data", new_callable=AsyncMock) as mock_sold:
             mock_sold.side_effect = Exception("Network error")
 
             result = await scrape_single_card(card)
@@ -229,10 +226,11 @@ class TestScrapeSingleCard:
         """Test scraping when no snapshot exists."""
         card = sample_cards[0]
 
-        with patch('app.core.scheduler.scrape_sold_data', new_callable=AsyncMock) as mock_sold, \
-             patch('app.core.scheduler.scrape_active_data', new_callable=AsyncMock) as mock_active, \
-             patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry:
-
+        with (
+            patch("app.core.scheduler.scrape_sold_data", new_callable=AsyncMock) as mock_sold,
+            patch("app.core.scheduler.scrape_active_data", new_callable=AsyncMock) as mock_active,
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+        ):
             mock_active.return_value = (1.50, 10, 1.00)
 
             # Mock execute_with_retry_async to return False (no snapshot to update)
@@ -249,10 +247,11 @@ class TestScrapeSingleCard:
         card = sample_cards[0]
         expected_search = f"{card.name} {card.set_name}"
 
-        with patch('app.core.scheduler.scrape_sold_data', new_callable=AsyncMock) as mock_sold, \
-             patch('app.core.scheduler.scrape_active_data', new_callable=AsyncMock) as mock_active, \
-             patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry:
-
+        with (
+            patch("app.core.scheduler.scrape_sold_data", new_callable=AsyncMock) as mock_sold,
+            patch("app.core.scheduler.scrape_active_data", new_callable=AsyncMock) as mock_active,
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+        ):
             mock_active.return_value = (1.50, 10, 1.00)
             mock_retry.return_value = False
 
@@ -261,10 +260,10 @@ class TestScrapeSingleCard:
             # Verify search term is passed correctly
             mock_sold.assert_called_once()
             call_kwargs = mock_sold.call_args[1]
-            assert call_kwargs['search_term'] == expected_search
+            assert call_kwargs["search_term"] == expected_search
 
             mock_active.assert_called_once()
-            assert mock_active.call_args[1]['search_term'] == expected_search
+            assert mock_active.call_args[1]["search_term"] == expected_search
 
 
 class TestJobUpdateMarketData:
@@ -275,14 +274,15 @@ class TestJobUpdateMarketData:
         """Test that job updates cards with stale snapshots."""
         mock_card = Mock(spec=Card, id=1, name="Test Card", set_name="Test Set", product_type="Single")
 
-        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
-             patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
-             patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.scraper_metrics'):
-
+        with (
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+            patch("app.core.scheduler.scrape_single_card", new_callable=AsyncMock) as mock_scrape,
+            patch("app.core.scheduler.BrowserManager.get_browser", new_callable=AsyncMock),
+            patch("app.core.scheduler.BrowserManager.close", new_callable=AsyncMock),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete"),
+            patch("app.core.scheduler.scraper_metrics"),
+        ):
             # First call: check_connection returns True
             # Second call: get_cards_to_update returns [mock_card]
             mock_retry.side_effect = [True, [mock_card]]
@@ -300,14 +300,15 @@ class TestJobUpdateMarketData:
         mock_card1 = Mock(spec=Card, id=1, name="Card 1", set_name="Set 1", product_type="Single")
         # Random sample happens inside get_cards_to_update, so we mock the final result
 
-        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
-             patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
-             patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.scraper_metrics'):
-
+        with (
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+            patch("app.core.scheduler.scrape_single_card", new_callable=AsyncMock) as mock_scrape,
+            patch("app.core.scheduler.BrowserManager.get_browser", new_callable=AsyncMock),
+            patch("app.core.scheduler.BrowserManager.close", new_callable=AsyncMock),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete"),
+            patch("app.core.scheduler.scraper_metrics"),
+        ):
             # First call: check_connection returns True
             # Second call: get_cards_to_update returns [mock_card1] (random sample)
             mock_retry.side_effect = [True, [mock_card1]]
@@ -323,15 +324,16 @@ class TestJobUpdateMarketData:
         """Test that browser startup retries work correctly."""
         mock_card = Mock(spec=Card, id=1, name="Test", set_name="Set", product_type="Single")
 
-        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
-             patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock) as mock_browser, \
-             patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock) as mock_close, \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.scraper_metrics'), \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+            patch("app.core.scheduler.BrowserManager.get_browser", new_callable=AsyncMock) as mock_browser,
+            patch("app.core.scheduler.BrowserManager.close", new_callable=AsyncMock) as mock_close,
+            patch("app.core.scheduler.scrape_single_card", new_callable=AsyncMock) as mock_scrape,
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete"),
+            patch("app.core.scheduler.scraper_metrics"),
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             # First call: check_connection returns True
             # Second call: get_cards_to_update returns [mock_card]
             mock_retry.side_effect = [True, [mock_card]]
@@ -340,7 +342,7 @@ class TestJobUpdateMarketData:
             mock_browser.side_effect = [
                 Exception("Browser error 1"),
                 Exception("Browser error 2"),
-                None  # Success
+                None,  # Success
             ]
 
             mock_scrape.return_value = True
@@ -357,14 +359,15 @@ class TestJobUpdateMarketData:
         """Test that job exits gracefully when browser fails all retries."""
         mock_card = Mock(spec=Card, id=1, name="Test", set_name="Set", product_type="Single")
 
-        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
-             patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock) as mock_browser, \
-             patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.scraper_metrics'), \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+            patch("app.core.scheduler.BrowserManager.get_browser", new_callable=AsyncMock) as mock_browser,
+            patch("app.core.scheduler.BrowserManager.close", new_callable=AsyncMock),
+            patch("app.core.scheduler.scrape_single_card", new_callable=AsyncMock) as mock_scrape,
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.scraper_metrics"),
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             # First call: check_connection returns True
             # Second call: get_cards_to_update returns [mock_card]
             mock_retry.side_effect = [True, [mock_card]]
@@ -383,20 +386,18 @@ class TestJobUpdateMarketData:
     async def test_batch_processing_with_concurrency(self):
         """Test that cards are processed in batches with proper concurrency."""
         # Create 8 mock cards (should be processed in batches of SCHEDULER_CARD_BATCH_SIZE)
-        mock_cards = [
-            Mock(spec=Card, id=i, name=f"Card {i}", set_name="Set", product_type="Single")
-            for i in range(8)
-        ]
+        mock_cards = [Mock(spec=Card, id=i, name=f"Card {i}", set_name="Set", product_type="Single") for i in range(8)]
 
-        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
-             patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
-             patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.scraper_metrics'), \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+            patch("app.core.scheduler.scrape_single_card", new_callable=AsyncMock) as mock_scrape,
+            patch("app.core.scheduler.BrowserManager.get_browser", new_callable=AsyncMock),
+            patch("app.core.scheduler.BrowserManager.close", new_callable=AsyncMock),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete"),
+            patch("app.core.scheduler.scraper_metrics"),
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             # First call: check_connection returns True
             # Second call: get_cards_to_update returns mock_cards
             mock_retry.side_effect = [True, mock_cards]
@@ -411,20 +412,18 @@ class TestJobUpdateMarketData:
     @pytest.mark.asyncio
     async def test_tracks_success_and_failure_counts(self):
         """Test that job correctly counts successful and failed scrapes."""
-        mock_cards = [
-            Mock(spec=Card, id=i, name=f"Card {i}", set_name="Set", product_type="Single")
-            for i in range(3)
-        ]
+        mock_cards = [Mock(spec=Card, id=i, name=f"Card {i}", set_name="Set", product_type="Single") for i in range(3)]
 
-        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
-             patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
-             patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete') as mock_log_complete, \
-             patch('app.core.scheduler.scraper_metrics'), \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+            patch("app.core.scheduler.scrape_single_card", new_callable=AsyncMock) as mock_scrape,
+            patch("app.core.scheduler.BrowserManager.get_browser", new_callable=AsyncMock),
+            patch("app.core.scheduler.BrowserManager.close", new_callable=AsyncMock),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete") as mock_log_complete,
+            patch("app.core.scheduler.scraper_metrics"),
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             # First call: check_connection returns True
             # Second call: get_cards_to_update returns mock_cards
             mock_retry.side_effect = [True, mock_cards]
@@ -437,14 +436,15 @@ class TestJobUpdateMarketData:
             # Verify log_scrape_complete was called with error count
             mock_log_complete.assert_called_once()
             call_kwargs = mock_log_complete.call_args[1]
-            assert call_kwargs['errors'] > 0
+            assert call_kwargs["errors"] > 0
 
     @pytest.mark.asyncio
     async def test_handles_no_cards_to_update(self):
         """Test job handles case where no cards exist."""
-        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape:
-
+        with (
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+            patch("app.core.scheduler.scrape_single_card", new_callable=AsyncMock) as mock_scrape,
+        ):
             # First call: check_connection returns True
             # Second call: get_cards_to_update returns empty list
             mock_retry.side_effect = [True, []]
@@ -459,14 +459,15 @@ class TestJobUpdateMarketData:
         """Test that job logs start and completion to Discord."""
         mock_card = Mock(spec=Card, id=1, name="Test Card", set_name="Set", product_type="Single")
 
-        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
-             patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
-             patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
-             patch('app.core.scheduler.log_scrape_start') as mock_log_start, \
-             patch('app.core.scheduler.log_scrape_complete') as mock_log_complete, \
-             patch('app.core.scheduler.scraper_metrics'):
-
+        with (
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+            patch("app.core.scheduler.scrape_single_card", new_callable=AsyncMock) as mock_scrape,
+            patch("app.core.scheduler.BrowserManager.get_browser", new_callable=AsyncMock),
+            patch("app.core.scheduler.BrowserManager.close", new_callable=AsyncMock),
+            patch("app.core.scheduler.log_scrape_start") as mock_log_start,
+            patch("app.core.scheduler.log_scrape_complete") as mock_log_complete,
+            patch("app.core.scheduler.scraper_metrics"),
+        ):
             # First call: check_connection returns True
             # Second call: get_cards_to_update returns [mock_card]
             mock_retry.side_effect = [True, [mock_card]]
@@ -477,7 +478,7 @@ class TestJobUpdateMarketData:
             # Verify Discord logging
             mock_log_start.assert_called_once()
             assert mock_log_start.call_args[0][0] == 1  # 1 card
-            assert mock_log_start.call_args[1]['scrape_type'] == "scheduled"
+            assert mock_log_start.call_args[1]["scrape_type"] == "scheduled"
 
             mock_log_complete.assert_called_once()
 
@@ -486,15 +487,16 @@ class TestJobUpdateMarketData:
         """Test that job handles and logs exceptions during scraping."""
         mock_card = Mock(spec=Card, id=1, name="Test Card", set_name="Set", product_type="Single")
 
-        with patch('app.core.scheduler.execute_with_retry_async', new_callable=AsyncMock) as mock_retry, \
-             patch('app.core.scheduler.scrape_single_card', new_callable=AsyncMock) as mock_scrape, \
-             patch('app.core.scheduler.BrowserManager.get_browser', new_callable=AsyncMock), \
-             patch('app.core.scheduler.BrowserManager.close', new_callable=AsyncMock), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_error') as mock_log_error, \
-             patch('app.core.scheduler.scraper_metrics'), \
-             patch('app.core.scheduler.asyncio.gather', new_callable=AsyncMock) as mock_gather:
-
+        with (
+            patch("app.core.scheduler.execute_with_retry_async", new_callable=AsyncMock) as mock_retry,
+            patch("app.core.scheduler.scrape_single_card", new_callable=AsyncMock) as mock_scrape,
+            patch("app.core.scheduler.BrowserManager.get_browser", new_callable=AsyncMock),
+            patch("app.core.scheduler.BrowserManager.close", new_callable=AsyncMock),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_error") as mock_log_error,
+            patch("app.core.scheduler.scraper_metrics"),
+            patch("app.core.scheduler.asyncio.gather", new_callable=AsyncMock) as mock_gather,
+        ):
             # First call: check_connection returns True
             # Second call: get_cards_to_update returns [mock_card]
             mock_retry.side_effect = [True, [mock_card]]
@@ -514,22 +516,23 @@ class TestJobUpdateBlokpaxData:
     @pytest.mark.asyncio
     async def test_updates_all_storefronts(self):
         """Test that job updates all WOTF storefronts."""
-        with patch('app.core.scheduler.WOTF_STOREFRONTS', ['storefront-1', 'storefront-2']), \
-             patch('app.core.scheduler.get_bpx_price', new_callable=AsyncMock) as mock_price, \
-             patch('app.core.scheduler.scrape_storefront_floor', new_callable=AsyncMock) as mock_floor, \
-             patch('app.core.scheduler.scrape_recent_sales', new_callable=AsyncMock) as mock_sales, \
-             patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.WOTF_STOREFRONTS", ["storefront-1", "storefront-2"]),
+            patch("app.core.scheduler.get_bpx_price", new_callable=AsyncMock) as mock_price,
+            patch("app.core.scheduler.scrape_storefront_floor", new_callable=AsyncMock) as mock_floor,
+            patch("app.core.scheduler.scrape_recent_sales", new_callable=AsyncMock) as mock_sales,
+            patch("app.core.scheduler.Session") as mock_session_class,
+            patch("app.core.scheduler.engine"),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete"),
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             mock_price.return_value = 0.001234
             mock_floor.return_value = {
-                'floor_price_bpx': 1000,
-                'floor_price_usd': 1.23,
-                'listed_count': 5,
-                'total_tokens': 10
+                "floor_price_bpx": 1000,
+                "floor_price_usd": 1.23,
+                "listed_count": 5,
+                "total_tokens": 10,
             }
             mock_sales.return_value = []
 
@@ -545,27 +548,28 @@ class TestJobUpdateBlokpaxData:
 
             # Verify deep_scan is enabled
             for call_obj in mock_floor.call_args_list:
-                assert call_obj[1]['deep_scan'] is True
+                assert call_obj[1]["deep_scan"] is True
 
     @pytest.mark.asyncio
     async def test_saves_snapshots_to_database(self):
         """Test that job saves BlokpaxSnapshot records."""
-        with patch('app.core.scheduler.WOTF_STOREFRONTS', ['test-storefront']), \
-             patch('app.core.scheduler.get_bpx_price', new_callable=AsyncMock) as mock_price, \
-             patch('app.core.scheduler.scrape_storefront_floor', new_callable=AsyncMock) as mock_floor, \
-             patch('app.core.scheduler.scrape_recent_sales', new_callable=AsyncMock) as mock_sales, \
-             patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.WOTF_STOREFRONTS", ["test-storefront"]),
+            patch("app.core.scheduler.get_bpx_price", new_callable=AsyncMock) as mock_price,
+            patch("app.core.scheduler.scrape_storefront_floor", new_callable=AsyncMock) as mock_floor,
+            patch("app.core.scheduler.scrape_recent_sales", new_callable=AsyncMock) as mock_sales,
+            patch("app.core.scheduler.Session") as mock_session_class,
+            patch("app.core.scheduler.engine"),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete"),
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             mock_price.return_value = 0.001234
             mock_floor.return_value = {
-                'floor_price_bpx': 1000,
-                'floor_price_usd': 1.23,
-                'listed_count': 5,
-                'total_tokens': 10
+                "floor_price_bpx": 1000,
+                "floor_price_usd": 1.23,
+                "listed_count": 5,
+                "total_tokens": 10,
             }
             mock_sales.return_value = []
 
@@ -583,25 +587,21 @@ class TestJobUpdateBlokpaxData:
     async def test_updates_storefront_record(self):
         """Test that job updates BlokpaxStorefront records."""
         mock_storefront = MagicMock()
-        mock_storefront.slug = 'test-storefront'
+        mock_storefront.slug = "test-storefront"
 
-        with patch('app.core.scheduler.WOTF_STOREFRONTS', ['test-storefront']), \
-             patch('app.core.scheduler.get_bpx_price', new_callable=AsyncMock) as mock_price, \
-             patch('app.core.scheduler.scrape_storefront_floor', new_callable=AsyncMock) as mock_floor, \
-             patch('app.core.scheduler.scrape_recent_sales', new_callable=AsyncMock) as mock_sales, \
-             patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.WOTF_STOREFRONTS", ["test-storefront"]),
+            patch("app.core.scheduler.get_bpx_price", new_callable=AsyncMock) as mock_price,
+            patch("app.core.scheduler.scrape_storefront_floor", new_callable=AsyncMock) as mock_floor,
+            patch("app.core.scheduler.scrape_recent_sales", new_callable=AsyncMock) as mock_sales,
+            patch("app.core.scheduler.Session") as mock_session_class,
+            patch("app.core.scheduler.engine"),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete"),
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             mock_price.return_value = 0.001234
-            floor_data = {
-                'floor_price_bpx': 1000,
-                'floor_price_usd': 1.23,
-                'listed_count': 5,
-                'total_tokens': 10
-            }
+            floor_data = {"floor_price_bpx": 1000, "floor_price_usd": 1.23, "listed_count": 5, "total_tokens": 10}
             mock_floor.return_value = floor_data
             mock_sales.return_value = []
 
@@ -612,10 +612,10 @@ class TestJobUpdateBlokpaxData:
             await job_update_blokpax_data()
 
             # Verify storefront was updated
-            assert mock_storefront.floor_price_bpx == floor_data['floor_price_bpx']
-            assert mock_storefront.floor_price_usd == floor_data['floor_price_usd']
-            assert mock_storefront.listed_count == floor_data['listed_count']
-            assert mock_storefront.total_tokens == floor_data['total_tokens']
+            assert mock_storefront.floor_price_bpx == floor_data["floor_price_bpx"]
+            assert mock_storefront.floor_price_usd == floor_data["floor_price_usd"]
+            assert mock_storefront.listed_count == floor_data["listed_count"]
+            assert mock_storefront.total_tokens == floor_data["total_tokens"]
             assert mock_storefront.updated_at is not None
 
     @pytest.mark.asyncio
@@ -626,23 +626,24 @@ class TestJobUpdateBlokpaxData:
         mock_sale_other = MagicMock()
         mock_sale_other.asset_name = "Other Game Card"
 
-        with patch('app.core.scheduler.WOTF_STOREFRONTS', ['reward-room']), \
-             patch('app.core.scheduler.get_bpx_price', new_callable=AsyncMock) as mock_price, \
-             patch('app.core.scheduler.scrape_storefront_floor', new_callable=AsyncMock) as mock_floor, \
-             patch('app.core.scheduler.scrape_recent_sales', new_callable=AsyncMock) as mock_sales, \
-             patch('app.core.scheduler.is_wotf_asset') as mock_is_wotf, \
-             patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.WOTF_STOREFRONTS", ["reward-room"]),
+            patch("app.core.scheduler.get_bpx_price", new_callable=AsyncMock) as mock_price,
+            patch("app.core.scheduler.scrape_storefront_floor", new_callable=AsyncMock) as mock_floor,
+            patch("app.core.scheduler.scrape_recent_sales", new_callable=AsyncMock) as mock_sales,
+            patch("app.core.scheduler.is_wotf_asset") as mock_is_wotf,
+            patch("app.core.scheduler.Session") as mock_session_class,
+            patch("app.core.scheduler.engine"),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete"),
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             mock_price.return_value = 0.001234
             mock_floor.return_value = {
-                'floor_price_bpx': 1000,
-                'floor_price_usd': 1.23,
-                'listed_count': 5,
-                'total_tokens': 10
+                "floor_price_bpx": 1000,
+                "floor_price_usd": 1.23,
+                "listed_count": 5,
+                "total_tokens": 10,
             }
             mock_sales.return_value = [mock_sale_wotf, mock_sale_other]
             mock_is_wotf.side_effect = lambda name: "WOTF" in name
@@ -659,23 +660,24 @@ class TestJobUpdateBlokpaxData:
     @pytest.mark.asyncio
     async def test_handles_storefront_error_gracefully(self):
         """Test that errors on one storefront don't stop others."""
-        with patch('app.core.scheduler.WOTF_STOREFRONTS', ['storefront-1', 'storefront-2', 'storefront-3']), \
-             patch('app.core.scheduler.get_bpx_price', new_callable=AsyncMock) as mock_price, \
-             patch('app.core.scheduler.scrape_storefront_floor', new_callable=AsyncMock) as mock_floor, \
-             patch('app.core.scheduler.scrape_recent_sales', new_callable=AsyncMock) as mock_sales, \
-             patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete') as mock_log_complete, \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.WOTF_STOREFRONTS", ["storefront-1", "storefront-2", "storefront-3"]),
+            patch("app.core.scheduler.get_bpx_price", new_callable=AsyncMock) as mock_price,
+            patch("app.core.scheduler.scrape_storefront_floor", new_callable=AsyncMock) as mock_floor,
+            patch("app.core.scheduler.scrape_recent_sales", new_callable=AsyncMock) as mock_sales,
+            patch("app.core.scheduler.Session") as mock_session_class,
+            patch("app.core.scheduler.engine"),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete") as mock_log_complete,
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             mock_price.return_value = 0.001234
 
             # Second storefront fails
             mock_floor.side_effect = [
-                {'floor_price_bpx': 1000, 'floor_price_usd': 1.23, 'listed_count': 5, 'total_tokens': 10},
+                {"floor_price_bpx": 1000, "floor_price_usd": 1.23, "listed_count": 5, "total_tokens": 10},
                 Exception("Network error"),
-                {'floor_price_bpx': 2000, 'floor_price_usd': 2.46, 'listed_count': 3, 'total_tokens': 8},
+                {"floor_price_bpx": 2000, "floor_price_usd": 2.46, "listed_count": 3, "total_tokens": 8},
             ]
             mock_sales.return_value = []
 
@@ -690,27 +692,28 @@ class TestJobUpdateBlokpaxData:
 
             # Should report 1 error
             mock_log_complete.assert_called_once()
-            assert mock_log_complete.call_args[1]['errors'] == 1
+            assert mock_log_complete.call_args[1]["errors"] == 1
 
     @pytest.mark.asyncio
     async def test_limits_sales_pages_for_scheduled_runs(self):
         """Test that scheduled runs limit sales page scraping."""
-        with patch('app.core.scheduler.WOTF_STOREFRONTS', ['test-storefront']), \
-             patch('app.core.scheduler.get_bpx_price', new_callable=AsyncMock) as mock_price, \
-             patch('app.core.scheduler.scrape_storefront_floor', new_callable=AsyncMock) as mock_floor, \
-             patch('app.core.scheduler.scrape_recent_sales', new_callable=AsyncMock) as mock_sales, \
-             patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete'), \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.WOTF_STOREFRONTS", ["test-storefront"]),
+            patch("app.core.scheduler.get_bpx_price", new_callable=AsyncMock) as mock_price,
+            patch("app.core.scheduler.scrape_storefront_floor", new_callable=AsyncMock) as mock_floor,
+            patch("app.core.scheduler.scrape_recent_sales", new_callable=AsyncMock) as mock_sales,
+            patch("app.core.scheduler.Session") as mock_session_class,
+            patch("app.core.scheduler.engine"),
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete"),
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             mock_price.return_value = 0.001234
             mock_floor.return_value = {
-                'floor_price_bpx': 1000,
-                'floor_price_usd': 1.23,
-                'listed_count': 5,
-                'total_tokens': 10
+                "floor_price_bpx": 1000,
+                "floor_price_usd": 1.23,
+                "listed_count": 5,
+                "total_tokens": 10,
             }
             mock_sales.return_value = []
 
@@ -722,27 +725,28 @@ class TestJobUpdateBlokpaxData:
 
             # Verify max_pages is set to 2
             mock_sales.assert_called_once()
-            assert mock_sales.call_args[1]['max_pages'] == 2
+            assert mock_sales.call_args[1]["max_pages"] == 2
 
     @pytest.mark.asyncio
     async def test_logs_start_and_complete(self):
         """Test that Blokpax job logs to Discord."""
-        with patch('app.core.scheduler.WOTF_STOREFRONTS', ['storefront-1']), \
-             patch('app.core.scheduler.get_bpx_price', new_callable=AsyncMock) as mock_price, \
-             patch('app.core.scheduler.scrape_storefront_floor', new_callable=AsyncMock) as mock_floor, \
-             patch('app.core.scheduler.scrape_recent_sales', new_callable=AsyncMock) as mock_sales, \
-             patch('app.core.scheduler.Session') as mock_session_class, \
-             patch('app.core.scheduler.engine'), \
-             patch('app.core.scheduler.log_scrape_start') as mock_log_start, \
-             patch('app.core.scheduler.log_scrape_complete') as mock_log_complete, \
-             patch('app.core.scheduler.asyncio.sleep', new_callable=AsyncMock):
-
+        with (
+            patch("app.core.scheduler.WOTF_STOREFRONTS", ["storefront-1"]),
+            patch("app.core.scheduler.get_bpx_price", new_callable=AsyncMock) as mock_price,
+            patch("app.core.scheduler.scrape_storefront_floor", new_callable=AsyncMock) as mock_floor,
+            patch("app.core.scheduler.scrape_recent_sales", new_callable=AsyncMock) as mock_sales,
+            patch("app.core.scheduler.Session") as mock_session_class,
+            patch("app.core.scheduler.engine"),
+            patch("app.core.scheduler.log_scrape_start") as mock_log_start,
+            patch("app.core.scheduler.log_scrape_complete") as mock_log_complete,
+            patch("app.core.scheduler.asyncio.sleep", new_callable=AsyncMock),
+        ):
             mock_price.return_value = 0.001234
             mock_floor.return_value = {
-                'floor_price_bpx': 1000,
-                'floor_price_usd': 1.23,
-                'listed_count': 5,
-                'total_tokens': 10
+                "floor_price_bpx": 1000,
+                "floor_price_usd": 1.23,
+                "listed_count": 5,
+                "total_tokens": 10,
             }
             mock_sales.return_value = []
 
@@ -753,18 +757,19 @@ class TestJobUpdateBlokpaxData:
             await job_update_blokpax_data()
 
             mock_log_start.assert_called_once()
-            assert mock_log_start.call_args[1]['scrape_type'] == "blokpax"
+            assert mock_log_start.call_args[1]["scrape_type"] == "blokpax"
 
             mock_log_complete.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_handles_fatal_error(self):
         """Test that fatal errors are logged appropriately."""
-        with patch('app.core.scheduler.get_bpx_price', new_callable=AsyncMock) as mock_price, \
-             patch('app.core.scheduler.log_scrape_start'), \
-             patch('app.core.scheduler.log_scrape_complete') as mock_log_complete, \
-             patch('app.core.scheduler.log_scrape_error') as mock_log_error:
-
+        with (
+            patch("app.core.scheduler.get_bpx_price", new_callable=AsyncMock) as mock_price,
+            patch("app.core.scheduler.log_scrape_start"),
+            patch("app.core.scheduler.log_scrape_complete") as mock_log_complete,
+            patch("app.core.scheduler.log_scrape_error") as mock_log_error,
+        ):
             mock_price.side_effect = Exception("Fatal error")
 
             await job_update_blokpax_data()
@@ -787,9 +792,10 @@ class TestJobMarketInsights:
         mock_module = MagicMock()
         mock_module.get_insights_generator = MagicMock(return_value=mock_generator)
 
-        with patch.dict('sys.modules', {'app.services.market_insights': mock_module}), \
-             patch('app.core.scheduler.log_market_insights') as mock_log_insights:
-
+        with (
+            patch.dict("sys.modules", {"app.services.market_insights": mock_module}),
+            patch("app.core.scheduler.log_market_insights") as mock_log_insights,
+        ):
             mock_log_insights.return_value = True
 
             await job_market_insights()
@@ -801,9 +807,9 @@ class TestJobMarketInsights:
     @pytest.mark.asyncio
     async def test_handles_insights_generation_error(self):
         """Test error handling in market insights generation."""
-        with patch('app.core.scheduler.log_scrape_error') as mock_log_error:
+        with patch("app.core.scheduler.log_scrape_error") as mock_log_error:
             # Mock import to raise exception
-            with patch('builtins.__import__', side_effect=Exception("API error")):
+            with patch("builtins.__import__", side_effect=Exception("API error")):
                 await job_market_insights()
 
                 mock_log_error.assert_called_once()
@@ -819,9 +825,10 @@ class TestJobMarketInsights:
         mock_module = MagicMock()
         mock_module.get_insights_generator = MagicMock(return_value=mock_generator)
 
-        with patch.dict('sys.modules', {'app.services.market_insights': mock_module}), \
-             patch('app.core.scheduler.log_market_insights') as mock_log_insights:
-
+        with (
+            patch.dict("sys.modules", {"app.services.market_insights": mock_module}),
+            patch("app.core.scheduler.log_market_insights") as mock_log_insights,
+        ):
             mock_log_insights.return_value = False  # Post failed
 
             await job_market_insights()
@@ -839,9 +846,10 @@ class TestJobMarketInsights:
         mock_module = MagicMock()
         mock_module.get_insights_generator = MagicMock(return_value=mock_generator)
 
-        with patch.dict('sys.modules', {'app.services.market_insights': mock_module}), \
-             patch('app.core.scheduler.log_market_insights'):
-
+        with (
+            patch.dict("sys.modules", {"app.services.market_insights": mock_module}),
+            patch("app.core.scheduler.log_market_insights"),
+        ):
             await job_market_insights()
 
             # Verify gather_market_data called without args (uses defaults)
@@ -879,13 +887,13 @@ class TestJobCancellation:
         test_scheduler.add_job(lambda: None, IntervalTrigger(hours=8), id="job_update_blokpax_data")
 
         # Remove one job
-        test_scheduler.remove_job('job_update_market_data')
+        test_scheduler.remove_job("job_update_market_data")
 
         # Verify it's gone
-        assert test_scheduler.get_job('job_update_market_data') is None
+        assert test_scheduler.get_job("job_update_market_data") is None
 
         # Other jobs still exist
-        assert test_scheduler.get_job('job_update_blokpax_data') is not None
+        assert test_scheduler.get_job("job_update_blokpax_data") is not None
 
 
 class TestCronExpressionParsing:
@@ -895,37 +903,29 @@ class TestCronExpressionParsing:
         """Test morning market insights cron schedule."""
         test_scheduler = AsyncIOScheduler()
 
-        test_scheduler.add_job(
-            lambda: None,
-            CronTrigger(hour=9, minute=0),
-            id="job_market_insights_morning"
-        )
+        test_scheduler.add_job(lambda: None, CronTrigger(hour=9, minute=0), id="job_market_insights_morning")
 
-        job = test_scheduler.get_job('job_market_insights_morning')
+        job = test_scheduler.get_job("job_market_insights_morning")
         trigger = job.trigger
 
         # Verify trigger is set for 9:00 AM UTC
         assert isinstance(trigger, CronTrigger)
         # CronTrigger stores the values, we can check the string representation
-        assert '9' in str(trigger) or 'hour=9' in repr(trigger)
+        assert "9" in str(trigger) or "hour=9" in repr(trigger)
 
     def test_evening_insights_schedule(self):
         """Test evening market insights cron schedule."""
         test_scheduler = AsyncIOScheduler()
 
-        test_scheduler.add_job(
-            lambda: None,
-            CronTrigger(hour=18, minute=0),
-            id="job_market_insights_evening"
-        )
+        test_scheduler.add_job(lambda: None, CronTrigger(hour=18, minute=0), id="job_market_insights_evening")
 
-        job = test_scheduler.get_job('job_market_insights_evening')
+        job = test_scheduler.get_job("job_market_insights_evening")
         trigger = job.trigger
 
         # Verify trigger is set for 6:00 PM (18:00) UTC
         assert isinstance(trigger, CronTrigger)
         # CronTrigger stores the values, we can check the string representation
-        assert '18' in str(trigger) or 'hour=18' in repr(trigger)
+        assert "18" in str(trigger) or "hour=18" in repr(trigger)
 
 
 class TestIntervalTriggerConfiguration:
@@ -938,10 +938,10 @@ class TestIntervalTriggerConfiguration:
         test_scheduler.add_job(
             lambda: None,
             IntervalTrigger(minutes=30),  # Updated from 45m to 30m
-            id="job_update_market_data"
+            id="job_update_market_data",
         )
 
-        job = test_scheduler.get_job('job_update_market_data')
+        job = test_scheduler.get_job("job_update_market_data")
         trigger = job.trigger
 
         # 30 minutes = 1800 seconds
@@ -951,13 +951,9 @@ class TestIntervalTriggerConfiguration:
         """Test Blokpax job interval configuration."""
         test_scheduler = AsyncIOScheduler()
 
-        test_scheduler.add_job(
-            lambda: None,
-            IntervalTrigger(hours=8),
-            id="job_update_blokpax_data"
-        )
+        test_scheduler.add_job(lambda: None, IntervalTrigger(hours=8), id="job_update_blokpax_data")
 
-        job = test_scheduler.get_job('job_update_blokpax_data')
+        job = test_scheduler.get_job("job_update_blokpax_data")
         trigger = job.trigger
 
         # 8 hours = 28800 seconds
@@ -989,24 +985,18 @@ class TestEdgeCases:
             lambda: None,
             IntervalTrigger(minutes=30),  # Updated from 45m to 30m
             id="job_update_market_data",
-            misfire_grace_time=900  # Updated from 1800 to 900 (15 minutes)
+            misfire_grace_time=900,  # Updated from 1800 to 900 (15 minutes)
         )
         test_scheduler.add_job(
-            lambda: None,
-            IntervalTrigger(hours=8),
-            id="job_update_blokpax_data",
-            misfire_grace_time=3600
+            lambda: None, IntervalTrigger(hours=8), id="job_update_blokpax_data", misfire_grace_time=3600
         )
         test_scheduler.add_job(
-            lambda: None,
-            CronTrigger(hour=9, minute=0),
-            id="job_market_insights_morning",
-            misfire_grace_time=3600
+            lambda: None, CronTrigger(hour=9, minute=0), id="job_market_insights_morning", misfire_grace_time=3600
         )
 
-        market_job = test_scheduler.get_job('job_update_market_data')
-        blokpax_job = test_scheduler.get_job('job_update_blokpax_data')
-        morning_insights = test_scheduler.get_job('job_market_insights_morning')
+        market_job = test_scheduler.get_job("job_update_market_data")
+        blokpax_job = test_scheduler.get_job("job_update_blokpax_data")
+        morning_insights = test_scheduler.get_job("job_market_insights_morning")
 
         # Market data: 15 minutes grace (half of 30m interval)
         assert market_job.misfire_grace_time == 900

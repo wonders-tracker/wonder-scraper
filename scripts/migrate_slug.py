@@ -1,10 +1,11 @@
 """
 Migration script to add slug column to card table and populate slugs for existing cards.
 """
-import re
+
 from sqlmodel import Session, text, select
 from app.db import engine
 from app.models.card import Card, generate_slug
+
 
 def migrate():
     with Session(engine) as session:
@@ -60,6 +61,7 @@ def migrate():
         except Exception as e:
             session.rollback()
             print(f"Index may already exist: {e}")
+
 
 if __name__ == "__main__":
     migrate()

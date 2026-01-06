@@ -5,6 +5,7 @@ Usage:
     python scripts/backfill_product_subtype.py           # Dry run - show what would be updated
     python scripts/backfill_product_subtype.py --commit  # Actually update the database
 """
+
 import argparse
 from sqlmodel import Session, select
 from app.db import engine

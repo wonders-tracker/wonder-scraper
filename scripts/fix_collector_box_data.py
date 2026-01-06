@@ -121,13 +121,9 @@ def fix_collector_box_data(execute: bool = False):
 
     with Session(engine) as session:
         # Find the Collector Booster Box cards
-        nft_box = session.exec(
-            select(Card).where(Card.name == "Collector Booster Box (NFT)")
-        ).first()
+        nft_box = session.exec(select(Card).where(Card.name == "Collector Booster Box (NFT)")).first()
 
-        physical_box = session.exec(
-            select(Card).where(Card.name == "Collector Booster Box")
-        ).first()
+        physical_box = session.exec(select(Card).where(Card.name == "Collector Booster Box")).first()
 
         if not nft_box and not physical_box:
             print("ERROR: No Collector Booster Box cards found in database")
@@ -146,10 +142,7 @@ def fix_collector_box_data(execute: bool = False):
             print(f"\n--- NFT Collector Boxes (card_id={nft_box.id}) ---\n")
 
             nft_records = session.exec(
-                select(MarketPrice).where(
-                    MarketPrice.card_id == nft_box.id,
-                    MarketPrice.platform == "opensea"
-                )
+                select(MarketPrice).where(MarketPrice.card_id == nft_box.id, MarketPrice.platform == "opensea")
             ).all()
 
             print(f"Found {len(nft_records)} NFT box records")
@@ -170,9 +163,9 @@ def fix_collector_box_data(execute: bool = False):
                 new_subtype = variant
 
                 if old_treatment != new_treatment or old_subtype != new_subtype:
-                    print(f"  ID {record.id}: \"{record.title[:40]}...\"")
-                    print(f"    treatment: \"{old_treatment}\" -> {new_treatment}")
-                    print(f"    subtype: \"{old_subtype}\" -> \"{new_subtype}\"")
+                    print(f'  ID {record.id}: "{record.title[:40]}..."')
+                    print(f'    treatment: "{old_treatment}" -> {new_treatment}')
+                    print(f'    subtype: "{old_subtype}" -> "{new_subtype}"')
 
                     if execute:
                         record.treatment = new_treatment
@@ -188,10 +181,7 @@ def fix_collector_box_data(execute: bool = False):
             print(f"\n--- Physical Collector Boxes (card_id={physical_box.id}) ---\n")
 
             ebay_records = session.exec(
-                select(MarketPrice).where(
-                    MarketPrice.card_id == physical_box.id,
-                    MarketPrice.platform == "ebay"
-                )
+                select(MarketPrice).where(MarketPrice.card_id == physical_box.id, MarketPrice.platform == "ebay")
             ).all()
 
             print(f"Found {len(ebay_records)} eBay box records")
@@ -221,9 +211,9 @@ def fix_collector_box_data(execute: bool = False):
                     new_subtype = "Collector Booster Box"
 
                 if old_treatment != new_treatment or old_subtype != new_subtype:
-                    print(f"  ID {record.id}: \"{record.title[:50]}...\"")
-                    print(f"    treatment: \"{old_treatment}\" -> \"{new_treatment}\"")
-                    print(f"    subtype: \"{old_subtype}\" -> \"{new_subtype}\"")
+                    print(f'  ID {record.id}: "{record.title[:50]}..."')
+                    print(f'    treatment: "{old_treatment}" -> "{new_treatment}"')
+                    print(f'    subtype: "{old_subtype}" -> "{new_subtype}"')
 
                     if execute:
                         record.treatment = new_treatment
@@ -252,11 +242,7 @@ def fix_collector_box_data(execute: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fix Collector Booster Box data structure")
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Actually update records (default is dry run)"
-    )
+    parser.add_argument("--execute", action="store_true", help="Actually update records (default is dry run)")
     args = parser.parse_args()
 
     fix_collector_box_data(execute=args.execute)

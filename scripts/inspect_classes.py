@@ -16,4 +16,3 @@ for tag in soup.find_all(True):
 print("Top 20 classes:")
 for c, count in classes.most_common(20):
     print(f"{c}: {count}")
-

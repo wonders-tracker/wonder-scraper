@@ -55,9 +55,10 @@ async def main():
     # Try to send Discord notification
     try:
         from app.discord_bot.logger import log_warning
+
         log_warning(
             "🟢 Scheduler Worker Started",
-            f"Worker started at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}"
+            f"Worker started at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}",
         )
     except Exception as e:
         logger.warning(f"Could not send Discord notification: {e}")

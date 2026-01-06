@@ -16,4 +16,3 @@ target_price = soup.find(string=lambda t: t and "$399.99" in t)
 if target_price:
     print(f"Price Parent: {target_price.parent.name}, Classes: {target_price.parent.get('class')}")
     print(f"Grandparent: {target_price.parent.parent.name}, Classes: {target_price.parent.parent.get('class')}")
-

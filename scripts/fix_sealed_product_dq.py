@@ -18,12 +18,13 @@ import argparse
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple
 
 from sqlmodel import Session, select
 from sqlalchemy import text
 
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.db import engine
@@ -33,15 +34,15 @@ from app.models.card import Card
 
 # Quantity detection patterns for sealed products
 QUANTITY_PATTERNS = [
-    (r'^(\d+)\s*x\s+', 'start Nx'),           # "2x Bundle" at start
-    (r'^x\s*(\d+)\s+', 'start xN'),           # "X3 Bundle" at start
-    (r'\bx\s*(\d+)\s*$', 'end xN'),           # "Bundle x4" at end
-    (r'\b(\d+)\s*x\s*$', 'end Nx'),           # "Bundle 2x" at end (less common)
-    (r'\blot\s+of\s+(\d+)\b', 'lot of N'),    # "lot of 4"
-    (r'\bset\s+of\s+(\d+)\b', 'set of N'),    # "set of 2"
-    (r'^(\d+)\s+wonders\b', 'N Wonders'),     # "2 Wonders of..." at start
-    (r'\b(\d+)\s*ct\b', 'Nct'),               # "5ct"
-    (r'\(x(\d+)\)', 'parentheses (xN)'),      # "(x2)"
+    (r"^(\d+)\s*x\s+", "start Nx"),  # "2x Bundle" at start
+    (r"^x\s*(\d+)\s+", "start xN"),  # "X3 Bundle" at start
+    (r"\bx\s*(\d+)\s*$", "end xN"),  # "Bundle x4" at end
+    (r"\b(\d+)\s*x\s*$", "end Nx"),  # "Bundle 2x" at end (less common)
+    (r"\blot\s+of\s+(\d+)\b", "lot of N"),  # "lot of 4"
+    (r"\bset\s+of\s+(\d+)\b", "set of N"),  # "set of 2"
+    (r"^(\d+)\s+wonders\b", "N Wonders"),  # "2 Wonders of..." at start
+    (r"\b(\d+)\s*ct\b", "Nct"),  # "5ct"
+    (r"\(x(\d+)\)", "parentheses (xN)"),  # "(x2)"
 ]
 
 
@@ -65,9 +66,7 @@ def detect_quantity_from_title(title: str) -> Tuple[int, str]:
 
 def get_bundle_card_id(session: Session) -> Optional[int]:
     """Get the card_id for Existence Play Booster Bundle."""
-    card = session.exec(
-        select(Card).where(Card.name == "Existence Play Booster Bundle")
-    ).first()
+    card = session.exec(select(Card).where(Card.name == "Existence Play Booster Bundle")).first()
     return card.id if card else None
 
 
@@ -97,10 +96,7 @@ def fix_card_mismatches(session: Session, dry_run: bool = True) -> dict:
         select(MarketPrice)
         .where(MarketPrice.platform == "ebay")
         .where(MarketPrice.card_id.in_(pack_card_ids))
-        .where(
-            (MarketPrice.title.ilike("%play bundle%")) |
-            (MarketPrice.title.ilike("%blaster box%"))
-        )
+        .where((MarketPrice.title.ilike("%play bundle%")) | (MarketPrice.title.ilike("%blaster box%")))
     ).all()
 
     print(f"  Found {len(mismatched)} listings to process")
@@ -133,10 +129,7 @@ def fix_card_mismatches(session: Session, dry_run: bool = True) -> dict:
                 results["deleted"] += 1
             else:
                 try:
-                    session.execute(
-                        text("DELETE FROM marketprice WHERE id = :id"),
-                        {"id": mp_id}
-                    )
+                    session.execute(text("DELETE FROM marketprice WHERE id = :id"), {"id": mp_id})
                     session.commit()
                     print(f"  [DELETED] ID {mp_id}: duplicate (kept ID {existing_id})")
                     results["deleted"] += 1
@@ -154,7 +147,7 @@ def fix_card_mismatches(session: Session, dry_run: bool = True) -> dict:
                 try:
                     session.execute(
                         text("UPDATE marketprice SET card_id = :card_id WHERE id = :id"),
-                        {"card_id": bundle_card_id, "id": mp.id}
+                        {"card_id": bundle_card_id, "id": mp.id},
                     )
                     session.commit()
                     print(f"  [FIXED] ID {mp.id}: card_id -> {bundle_card_id}")
@@ -181,7 +174,7 @@ def fix_quantities(session: Session, dry_run: bool = True) -> dict:
     print()
 
     # Get all sealed product listings with qty=1
-    sealed_types = ['Pack', 'Bundle', 'Box', 'Lot']
+    sealed_types = ["Pack", "Bundle", "Box", "Lot"]
 
     listings = session.exec(
         select(MarketPrice, Card.product_type)
@@ -223,7 +216,7 @@ def fix_quantities(session: Session, dry_run: bool = True) -> dict:
                             SET quantity = :qty, price = :price
                             WHERE id = :id
                         """),
-                        {"qty": detected_qty, "price": new_price, "id": mp.id}
+                        {"qty": detected_qty, "price": new_price, "id": mp.id},
                     )
                     session.commit()
                     print(f"  [FIXED] ID {mp.id}: qty=1->{detected_qty}, price=${old_price:.2f}->${new_price:.2f}")
@@ -246,8 +239,7 @@ def main():
     parser = argparse.ArgumentParser(description="Fix sealed product DQ issues")
     parser.add_argument("--dry-run", action="store_true", help="Preview fixes without applying")
     parser.add_argument("--execute", action="store_true", help="Apply fixes")
-    parser.add_argument("--fix", choices=["card-mismatch", "quantity", "all"],
-                        default="all", help="Which fix to apply")
+    parser.add_argument("--fix", choices=["card-mismatch", "quantity", "all"], default="all", help="Which fix to apply")
 
     args = parser.parse_args()
 
@@ -287,7 +279,7 @@ def main():
     print(f"  Errors: {total_results['errors']}")
 
     if dry_run:
-        print(f"\n  Run with --execute to apply these fixes")
+        print("\n  Run with --execute to apply these fixes")
 
 
 if __name__ == "__main__":

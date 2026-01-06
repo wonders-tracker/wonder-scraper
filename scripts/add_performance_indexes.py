@@ -8,6 +8,7 @@ Expected improvements:
 - /market/overview: 4-5x faster
 - Deals tab: 2-5x faster
 """
+
 from sqlalchemy import text
 from app.db import engine
 
@@ -24,9 +25,8 @@ def add_performance_indexes():
             CREATE INDEX IF NOT EXISTS idx_marketprice_listings_query
             ON marketprice (listing_type, platform, listed_at DESC NULLS LAST, sold_date DESC NULLS LAST)
             WHERE listing_type IS NOT NULL
-            """
+            """,
         ),
-
         # 2. Scraped_at index for freshness filtering
         # Speeds up: Deals tab, recent listings queries
         (
@@ -34,9 +34,8 @@ def add_performance_indexes():
             """
             CREATE INDEX IF NOT EXISTS idx_marketprice_scraped_at
             ON marketprice (scraped_at DESC)
-            """
+            """,
         ),
-
         # 3. COALESCE(sold_date, scraped_at) for sold listings
         # Speeds up: Floor price, VWAP calculations
         (
@@ -45,9 +44,8 @@ def add_performance_indexes():
             CREATE INDEX IF NOT EXISTS idx_marketprice_sold_date_fallback
             ON marketprice (card_id, listing_type, COALESCE(sold_date, scraped_at) DESC)
             WHERE listing_type = 'sold'
-            """
+            """,
         ),
-
         # 4. Platform + listing_type composite for platform filtering
         # Speeds up: eBay vs Blokpax filtering
         (
@@ -55,9 +53,8 @@ def add_performance_indexes():
             """
             CREATE INDEX IF NOT EXISTS idx_marketprice_platform_type
             ON marketprice (platform, listing_type, card_id)
-            """
+            """,
         ),
-
         # 5. Active listings by card for deals detection
         # Speeds up: Deals tab, active inventory queries
         (
@@ -66,7 +63,7 @@ def add_performance_indexes():
             CREATE INDEX IF NOT EXISTS idx_marketprice_active_by_card
             ON marketprice (card_id, price, scraped_at DESC)
             WHERE listing_type = 'active'
-            """
+            """,
         ),
     ]
 

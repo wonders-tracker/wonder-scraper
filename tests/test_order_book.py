@@ -129,7 +129,7 @@ class TestOrderBookAnalyzer:
         conf = analyzer._calculate_confidence(deepest, total_listings=0, stale_count=0)
         assert conf == 0.0
 
-    @patch.object(OrderBookAnalyzer, '_fetch_active_listings')
+    @patch.object(OrderBookAnalyzer, "_fetch_active_listings")
     def test_estimate_floor_insufficient_data_no_fallback(self, mock_fetch, analyzer):
         """Test that insufficient data returns None when fallback is disabled."""
         mock_fetch.return_value = []  # No listings (MIN_LISTINGS is now 1)
@@ -137,8 +137,8 @@ class TestOrderBookAnalyzer:
         result = analyzer.estimate_floor(card_id=123, allow_sales_fallback=False)
         assert result is None
 
-    @patch.object(OrderBookAnalyzer, '_fetch_sold_listings')
-    @patch.object(OrderBookAnalyzer, '_fetch_active_listings')
+    @patch.object(OrderBookAnalyzer, "_fetch_sold_listings")
+    @patch.object(OrderBookAnalyzer, "_fetch_active_listings")
     def test_estimate_floor_sales_fallback(self, mock_active, mock_sold, analyzer):
         """Test that sales fallback is used when active listings are insufficient."""
         now = datetime.now(timezone.utc)
@@ -155,7 +155,7 @@ class TestOrderBookAnalyzer:
         assert result.floor_estimate > 0
         assert result.confidence <= 0.5  # Sales fallback has reduced confidence (0.5x multiplier)
 
-    @patch.object(OrderBookAnalyzer, '_fetch_active_listings')
+    @patch.object(OrderBookAnalyzer, "_fetch_active_listings")
     def test_estimate_floor_success(self, mock_fetch, analyzer):
         """Test successful floor estimation."""
         now = datetime.now(timezone.utc)

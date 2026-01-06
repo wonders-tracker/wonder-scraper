@@ -13,8 +13,7 @@ Tests cover:
 """
 
 import pytest
-import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from fastapi import Request, HTTPException, status
 from fastapi.datastructures import Headers
 
@@ -150,7 +149,7 @@ class TestRateLimitChecking:
 class TestRateLimitReset:
     """Tests for rate limit reset after time window."""
 
-    @patch('app.core.rate_limit.time.time')
+    @patch("app.core.rate_limit.time.time")
     def test_old_requests_are_cleaned_up(self, mock_time):
         """Test that requests outside the time window are removed."""
         limiter = RateLimiter()
@@ -174,7 +173,7 @@ class TestRateLimitReset:
         is_limited, _ = limiter.is_rate_limited(ip, max_requests=10, window_seconds=60)
         assert is_limited is False
 
-    @patch('app.core.rate_limit.time.time')
+    @patch("app.core.rate_limit.time.time")
     def test_partial_window_cleanup(self, mock_time):
         """Test that only requests outside the window are removed."""
         limiter = RateLimiter()
@@ -204,7 +203,7 @@ class TestRateLimitReset:
         is_limited, _ = limiter.is_rate_limited(ip, max_requests=10, window_seconds=60)
         assert is_limited is False  # Only 5 requests in window
 
-    @patch('app.core.rate_limit.time.time')
+    @patch("app.core.rate_limit.time.time")
     def test_sliding_window_behavior(self, mock_time):
         """Test that rate limit uses sliding window algorithm."""
         limiter = RateLimiter()
@@ -268,7 +267,7 @@ class TestFailedLoginTracking:
         assert lockout_duration == 300
         assert ip in limiter._lockouts
 
-    @patch('app.core.rate_limit.time.time')
+    @patch("app.core.rate_limit.time.time")
     def test_lockout_prevents_requests(self, mock_time):
         """Test that locked out IPs are blocked from making requests."""
         limiter = RateLimiter()
@@ -286,7 +285,7 @@ class TestFailedLoginTracking:
         assert is_limited is True
         assert retry_after == 300
 
-    @patch('app.core.rate_limit.time.time')
+    @patch("app.core.rate_limit.time.time")
     def test_lockout_expires_after_duration(self, mock_time):
         """Test that lockout expires after the lockout duration."""
         limiter = RateLimiter()
@@ -310,7 +309,7 @@ class TestFailedLoginTracking:
         assert limiter._failed_attempts[ip] == 0
         assert ip not in limiter._lockouts
 
-    @patch('app.core.rate_limit.time.time')
+    @patch("app.core.rate_limit.time.time")
     def test_lockout_retry_after_counts_down(self, mock_time):
         """Test that retry_after countdown is accurate during lockout."""
         limiter = RateLimiter()
@@ -350,7 +349,7 @@ class TestFailedLoginTracking:
         # Failed attempts should be cleared
         assert ip not in limiter._failed_attempts
 
-    @patch('app.core.rate_limit.time.time')
+    @patch("app.core.rate_limit.time.time")
     def test_successful_login_clears_lockout(self, mock_time):
         """Test that successful login clears lockout."""
         limiter = RateLimiter()
@@ -427,10 +426,7 @@ class TestGetClientIP:
     def test_x_forwarded_for_takes_precedence_over_x_real_ip(self):
         """Test that X-Forwarded-For takes precedence over X-Real-IP."""
         request = Mock(spec=Request)
-        request.headers = Headers({
-            "x-forwarded-for": "203.0.113.1",
-            "x-real-ip": "198.51.100.1"
-        })
+        request.headers = Headers({"x-forwarded-for": "203.0.113.1", "x-real-ip": "198.51.100.1"})
         request.client = None
 
         ip = get_client_ip(request)
@@ -479,7 +475,7 @@ class TestRateLimitDecorator:
         request.client.host = "192.168.1.1"
 
         # Manually inject limiter for testing
-        with patch('app.core.rate_limit.rate_limiter', limiter):
+        with patch("app.core.rate_limit.rate_limiter", limiter):
             # First 5 requests should succeed
             for i in range(5):
                 result = await test_endpoint(request)
@@ -500,7 +496,7 @@ class TestRateLimitDecorator:
         request.client = Mock()
         request.client.host = "192.168.1.1"
 
-        with patch('app.core.rate_limit.rate_limiter', limiter):
+        with patch("app.core.rate_limit.rate_limiter", limiter):
             # First 3 requests should succeed
             for _ in range(3):
                 result = await test_endpoint(request)
@@ -529,7 +525,7 @@ class TestRateLimitDecorator:
         request.client = Mock()
         request.client.host = "192.168.1.1"
 
-        with patch('app.core.rate_limit.rate_limiter', limiter):
+        with patch("app.core.rate_limit.rate_limiter", limiter):
             # First request succeeds
             await test_endpoint(request)
 
@@ -553,7 +549,7 @@ class TestRateLimitDecorator:
         request.client = Mock()
         request.client.host = "192.168.1.1"
 
-        with patch('app.core.rate_limit.rate_limiter', limiter):
+        with patch("app.core.rate_limit.rate_limiter", limiter):
             # Pass request as positional argument
             result = await test_endpoint(request)
             assert result == {"status": "success"}
@@ -572,7 +568,7 @@ class TestRateLimitDecorator:
         request.client = Mock()
         request.client.host = "192.168.1.1"
 
-        with patch('app.core.rate_limit.rate_limiter', limiter):
+        with patch("app.core.rate_limit.rate_limiter", limiter):
             result = await test_endpoint(request)
             assert result == {"status": "success"}
 
@@ -594,7 +590,7 @@ class TestRateLimitDecorator:
         request.client = Mock()
         request.client.host = "192.168.1.1"
 
-        with patch('app.core.rate_limit.rate_limiter', limiter):
+        with patch("app.core.rate_limit.rate_limiter", limiter):
             # Make 2 requests to endpoint1
             await endpoint1(request)
             await endpoint1(request)
@@ -623,7 +619,7 @@ class TestRateLimitDecorator:
         request.client = Mock()
         request.client.host = "192.168.1.1"
 
-        with patch('app.core.rate_limit.rate_limiter', limiter):
+        with patch("app.core.rate_limit.rate_limiter", limiter):
             # First request succeeds
             await test_endpoint(request)
 
@@ -747,7 +743,7 @@ class TestEdgeCases:
         # Should not raise any errors
         assert True
 
-    @patch('app.core.rate_limit.time.time')
+    @patch("app.core.rate_limit.time.time")
     def test_exactly_at_window_boundary(self, mock_time):
         """Test behavior when request is exactly at window boundary."""
         limiter = RateLimiter()

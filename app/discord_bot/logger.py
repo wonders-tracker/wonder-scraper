@@ -342,6 +342,44 @@ def log_hot_deal(
     )
 
 
+def log_circuit_breaker_change(name: str, old_state: str, new_state: str) -> bool:
+    """
+    Log circuit breaker state changes to Discord.
+
+    Args:
+        name: Name of the circuit breaker (e.g., "ebay", "blokpax", "opensea")
+        old_state: Previous state ("closed", "open", "half_open")
+        new_state: New state ("closed", "open", "half_open")
+    """
+    # Determine emoji and color based on state transition
+    if new_state == "open":
+        emoji = "🔴"
+        title = f"{emoji} Circuit OPEN: {name}"
+        description = f"**{name.upper()}** scraper circuit breaker has **OPENED**\n\nRequests will be blocked until recovery timeout."
+        color = 0xEF4444  # Red
+    elif new_state == "closed":
+        emoji = "🟢"
+        title = f"{emoji} Circuit CLOSED: {name}"
+        description = f"**{name.upper()}** scraper circuit breaker has **RECOVERED**\n\nNormal operation resumed."
+        color = 0x10B981  # Green
+    else:  # half_open
+        emoji = "🟡"
+        title = f"{emoji} Circuit HALF-OPEN: {name}"
+        description = f"**{name.upper()}** scraper circuit breaker is **TESTING**\n\nAllowing limited requests to test recovery."
+        color = 0xF59E0B  # Yellow
+
+    return _send_log(
+        title=title,
+        description=description,
+        color=color,
+        fields=[
+            {"name": "Previous State", "value": old_state.upper(), "inline": True},
+            {"name": "New State", "value": new_state.upper(), "inline": True},
+            {"name": "Scraper", "value": name.title(), "inline": True},
+        ],
+    )
+
+
 def check_and_log_deal(
     card_id: int,
     card_name: str,
