@@ -2,6 +2,15 @@
 
 This guide walks through setting up the complete staging environment.
 
+## Current Staging Environment
+
+| Component | URL/Value |
+|-----------|-----------|
+| **Backend** | https://wonder-scraper-staging-staging.up.railway.app |
+| **Health Check** | https://wonder-scraper-staging-staging.up.railway.app/health |
+| **Database** | Neon `staging` branch |
+| **Railway Service** | `wonder-scraper-staging` in `staging` environment |
+
 ## Prerequisites
 
 - Railway account with existing production service
