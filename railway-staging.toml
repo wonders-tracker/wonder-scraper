@@ -1,0 +1,36 @@
+# Railway Staging Service Configuration
+#
+# This config is for the staging environment backend service.
+# Deploy this as a separate Railway service pointing to the staging branch.
+#
+# Setup:
+#   1. In Railway dashboard, create new service from this repo
+#   2. Set "Source Branch" to "staging"
+#   3. Set "Config Path" to "railway-staging.toml"
+#   4. Add environment variables (see below)
+#
+# Required Environment Variables:
+#   DATABASE_URL          - Neon staging branch connection string
+#   SECRET_KEY            - Can be different from prod for isolation
+#   FRONTEND_URL          - https://staging.wonderstracker.com or Vercel preview URL
+#   DISCORD_*_WEBHOOK_URL - Optional: use separate staging webhooks or disable
+#
+# Recommended Settings:
+#   RUN_SCHEDULER=true    - Run scheduler in staging for full testing
+#   USE_TASK_QUEUE=false  - Keep simple unless testing task queue
+
+[build]
+builder = "dockerfile"
+
+[deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port 8080"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+# Staging can have shorter health check grace period
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+[env]
+PYTHONUNBUFFERED = "1"
+# Staging-specific: reduce noise
+MEMORY_LOG_INTERVAL_SECONDS = "0"

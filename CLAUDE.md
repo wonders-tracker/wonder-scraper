@@ -89,19 +89,80 @@ Use the deploy script for reliable Vercel deployments:
 
 **Important:** Never commit `.vercel/output` - it causes Vercel to skip builds and serve stale content. This is already in `.gitignore`.
 
+## Development Workflow
+
+### Environment Strategy
+
+```
+Feature Branch → Staging → Production
+      ↓             ↓           ↓
+  Local DB     Neon Staging   Neon Prod
+```
+
+| Environment | Backend | Frontend | Database |
+|-------------|---------|----------|----------|
+| **Local** | `uvicorn --reload` | `npm run dev` | Docker PostgreSQL |
+| **Staging** | Railway staging service | Vercel preview | Neon staging branch |
+| **Production** | Railway prod service | Vercel prod | Neon main branch |
+
+### Feature Development Process
+
+1. **Create feature branch** from `main`
+   ```bash
+   git checkout -b feature/my-feature main
+   ```
+
+2. **Develop locally** with Docker Compose
+   ```bash
+   docker-compose up -d postgres
+   poetry run uvicorn app.main:app --reload
+   cd frontend && npm run dev
+   ```
+
+3. **Push and create PR** → CI runs all checks
+   ```bash
+   git push -u origin feature/my-feature
+   gh pr create --base staging
+   ```
+
+4. **Merge to staging** → Auto-deploys to staging environment
+   - Backend: Railway staging service
+   - Frontend: Vercel staging preview
+   - Database: Neon staging branch
+
+5. **Test on staging** → Verify feature works end-to-end
+
+6. **Merge staging to main** → Auto-deploys to production
+
+### Database Migrations
+
+**Safe migration workflow:**
+1. Write migration with `alembic revision --autogenerate -m "description"`
+2. Test locally: `poetry run alembic upgrade head`
+3. Push to feature branch → CI tests migration on fresh DB
+4. Merge to staging → Migration runs on Neon staging branch
+5. Verify staging works correctly
+6. Merge to main → Migration runs on Neon production
+
+**CI checks for dangerous operations:**
+- DROP TABLE/COLUMN detection
+- Column type changes
+- NOT NULL without defaults
+
 ## CI/CD
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push to main/staging/preview:
 
+**All branches:**
 - **backend-test**: Runs pytest with PostgreSQL
 - **backend-lint**: Runs ruff check/format and ty type check
 - **frontend-test**: Runs typecheck, lint, and build
-- **frontend-bundle-integrity**: Validates production bundle structure:
-  - React vendor chunk exists and contains runtime
-  - Router and main entry chunks exist
-  - All JS files pass syntax validation
-  - Reports bundle sizes
+- **frontend-bundle-integrity**: Validates production bundle structure
 - **security-scan**: Trivy vulnerability scanner
+- **migration-check**: Detects dangerous database migrations (PRs only)
+
+**Staging branch only:**
+- **staging-smoke-test**: Health checks and API tests after deploy
 
 ## Key Directories
 
