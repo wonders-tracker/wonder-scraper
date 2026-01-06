@@ -74,6 +74,14 @@ async def lifespan(app: FastAPI):
     logger.info(f"SaaS Features: {'ENABLED' if BILLING_AVAILABLE else 'DISABLED (OSS mode)'}")
     logger.info(f"Usage Metering: {'ENABLED' if METERING_AVAILABLE else 'DISABLED'}")
     logger.info("=" * 50)
+
+    # Register circuit breaker Discord notifications
+    from app.core.circuit_breaker import set_notification_callback
+    from app.discord_bot.logger import log_circuit_breaker_change
+
+    set_notification_callback(log_circuit_breaker_change)
+    logger.info("Circuit breaker Discord notifications enabled")
+
     if settings.RUN_SCHEDULER:
         start_scheduler()
     else:

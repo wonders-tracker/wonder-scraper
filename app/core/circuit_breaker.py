@@ -2,10 +2,31 @@ from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Dict
+from typing import Callable, Dict, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Type alias for notification callback
+StateChangeCallback = Callable[[str, str, str], None]  # (name, old_state, new_state)
+
+# Global notification callback - set by application on startup
+_notification_callback: Optional[StateChangeCallback] = None
+
+
+def set_notification_callback(callback: StateChangeCallback) -> None:
+    """Set the global notification callback for circuit breaker state changes."""
+    global _notification_callback
+    _notification_callback = callback
+
+
+def _notify_state_change(name: str, old_state: str, new_state: str) -> None:
+    """Notify about state change if callback is registered."""
+    if _notification_callback:
+        try:
+            _notification_callback(name, old_state, new_state)
+        except Exception as e:
+            logger.error(f"Circuit breaker notification failed: {e}")
 
 
 class CircuitState(Enum):
@@ -41,19 +62,23 @@ class CircuitBreaker:
         if self._state == CircuitState.OPEN and self._last_failure_time:
             elapsed = (datetime.now(timezone.utc) - self._last_failure_time).total_seconds()
             if elapsed >= self.recovery_timeout:
+                old_state = self._state.value
                 self._state = CircuitState.HALF_OPEN
                 self._half_open_calls = 0
                 logger.info(f"Circuit {self.name}: OPEN -> HALF_OPEN")
+                _notify_state_change(self.name, old_state, self._state.value)
 
     def record_success(self):
         with self._lock:
             if self._state == CircuitState.HALF_OPEN:
                 self._success_count += 1
                 if self._success_count >= self.half_open_max_calls:
+                    old_state = self._state.value
                     self._state = CircuitState.CLOSED
                     self._failure_count = 0
                     self._success_count = 0
                     logger.info(f"Circuit {self.name}: HALF_OPEN -> CLOSED")
+                    _notify_state_change(self.name, old_state, self._state.value)
             else:
                 self._failure_count = 0
 
@@ -63,11 +88,15 @@ class CircuitBreaker:
             self._last_failure_time = datetime.now(timezone.utc)
 
             if self._state == CircuitState.HALF_OPEN:
+                old_state = self._state.value
                 self._state = CircuitState.OPEN
                 logger.warning(f"Circuit {self.name}: HALF_OPEN -> OPEN (failure during recovery)")
+                _notify_state_change(self.name, old_state, self._state.value)
             elif self._failure_count >= self.failure_threshold:
+                old_state = self._state.value
                 self._state = CircuitState.OPEN
                 logger.warning(f"Circuit {self.name}: CLOSED -> OPEN (threshold reached)")
+                _notify_state_change(self.name, old_state, self._state.value)
 
     def allow_request(self) -> bool:
         with self._lock:
