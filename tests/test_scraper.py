@@ -9,7 +9,6 @@ Tests cover:
 - Bundle/pack detection
 """
 
-import pytest
 from app.scraper.ebay import (
     _is_valid_match,
     _detect_treatment,
@@ -28,52 +27,34 @@ class TestIsValidMatch:
 
     def test_exact_card_name_match(self):
         """Exact card name should match."""
-        assert _is_valid_match(
-            "Wonders of the First Progo Classic Paper",
-            "Progo"
-        ) is True
+        assert _is_valid_match("Wonders of the First Progo Classic Paper", "Progo") is True
 
     def test_card_with_treatment(self):
         """Card name with treatment should match."""
-        assert _is_valid_match(
-            "WOTF Existence Zeltona Formless Foil",
-            "Zeltona"
-        ) is True
+        assert _is_valid_match("WOTF Existence Zeltona Formless Foil", "Zeltona") is True
 
     def test_card_with_set_name(self):
         """Card with set name should match."""
-        assert _is_valid_match(
-            "Wonders of the First Existence Deep Black Goop Stonefoil",
-            "Deep Black Goop"
-        ) is True
+        assert _is_valid_match("Wonders of the First Existence Deep Black Goop Stonefoil", "Deep Black Goop") is True
 
     def test_sealed_product_match(self):
         """Sealed product should match with lenient rules."""
-        assert _is_valid_match(
-            "Wonders of the First Existence Collector Booster Box Sealed",
-            "Collector Booster Box"
-        ) is True
+        assert (
+            _is_valid_match("Wonders of the First Existence Collector Booster Box Sealed", "Collector Booster Box")
+            is True
+        )
 
     def test_play_bundle_match(self):
         """Play Bundle should match."""
-        assert _is_valid_match(
-            "Wonders of the First Existence Play Bundle Blaster Box",
-            "Play Bundle"
-        ) is True
+        assert _is_valid_match("Wonders of the First Existence Play Bundle Blaster Box", "Play Bundle") is True
 
     def test_psa_graded_wotf_card(self):
         """PSA graded WOTF cards should still match."""
-        assert _is_valid_match(
-            "2024 Wonders of the First Existence Progo Formless Foil PSA 10",
-            "Progo"
-        ) is True
+        assert _is_valid_match("2024 Wonders of the First Existence Progo Formless Foil PSA 10", "Progo") is True
 
     def test_card_number_format(self):
         """Card with number format should match."""
-        assert _is_valid_match(
-            "Wonders of the First Zeltona 123/401 Classic Foil",
-            "Zeltona"
-        ) is True
+        assert _is_valid_match("Wonders of the First Zeltona 123/401 Classic Foil", "Zeltona") is True
 
     # =========================================================================
     # Non-WOTF Card Filtering - Should FAIL
@@ -84,165 +65,107 @@ class TestIsValidMatch:
 
         def test_rejects_yugioh_mp22_code(self):
             """Should reject Yu-Gi-Oh MP22-EN card codes."""
-            assert _is_valid_match(
-                "Ruddy Rose Dragon MP22-EN077 2022 Tin of the Pharaoh's Gods 1st Edition",
-                "Dragon's Gold"
-            ) is False
+            assert (
+                _is_valid_match(
+                    "Ruddy Rose Dragon MP22-EN077 2022 Tin of the Pharaoh's Gods 1st Edition", "Dragon's Gold"
+                )
+                is False
+            )
 
         def test_rejects_yugioh_mged_code(self):
             """Should reject Yu-Gi-Oh MGED-EN card codes."""
-            assert _is_valid_match(
-                "Trishula Dragon of the Ice Barrier MGED-EN027 Gold Rare",
-                "Dragon's Gold"
-            ) is False
+            assert _is_valid_match("Trishula Dragon of the Ice Barrier MGED-EN027 Gold Rare", "Dragon's Gold") is False
 
         def test_rejects_tin_of_pharaoh(self):
             """Should reject Tin of the Pharaoh's Gods."""
-            assert _is_valid_match(
-                "Albion the Branded Dragon 2022 Tin of the Pharaoh's Gods",
-                "Dragon's Gold"
-            ) is False
+            assert _is_valid_match("Albion the Branded Dragon 2022 Tin of the Pharaoh's Gods", "Dragon's Gold") is False
 
         def test_rejects_konami(self):
             """Should reject Konami products."""
-            assert _is_valid_match(
-                "Red-Eyes Black Dragon Konami 1st Edition",
-                "Dragon's Gold"
-            ) is False
+            assert _is_valid_match("Red-Eyes Black Dragon Konami 1st Edition", "Dragon's Gold") is False
 
         def test_rejects_yugioh_explicit(self):
             """Should reject explicit Yu-Gi-Oh mentions."""
-            assert _is_valid_match(
-                "Yu-Gi-Oh! Blue-Eyes White Dragon",
-                "Dragon's Gold"
-            ) is False
+            assert _is_valid_match("Yu-Gi-Oh! Blue-Eyes White Dragon", "Dragon's Gold") is False
 
         def test_rejects_ice_barrier(self):
             """Should reject Ice Barrier archetype."""
-            assert _is_valid_match(
-                "Trishula Dragon of the Ice Barrier Secret Rare",
-                "Dragon's Gold"
-            ) is False
+            assert _is_valid_match("Trishula Dragon of the Ice Barrier Secret Rare", "Dragon's Gold") is False
 
     class TestDragonBallZFiltering:
         """Tests for Dragon Ball Z card filtering."""
 
         def test_rejects_dragonball(self):
             """Should reject Dragon Ball Z cards."""
-            assert _is_valid_match(
-                "Dragonball Z CCG The Awakening Android 20 WA-066",
-                "The Awakening"
-            ) is False
+            assert _is_valid_match("Dragonball Z CCG The Awakening Android 20 WA-066", "The Awakening") is False
 
         def test_rejects_dbz_characters(self):
             """Should reject DBZ character names."""
-            assert _is_valid_match(
-                "Dragon Ball Z Hercule 1st Edition Gold",
-                "The Awakening"
-            ) is False
+            assert _is_valid_match("Dragon Ball Z Hercule 1st Edition Gold", "The Awakening") is False
 
         def test_rejects_dbz_card_codes(self):
             """Should reject DBZ card codes like WA-066."""
-            assert _is_valid_match(
-                "The Awakening WA-079 Holo 1st Ed",
-                "The Awakening"
-            ) is False
+            assert _is_valid_match("The Awakening WA-079 Holo 1st Ed", "The Awakening") is False
 
         def test_rejects_goku(self):
             """Should reject Goku cards."""
-            assert _is_valid_match(
-                "Goku Level 5 The Awakening Gold Stamp",
-                "The Awakening"
-            ) is False
+            assert _is_valid_match("Goku Level 5 The Awakening Gold Stamp", "The Awakening") is False
 
     class TestPokemonFiltering:
         """Tests for Pokemon card filtering."""
 
         def test_rejects_pokemon_explicit(self):
             """Should reject explicit Pokemon mentions."""
-            assert _is_valid_match(
-                "Pokemon Scarlet Violet Charizard ex",
-                "Charizard"
-            ) is False
+            assert _is_valid_match("Pokemon Scarlet Violet Charizard ex", "Charizard") is False
 
         def test_rejects_pokemon_characters(self):
             """Should reject Pokemon character names."""
-            assert _is_valid_match(
-                "Pikachu VMAX Rainbow Rare Evolving Skies",
-                "Pikachu"
-            ) is False
+            assert _is_valid_match("Pikachu VMAX Rainbow Rare Evolving Skies", "Pikachu") is False
 
         def test_rejects_pokemon_sets(self):
             """Should reject Pokemon set names."""
-            assert _is_valid_match(
-                "Evolving Skies Booster Box Sealed",
-                "Booster Box"
-            ) is False
+            assert _is_valid_match("Evolving Skies Booster Box Sealed", "Booster Box") is False
 
         def test_rejects_scarlet_violet(self):
             """Should reject Scarlet Violet set."""
-            assert _is_valid_match(
-                "Scarlet Violet 151 Booster Pack",
-                "Booster Pack"
-            ) is False
+            assert _is_valid_match("Scarlet Violet 151 Booster Pack", "Booster Pack") is False
 
     class TestOnePieceFiltering:
         """Tests for One Piece TCG filtering."""
 
         def test_rejects_one_piece_codes(self):
             """Should reject One Piece card codes."""
-            assert _is_valid_match(
-                "OP05 Awakening of the New Era Luffy",
-                "The Awakening"
-            ) is False
+            assert _is_valid_match("OP05 Awakening of the New Era Luffy", "The Awakening") is False
 
         def test_rejects_straw_hat(self):
             """Should reject Straw Hat references."""
-            assert _is_valid_match(
-                "Straw Hat Crew Awakening Rare",
-                "The Awakening"
-            ) is False
+            assert _is_valid_match("Straw Hat Crew Awakening Rare", "The Awakening") is False
 
         def test_rejects_luffy(self):
             """Should reject Luffy cards."""
-            assert _is_valid_match(
-                "Luffy Gear 5 Awakening Super Rare",
-                "The Awakening"
-            ) is False
+            assert _is_valid_match("Luffy Gear 5 Awakening Super Rare", "The Awakening") is False
 
     class TestMTGFiltering:
         """Tests for Magic: The Gathering filtering."""
 
         def test_rejects_magic_the_gathering(self):
             """Should reject Magic: The Gathering."""
-            assert _is_valid_match(
-                "Magic the Gathering Dragon Booster Pack",
-                "Dragon's Gold"
-            ) is False
+            assert _is_valid_match("Magic the Gathering Dragon Booster Pack", "Dragon's Gold") is False
 
         def test_rejects_planeswalker(self):
             """Should reject Planeswalker cards."""
-            assert _is_valid_match(
-                "Planeswalker Dragon Mythic Rare",
-                "Dragon's Gold"
-            ) is False
+            assert _is_valid_match("Planeswalker Dragon Mythic Rare", "Dragon's Gold") is False
 
     class TestSportsCardFiltering:
         """Tests for sports card filtering."""
 
         def test_rejects_topps(self):
             """Should reject Topps cards."""
-            assert _is_valid_match(
-                "Topps Chrome Gold Refractor",
-                "Dragon's Gold"
-            ) is False
+            assert _is_valid_match("Topps Chrome Gold Refractor", "Dragon's Gold") is False
 
         def test_rejects_panini(self):
             """Should reject Panini cards."""
-            assert _is_valid_match(
-                "Panini Prizm Gold Parallel",
-                "Dragon's Gold"
-            ) is False
+            assert _is_valid_match("Panini Prizm Gold Parallel", "Dragon's Gold") is False
 
     # =========================================================================
     # Edge Cases
@@ -251,25 +174,16 @@ class TestIsValidMatch:
     def test_the_first_card_strict_matching(self):
         """'The First' card should require strict matching."""
         # Should match with card number
-        assert _is_valid_match(
-            "Wonders of the First The First 001/401 Formless Foil",
-            "The First"
-        ) is True
+        assert _is_valid_match("Wonders of the First The First 001/401 Formless Foil", "The First") is True
 
     def test_rejects_bundle_when_searching_pack(self):
         """Should reject bundles when searching for individual packs."""
-        assert _is_valid_match(
-            "Wonders of the First Play Bundle Blaster Box 6 Packs",
-            "Booster Pack"
-        ) is False
+        assert _is_valid_match("Wonders of the First Play Bundle Blaster Box 6 Packs", "Booster Pack") is False
 
     def test_fuzzy_matching_typos(self):
         """Should handle minor typos with fuzzy matching."""
         # "Atherion" vs "Aetherion" - close enough
-        assert _is_valid_match(
-            "Wonders of the First Atherion Classic Foil",
-            "Aetherion"
-        ) is True
+        assert _is_valid_match("Wonders of the First Atherion Classic Foil", "Aetherion") is True
 
 
 class TestDetectTreatment:
@@ -668,7 +582,15 @@ class TestContaminationFiltering:
             "2024 WOTF Zeltona Stonefoil",
         ]
         for title in wotf_titles:
-            card_name = "Dragon's Gold" if "Dragon" in title else "The Awakening" if "Awakening" in title else "Progo" if "Progo" in title else "Zeltona"
+            card_name = (
+                "Dragon's Gold"
+                if "Dragon" in title
+                else "The Awakening"
+                if "Awakening" in title
+                else "Progo"
+                if "Progo" in title
+                else "Zeltona"
+            )
             assert _is_valid_match(title, card_name) is True, f"Incorrectly filtered: {title}"
 
     def test_allows_legitimate_wotf_sealed_products(self):
@@ -700,8 +622,9 @@ class TestRealWorldContaminationCases:
             "Debris Dragon PGL2-EN031 Premium Gold: Return of the Bling",
         ]
         for title in contaminated_titles:
-            assert _is_valid_match(title, "Dragon's Gold") is False, \
-                f"CRITICAL: Failed to filter known contamination: {title}"
+            assert (
+                _is_valid_match(title, "Dragon's Gold") is False
+            ), f"CRITICAL: Failed to filter known contamination: {title}"
 
     def test_starter_set_contamination_cases(self):
         """Real contamination cases that hit 2-Player Starter Set."""
@@ -715,8 +638,9 @@ class TestRealWorldContaminationCases:
             "Castel, the Skyblaster Musketeer STAX-EN043 2-Player Starter Set",
         ]
         for title in contaminated_titles:
-            assert _is_valid_match(title, "2-Player Starter Set") is False, \
-                f"CRITICAL: Failed to filter known contamination: {title}"
+            assert (
+                _is_valid_match(title, "2-Player Starter Set") is False
+            ), f"CRITICAL: Failed to filter known contamination: {title}"
 
     def test_mtg_contamination_cases(self):
         """Real MTG contamination cases."""
@@ -724,8 +648,9 @@ class TestRealWorldContaminationCases:
             "Magic: The Gathering Purphoros, God Of The Forge Lightly Played",
         ]
         for title in contaminated_titles:
-            assert _is_valid_match(title, "Purphoros") is False, \
-                f"CRITICAL: Failed to filter MTG contamination: {title}"
+            assert (
+                _is_valid_match(title, "Purphoros") is False
+            ), f"CRITICAL: Failed to filter MTG contamination: {title}"
 
     def test_legitimate_wotf_with_dragon_keyword(self):
         """WOTF cards with 'Dragon' should NOT be filtered."""
@@ -737,8 +662,9 @@ class TestRealWorldContaminationCases:
             "Wonders of the First Dragon's Gold Stonefoil",
         ]
         for title in legitimate_titles:
-            assert _is_valid_match(title, "Dragon's Gold") is True, \
-                f"CRITICAL: Incorrectly filtered legitimate WOTF: {title}"
+            assert (
+                _is_valid_match(title, "Dragon's Gold") is True
+            ), f"CRITICAL: Incorrectly filtered legitimate WOTF: {title}"
 
     def test_legitimate_wotf_starter_products(self):
         """WOTF starter products should NOT be filtered."""
@@ -748,8 +674,7 @@ class TestRealWorldContaminationCases:
             ("WOTF Existence 2-Player Starter Set Sealed", "2-Player Starter Set"),
         ]
         for title, card_name in legitimate_cases:
-            assert _is_valid_match(title, card_name) is True, \
-                f"CRITICAL: Incorrectly filtered legitimate WOTF: {title}"
+            assert _is_valid_match(title, card_name) is True, f"CRITICAL: Incorrectly filtered legitimate WOTF: {title}"
 
 
 class TestAIExtractorValidation:
@@ -762,10 +687,7 @@ class TestAIExtractorValidation:
         extractor = get_ai_extractor()
 
         # Test WOTF indicators
-        result = extractor.validate_wotf_listing(
-            "Wonders of the First Progo Formless Foil",
-            "Progo"
-        )
+        result = extractor.validate_wotf_listing("Wonders of the First Progo Formless Foil", "Progo")
         assert result["is_wotf"] is True
         assert result["confidence"] >= 0.9
 
@@ -776,8 +698,7 @@ class TestAIExtractorValidation:
         extractor = get_ai_extractor()
 
         result = extractor.validate_wotf_listing(
-            "Ruddy Rose Dragon MP22-EN077 Tin of the Pharaoh's Gods",
-            "Dragon's Gold"
+            "Ruddy Rose Dragon MP22-EN077 Tin of the Pharaoh's Gods", "Dragon's Gold"
         )
         assert result["is_wotf"] is False
         assert result["detected_tcg"] == "Yu-Gi-Oh"
@@ -788,10 +709,7 @@ class TestAIExtractorValidation:
 
         extractor = get_ai_extractor()
 
-        result = extractor.validate_wotf_listing(
-            "Dragonball Z CCG The Awakening Hercule",
-            "The Awakening"
-        )
+        result = extractor.validate_wotf_listing("Dragonball Z CCG The Awakening Hercule", "The Awakening")
         assert result["is_wotf"] is False
         assert result["detected_tcg"] == "Dragon Ball Z"
 
@@ -801,10 +719,7 @@ class TestAIExtractorValidation:
 
         extractor = get_ai_extractor()
 
-        result = extractor.validate_wotf_listing(
-            "Pokemon Charizard VMAX Evolving Skies",
-            "Charizard"
-        )
+        result = extractor.validate_wotf_listing("Pokemon Charizard VMAX Evolving Skies", "Charizard")
         assert result["is_wotf"] is False
         assert result["detected_tcg"] == "Pokemon"
 
@@ -820,10 +735,7 @@ class TestAIExtractorValidation:
 
         try:
             # Ambiguous - no clear TCG indicators
-            result = extractor.validate_wotf_listing(
-                "Dragon Card Foil Rare",
-                "Dragon's Gold"
-            )
+            result = extractor.validate_wotf_listing("Dragon Card Foil Rare", "Dragon's Gold")
             # Without AI, should return low confidence when ambiguous
             assert result["confidence"] <= 0.7
             assert "no AI available" in result["reason"].lower() or result["confidence"] == 0.5
@@ -870,14 +782,8 @@ class TestAIExtractorEnhancements:
         extractor.clear_feedback_log()
 
         # Make some validation calls
-        extractor.validate_wotf_listing(
-            "Wonders of the First Progo Stonefoil",
-            "Progo"
-        )
-        extractor.validate_wotf_listing(
-            "Yu-Gi-Oh MP22-EN060 Roxrose Dragon",
-            "Dragon's Gold"
-        )
+        extractor.validate_wotf_listing("Wonders of the First Progo Stonefoil", "Progo")
+        extractor.validate_wotf_listing("Yu-Gi-Oh MP22-EN060 Roxrose Dragon", "Dragon's Gold")
 
         # Check feedback log
         log = extractor.get_feedback_log()
@@ -899,14 +805,8 @@ class TestAIExtractorEnhancements:
         extractor.clear_feedback_log()
 
         # Make one accept and one reject
-        extractor.validate_wotf_listing(
-            "Wonders of the First Progo Classic Paper",
-            "Progo"
-        )
-        extractor.validate_wotf_listing(
-            "Pokemon Pikachu VMAX",
-            "The Awakening"
-        )
+        extractor.validate_wotf_listing("Wonders of the First Progo Classic Paper", "Progo")
+        extractor.validate_wotf_listing("Pokemon Pikachu VMAX", "The Awakening")
 
         rejections = extractor.get_rejection_log()
         assert len(rejections) >= 1
@@ -917,10 +817,7 @@ class TestAIExtractorEnhancements:
         from app.services.ai_extractor import get_ai_extractor
 
         extractor = get_ai_extractor()
-        result = extractor.validate_wotf_listing(
-            "Progo Stonefoil Existence Set 123/401",
-            "Progo"
-        )
+        result = extractor.validate_wotf_listing("Progo Stonefoil Existence Set 123/401", "Progo")
 
         assert result["is_wotf"] is True
         assert result["confidence"] >= 0.9
@@ -931,10 +828,7 @@ class TestAIExtractorEnhancements:
         from app.services.ai_extractor import get_ai_extractor
 
         extractor = get_ai_extractor()
-        result = extractor.validate_wotf_listing(
-            "Konami Yu-Gi-Oh Dark Magician",
-            "Dragon's Gold"
-        )
+        result = extractor.validate_wotf_listing("Konami Yu-Gi-Oh Dark Magician", "Dragon's Gold")
 
         assert result["is_wotf"] is False
         assert result["confidence"] >= 0.9
@@ -945,10 +839,7 @@ class TestAIExtractorEnhancements:
         from app.services.ai_extractor import get_ai_extractor
 
         extractor = get_ai_extractor()
-        result = extractor.extract_structured_data(
-            "Wonders of the First Progo Stonefoil 234/401 PSA 10",
-            "Progo"
-        )
+        result = extractor.extract_structured_data("Wonders of the First Progo Stonefoil 234/401 PSA 10", "Progo")
 
         assert result["card_name"] == "Progo"
         assert result["treatment"] == "Stonefoil"
@@ -965,17 +856,11 @@ class TestAIExtractorEnhancements:
         extractor = get_ai_extractor()
 
         # Existence set
-        result = extractor.extract_structured_data(
-            "Progo Existence Formless Foil",
-            "Progo"
-        )
+        result = extractor.extract_structured_data("Progo Existence Formless Foil", "Progo")
         assert result["set_name"] == "Existence"
 
         # Genesis set
-        result = extractor.extract_structured_data(
-            "Progo Genesis Classic Foil",
-            "Progo"
-        )
+        result = extractor.extract_structured_data("Progo Genesis Classic Foil", "Progo")
         assert result["set_name"] == "Genesis"
 
     def test_structured_extraction_treatments(self):
@@ -1005,28 +890,19 @@ class TestAIExtractorEnhancements:
         extractor = get_ai_extractor()
 
         # PSA grading
-        result = extractor.extract_structured_data(
-            "Progo WOTF PSA 10 Gem Mint",
-            "Progo"
-        )
+        result = extractor.extract_structured_data("Progo WOTF PSA 10 Gem Mint", "Progo")
         assert result["is_graded"] is True
         assert result["grading_info"]["service"] == "PSA"
         assert result["grading_info"]["grade"] == 10.0
 
         # CGC grading
-        result = extractor.extract_structured_data(
-            "Progo WOTF CGC 9.5",
-            "Progo"
-        )
+        result = extractor.extract_structured_data("Progo WOTF CGC 9.5", "Progo")
         assert result["is_graded"] is True
         assert result["grading_info"]["service"] == "CGC"
         assert result["grading_info"]["grade"] == 9.5
 
         # BGS grading
-        result = extractor.extract_structured_data(
-            "Progo WOTF BGS 9",
-            "Progo"
-        )
+        result = extractor.extract_structured_data("Progo WOTF BGS 9", "Progo")
         assert result["is_graded"] is True
         assert result["grading_info"]["service"] == "BGS"
         assert result["grading_info"]["grade"] == 9.0
@@ -1162,7 +1038,9 @@ class TestScoreSealedMatch:
         # Card name does NOT appear exactly
         partial_score = score_sealed_match(title, "Play Bundle", "Bundle")
 
-        assert exact_score >= partial_score + 100, f"Exact ({exact_score}) should have +100 over partial ({partial_score})"
+        assert (
+            exact_score >= partial_score + 100
+        ), f"Exact ({exact_score}) should have +100 over partial ({partial_score})"
 
     def test_product_type_alignment(self):
         """Product type alignment should boost score."""
@@ -1237,8 +1115,7 @@ class TestContaminationBlocklist:
             "Divine Arsenal AA-ZEUS - Sky Thunder STAX-EN044 2-Player Starter Set",
         ]
         for title in contaminated:
-            assert _is_valid_match(title, "2-Player Starter Set") is False, \
-                f"Should block: {title}"
+            assert _is_valid_match(title, "2-Player Starter Set") is False, f"Should block: {title}"
 
     def test_mtg_awakening_possessed_blocked(self):
         """MTG 'Awakening of the Possessed' cards should be blocked."""
@@ -1249,8 +1126,7 @@ class TestContaminationBlocklist:
             "Awakening of the Crystal Ultimates - SDCB-EN016 - Common",
         ]
         for title in contaminated:
-            assert _is_valid_match(title, "The Awakening") is False, \
-                f"Should block: {title}"
+            assert _is_valid_match(title, "The Awakening") is False, f"Should block: {title}"
 
     def test_mtg_black_market_connections_blocked(self):
         """MTG 'Black Market Connections' cards should be blocked."""
@@ -1259,8 +1135,7 @@ class TestContaminationBlocklist:
             "Black Market Connections R Commander: The Lost Caverns",
         ]
         for title in contaminated:
-            assert _is_valid_match(title, "Market of Lost Wonders") is False, \
-                f"Should block: {title}"
+            assert _is_valid_match(title, "Market of Lost Wonders") is False, f"Should block: {title}"
 
     def test_mtg_treasure_cove_blocked(self):
         """MTG 'Treasure Map // Treasure Cove' cards should be blocked."""
@@ -1268,8 +1143,7 @@ class TestContaminationBlocklist:
             "1 x Treasure Map // Treasure Cove - Foil - Extended Art - The Lost Caverns",
         ]
         for title in contaminated:
-            assert _is_valid_match(title, "Treasure Map") is False, \
-                f"Should block: {title}"
+            assert _is_valid_match(title, "Treasure Map") is False, f"Should block: {title}"
 
     def test_pokemon_machamp_blocked(self):
         """Pokemon Machamp cards should be blocked."""
@@ -1278,8 +1152,7 @@ class TestContaminationBlocklist:
             "CGC 9 Machamp 1999 1st Edition Base Set Cosmos Holo",
         ]
         for title in contaminated:
-            assert _is_valid_match(title, "2-Player Starter Set") is False, \
-                f"Should block: {title}"
+            assert _is_valid_match(title, "2-Player Starter Set") is False, f"Should block: {title}"
 
     def test_legitimate_wotf_still_passes(self):
         """Legitimate WOTF cards should still pass after blocklist updates."""
@@ -1290,5 +1163,4 @@ class TestContaminationBlocklist:
             ("Wonders of the First Treasure Map Classic Foil", "Treasure Map"),
         ]
         for title, card in legitimate:
-            assert _is_valid_match(title, card) is True, \
-                f"Should NOT block legitimate WOTF: {title}"
+            assert _is_valid_match(title, card) is True, f"Should NOT block legitimate WOTF: {title}"

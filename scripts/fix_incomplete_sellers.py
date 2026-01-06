@@ -12,12 +12,13 @@ import argparse
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
 from sqlmodel import Session
 from sqlalchemy import text
 
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.db import engine
@@ -30,22 +31,22 @@ from scripts.backfill_seller_data import (
 
 # Known incomplete/truncated seller names that need to be re-scraped
 INCOMPLETE_SELLERS = [
-    'The',
-    'Blue',
-    'BRM',
-    'Premier',
-    'Midnight',
-    'Collectors',
-    'Azure',
-    'Rooster',
-    'Comic',
-    'Dragonfly',
-    'Hawkewind',  # This one might be complete, but let's verify
-    'Ritchies',
-    'Elkhorn',
-    'Preferred',
-    'GLS',
-    'JDP',
+    "The",
+    "Blue",
+    "BRM",
+    "Premier",
+    "Midnight",
+    "Collectors",
+    "Azure",
+    "Rooster",
+    "Comic",
+    "Dragonfly",
+    "Hawkewind",  # This one might be complete, but let's verify
+    "Ritchies",
+    "Elkhorn",
+    "Preferred",
+    "GLS",
+    "JDP",
 ]
 
 
@@ -53,8 +54,8 @@ async def fix_incomplete_sellers_async(dry_run: bool = True, limit: Optional[int
     """Re-scrape listings with known incomplete seller names."""
     with Session(engine) as session:
         # Build query for listings with incomplete seller names
-        placeholders = ', '.join([f':seller_{i}' for i in range(len(INCOMPLETE_SELLERS))])
-        params = {f'seller_{i}': seller for i, seller in enumerate(INCOMPLETE_SELLERS)}
+        placeholders = ", ".join([f":seller_{i}" for i in range(len(INCOMPLETE_SELLERS))])
+        params = {f"seller_{i}": seller for i, seller in enumerate(INCOMPLETE_SELLERS)}
 
         # Use parameterized LIMIT to prevent SQL injection
         if limit:
@@ -113,7 +114,7 @@ async def fix_incomplete_sellers_async(dry_run: bool = True, limit: Optional[int
         try:
             # Process in batches
             for i in range(0, len(results), batch_size):
-                batch = results[i:i + batch_size]
+                batch = results[i : i + batch_size]
                 batch_num = i // batch_size + 1
                 total_batches = (len(results) + batch_size - 1) // batch_size
 
@@ -155,18 +156,16 @@ async def fix_incomplete_sellers_async(dry_run: bool = True, limit: Optional[int
                         continue
 
                     try:
-                        session.execute(text("""
+                        session.execute(
+                            text("""
                             UPDATE marketprice
                             SET seller_name = :seller,
                                 seller_feedback_score = :score,
                                 seller_feedback_percent = :pct
                             WHERE id = :id
-                        """), {
-                            "seller": seller_name,
-                            "score": feedback_score,
-                            "pct": feedback_percent,
-                            "id": mp_id
-                        })
+                        """),
+                            {"seller": seller_name, "score": feedback_score, "pct": feedback_percent, "id": mp_id},
+                        )
                         session.commit()
                         total_updated += 1
                         print(f"    [{mp_id}] Fixed: '{old_seller}' -> '{seller_name}'")

@@ -8,7 +8,6 @@ Tests cover:
 - Data integrity for NFT treatments in MarketPrice
 """
 
-import pytest
 from datetime import datetime, timezone
 from typing import List
 from sqlmodel import Session, select
@@ -246,9 +245,7 @@ class TestNFTDataIntegrity:
         test_session.refresh(market_price)
 
         # Verify data integrity
-        retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.id == market_price.id)
-        ).first()
+        retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.id == market_price.id)).first()
 
         assert retrieved is not None
         assert retrieved.treatment == "Rare, Fire, Level 5"
@@ -279,9 +276,7 @@ class TestNFTDataIntegrity:
         test_session.commit()
         test_session.refresh(market_price)
 
-        retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.id == market_price.id)
-        ).first()
+        retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.id == market_price.id)).first()
 
         assert retrieved.treatment == "Ultra-Rare, Fire & Ice, Level 10+"
 
@@ -320,10 +315,7 @@ class TestNFTDataIntegrity:
 
         # Verify all sales stored correctly
         all_sales = test_session.exec(
-            select(MarketPrice).where(
-                MarketPrice.card_id == card.id,
-                MarketPrice.platform == "opensea"
-            )
+            select(MarketPrice).where(MarketPrice.card_id == card.id, MarketPrice.platform == "opensea")
         ).all()
 
         assert len(all_sales) == 4
@@ -360,9 +352,7 @@ class TestNFTDataIntegrity:
         test_session.add(market_price)
         test_session.commit()
 
-        retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.id == market_price.id)
-        ).first()
+        retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.id == market_price.id)).first()
 
         # Verify URL format
         assert retrieved.url is not None
@@ -400,9 +390,7 @@ class TestNFTDataIntegrity:
         # Check for existing before adding duplicate
         existing = test_session.exec(
             select(MarketPrice).where(
-                MarketPrice.card_id == card.id,
-                MarketPrice.external_id == tx_hash,
-                MarketPrice.platform == "opensea"
+                MarketPrice.card_id == card.id, MarketPrice.external_id == tx_hash, MarketPrice.platform == "opensea"
             )
         ).first()
 
@@ -437,9 +425,7 @@ class TestNFTDataIntegrity:
         test_session.add(market_price)
         test_session.commit()
 
-        retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.id == market_price.id)
-        ).first()
+        retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.id == market_price.id)).first()
 
         assert retrieved.external_id.startswith("opensea_3515_")
 
@@ -454,7 +440,7 @@ class TestOpenSeaCollectionConfig:
             "card_name": "Character Proofs",
             "slug": "wotf-character-proofs",
             "contract": "0x05f08b01971cf70bcd4e743a8906790cfb9a8fb8",
-            "chain": "ethereum"
+            "chain": "ethereum",
         }
 
         assert config["contract"].startswith("0x")
@@ -469,7 +455,7 @@ class TestOpenSeaCollectionConfig:
             "card_name": "Existence Collector Box",
             "slug": "wotf-existence-collector-boxes",
             "contract": "0x28a11da34a93712b1fde4ad15da217a3b14d9465",
-            "chain": "ethereum"
+            "chain": "ethereum",
         }
 
         assert config["contract"].startswith("0x")
@@ -518,9 +504,7 @@ class TestCollectorBoxesVsEbayBoxes:
         test_session.add(nft_box)
         test_session.commit()
 
-        retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.id == nft_box.id)
-        ).first()
+        retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.id == nft_box.id)).first()
 
         assert retrieved.platform == "opensea"
         assert "opensea.io/item" in retrieved.url
@@ -551,9 +535,7 @@ class TestCollectorBoxesVsEbayBoxes:
         test_session.add(ebay_box)
         test_session.commit()
 
-        retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.id == ebay_box.id)
-        ).first()
+        retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.id == ebay_box.id)).first()
 
         assert retrieved.platform == "ebay"
         assert "ebay.com" in retrieved.url
@@ -597,17 +579,11 @@ class TestCollectorBoxesVsEbayBoxes:
 
         # Query both platforms
         opensea_sales = test_session.exec(
-            select(MarketPrice).where(
-                MarketPrice.card_id == card.id,
-                MarketPrice.platform == "opensea"
-            )
+            select(MarketPrice).where(MarketPrice.card_id == card.id, MarketPrice.platform == "opensea")
         ).all()
 
         ebay_sales = test_session.exec(
-            select(MarketPrice).where(
-                MarketPrice.card_id == card.id,
-                MarketPrice.platform == "ebay"
-            )
+            select(MarketPrice).where(MarketPrice.card_id == card.id, MarketPrice.platform == "ebay")
         ).all()
 
         assert len(opensea_sales) == 1
@@ -638,9 +614,7 @@ class TestCollectorBoxesVsEbayBoxes:
         test_session.add(nft_box)
         test_session.commit()
 
-        retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.id == nft_box.id)
-        ).first()
+        retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.id == nft_box.id)).first()
 
         # NFT boxes should use traits, not physical product treatments
         assert retrieved.treatment != "Sealed"
@@ -669,9 +643,7 @@ class TestCollectorBoxesVsEbayBoxes:
         test_session.add(ebay_box)
         test_session.commit()
 
-        retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.id == ebay_box.id)
-        ).first()
+        retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.id == ebay_box.id)).first()
 
         assert retrieved.treatment == "Sealed"
         assert retrieved.platform == "ebay"
@@ -689,43 +661,45 @@ class TestCollectorBoxesVsEbayBoxes:
 
         # Add multiple sales from each platform
         for i in range(3):
-            test_session.add(MarketPrice(
-                card_id=card.id,
-                price=100.00 + i * 50,
-                title=f"NFT Box #{i}",
-                listing_type="sold",
-                treatment="Rare",
-                platform="opensea",
-                external_id=f"opensea_{i}",
-            ))
+            test_session.add(
+                MarketPrice(
+                    card_id=card.id,
+                    price=100.00 + i * 50,
+                    title=f"NFT Box #{i}",
+                    listing_type="sold",
+                    treatment="Rare",
+                    platform="opensea",
+                    external_id=f"opensea_{i}",
+                )
+            )
 
         for i in range(5):
-            test_session.add(MarketPrice(
-                card_id=card.id,
-                price=80.00 + i * 5,
-                title=f"eBay Box {i}",
-                listing_type="sold",
-                treatment="Sealed",
-                platform="ebay",
-                external_id=f"ebay_{i}",
-            ))
+            test_session.add(
+                MarketPrice(
+                    card_id=card.id,
+                    price=80.00 + i * 5,
+                    title=f"eBay Box {i}",
+                    listing_type="sold",
+                    treatment="Sealed",
+                    platform="ebay",
+                    external_id=f"ebay_{i}",
+                )
+            )
 
         test_session.commit()
 
         # Count by platform
-        opensea_count = len(test_session.exec(
-            select(MarketPrice).where(
-                MarketPrice.card_id == card.id,
-                MarketPrice.platform == "opensea"
-            )
-        ).all())
+        opensea_count = len(
+            test_session.exec(
+                select(MarketPrice).where(MarketPrice.card_id == card.id, MarketPrice.platform == "opensea")
+            ).all()
+        )
 
-        ebay_count = len(test_session.exec(
-            select(MarketPrice).where(
-                MarketPrice.card_id == card.id,
-                MarketPrice.platform == "ebay"
-            )
-        ).all())
+        ebay_count = len(
+            test_session.exec(
+                select(MarketPrice).where(MarketPrice.card_id == card.id, MarketPrice.platform == "ebay")
+            ).all()
+        )
 
         assert opensea_count == 3
         assert ebay_count == 5
@@ -769,13 +743,9 @@ class TestCollectorBoxesVsEbayBoxes:
         test_session.commit()
 
         # Verify URL patterns
-        nft_retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.platform == "opensea")
-        ).first()
+        nft_retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.platform == "opensea")).first()
 
-        ebay_retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.platform == "ebay")
-        ).first()
+        ebay_retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.platform == "ebay")).first()
 
         assert "opensea.io/item" in nft_retrieved.url
         assert "/ethereum/" in nft_retrieved.url
@@ -823,14 +793,10 @@ class TestCollectorBoxesVsEbayBoxes:
         test_session.commit()
 
         # NFT external_id starts with 0x (tx hash)
-        nft_retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.platform == "opensea")
-        ).first()
+        nft_retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.platform == "opensea")).first()
 
         # eBay external_id starts with ebay_
-        ebay_retrieved = test_session.exec(
-            select(MarketPrice).where(MarketPrice.platform == "ebay")
-        ).first()
+        ebay_retrieved = test_session.exec(select(MarketPrice).where(MarketPrice.platform == "ebay")).first()
 
         assert nft_retrieved.external_id.startswith("0x")
         assert ebay_retrieved.external_id.startswith("ebay_")

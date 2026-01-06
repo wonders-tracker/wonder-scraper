@@ -10,14 +10,12 @@ Usage:
     python scripts/backfill_nft_traits.py --execute    # Actually update records
     python scripts/backfill_nft_traits.py --limit 100  # Limit to 100 records
 """
+
 import asyncio
 import argparse
-import aiohttp
-import os
 import re
 import json
-from datetime import datetime
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List
 
 from sqlmodel import Session, select
 from bs4 import BeautifulSoup
@@ -87,9 +85,7 @@ def extract_treatment_from_traits(traits: List[Dict[str, str]]) -> Optional[str]
 
 
 async def fetch_opensea_nft_traits(
-    contract_address: str,
-    token_id: str,
-    chain: str = "ethereum"
+    contract_address: str, token_id: str, chain: str = "ethereum"
 ) -> Optional[List[Dict[str, str]]]:
     """
     Fetch NFT traits from OpenSea by scraping the NFT page.
@@ -112,7 +108,7 @@ async def fetch_opensea_nft_traits(
                 continue
 
             # Extract JSON from push patterns
-            matches = re.findall(r'\.push\((\{.*?\})\)', content, re.DOTALL)
+            matches = re.findall(r"\.push\((\{.*?\})\)", content, re.DOTALL)
             for match in matches:
                 try:
                     data = json.loads(match)
@@ -128,10 +124,7 @@ async def fetch_opensea_nft_traits(
                             # Convert OpenSea format to standard format
                             traits = []
                             for attr in attributes:
-                                traits.append({
-                                    "trait_type": attr.get("traitType", ""),
-                                    "value": attr.get("value", "")
-                                })
+                                traits.append({"trait_type": attr.get("traitType", ""), "value": attr.get("value", "")})
                             return traits
                 except json.JSONDecodeError:
                     continue
@@ -146,9 +139,7 @@ def get_blokpax_traits(session: Session, asset_id: str) -> Optional[List[Dict[st
     """
     Look up traits from BlokpaxAssetDB for a given asset ID.
     """
-    asset = session.exec(
-        select(BlokpaxAssetDB).where(BlokpaxAssetDB.external_id == asset_id)
-    ).first()
+    asset = session.exec(select(BlokpaxAssetDB).where(BlokpaxAssetDB.external_id == asset_id)).first()
 
     if asset and asset.traits:
         return asset.traits
@@ -165,7 +156,8 @@ def parse_opensea_url(url: str) -> Optional[Dict[str, str]]:
         return None
 
     import re
-    match = re.search(r'opensea\.io/(?:item|assets)/([^/]+)/([^/]+)/(\d+)', url)
+
+    match = re.search(r"opensea\.io/(?:item|assets)/([^/]+)/([^/]+)/(\d+)", url)
     if match:
         chain = match.group(1)
         contract_or_slug = match.group(2)
@@ -180,11 +172,7 @@ def parse_opensea_url(url: str) -> Optional[Dict[str, str]]:
         else:
             contract = contract_or_slug
 
-        return {
-            "chain": chain,
-            "contract": contract,
-            "token_id": token_id
-        }
+        return {"chain": chain, "contract": contract, "token_id": token_id}
     return None
 
 
@@ -206,8 +194,7 @@ async def backfill_nft_traits(execute: bool = False, limit: int = None):
         # Find all MarketPrice records from OpenSea/Blokpax that need traits populated
         # Records where traits field is NULL
         query = select(MarketPrice).where(
-            MarketPrice.platform.in_(["opensea", "blokpax"]),
-            MarketPrice.traits.is_(None)
+            MarketPrice.platform.in_(["opensea", "blokpax"]), MarketPrice.traits.is_(None)
         )
         if limit:
             query = query.limit(limit)
@@ -248,11 +235,7 @@ async def backfill_nft_traits(execute: bool = False, limit: int = None):
                 parsed = parse_opensea_url(record.url)
                 if parsed:
                     print(f"  Fetching OpenSea traits for {parsed['contract'][:10]}.../{parsed['token_id']}")
-                    traits = await fetch_opensea_nft_traits(
-                        parsed["contract"],
-                        parsed["token_id"],
-                        parsed["chain"]
-                    )
+                    traits = await fetch_opensea_nft_traits(parsed["contract"], parsed["token_id"], parsed["chain"])
                     if traits:
                         new_treatment = extract_treatment_from_traits(traits)
                         print(f"  Found OpenSea traits: {traits[:2]}...")
@@ -270,10 +253,10 @@ async def backfill_nft_traits(execute: bool = False, limit: int = None):
                     record.traits = traits  # Store ALL traits in the new JSON field
                     session.add(record)
                     session.commit()  # Commit after each record to avoid timeout
-                    print(f"  [Saved]")
+                    print("  [Saved]")
                 updated_count += 1
             else:
-                print(f"  -> No traits found, keeping as-is")
+                print("  -> No traits found, keeping as-is")
                 skipped_count += 1
 
             print()
@@ -293,17 +276,8 @@ async def backfill_nft_traits(execute: bool = False, limit: int = None):
 
 async def main():
     parser = argparse.ArgumentParser(description="Backfill NFT traits for MarketPrice records")
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Actually update records (default is dry run)"
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Limit number of records to process"
-    )
+    parser.add_argument("--execute", action="store_true", help="Actually update records (default is dry run)")
+    parser.add_argument("--limit", type=int, default=None, help="Limit number of records to process")
     args = parser.parse_args()
 
     await backfill_nft_traits(execute=args.execute, limit=args.limit)

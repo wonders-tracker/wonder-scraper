@@ -12,7 +12,6 @@ These tests ensure:
 4. Edge cases are handled properly
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -146,7 +145,7 @@ class TestParseDateAbsolute:
     def test_future_date_uses_previous_year(self):
         """If parsed date is in future, use previous year."""
         # Mock a fixed "now" date to test year rollover logic
-        with patch('app.scraper.ebay.datetime') as mock_dt:
+        with patch("app.scraper.ebay.datetime") as mock_dt:
             # Pretend it's Jan 15, 2025
             mock_now = datetime(2025, 1, 15, tzinfo=timezone.utc)
             mock_dt.now.return_value = mock_now

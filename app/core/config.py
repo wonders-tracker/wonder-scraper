@@ -46,14 +46,15 @@ class Settings(BaseSettings):
     THREADPOOL_MAX_WORKERS: int = 40  # Cap AnyIO worker threads to avoid OS limits
     RUN_SCHEDULER: bool = True  # Allow API dyno to turn scheduler off
     MEMORY_LOG_INTERVAL_SECONDS: int = 0  # Disabled by default
+    USE_TASK_QUEUE: bool = False  # Enable task queue mode (requires worker process)
 
     # Anti-scraping
     ANTI_SCRAPING_STATE_TTL_SECONDS: int = 900
     ANTI_SCRAPING_MAX_TRACKED_IPS: int = 5000
 
     # Database pool - sized for concurrent scraper operations
-    # With SCHEDULER_CARD_BATCH_SIZE=8 and BROWSER_SEMAPHORE_LIMIT=2,
-    # we can have up to 8*2*2=32 concurrent DB operations
+    # With SCHEDULER_CARD_BATCH_SIZE=4 and BROWSER_SEMAPHORE_LIMIT=2,
+    # we can have up to 4*2*2=16 concurrent DB operations
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 15
 
@@ -75,6 +76,10 @@ class Settings(BaseSettings):
     BROWSER_SEMAPHORE_LIMIT: int = 2  # Reduced from 4 to avoid eBay rate limits
     # Maximum browser restart attempts before extended cooldown
     BROWSER_MAX_RESTARTS: int = 3
+    # Seconds between proactive health checks
+    BROWSER_HEALTH_CHECK_INTERVAL: int = 30
+    # Consecutive timeouts before forcing hard restart
+    BROWSER_MAX_CONSECUTIVE_TIMEOUTS: int = 3
     # Seconds to wait for browser to start
     BROWSER_STARTUP_TIMEOUT: int = 60
     # Restart browser after this many page fetches to prevent memory leaks
@@ -86,12 +91,12 @@ class Settings(BaseSettings):
     BROWSER_RESTART_DELAY: int = 2
     # Default retry count for page fetches
     BROWSER_PAGE_RETRIES: int = 3
-    # Random delay range (seconds) before navigation for human-like behavior
-    BROWSER_PRE_NAV_DELAY_MIN: float = 1.0
-    BROWSER_PRE_NAV_DELAY_MAX: float = 3.0
-    # Random delay range (seconds) after navigation for content load
-    BROWSER_CONTENT_LOAD_DELAY_MIN: float = 2.0
-    BROWSER_CONTENT_LOAD_DELAY_MAX: float = 4.0
+    # Random delay range (seconds) before navigation for human-like behavior (0.5-1.5s)
+    BROWSER_PRE_NAV_DELAY_MIN: float = 0.5
+    BROWSER_PRE_NAV_DELAY_MAX: float = 1.5
+    # Random delay range (seconds) after navigation for content load (1.0-2.0s)
+    BROWSER_CONTENT_LOAD_DELAY_MIN: float = 1.0
+    BROWSER_CONTENT_LOAD_DELAY_MAX: float = 2.0
     # Minimum valid page content length (bytes)
     BROWSER_MIN_CONTENT_LENGTH: int = 100
     # Extended cooldown range (seconds) when eBay blocking detected
@@ -131,8 +136,8 @@ class Settings(BaseSettings):
     BLOKPAX_REQUEST_TIMEOUT: float = 15.0
 
     # ===== Scheduler Settings =====
-    # Batch size for concurrent card scraping (matches 2x browser semaphore)
-    SCHEDULER_CARD_BATCH_SIZE: int = 8
+    # Batch size for concurrent card scraping (2x browser semaphore for buffer)
+    SCHEDULER_CARD_BATCH_SIZE: int = 4
     # Number of cards between DB connection health checks
     SCHEDULER_CONNECTION_CHECK_INTERVAL: int = 40
     # Random sample size when no stale cards need update

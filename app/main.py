@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI):
             await BrowserManager.close()
             # Give time for graceful close, then force kill orphans
             await asyncio.sleep(2)
-            kill_stale_chrome_processes()
+            await kill_stale_chrome_processes()
             logger.info("Browser cleanup complete")
         except Exception as e:
             logger.warning(f"Browser cleanup error: {e}")
@@ -354,4 +354,37 @@ def health_metrics():
     return {
         "summary": scraper_metrics.get_summary(),
         "jobs": scraper_metrics.get_all_metrics(),
+    }
+
+
+@app.get("/health/circuits")
+def health_circuits():
+    """
+    Get current state of all circuit breakers.
+
+    Returns the state of each circuit breaker including:
+    - state: closed (healthy), open (failing), or half_open (recovering)
+    - failure_count: current consecutive failures
+    - failure_threshold: failures before circuit opens
+    - recovery_timeout: seconds before attempting recovery
+    - all_healthy: true if all circuits are closed
+    """
+    from app.core.circuit_breaker import CircuitBreakerRegistry
+
+    states = CircuitBreakerRegistry.get_all_states()
+
+    # Add more detail for each breaker
+    breakers_info = {}
+    for name, state in states.items():
+        breaker = CircuitBreakerRegistry.get(name)
+        breakers_info[name] = {
+            "state": state,
+            "failure_count": breaker._failure_count,
+            "failure_threshold": breaker.failure_threshold,
+            "recovery_timeout": breaker.recovery_timeout,
+        }
+
+    return {
+        "circuits": breakers_info,
+        "all_healthy": all(s == "closed" for s in states.values()),
     }

@@ -6,13 +6,14 @@ Does NOT write to the database - only prints what would happen.
 
 import re
 import httpx
-from typing import Optional, Tuple
+from typing import Optional
 from dataclasses import dataclass
 
 
 @dataclass
 class PreslabInfo:
     """Parsed preslab information."""
+
     card_name: str
     grade: Optional[str]  # e.g., "9 MINT", "8 NM MT"
     grade_number: Optional[int]  # Just the number: 9, 8, etc.
@@ -59,7 +60,9 @@ def parse_preslab_name(asset_name: str) -> Optional[PreslabInfo]:
     serial = None
 
     # Try to match grade pattern: number followed by grade text
-    grade_match = re.match(r"^(\d+)\s+(MINT|NM MT|GEM MINT|NM|MT|EX|VG|GOOD|POOR)(?:\s+(.+))?$", remainder, re.IGNORECASE)
+    grade_match = re.match(
+        r"^(\d+)\s+(MINT|NM MT|GEM MINT|NM|MT|EX|VG|GOOD|POOR)(?:\s+(.+))?$", remainder, re.IGNORECASE
+    )
 
     if grade_match:
         grade_number = int(grade_match.group(1))
@@ -83,7 +86,7 @@ def parse_preslab_name(asset_name: str) -> Optional[PreslabInfo]:
         serial=serial,
         cert_id=cert_id,
         treatment=treatment,
-        raw_name=asset_name
+        raw_name=asset_name,
     )
 
 
@@ -132,6 +135,7 @@ def fetch_cards_from_db() -> dict:
     """Fetch card names from database for matching."""
     import sys
     import os
+
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     from sqlmodel import Session, select
@@ -142,11 +146,7 @@ def fetch_cards_from_db() -> dict:
 
     with Session(engine) as session:
         # Get all non-sealed cards (singles)
-        stmt = (
-            select(Card, Rarity.name)
-            .join(Rarity, Card.rarity_id == Rarity.id)
-            .where(Rarity.name != "SEALED")
-        )
+        stmt = select(Card, Rarity.name).join(Rarity, Card.rarity_id == Rarity.id).where(Rarity.name != "SEALED")
         results = session.exec(stmt).all()
 
         for card, rarity_name in results:
@@ -155,7 +155,7 @@ def fetch_cards_from_db() -> dict:
                 "id": card.id,
                 "name": card.name,
                 "set_name": card.set_name,
-                "rarity": rarity_name
+                "rarity": rarity_name,
             }
 
     return cards_by_name

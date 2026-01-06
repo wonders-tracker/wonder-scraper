@@ -25,8 +25,12 @@ from app.core import security
 
 # Import all models to ensure they're registered with SQLModel.metadata
 from app.models import (  # noqa: F401
-    PortfolioItem, PortfolioCard, PurchaseSource,
-    PageView, CardMetaVote, CardMetaVoteReaction,
+    PortfolioItem,
+    PortfolioCard,
+    PurchaseSource,
+    PageView,
+    CardMetaVote,
+    CardMetaVoteReaction,
 )
 from app.models.api_key import APIKey  # noqa: F401
 from app.models.watchlist import Watchlist, EmailPreferences  # noqa: F401
@@ -64,16 +68,70 @@ def seed_cards(session: Session, rarities: dict) -> list:
     """Seed card records for testing."""
     cards_data = [
         # Singles with various rarities
-        {"name": "Test Card Common", "slug": "test-card-common", "rarity": "Common", "product_type": "Single", "set_name": "Wonders of the First"},
-        {"name": "Test Card Rare", "slug": "test-card-rare", "rarity": "Rare", "product_type": "Single", "set_name": "Wonders of the First"},
-        {"name": "Progo", "slug": "progo", "rarity": "Rare", "product_type": "Single", "set_name": "Wonders of the First"},
-        {"name": "Sandura of Heliosynth", "slug": "sandura-of-heliosynth", "rarity": "Mythic", "product_type": "Single", "set_name": "Wonders of the First"},
-        {"name": "The Prisoner", "slug": "the-prisoner", "rarity": "Legendary", "product_type": "Single", "set_name": "Wonders of the First"},
-        {"name": "Azure Sky Chaser", "slug": "azure-sky-chaser", "rarity": "Uncommon", "product_type": "Single", "set_name": "Wonders of the First"},
+        {
+            "name": "Test Card Common",
+            "slug": "test-card-common",
+            "rarity": "Common",
+            "product_type": "Single",
+            "set_name": "Wonders of the First",
+        },
+        {
+            "name": "Test Card Rare",
+            "slug": "test-card-rare",
+            "rarity": "Rare",
+            "product_type": "Single",
+            "set_name": "Wonders of the First",
+        },
+        {
+            "name": "Progo",
+            "slug": "progo",
+            "rarity": "Rare",
+            "product_type": "Single",
+            "set_name": "Wonders of the First",
+        },
+        {
+            "name": "Sandura of Heliosynth",
+            "slug": "sandura-of-heliosynth",
+            "rarity": "Mythic",
+            "product_type": "Single",
+            "set_name": "Wonders of the First",
+        },
+        {
+            "name": "The Prisoner",
+            "slug": "the-prisoner",
+            "rarity": "Legendary",
+            "product_type": "Single",
+            "set_name": "Wonders of the First",
+        },
+        {
+            "name": "Azure Sky Chaser",
+            "slug": "azure-sky-chaser",
+            "rarity": "Uncommon",
+            "product_type": "Single",
+            "set_name": "Wonders of the First",
+        },
         # Boxes and sealed products
-        {"name": "Collector Booster Box", "slug": "collector-booster-box", "rarity": "SEALED", "product_type": "Box", "set_name": "Wonders of the First"},
-        {"name": "Play Bundle", "slug": "play-bundle", "rarity": "SEALED", "product_type": "Bundle", "set_name": "Wonders of the First"},
-        {"name": "Booster Pack", "slug": "booster-pack", "rarity": "SEALED", "product_type": "Pack", "set_name": "Wonders of the First"},
+        {
+            "name": "Collector Booster Box",
+            "slug": "collector-booster-box",
+            "rarity": "SEALED",
+            "product_type": "Box",
+            "set_name": "Wonders of the First",
+        },
+        {
+            "name": "Play Bundle",
+            "slug": "play-bundle",
+            "rarity": "SEALED",
+            "product_type": "Bundle",
+            "set_name": "Wonders of the First",
+        },
+        {
+            "name": "Booster Pack",
+            "slug": "booster-pack",
+            "rarity": "SEALED",
+            "product_type": "Pack",
+            "set_name": "Wonders of the First",
+        },
     ]
 
     cards = []
@@ -109,123 +167,141 @@ def seed_market_prices(session: Session, cards: list) -> list:
     test_common = card_map.get("test-card-common")
     if test_common:
         for i, price in enumerate([1.00, 1.50, 2.00, 2.50, 3.00]):
-            prices.append(MarketPrice(
-                card_id=test_common.id,
-                price=price,
-                title=f"Test Card Common - Classic Paper #{i}",
-                treatment="Classic Paper",
-                listing_type="sold",
-                sold_date=now - timedelta(days=i),
-                scraped_at=now - timedelta(days=i),
-                platform="ebay",
-            ))
+            prices.append(
+                MarketPrice(
+                    card_id=test_common.id,
+                    price=price,
+                    title=f"Test Card Common - Classic Paper #{i}",
+                    treatment="Classic Paper",
+                    listing_type="sold",
+                    sold_date=now - timedelta(days=i),
+                    scraped_at=now - timedelta(days=i),
+                    platform="ebay",
+                )
+            )
         for i, price in enumerate([5.00, 6.00, 7.00]):
-            prices.append(MarketPrice(
-                card_id=test_common.id,
-                price=price,
-                title=f"Test Card Common - Classic Foil #{i}",
-                treatment="Classic Foil",
-                listing_type="sold",
-                sold_date=now - timedelta(days=i),
-                scraped_at=now - timedelta(days=i),
-                platform="ebay",
-            ))
+            prices.append(
+                MarketPrice(
+                    card_id=test_common.id,
+                    price=price,
+                    title=f"Test Card Common - Classic Foil #{i}",
+                    treatment="Classic Foil",
+                    listing_type="sold",
+                    sold_date=now - timedelta(days=i),
+                    scraped_at=now - timedelta(days=i),
+                    platform="ebay",
+                )
+            )
 
     # Progo: NO Classic Paper/Foil - tests fallback to cheapest treatment
     progo = card_map.get("progo")
     if progo:
         for i, price in enumerate([5.00, 6.00, 7.00, 8.00]):
-            prices.append(MarketPrice(
-                card_id=progo.id,
-                price=price,
-                title=f"Progo - Formless Foil #{i}",
-                treatment="Formless Foil",
-                listing_type="sold",
-                sold_date=now - timedelta(days=i),
-                scraped_at=now - timedelta(days=i),
-                platform="ebay",
-            ))
+            prices.append(
+                MarketPrice(
+                    card_id=progo.id,
+                    price=price,
+                    title=f"Progo - Formless Foil #{i}",
+                    treatment="Formless Foil",
+                    listing_type="sold",
+                    sold_date=now - timedelta(days=i),
+                    scraped_at=now - timedelta(days=i),
+                    platform="ebay",
+                )
+            )
         for i, price in enumerate([50.00, 60.00, 70.00]):
-            prices.append(MarketPrice(
-                card_id=progo.id,
-                price=price,
-                title=f"Progo - OCM Serialized #{i}",
-                treatment="OCM Serialized",
-                listing_type="sold",
-                sold_date=now - timedelta(days=i),
-                scraped_at=now - timedelta(days=i),
-                platform="ebay",
-            ))
+            prices.append(
+                MarketPrice(
+                    card_id=progo.id,
+                    price=price,
+                    title=f"Progo - OCM Serialized #{i}",
+                    treatment="OCM Serialized",
+                    listing_type="sold",
+                    sold_date=now - timedelta(days=i),
+                    scraped_at=now - timedelta(days=i),
+                    platform="ebay",
+                )
+            )
         # Active listing - should NOT affect floor
-        prices.append(MarketPrice(
-            card_id=progo.id,
-            price=0.99,
-            title="Progo - Classic Paper (Active)",
-            treatment="Classic Paper",
-            listing_type="active",
-            scraped_at=now,
-            platform="ebay",
-        ))
+        prices.append(
+            MarketPrice(
+                card_id=progo.id,
+                price=0.99,
+                title="Progo - Classic Paper (Active)",
+                treatment="Classic Paper",
+                listing_type="active",
+                scraped_at=now,
+                platform="ebay",
+            )
+        )
 
     # Test Card Rare: Mixed treatments
     test_rare = card_map.get("test-card-rare")
     if test_rare:
         for i, price in enumerate([10.00, 12.00, 15.00, 18.00]):
-            prices.append(MarketPrice(
-                card_id=test_rare.id,
-                price=price,
-                title=f"Test Card Rare - Classic Paper #{i}",
-                treatment="Classic Paper",
-                listing_type="sold",
-                sold_date=now - timedelta(days=i),
-                scraped_at=now - timedelta(days=i),
-                platform="ebay",
-            ))
+            prices.append(
+                MarketPrice(
+                    card_id=test_rare.id,
+                    price=price,
+                    title=f"Test Card Rare - Classic Paper #{i}",
+                    treatment="Classic Paper",
+                    listing_type="sold",
+                    sold_date=now - timedelta(days=i),
+                    scraped_at=now - timedelta(days=i),
+                    platform="ebay",
+                )
+            )
 
     # Sandura: High-value mythic
     sandura = card_map.get("sandura-of-heliosynth")
     if sandura:
         for i, price in enumerate([100.00, 120.00, 150.00, 180.00]):
-            prices.append(MarketPrice(
-                card_id=sandura.id,
-                price=price,
-                title=f"Sandura of Heliosynth - Classic Paper #{i}",
-                treatment="Classic Paper",
-                listing_type="sold",
-                sold_date=now - timedelta(days=i),
-                scraped_at=now - timedelta(days=i),
-                platform="ebay",
-            ))
+            prices.append(
+                MarketPrice(
+                    card_id=sandura.id,
+                    price=price,
+                    title=f"Sandura of Heliosynth - Classic Paper #{i}",
+                    treatment="Classic Paper",
+                    listing_type="sold",
+                    sold_date=now - timedelta(days=i),
+                    scraped_at=now - timedelta(days=i),
+                    platform="ebay",
+                )
+            )
 
     # Collector Booster Box: Sealed product
     box = card_map.get("collector-booster-box")
     if box:
         for i, price in enumerate([150.00, 160.00, 170.00, 180.00]):
-            prices.append(MarketPrice(
-                card_id=box.id,
-                price=price,
-                title=f"Collector Booster Box - Sealed #{i}",
-                treatment="Sealed",
-                listing_type="sold",
-                sold_date=now - timedelta(days=i),
-                scraped_at=now - timedelta(days=i),
-                platform="ebay",
-            ))
+            prices.append(
+                MarketPrice(
+                    card_id=box.id,
+                    price=price,
+                    title=f"Collector Booster Box - Sealed #{i}",
+                    treatment="Sealed",
+                    listing_type="sold",
+                    sold_date=now - timedelta(days=i),
+                    scraped_at=now - timedelta(days=i),
+                    platform="ebay",
+                )
+            )
 
     # Add some OpenSea listings for platform diversity
     # Only add to sealed products, not Singles (Singles shouldn't have Digital treatment)
     if box:
-        prices.append(MarketPrice(
-            card_id=box.id,
-            price=175.00,
-            title=f"{box.name} - OpenSea NFT",
-            treatment="Digital",
-            listing_type="sold",
-            sold_date=now - timedelta(days=5),
-            scraped_at=now - timedelta(days=5),
-            platform="opensea",
-            url="https://opensea.io/assets/test/123",
-        ))
+        prices.append(
+            MarketPrice(
+                card_id=box.id,
+                price=175.00,
+                title=f"{box.name} - OpenSea NFT",
+                treatment="Digital",
+                listing_type="sold",
+                sold_date=now - timedelta(days=5),
+                scraped_at=now - timedelta(days=5),
+                platform="opensea",
+                url="https://opensea.io/assets/test/123",
+            )
+        )
 
     # Batch insert
     for p in prices:

@@ -11,7 +11,6 @@ Tests cover:
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock
 from sqlmodel import Session, select
 
 from app.models.user import User
@@ -23,7 +22,6 @@ class TestUserRegistration:
 
     def test_register_new_user(self, test_session: Session):
         """Test successful user registration."""
-        from app.api.auth import UserCreate
 
         # Check user doesn't exist
         existing = test_session.exec(select(User).where(User.email == "newuser@example.com")).first()
@@ -34,7 +32,7 @@ class TestUserRegistration:
             email="newuser@example.com",
             hashed_password=security.get_password_hash("securepassword123"),
             is_active=True,
-            is_superuser=False
+            is_superuser=False,
         )
         test_session.add(new_user)
         test_session.commit()
@@ -176,9 +174,7 @@ class TestPasswordReset:
         # Hash of a non-existent token
         invalid_token_hash = hashlib.sha256(b"invalid_token_that_does_not_exist").hexdigest()
 
-        user = test_session.exec(select(User).where(
-            User.password_reset_token_hash == invalid_token_hash
-        )).first()
+        user = test_session.exec(select(User).where(User.password_reset_token_hash == invalid_token_hash)).first()
         assert user is None
 
     def test_reset_password_clears_token_hash(
@@ -201,9 +197,7 @@ class TestPasswordReset:
     def test_forgot_password_nonexistent_email_no_error(self, test_session: Session):
         """Test forgot password with nonexistent email doesn't reveal user existence."""
         # This is important for security - we should not reveal if an email exists
-        user = test_session.exec(select(User).where(
-            User.email == "nonexistent@example.com"
-        )).first()
+        user = test_session.exec(select(User).where(User.email == "nonexistent@example.com")).first()
         assert user is None
         # In real endpoint, this should still return success message
 
@@ -267,6 +261,7 @@ class TestTokenGeneration:
     def test_reset_token_is_secure_length(self):
         """Test reset tokens are sufficiently long."""
         import secrets
+
         token = secrets.token_urlsafe(32)
 
         # 32 bytes base64 encoded = ~43 characters
@@ -275,6 +270,7 @@ class TestTokenGeneration:
     def test_reset_tokens_are_unique(self):
         """Test reset tokens are unique."""
         import secrets
+
         tokens = [secrets.token_urlsafe(32) for _ in range(100)]
 
         # All tokens should be unique
@@ -283,10 +279,11 @@ class TestTokenGeneration:
     def test_reset_token_is_url_safe(self):
         """Test reset tokens are URL safe."""
         import secrets
+
         token = secrets.token_urlsafe(32)
 
         # Should not contain URL-unsafe characters
-        unsafe_chars = ['+', '/', '=', ' ', '&', '?', '#']
+        unsafe_chars = ["+", "/", "=", " ", "&", "?", "#"]
         for char in unsafe_chars:
             assert char not in token
 
@@ -306,8 +303,8 @@ class TestUserModel:
         """Test user model has password reset fields."""
         user, raw_token = sample_user_with_reset_token
 
-        assert hasattr(user, 'password_reset_token_hash')
-        assert hasattr(user, 'password_reset_expires')
+        assert hasattr(user, "password_reset_token_hash")
+        assert hasattr(user, "password_reset_expires")
         assert user.password_reset_token_hash is not None
         assert user.password_reset_expires is not None
 
@@ -537,7 +534,7 @@ class TestOnboardingAPI:
         test_session.refresh(user)
 
         # Verify the field exists and is accessible
-        assert hasattr(user, 'onboarding_completed')
+        assert hasattr(user, "onboarding_completed")
         assert user.onboarding_completed is False
 
         # After onboarding
@@ -562,7 +559,6 @@ class TestOnboardingAPIEndpoints:
         This catches bugs where frontend calls wrong endpoint (users/me vs auth/me).
         The auth/me endpoint MUST return onboarding_completed for login flow to work.
         """
-        from app.api.auth import get_current_user_info
 
         user = User(
             email="authme@test.com",
@@ -612,7 +608,7 @@ class TestOnboardingAPIEndpoints:
         user_out = UserOut.model_validate(user)
 
         # CRITICAL: users/me MUST include onboarding_completed
-        assert hasattr(user_out, 'onboarding_completed')
+        assert hasattr(user_out, "onboarding_completed")
         assert user_out.onboarding_completed is True
 
     def test_complete_onboarding_endpoint_updates_flag(self, test_session: Session):

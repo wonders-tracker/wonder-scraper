@@ -164,20 +164,24 @@ class TestFloorPriceConsistency:
             # Compare (allow for small floating point differences)
             if list_floor is not None and detail_floor is not None:
                 if abs(list_floor - detail_floor) > 0.01:
-                    mismatches.append({
+                    mismatches.append(
+                        {
+                            "card_id": card_id,
+                            "name": list_card["name"],
+                            "list_floor": list_floor,
+                            "detail_floor": detail_floor,
+                        }
+                    )
+            elif list_floor != detail_floor:
+                # One is None, other is not
+                mismatches.append(
+                    {
                         "card_id": card_id,
                         "name": list_card["name"],
                         "list_floor": list_floor,
                         "detail_floor": detail_floor,
-                    })
-            elif list_floor != detail_floor:
-                # One is None, other is not
-                mismatches.append({
-                    "card_id": card_id,
-                    "name": list_card["name"],
-                    "list_floor": list_floor,
-                    "detail_floor": detail_floor,
-                })
+                    }
+                )
 
         assert len(mismatches) == 0, f"Floor price mismatches found: {mismatches}"
 
@@ -202,11 +206,11 @@ class TestFloorPriceConsistency:
 
         # They should match
         if list_floor is not None and detail_floor is not None:
-            assert abs(list_floor - detail_floor) < 0.01, \
-                f"PROGO floor mismatch: list={list_floor}, detail={detail_floor}"
+            assert (
+                abs(list_floor - detail_floor) < 0.01
+            ), f"PROGO floor mismatch: list={list_floor}, detail={detail_floor}"
         else:
-            assert list_floor == detail_floor, \
-                f"PROGO floor mismatch: list={list_floor}, detail={detail_floor}"
+            assert list_floor == detail_floor, f"PROGO floor mismatch: list={list_floor}, detail={detail_floor}"
 
         # Floor should NOT be $0.99 (the active listing bug)
         if list_floor is not None:
@@ -281,8 +285,7 @@ class TestSalesHistoryEndpoint:
                     pass
 
         for i in range(len(dates) - 1):
-            assert dates[i] >= dates[i + 1], \
-                f"History not in descending order: {dates[i]} before {dates[i + 1]}"
+            assert dates[i] >= dates[i + 1], f"History not in descending order: {dates[i]} before {dates[i + 1]}"
 
     def test_history_includes_null_sold_date_sales(self, client):
         """

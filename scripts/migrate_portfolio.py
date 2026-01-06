@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlmodel import Session, select, func, text
+from sqlmodel import Session, select, func
 from app.db import engine, create_db_and_tables
 from app.models.portfolio import PortfolioItem, PortfolioCard
 
@@ -27,9 +27,7 @@ from app.models.portfolio import PortfolioItem, PortfolioCard
 def count_existing_data(session: Session) -> dict:
     """Count records in both tables for verification."""
     old_items = session.exec(select(func.count()).select_from(PortfolioItem)).one()
-    old_quantity_sum = session.exec(
-        select(func.coalesce(func.sum(PortfolioItem.quantity), 0))
-    ).one()
+    old_quantity_sum = session.exec(select(func.coalesce(func.sum(PortfolioItem.quantity), 0))).one()
 
     new_cards = session.exec(select(func.count()).select_from(PortfolioCard)).one()
 
@@ -68,7 +66,9 @@ def migrate_portfolio_items(session: Session, dry_run: bool = True) -> dict:
             ).one()
 
             if existing > 0:
-                print(f"  Skipping item {item.id} (user={item.user_id}, card={item.card_id}) - already migrated ({existing} cards exist)")
+                print(
+                    f"  Skipping item {item.id} (user={item.user_id}, card={item.card_id}) - already migrated ({existing} cards exist)"
+                )
                 stats["skipped"] += 1
                 continue
 
@@ -93,7 +93,9 @@ def migrate_portfolio_items(session: Session, dry_run: bool = True) -> dict:
                 stats["cards_created"] += 1
 
             stats["items_processed"] += 1
-            print(f"  {'[DRY RUN] ' if dry_run else ''}Migrated item {item.id}: {item.quantity} card(s) for user={item.user_id}, card={item.card_id}")
+            print(
+                f"  {'[DRY RUN] ' if dry_run else ''}Migrated item {item.id}: {item.quantity} card(s) for user={item.user_id}, card={item.card_id}"
+            )
 
         except Exception as e:
             stats["errors"].append(f"Item {item.id}: {str(e)}")
@@ -117,14 +119,14 @@ def verify_migration(session: Session) -> bool:
     print(f"Total Quantity (old):      {counts['total_quantity']}")
     print(f"Portfolio Cards (new):     {counts['portfolio_cards']}")
 
-    if counts['total_quantity'] == counts['portfolio_cards']:
+    if counts["total_quantity"] == counts["portfolio_cards"]:
         print("\n[OK] Migration complete - counts match!")
         return True
-    elif counts['portfolio_cards'] > counts['total_quantity']:
+    elif counts["portfolio_cards"] > counts["total_quantity"]:
         print("\n[WARNING] More cards than expected - possible duplicate migration")
         return False
     else:
-        diff = counts['total_quantity'] - counts['portfolio_cards']
+        diff = counts["total_quantity"] - counts["portfolio_cards"]
         print(f"\n[PENDING] {diff} cards still need to be migrated")
         return False
 
@@ -149,7 +151,7 @@ def main():
     with Session(engine) as session:
         # Show current state
         counts = count_existing_data(session)
-        print(f"\nCurrent State:")
+        print("\nCurrent State:")
         print(f"  Portfolio Items (old table): {counts['portfolio_items']}")
         print(f"  Total Quantity to migrate:   {counts['total_quantity']}")
         print(f"  Portfolio Cards (new table): {counts['portfolio_cards']}")
@@ -158,7 +160,7 @@ def main():
             verify_migration(session)
             return
 
-        if counts['portfolio_items'] == 0:
+        if counts["portfolio_items"] == 0:
             print("\nNo portfolio items to migrate.")
             return
 
@@ -182,9 +184,9 @@ def main():
         print(f"Skipped:         {stats['skipped']}")
         print(f"Errors:          {len(stats['errors'])}")
 
-        if stats['errors']:
+        if stats["errors"]:
             print("\nErrors:")
-            for err in stats['errors']:
+            for err in stats["errors"]:
                 print(f"  - {err}")
 
         # Verify

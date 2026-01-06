@@ -7,11 +7,11 @@ Provides database session fixtures and mock data generators.
 import pytest
 from datetime import datetime, timedelta, timezone
 from typing import Generator, List
-from sqlmodel import Session, SQLModel, create_engine, text
+from sqlmodel import Session, SQLModel, create_engine
 from sqlalchemy.pool import StaticPool
 
 from app.models.card import Card, Rarity
-from app.models.market import MarketPrice, MarketSnapshot
+from app.models.market import MarketPrice
 from app.models.user import User
 from app.core import security
 
@@ -19,6 +19,7 @@ from app.core import security
 # Check if SaaS module is available
 try:
     import saas
+
     SAAS_AVAILABLE = True
 except ImportError:
     SAAS_AVAILABLE = False
@@ -63,11 +64,11 @@ def clear_rate_limiters():
         if isinstance(obj, AntiScrapingMiddleware):
             obj.clear()
         # Check if this object wraps another app
-        if hasattr(obj, 'app'):
+        if hasattr(obj, "app"):
             find_and_clear_middleware(obj.app)
 
     # Access middleware_stack to trigger build, then clear
-    if hasattr(app, 'middleware_stack') and app.middleware_stack:
+    if hasattr(app, "middleware_stack") and app.middleware_stack:
         find_and_clear_middleware(app.middleware_stack)
 
     yield
@@ -97,6 +98,7 @@ def test_session(test_engine) -> Generator[Session, None, None]:
 def integration_session() -> Generator[Session, None, None]:
     """Provide a session to the real database for integration tests."""
     from app.db import engine
+
     with Session(engine) as session:
         yield session
 
@@ -146,91 +148,105 @@ def sample_market_prices(test_session: Session, sample_cards: List[Card]) -> Lis
 
     # Card 1: Classic Paper sales (base treatment)
     for i, price in enumerate([1.00, 1.50, 2.00, 2.50, 3.00]):
-        prices.append(MarketPrice(
-            card_id=1,
-            price=price,
-            title=f"Test Card Common - Classic Paper #{i}",
-            treatment="Classic Paper",
-            listing_type="sold",
-            sold_date=now - timedelta(days=i),
-            scraped_at=now - timedelta(days=i),
-            platform="ebay",
-        ))
+        prices.append(
+            MarketPrice(
+                card_id=1,
+                price=price,
+                title=f"Test Card Common - Classic Paper #{i}",
+                treatment="Classic Paper",
+                listing_type="sold",
+                sold_date=now - timedelta(days=i),
+                scraped_at=now - timedelta(days=i),
+                platform="ebay",
+            )
+        )
 
     # Card 1: Also has some Foil sales (more expensive)
     for i, price in enumerate([5.00, 6.00, 7.00]):
-        prices.append(MarketPrice(
-            card_id=1,
-            price=price,
-            title=f"Test Card Common - Classic Foil #{i}",
-            treatment="Classic Foil",
-            listing_type="sold",
-            sold_date=now - timedelta(days=i),
-            scraped_at=now - timedelta(days=i),
-            platform="ebay",
-        ))
+        prices.append(
+            MarketPrice(
+                card_id=1,
+                price=price,
+                title=f"Test Card Common - Classic Foil #{i}",
+                treatment="Classic Foil",
+                listing_type="sold",
+                sold_date=now - timedelta(days=i),
+                scraped_at=now - timedelta(days=i),
+                platform="ebay",
+            )
+        )
 
     # Card 2: Mixed treatments
     for i, price in enumerate([10.00, 12.00, 15.00, 18.00]):
-        prices.append(MarketPrice(
-            card_id=2,
-            price=price,
-            title=f"Test Card Rare - Classic Paper #{i}",
-            treatment="Classic Paper",
-            listing_type="sold",
-            sold_date=now - timedelta(days=i),
-            scraped_at=now - timedelta(days=i),
-            platform="ebay",
-        ))
+        prices.append(
+            MarketPrice(
+                card_id=2,
+                price=price,
+                title=f"Test Card Rare - Classic Paper #{i}",
+                treatment="Classic Paper",
+                listing_type="sold",
+                sold_date=now - timedelta(days=i),
+                scraped_at=now - timedelta(days=i),
+                platform="ebay",
+            )
+        )
 
     # Card 3: ONLY premium treatments (no Classic Paper/Foil)
     # This tests the fallback to cheapest treatment
     for i, price in enumerate([5.00, 6.00, 7.00, 8.00]):  # Formless Foil is cheapest
-        prices.append(MarketPrice(
-            card_id=3,
-            price=price,
-            title=f"Promo Only Card - Formless Foil #{i}",
-            treatment="Formless Foil",
-            listing_type="sold",
-            sold_date=now - timedelta(days=i),
-            scraped_at=now - timedelta(days=i),
-            platform="ebay",
-        ))
+        prices.append(
+            MarketPrice(
+                card_id=3,
+                price=price,
+                title=f"Promo Only Card - Formless Foil #{i}",
+                treatment="Formless Foil",
+                listing_type="sold",
+                sold_date=now - timedelta(days=i),
+                scraped_at=now - timedelta(days=i),
+                platform="ebay",
+            )
+        )
 
     for i, price in enumerate([50.00, 60.00, 70.00]):  # OCM Serialized is expensive
-        prices.append(MarketPrice(
-            card_id=3,
-            price=price,
-            title=f"Promo Only Card - OCM Serialized #{i}",
-            treatment="OCM Serialized",
-            listing_type="sold",
-            sold_date=now - timedelta(days=i),
-            scraped_at=now - timedelta(days=i),
-            platform="ebay",
-        ))
+        prices.append(
+            MarketPrice(
+                card_id=3,
+                price=price,
+                title=f"Promo Only Card - OCM Serialized #{i}",
+                treatment="OCM Serialized",
+                listing_type="sold",
+                sold_date=now - timedelta(days=i),
+                scraped_at=now - timedelta(days=i),
+                platform="ebay",
+            )
+        )
 
     for i, price in enumerate([100.00, 150.00]):  # Promo is most expensive
-        prices.append(MarketPrice(
-            card_id=3,
-            price=price,
-            title=f"Promo Only Card - Promo #{i}",
-            treatment="Promo",
-            listing_type="sold",
-            sold_date=now - timedelta(days=i),
-            scraped_at=now - timedelta(days=i),
-            platform="ebay",
-        ))
+        prices.append(
+            MarketPrice(
+                card_id=3,
+                price=price,
+                title=f"Promo Only Card - Promo #{i}",
+                treatment="Promo",
+                listing_type="sold",
+                sold_date=now - timedelta(days=i),
+                scraped_at=now - timedelta(days=i),
+                platform="ebay",
+            )
+        )
 
     # Card 3: Active listing (should NOT affect floor calculation)
-    prices.append(MarketPrice(
-        card_id=3,
-        price=0.99,  # Low active listing
-        title="Promo Only Card - Classic Paper (Active)",
-        treatment="Classic Paper",
-        listing_type="active",
-        scraped_at=now,
-        platform="ebay",
-    ))
+    prices.append(
+        MarketPrice(
+            card_id=3,
+            price=0.99,  # Low active listing
+            title="Promo Only Card - Classic Paper (Active)",
+            treatment="Classic Paper",
+            listing_type="active",
+            scraped_at=now,
+            platform="ebay",
+        )
+    )
 
     for p in prices:
         test_session.add(p)
@@ -247,16 +263,18 @@ def old_market_prices(test_session: Session, sample_cards: List[Card]) -> List[M
 
     # Card 4 (Box): Only has old sales (>30 days ago)
     for i, price in enumerate([50.00, 55.00, 60.00, 65.00]):
-        prices.append(MarketPrice(
-            card_id=4,
-            price=price,
-            title=f"Test Box - Sealed #{i}",
-            treatment="Sealed",
-            listing_type="sold",
-            sold_date=now - timedelta(days=45 + i),  # 45-48 days ago
-            scraped_at=now - timedelta(days=45 + i),
-            platform="ebay",
-        ))
+        prices.append(
+            MarketPrice(
+                card_id=4,
+                price=price,
+                title=f"Test Box - Sealed #{i}",
+                treatment="Sealed",
+                listing_type="sold",
+                sold_date=now - timedelta(days=45 + i),  # 45-48 days ago
+                scraped_at=now - timedelta(days=45 + i),
+                platform="ebay",
+            )
+        )
 
     for p in prices:
         test_session.add(p)
@@ -273,16 +291,18 @@ def null_sold_date_prices(test_session: Session, sample_cards: List[Card]) -> Li
 
     # Card 1: Sales with NULL sold_date (should use scraped_at)
     for i, price in enumerate([1.25, 1.75]):
-        prices.append(MarketPrice(
-            card_id=1,
-            price=price,
-            title=f"Test Card Common - Classic Paper (null date) #{i}",
-            treatment="Classic Paper",
-            listing_type="sold",
-            sold_date=None,  # NULL sold_date
-            scraped_at=now - timedelta(days=i + 10),
-            platform="ebay",
-        ))
+        prices.append(
+            MarketPrice(
+                card_id=1,
+                price=price,
+                title=f"Test Card Common - Classic Paper (null date) #{i}",
+                treatment="Classic Paper",
+                listing_type="sold",
+                sold_date=None,  # NULL sold_date
+                scraped_at=now - timedelta(days=i + 10),
+                platform="ebay",
+            )
+        )
 
     for p in prices:
         test_session.add(p)
@@ -294,6 +314,7 @@ def null_sold_date_prices(test_session: Session, sample_cards: List[Card]) -> Li
 # ============================================
 # User / Auth Fixtures
 # ============================================
+
 
 @pytest.fixture
 def sample_user(test_session: Session) -> User:
@@ -419,16 +440,30 @@ class TestDataFactory:
 
     # Sample card names for realistic test data
     CARD_NAMES = [
-        "Sandura of Heliosynth", "The Prisoner", "Azure Sky Chaser",
-        "Progo", "Lightbringer Leonis", "Shadowveil Assassin",
-        "Crystal Guardian", "Flame Dancer", "Storm Caller",
-        "Earth Warden", "Void Walker", "Divine Protector",
-        "Chaos Bringer", "Time Weaver", "Space Drifter",
+        "Sandura of Heliosynth",
+        "The Prisoner",
+        "Azure Sky Chaser",
+        "Progo",
+        "Lightbringer Leonis",
+        "Shadowveil Assassin",
+        "Crystal Guardian",
+        "Flame Dancer",
+        "Storm Caller",
+        "Earth Warden",
+        "Void Walker",
+        "Divine Protector",
+        "Chaos Bringer",
+        "Time Weaver",
+        "Space Drifter",
     ]
 
     TREATMENTS = [
-        "Classic Paper", "Classic Foil", "Formless Foil",
-        "OCM Serialized", "Promo", "Prerelease",
+        "Classic Paper",
+        "Classic Foil",
+        "Formless Foil",
+        "OCM Serialized",
+        "Promo",
+        "Prerelease",
     ]
 
     SOURCES = ["eBay", "Blokpax", "TCGPlayer", "LGS", "Trade", "Pack Pull", "Other"]
@@ -463,9 +498,8 @@ class TestDataFactory:
             return self._rarity_cache[name]
 
         from sqlmodel import select
-        rarity = self.session.exec(
-            select(Rarity).where(Rarity.name == name)
-        ).first()
+
+        rarity = self.session.exec(select(Rarity).where(Rarity.name == name)).first()
 
         if not rarity:
             rarity = Rarity(name=name)
@@ -492,6 +526,7 @@ class TestDataFactory:
         rarity = self.get_or_create_rarity(rarity_name)
 
         from app.models.card import generate_slug
+
         card = Card(
             name=name,
             slug=generate_slug(name),
@@ -609,15 +644,9 @@ class TestDataFactory:
         self.session.refresh(pc)
         return pc
 
-    def create_portfolio_cards(
-        self,
-        user: User,
-        card: Card,
-        count: int,
-        **kwargs
-    ) -> List:
+    def create_portfolio_cards(self, user: User, card: Card, count: int, **kwargs) -> List:
         """Create multiple portfolio cards for the same base card."""
-        from app.models.portfolio import PortfolioCard
+
         return [self.create_portfolio_card(user, card, **kwargs) for _ in range(count)]
 
 
@@ -646,41 +675,49 @@ def sample_portfolio_cards(test_session: Session, sample_user: User, sample_card
     cards = []
 
     # User has 3 copies of Card 1 with different treatments
-    cards.append(PortfolioCard(
-        user_id=sample_user.id,
-        card_id=sample_cards[0].id,
-        treatment="Classic Paper",
-        source="eBay",
-        purchase_price=1.50,
-        purchase_date=datetime.now(timezone.utc).date() - timedelta(days=10),
-    ))
-    cards.append(PortfolioCard(
-        user_id=sample_user.id,
-        card_id=sample_cards[0].id,
-        treatment="Classic Foil",
-        source="LGS",
-        purchase_price=5.00,
-        purchase_date=datetime.now(timezone.utc).date() - timedelta(days=5),
-    ))
-    cards.append(PortfolioCard(
-        user_id=sample_user.id,
-        card_id=sample_cards[0].id,
-        treatment="Classic Paper",
-        source="Pack Pull",
-        purchase_price=0.00,  # Pulled from pack
-        purchase_date=datetime.now(timezone.utc).date() - timedelta(days=20),
-    ))
+    cards.append(
+        PortfolioCard(
+            user_id=sample_user.id,
+            card_id=sample_cards[0].id,
+            treatment="Classic Paper",
+            source="eBay",
+            purchase_price=1.50,
+            purchase_date=datetime.now(timezone.utc).date() - timedelta(days=10),
+        )
+    )
+    cards.append(
+        PortfolioCard(
+            user_id=sample_user.id,
+            card_id=sample_cards[0].id,
+            treatment="Classic Foil",
+            source="LGS",
+            purchase_price=5.00,
+            purchase_date=datetime.now(timezone.utc).date() - timedelta(days=5),
+        )
+    )
+    cards.append(
+        PortfolioCard(
+            user_id=sample_user.id,
+            card_id=sample_cards[0].id,
+            treatment="Classic Paper",
+            source="Pack Pull",
+            purchase_price=0.00,  # Pulled from pack
+            purchase_date=datetime.now(timezone.utc).date() - timedelta(days=20),
+        )
+    )
 
     # User has 1 graded card
-    cards.append(PortfolioCard(
-        user_id=sample_user.id,
-        card_id=sample_cards[1].id,
-        treatment="Classic Paper",
-        source="eBay",
-        purchase_price=25.00,
-        purchase_date=datetime.now(timezone.utc).date() - timedelta(days=30),
-        grading="PSA 10",
-    ))
+    cards.append(
+        PortfolioCard(
+            user_id=sample_user.id,
+            card_id=sample_cards[1].id,
+            treatment="Classic Paper",
+            source="eBay",
+            purchase_price=25.00,
+            purchase_date=datetime.now(timezone.utc).date() - timedelta(days=30),
+            grading="PSA 10",
+        )
+    )
 
     for c in cards:
         test_session.add(c)

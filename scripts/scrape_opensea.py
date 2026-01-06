@@ -14,16 +14,17 @@ OPENSEA_COLLECTIONS = {
         "card_name": "Character Proofs",
         "slug": "wotf-character-proofs",
         "contract": "0x05f08b01971cf70bcd4e743a8906790cfb9a8fb8",
-        "chain": "ethereum"
+        "chain": "ethereum",
     },
     "wotf-existence-collector-boxes": {
         "url": "https://opensea.io/collection/wotf-existence-collector-boxes",
         "card_name": "Existence Collector Box",
         "slug": "wotf-existence-collector-boxes",
         "contract": "0x28a11da34a93712b1fde4ad15da217a3b14d9465",
-        "chain": "ethereum"
-    }
+        "chain": "ethereum",
+    },
 }
+
 
 async def main():
     print("--- Starting OpenSea Scrape ---")
@@ -51,17 +52,19 @@ async def main():
                 print(f"Scraped Stats: {scraped_stats}")
 
                 # Check for valid data (Floor Price OR Volume)
-                if scraped_stats and (scraped_stats.get("floor_price_usd", 0) > 0 or scraped_stats.get("total_volume_usd", 0) > 0):
+                if scraped_stats and (
+                    scraped_stats.get("floor_price_usd", 0) > 0 or scraped_stats.get("total_volume_usd", 0) > 0
+                ):
                     snapshot = MarketSnapshot(
                         card_id=card.id,
-                        min_price=scraped_stats.get("floor_price_usd", 0.0), # Floor price
+                        min_price=scraped_stats.get("floor_price_usd", 0.0),  # Floor price
                         max_price=0.0,
-                        avg_price=scraped_stats.get("floor_price_usd", 0.0), # Use floor as avg
-                        volume=int(scraped_stats.get("total_volume", 0)), # Total volume
+                        avg_price=scraped_stats.get("floor_price_usd", 0.0),  # Use floor as avg
+                        volume=int(scraped_stats.get("total_volume", 0)),  # Total volume
                         lowest_ask=scraped_stats.get("floor_price_usd", 0.0),
                         highest_bid=0.0,
                         inventory=scraped_stats.get("listed_count", 0),
-                        platform="opensea"
+                        platform="opensea",
                     )
                     session.add(snapshot)
                     session.commit()
@@ -85,7 +88,7 @@ async def main():
                             select(MarketPrice).where(
                                 MarketPrice.card_id == card.id,
                                 MarketPrice.external_id == sale.tx_hash,
-                                MarketPrice.platform == "opensea"
+                                MarketPrice.platform == "opensea",
                             )
                         ).first()
 
@@ -96,7 +99,7 @@ async def main():
                                 MarketPrice.card_id == card.id,
                                 MarketPrice.title == sale.token_name,
                                 MarketPrice.sold_date == sale.sold_at,
-                                MarketPrice.platform == "opensea"
+                                MarketPrice.platform == "opensea",
                             )
                         ).first()
 
@@ -110,7 +113,7 @@ async def main():
 
                     # Use NFT traits as treatment if available
                     treatment = None
-                    if hasattr(sale, 'traits') and sale.traits:
+                    if hasattr(sale, "traits") and sale.traits:
                         # Extract the most relevant trait for display
                         # Priority: Hierarchy (Character Proofs), Box Art (Collector Boxes)
                         trait_dict = {}
@@ -139,7 +142,12 @@ async def main():
                         name_lower = sale.token_name.lower()
                         if "foil" in name_lower or "holo" in name_lower:
                             treatment = "Foil"
-                        elif "serial" in name_lower or "/50" in name_lower or "/100" in name_lower or "/250" in name_lower:
+                        elif (
+                            "serial" in name_lower
+                            or "/50" in name_lower
+                            or "/100" in name_lower
+                            or "/250" in name_lower
+                        ):
                             treatment = "Serialized"
                         elif "proof" in name_lower:
                             treatment = "Proof"
@@ -155,10 +163,11 @@ async def main():
 
                     # Prepare traits for storage (normalize format)
                     traits_data = None
-                    if hasattr(sale, 'traits') and sale.traits:
+                    if hasattr(sale, "traits") and sale.traits:
                         traits_data = [
                             {"trait_type": t.get("trait_type", ""), "value": t.get("value", "")}
-                            for t in sale.traits if isinstance(t, dict)
+                            for t in sale.traits
+                            if isinstance(t, dict)
                         ]
 
                     # Create new MarketPrice record
@@ -186,10 +195,11 @@ async def main():
                 else:
                     print(f"No new sales to save for {card_name}")
 
-                await asyncio.sleep(2) # Polite delay
+                await asyncio.sleep(2)  # Polite delay
     finally:
         await BrowserManager.close()
         print("--- OpenSea Scrape Complete ---")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

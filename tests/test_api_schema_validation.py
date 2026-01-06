@@ -8,7 +8,6 @@ at runtime when FastAPI tries to serialize responses.
 
 import pytest
 from fastapi.testclient import TestClient
-from pydantic import BaseModel
 
 from app.main import app
 
@@ -91,9 +90,7 @@ class TestCardsEndpointSchemas:
         if not card_with_sales:
             pytest.skip("No cards with sales found")
 
-        response = client.get(
-            f"/api/v1/cards/{card_with_sales['id']}/history?limit=10&paginated=true"
-        )
+        response = client.get(f"/api/v1/cards/{card_with_sales['id']}/history?limit=10&paginated=true")
         assert response.status_code == 200
 
         data = response.json()

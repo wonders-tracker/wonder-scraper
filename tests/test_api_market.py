@@ -341,6 +341,7 @@ class TestListingReportsEndpoint:
         """Test creating a basic listing report."""
         # Get a real listing from the database
         from sqlmodel import select
+
         listing = integration_session.exec(
             select(MarketPrice).where(MarketPrice.listing_type == "sold").limit(1)
         ).first()
@@ -375,6 +376,7 @@ class TestListingReportsEndpoint:
     def test_create_report_all_reasons(self, client, integration_session):
         """Test creating reports with different reason types."""
         from sqlmodel import select
+
         listing = integration_session.exec(
             select(MarketPrice).where(MarketPrice.listing_type == "sold").limit(1)
         ).first()
@@ -409,6 +411,7 @@ class TestListingReportsEndpoint:
     def test_create_report_with_optional_fields(self, client, integration_session):
         """Test creating report with all optional fields."""
         from sqlmodel import select
+
         listing = integration_session.exec(
             select(MarketPrice).where(MarketPrice.listing_type == "sold").limit(1)
         ).first()
@@ -464,6 +467,7 @@ class TestListingReportsEndpoint:
         """Test retrieving listing reports."""
         # Get a real listing from the database
         from sqlmodel import select
+
         listing = integration_session.exec(
             select(MarketPrice).where(MarketPrice.listing_type == "sold").limit(1)
         ).first()
@@ -614,9 +618,7 @@ class TestMarketEndpointsIntegration:
 
         # Cards with volume in overview should have sales in activity
         cards_with_volume = {
-            item["id"]: item["volume_period"]
-            for item in overview_data
-            if item.get("volume_period", 0) > 0
+            item["id"]: item["volume_period"] for item in overview_data if item.get("volume_period", 0) > 0
         }
 
         if cards_with_volume:
@@ -643,12 +645,14 @@ class TestMarketEndpointsIntegration:
         activity_treatments = {item["treatment"] for item in activity_data if item.get("treatment")}
 
         # All activity treatments should exist in treatments list
-        assert activity_treatments.issubset(treatment_names), \
-            f"Activity has treatments not in treatments list: {activity_treatments - treatment_names}"
+        assert activity_treatments.issubset(
+            treatment_names
+        ), f"Activity has treatments not in treatments list: {activity_treatments - treatment_names}"
 
     def test_report_workflow(self, client, integration_session):
         """Test complete workflow: create report, then retrieve it."""
         from sqlmodel import select
+
         listing = integration_session.exec(
             select(MarketPrice).where(MarketPrice.listing_type == "sold").limit(1)
         ).first()
@@ -731,9 +735,7 @@ class TestMarketEndpointErrorHandling:
     def test_invalid_json_in_report(self, client):
         """Test that invalid JSON returns proper error."""
         response = client.post(
-            "/api/v1/market/reports",
-            data="not valid json",
-            headers={"Content-Type": "application/json"}
+            "/api/v1/market/reports", data="not valid json", headers={"Content-Type": "application/json"}
         )
         assert response.status_code == 422
 

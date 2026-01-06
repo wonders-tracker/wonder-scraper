@@ -8,6 +8,7 @@ Since we don't have the original HTML, we infer from available data:
 4. Active listings with 0 bids → 'buy_it_now' (most likely)
 5. Sold listings with 0 bids → NULL (could be BIN or no-bid auction)
 """
+
 import re
 from sqlmodel import Session, select, col
 from app.db import engine
@@ -117,6 +118,7 @@ def backfill_listing_format(dry_run: bool = False):
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Backfill listing_format field")
     parser.add_argument("--dry-run", action="store_true", help="Preview without making changes")
     args = parser.parse_args()

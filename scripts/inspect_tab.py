@@ -1,6 +1,6 @@
 from pydoll.browser import Chrome
-import asyncio
 import inspect
+
 
 async def inspect_tab():
     browser = Chrome()
@@ -10,14 +10,15 @@ async def inspect_tab():
     # from pydoll.browser.tab import Tab?
     pass
 
+
 if __name__ == "__main__":
     # let's try to import Tab
     try:
         from pydoll.browser.tab import Tab
+
         print("Tab methods:")
         for name, member in inspect.getmembers(Tab):
             if not name.startswith("_"):
                 print(name)
     except ImportError:
         print("Could not import Tab directly")
-

@@ -149,7 +149,7 @@ def main():
     sample_cards = enrich_with_details(cards[:5])
     save_data({"sample": sample_cards}, "cards_sample_detailed.json")
 
-    print(f"\n=== Complete ===")
+    print("\n=== Complete ===")
     print(f"Total cards fetched: {len(cards)}")
     print(f"Output directory: {OUTPUT_DIR}")
 

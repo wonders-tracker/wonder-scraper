@@ -13,6 +13,7 @@ import asyncio
 import os
 import random
 import shutil
+import stat
 import tempfile
 import subprocess
 import uuid
@@ -31,8 +32,8 @@ IS_CONTAINER = os.path.exists("/.dockerenv") or os.getenv("RAILWAY_ENVIRONMENT")
 _SESSION_ID = uuid.uuid4().hex[:8]
 
 
-def find_chrome_binary() -> Optional[str]:
-    """Find Chrome/Chromium binary on the system with extensive search."""
+def _find_chrome_binary_sync() -> Optional[str]:
+    """Synchronous implementation of Chrome binary search."""
     # Check env var first (set by nixpacks.toml)
     chrome_path = os.getenv("CHROME_PATH")
     if chrome_path and os.path.exists(chrome_path):
@@ -104,6 +105,15 @@ def find_chrome_binary() -> Optional[str]:
     return None
 
 
+async def find_chrome_binary() -> Optional[str]:
+    """Find Chrome/Chromium binary on the system with extensive search.
+
+    This is an async wrapper that runs the blocking search in a thread pool
+    to avoid freezing the event loop.
+    """
+    return await asyncio.to_thread(_find_chrome_binary_sync)
+
+
 def get_user_data_dir():
     """Get unique profile directory for this process session."""
     # Use session ID instead of PID - in containers PID is often 1
@@ -111,8 +121,8 @@ def get_user_data_dir():
     return os.path.join(tempfile.gettempdir(), f"pydoll_profile_{_SESSION_ID}")
 
 
-def kill_stale_chrome_processes():
-    """Kill any stale Chrome processes that might be blocking resources."""
+def _kill_stale_chrome_processes_sync():
+    """Synchronous implementation of killing stale Chrome processes."""
     try:
         # Find and kill any orphaned chrome processes
         # On macOS, use pkill with pattern matching for headless Chrome
@@ -130,8 +140,19 @@ def kill_stale_chrome_processes():
         pass
 
 
-def force_kill_all_chrome():
-    """Aggressively kill ALL Chrome/Chromium processes - nuclear option."""
+async def kill_stale_chrome_processes():
+    """Kill any stale Chrome processes that might be blocking resources.
+
+    This is an async wrapper that runs the blocking subprocess call in a thread pool
+    to avoid freezing the event loop.
+    """
+    await asyncio.to_thread(_kill_stale_chrome_processes_sync)
+
+
+def _force_kill_all_chrome_sync():
+    """Synchronous implementation of force killing all Chrome processes."""
+    import time
+
     print("[Browser] FORCE KILLING all Chrome processes...")
     kill_commands = [
         ["pkill", "-9", "-f", "chrome"],
@@ -146,15 +167,21 @@ def force_kill_all_chrome():
         except (subprocess.SubprocessError, FileNotFoundError, OSError):
             pass
     # Give OS time to clean up
-    import time
-
     time.sleep(2)
     print("[Browser] Force kill complete")
 
 
+async def force_kill_all_chrome():
+    """Aggressively kill ALL Chrome/Chromium processes - nuclear option.
+
+    This is an async wrapper that runs the blocking subprocess calls in a thread pool
+    to avoid freezing the event loop.
+    """
+    await asyncio.to_thread(_force_kill_all_chrome_sync)
+
+
 def cleanup_stale_profiles():
     """Clean up old profile directories from previous sessions."""
-
     try:
         tmp_dir = tempfile.gettempdir()
         current_profile = f"pydoll_profile_{_SESSION_ID}"
@@ -163,14 +190,15 @@ def cleanup_stale_profiles():
             if item.startswith("pydoll_profile_") and item != current_profile:
                 path = os.path.join(tmp_dir, item)
                 try:
-                    if os.path.isdir(path):
+                    # Use lstat to check the link itself, not target
+                    st = os.lstat(path)
+                    # Only delete if it's a real directory, not a symlink
+                    if stat.S_ISDIR(st.st_mode) and not stat.S_ISLNK(st.st_mode):
                         shutil.rmtree(path, ignore_errors=True)
                         print(f"[Browser] Cleaned up stale profile: {item}")
                 except (OSError, PermissionError):
-                    # Directory cleanup can fail due to permissions or locks - safe to ignore
                     pass
     except (OSError, PermissionError):
-        # Listing temp dir can fail in restricted environments - safe to ignore
         pass
 
 
@@ -185,9 +213,9 @@ class BrowserManager:
     _restarting: bool = False  # Flag to coordinate concurrent restart requests
     _last_restart_time: float = 0  # Timestamp of last restart
     _last_health_check: float = 0  # Timestamp of last health check
-    _health_check_interval: float = 30  # Seconds between health checks
+    _health_check_interval: int = settings.BROWSER_HEALTH_CHECK_INTERVAL
     _consecutive_timeouts: int = 0  # Track consecutive timeout errors
-    _max_consecutive_timeouts: int = 3  # Force hard restart after this many
+    _max_consecutive_timeouts: int = settings.BROWSER_MAX_CONSECUTIVE_TIMEOUTS
 
     @classmethod
     async def get_browser(cls) -> Chrome:
@@ -222,7 +250,7 @@ class BrowserManager:
                 print(f"[Browser] Error closing browser: {e}")
             cls._browser = None
             # Ensure Chrome processes are cleaned up
-            kill_stale_chrome_processes()
+            await kill_stale_chrome_processes()
 
     @classmethod
     async def close(cls):
@@ -283,14 +311,14 @@ class BrowserManager:
         print("[Browser] Starting pydoll browser...")
 
         # Clean up stale resources before starting
-        kill_stale_chrome_processes()
+        await kill_stale_chrome_processes()
         cleanup_stale_profiles()
 
         options = ChromiumOptions()
         options.headless = True
 
         # Use system Chrome if available
-        chrome_path = find_chrome_binary()
+        chrome_path = await find_chrome_binary()
         if chrome_path:
             print(f"[Browser] Using Chrome: {chrome_path}")
             options.binary_location = chrome_path
@@ -331,12 +359,12 @@ class BrowserManager:
         except asyncio.TimeoutError:
             print(f"[Browser] ERROR: Startup timed out after {cls._startup_timeout}s")
             cls._browser = None
-            kill_stale_chrome_processes()
+            await kill_stale_chrome_processes()
             raise Exception("Browser startup timed out")
         except Exception as e:
             print(f"[Browser] ERROR: Start failed: {type(e).__name__}: {e}")
             cls._browser = None
-            kill_stale_chrome_processes()
+            await kill_stale_chrome_processes()
             raise
 
     @classmethod
@@ -372,7 +400,7 @@ class BrowserManager:
         if should_hard_restart:
             print("[Browser] Too many consecutive timeouts - forcing hard restart!")
             # Nuclear option - kill everything (must be done before acquiring lock to avoid deadlock)
-            force_kill_all_chrome()
+            await force_kill_all_chrome()
             # Clear browser reference under lock
             async with cls._lock:
                 cls._consecutive_timeouts = 0

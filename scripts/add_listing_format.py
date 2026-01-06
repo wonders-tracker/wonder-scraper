@@ -9,6 +9,7 @@ This column stores the eBay listing format:
 
 Run: PYTHONPATH=. poetry run python scripts/add_listing_format.py
 """
+
 from sqlmodel import text, Session
 from app.db import engine
 
@@ -18,10 +19,12 @@ def migrate():
     with Session(engine) as session:
         try:
             # Add listing_format column if it doesn't exist
-            session.exec(text('''
+            session.exec(
+                text("""
                 ALTER TABLE marketprice
                 ADD COLUMN IF NOT EXISTS listing_format VARCHAR;
-            '''))
+            """)
+            )
 
             session.commit()
             print("Migration successful!")

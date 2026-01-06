@@ -31,6 +31,7 @@ from sqlmodel import Session
 from sqlalchemy import text
 
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.db import engine
@@ -43,12 +44,8 @@ CHECKPOINT_FILE = Path(__file__).parent.parent / "data" / ".seller_backfill_chec
 def save_checkpoint(processed_ids: set, stats: dict):
     """Save progress checkpoint to file."""
     CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    data = {
-        "processed_ids": list(processed_ids),
-        "stats": stats,
-        "timestamp": datetime.now().isoformat()
-    }
-    with open(CHECKPOINT_FILE, 'w') as f:
+    data = {"processed_ids": list(processed_ids), "stats": stats, "timestamp": datetime.now().isoformat()}
+    with open(CHECKPOINT_FILE, "w") as f:
         json.dump(data, f)
 
 
@@ -75,7 +72,7 @@ def extract_item_id_from_url(url: str) -> Optional[str]:
     """Extract eBay item ID from URL."""
     if not url:
         return None
-    match = re.search(r'/itm/(?:[^/]+/)?(\d+)', url)
+    match = re.search(r"/itm/(?:[^/]+/)?(\d+)", url)
     if match:
         return match.group(1)
     return None
@@ -93,20 +90,16 @@ async def fetch_with_browser(browser, item_id: str, mp_id: int) -> dict:
         # Get HTML with timeout
         try:
             result = await asyncio.wait_for(
-                tab.execute_script(
-                    "return document.documentElement.outerHTML;",
-                    return_by_value=True
-                ),
-                timeout=30
+                tab.execute_script("return document.documentElement.outerHTML;", return_by_value=True), timeout=30
             )
         except asyncio.TimeoutError:
             return {"status": "timeout", "mp_id": mp_id, "reason": "script timeout"}
 
         html = None
         if isinstance(result, dict):
-            inner = result.get('result', {})
+            inner = result.get("result", {})
             if isinstance(inner, dict):
-                html = inner.get('result', {}).get('value')
+                html = inner.get("result", {}).get("value")
 
         if not html:
             return {"status": "skip", "mp_id": mp_id, "reason": "no HTML"}
@@ -152,12 +145,12 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
     # Setup browser with proper Chrome detection
     options = ChromiumOptions()
     options.headless = True
-    options.add_argument('--disable-gpu')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
     # Use system Chrome binary
-    chrome_path = find_chrome_binary()
+    chrome_path = await find_chrome_binary()
     if chrome_path:
         print(f"Using Chrome: {chrome_path}")
         options.binary_location = chrome_path
@@ -180,15 +173,12 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
 
     try:
         for batch_start in range(0, len(work_items), batch_size):
-            batch = work_items[batch_start:batch_start + batch_size]
+            batch = work_items[batch_start : batch_start + batch_size]
             batch_num = batch_start // batch_size + 1
             total_batches = (len(work_items) + batch_size - 1) // batch_size
 
             # Process batch concurrently
-            tasks = [
-                fetch_with_browser(browser, item_id, mp_id)
-                for item_id, mp_id, title in batch
-            ]
+            tasks = [fetch_with_browser(browser, item_id, mp_id) for item_id, mp_id, title in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             batch_updated = 0
@@ -208,18 +198,21 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
                         if seller_name == "":
                             seller_name = None
 
-                        session.execute(text("""
+                        session.execute(
+                            text("""
                             UPDATE marketprice
                             SET seller_name = :seller,
                                 seller_feedback_score = :score,
                                 seller_feedback_percent = :pct
                             WHERE id = :id
-                        """), {
-                            "seller": seller_name,
-                            "score": result["feedback_score"],
-                            "pct": result["feedback_percent"],
-                            "id": mp_id
-                        })
+                        """),
+                            {
+                                "seller": seller_name,
+                                "score": result["feedback_score"],
+                                "pct": result["feedback_percent"],
+                                "id": mp_id,
+                            },
+                        )
                         session.commit()
                         batch_updated += 1
                         print(f"    ✓ {mp_id}: {seller_name or '(no seller found)'}")
@@ -241,9 +234,9 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
                         await asyncio.sleep(5)
                         new_options = ChromiumOptions()
                         new_options.headless = True
-                        new_options.add_argument('--disable-gpu')
-                        new_options.add_argument('--no-sandbox')
-                        new_options.add_argument('--disable-dev-shm-usage')
+                        new_options.add_argument("--disable-gpu")
+                        new_options.add_argument("--no-sandbox")
+                        new_options.add_argument("--disable-dev-shm-usage")
                         if chrome_path:
                             new_options.binary_location = chrome_path
                         browser = Chrome(options=new_options)
@@ -266,9 +259,9 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
                         await asyncio.sleep(3)
                         new_options = ChromiumOptions()
                         new_options.headless = True
-                        new_options.add_argument('--disable-gpu')
-                        new_options.add_argument('--no-sandbox')
-                        new_options.add_argument('--disable-dev-shm-usage')
+                        new_options.add_argument("--disable-gpu")
+                        new_options.add_argument("--no-sandbox")
+                        new_options.add_argument("--disable-dev-shm-usage")
                         if chrome_path:
                             new_options.binary_location = chrome_path
                         browser = Chrome(options=new_options)
@@ -289,8 +282,10 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
             # Progress
             elapsed = time.time() - start_time
             rate = (batch_start + len(batch)) / elapsed if elapsed > 0 else 0
-            print(f"  Batch {batch_num}/{total_batches}: +{batch_updated} | "
-                  f"Total: {total_updated}/{len(work_items)} | {rate:.1f}/sec")
+            print(
+                f"  Batch {batch_num}/{total_batches}: +{batch_updated} | "
+                f"Total: {total_updated}/{len(work_items)} | {rate:.1f}/sec"
+            )
 
             # If entire batch failed (0 updates, 0 skips), browser is likely stuck - restart immediately
             if batch_updated == 0 and batch_skipped == 0 and len(batch) > 0:
@@ -305,9 +300,9 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
                     await asyncio.sleep(3)
                     new_options = ChromiumOptions()
                     new_options.headless = True
-                    new_options.add_argument('--disable-gpu')
-                    new_options.add_argument('--no-sandbox')
-                    new_options.add_argument('--disable-dev-shm-usage')
+                    new_options.add_argument("--disable-gpu")
+                    new_options.add_argument("--no-sandbox")
+                    new_options.add_argument("--disable-dev-shm-usage")
                     if chrome_path:
                         new_options.binary_location = chrome_path
                     browser = Chrome(options=new_options)
@@ -330,7 +325,13 @@ async def backfill_async(work_items: List[tuple], session, batch_size: int = 3):
     return total_updated, total_skipped, total_failed
 
 
-def backfill_seller_data(dry_run: bool = True, limit: Optional[int] = None, batch_size: int = 3, listing_type: str = "all", resume: bool = False):
+def backfill_seller_data(
+    dry_run: bool = True,
+    limit: Optional[int] = None,
+    batch_size: int = 3,
+    listing_type: str = "all",
+    resume: bool = False,
+):
     """Backfill seller data using Pydoll browser."""
 
     # Load checkpoint if resuming
@@ -421,9 +422,7 @@ def backfill_seller_data(dry_run: bool = True, limit: Optional[int] = None, batc
 
         start_time = time.time()
         try:
-            total_updated, total_skipped, total_failed = asyncio.run(
-                backfill_async(work_items, session, batch_size)
-            )
+            total_updated, total_skipped, total_failed = asyncio.run(backfill_async(work_items, session, batch_size))
             # Clear checkpoint on successful completion
             clear_checkpoint()
             print("\n✓ Checkpoint cleared (run completed)")
@@ -450,8 +449,9 @@ def main():
     parser.add_argument("--execute", action="store_true", help="Actually execute the backfill")
     parser.add_argument("--limit", type=int, help="Limit number of items to process")
     parser.add_argument("--batch-size", type=int, default=3, help="Number of concurrent requests (default: 3)")
-    parser.add_argument("--type", choices=["all", "sold", "active"], default="all",
-                        help="Listing type to backfill (default: all)")
+    parser.add_argument(
+        "--type", choices=["all", "sold", "active"], default="all", help="Listing type to backfill (default: all)"
+    )
     parser.add_argument("--resume", action="store_true", help="Resume from last checkpoint")
 
     args = parser.parse_args()
@@ -474,7 +474,9 @@ def main():
     print(f"Resume: {args.resume}")
     print("=" * 60)
 
-    backfill_seller_data(dry_run=dry_run, limit=args.limit, batch_size=args.batch_size, listing_type=args.type, resume=args.resume)
+    backfill_seller_data(
+        dry_run=dry_run, limit=args.limit, batch_size=args.batch_size, listing_type=args.type, resume=args.resume
+    )
 
 
 if __name__ == "__main__":

@@ -23,9 +23,7 @@ def backfill_treatments():
 
         while True:
             # Fetch batch
-            batch = session.exec(
-                select(MarketPrice).offset(offset).limit(BATCH_SIZE)
-            ).all()
+            batch = session.exec(select(MarketPrice).offset(offset).limit(BATCH_SIZE)).all()
 
             if not batch:
                 break
@@ -51,6 +49,6 @@ def backfill_treatments():
 
         print(f"Successfully updated {updated_count} records with correct treatments.")
 
+
 if __name__ == "__main__":
     backfill_treatments()
-

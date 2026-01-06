@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.scraper.ebay import _extract_seller_info
@@ -146,30 +147,30 @@ class TestSellerExtraction:
 
     def _make_item_with_seller_link(self, href: str, text: str = "") -> MagicMock:
         """Create a mock item element with a seller link."""
-        html = f'''
+        html = f"""
         <div class="s-item">
             <a href="{href}" class="seller">{text}</a>
         </div>
-        '''
-        return BeautifulSoup(html, 'html.parser').find('div')
+        """
+        return BeautifulSoup(html, "html.parser").find("div")
 
     def _make_item_with_seller_info(self, seller_text: str) -> MagicMock:
         """Create a mock item element with seller info text."""
-        html = f'''
+        html = f"""
         <div class="s-item">
             <div class="s-item__seller-info">{seller_text}</div>
         </div>
-        '''
-        return BeautifulSoup(html, 'html.parser').find('div')
+        """
+        return BeautifulSoup(html, "html.parser").find("div")
 
     def _make_item_with_usr_link(self, username: str, text: str = "") -> MagicMock:
         """Create a mock item element with /usr/ link."""
-        html = f'''
+        html = f"""
         <div class="s-item">
             <a href="https://www.ebay.com/usr/{username}">{text or username}</a>
         </div>
-        '''
-        return BeautifulSoup(html, 'html.parser').find('div')
+        """
+        return BeautifulSoup(html, "html.parser").find("div")
 
     # ==================== SELLER NAME EXTRACTION ====================
 
@@ -181,12 +182,12 @@ class TestSellerExtraction:
 
     def test_extracts_seller_from_usr_link_with_query_params(self):
         """Should extract seller from /usr/ link even with query params."""
-        html = '''
+        html = """
         <div class="s-item">
             <a href="https://www.ebay.com/usr/seller_name?foo=bar&baz=123">Click</a>
         </div>
-        '''
-        item = BeautifulSoup(html, 'html.parser').find('div')
+        """
+        item = BeautifulSoup(html, "html.parser").find("div")
         seller_name, _, _ = _extract_seller_info(item)
         assert seller_name == "seller_name"
 
@@ -277,7 +278,7 @@ class TestSellerExtraction:
     def test_handles_empty_seller_info(self):
         """Should handle items with no seller info gracefully."""
         html = '<div class="s-item"><span>No seller info here</span></div>'
-        item = BeautifulSoup(html, 'html.parser').find('div')
+        item = BeautifulSoup(html, "html.parser").find("div")
         seller_name, feedback_score, feedback_percent = _extract_seller_info(item)
 
         # Should return None, not crash
@@ -286,7 +287,7 @@ class TestSellerExtraction:
     def test_handles_none_element(self):
         """Should handle None element gracefully."""
         html = '<div class="s-item"></div>'
-        item = BeautifulSoup(html, 'html.parser').find('div')
+        item = BeautifulSoup(html, "html.parser").find("div")
         seller_name, feedback_score, feedback_percent = _extract_seller_info(item)
 
         # Should not raise an exception
@@ -294,13 +295,13 @@ class TestSellerExtraction:
 
     def test_prioritizes_usr_link_over_text(self):
         """Should prefer /usr/ link extraction over text parsing."""
-        html = '''
+        html = """
         <div class="s-item">
             <a href="https://www.ebay.com/usr/correct_seller">wrong text garbage</a>
             <div class="s-item__seller-info">wrong_seller  100% positive</div>
         </div>
-        '''
-        item = BeautifulSoup(html, 'html.parser').find('div')
+        """
+        item = BeautifulSoup(html, "html.parser").find("div")
         seller_name, _, _ = _extract_seller_info(item)
 
         # Should get seller from URL, not from text
@@ -315,12 +316,12 @@ class TestSellerDataQuality:
 
     def test_seller_name_no_html_entities(self):
         """Seller name should not contain HTML entities."""
-        item_html = '''
+        item_html = """
         <div class="s-item">
             <a href="https://www.ebay.com/usr/seller&amp;name">text</a>
         </div>
-        '''
-        item = BeautifulSoup(item_html, 'html.parser').find('div')
+        """
+        item = BeautifulSoup(item_html, "html.parser").find("div")
         seller_name, _, _ = _extract_seller_info(item)
 
         if seller_name:
@@ -330,18 +331,22 @@ class TestSellerDataQuality:
 
     def test_seller_name_is_alphanumeric_with_special_chars(self):
         """Seller name should only contain valid username characters."""
-        item = BeautifulSoup('''
+        item = BeautifulSoup(
+            """
         <div class="s-item">
             <div class="s-item__seller-info">valid_seller-123.name (100) 99%</div>
         </div>
-        ''', 'html.parser').find('div')
+        """,
+            "html.parser",
+        ).find("div")
 
         seller_name, _, _ = _extract_seller_info(item)
 
         if seller_name:
             # Should only contain alphanumeric, underscore, dash, dot
             import re
-            assert re.match(r'^[a-zA-Z0-9_\-\.]+$', seller_name), f"Invalid chars in: {seller_name}"
+
+            assert re.match(r"^[a-zA-Z0-9_\-\.]+$", seller_name), f"Invalid chars in: {seller_name}"
 
     def test_regression_no_full_blob_in_seller_name(self):
         """
@@ -361,11 +366,14 @@ class TestSellerDataQuality:
         ]
 
         for bad_value in bad_patterns:
-            item = BeautifulSoup(f'''
+            item = BeautifulSoup(
+                f"""
             <div class="s-item">
                 <div class="s-item__seller-info">{bad_value}</div>
             </div>
-            ''', 'html.parser').find('div')
+            """,
+                "html.parser",
+            ).find("div")
 
             seller_name, _, _ = _extract_seller_info(item)
 
@@ -382,7 +390,7 @@ class TestSellerExtractionFromRealHTML:
 
     def test_modern_ebay_search_result(self):
         """Test extraction from modern eBay search result HTML."""
-        html = '''
+        html = """
         <div class="s-item">
             <div class="s-item__info">
                 <a class="s-item__link" href="https://www.ebay.com/itm/123456">
@@ -397,15 +405,15 @@ class TestSellerExtractionFromRealHTML:
                 </div>
             </div>
         </div>
-        '''
-        item = BeautifulSoup(html, 'html.parser').find('div', class_='s-item')
+        """
+        item = BeautifulSoup(html, "html.parser").find("div", class_="s-item")
         seller_name, _, _ = _extract_seller_info(item)
 
         assert seller_name == "topcardseller"
 
     def test_sold_listing_html(self):
         """Test extraction from sold listing format."""
-        html = '''
+        html = """
         <div class="s-item">
             <div class="s-item__seller-info">
                 <span class="s-item__seller-info-text">
@@ -414,8 +422,8 @@ class TestSellerExtractionFromRealHTML:
                 </span>
             </div>
         </div>
-        '''
-        item = BeautifulSoup(html, 'html.parser').find('div', class_='s-item')
+        """
+        item = BeautifulSoup(html, "html.parser").find("div", class_="s-item")
         seller_name, _, _ = _extract_seller_info(item)
 
         assert seller_name == "soldbyuser"

@@ -13,7 +13,6 @@ Usage:
     python scripts/migrate_add_cardeio_fields.py
 """
 
-import os
 import sys
 from pathlib import Path
 

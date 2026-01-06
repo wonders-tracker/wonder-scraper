@@ -1,6 +1,7 @@
 """
 Complete data refresh: eBay cards + boxes/packs + OpenSea collections + Blokpax using distributed workers
 """
+
 import asyncio
 import multiprocessing as mp
 from datetime import datetime, timezone
@@ -20,7 +21,7 @@ from app.scraper.blokpax import (
     scrape_recent_sales,
     is_wotf_asset,
 )
-from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error
+from app.discord_bot.logger import log_scrape_start, log_scrape_complete
 import sys
 import os
 import time
@@ -28,12 +29,14 @@ import time
 # Global browser lock for the process
 _process_browser = None
 
+
 async def get_process_browser():
     """Get or create a persistent browser for this process."""
     global _process_browser
     if _process_browser is None:
         _process_browser = await BrowserManager.get_browser()
     return _process_browser
+
 
 async def process_card_batch(cards_data: List[dict], is_backfill: bool = True):
     """Process a batch of cards using a single browser instance."""
@@ -47,12 +50,12 @@ async def process_card_batch(cards_data: List[dict], is_backfill: bool = True):
                 print(f"[Worker {os.getpid()}] Processing {i+1}/{len(cards_data)}: {card_data['name']}", flush=True)
 
                 await scrape_card(
-                    card_name=card_data['name'],
-                    card_id=card_data['id'],
-                    search_term=card_data['search_term'],
-                    set_name=card_data['set_name'],
-                    product_type=card_data['product_type'],
-                    is_backfill=is_backfill
+                    card_name=card_data["name"],
+                    card_id=card_data["id"],
+                    search_term=card_data["search_term"],
+                    set_name=card_data["set_name"],
+                    product_type=card_data["product_type"],
+                    is_backfill=is_backfill,
                 )
                 results.append(True)
             except Exception as e:
@@ -74,10 +77,12 @@ async def process_card_batch(cards_data: List[dict], is_backfill: bool = True):
 
     return results
 
+
 def worker_process_batch(args):
     """Wrapper to run async batch in a process."""
     cards_data, is_backfill = args
     return asyncio.run(process_card_batch(cards_data, is_backfill=is_backfill))
+
 
 async def scrape_all_ebay_parallel(num_workers: int = 2):
     """Scrape all cards, boxes, and packs from eBay using parallel workers"""
@@ -94,11 +99,11 @@ async def scrape_all_ebay_parallel(num_workers: int = 2):
     # Prepare card data - SKIP "The First" as it's too problematic
     card_data_list = [
         {
-            'id': card.id,
-            'name': card.name,
-            'set_name': card.set_name,
-            'search_term': f"{card.name} {card.set_name}",
-            'product_type': card.product_type if hasattr(card, 'product_type') else 'Single'
+            "id": card.id,
+            "name": card.name,
+            "set_name": card.set_name,
+            "search_term": f"{card.name} {card.set_name}",
+            "product_type": card.product_type if hasattr(card, "product_type") else "Single",
         }
         for card in cards
         if card.name != "The First"  # Skip this problematic card
@@ -106,7 +111,7 @@ async def scrape_all_ebay_parallel(num_workers: int = 2):
 
     # Chunk data for workers (20 per chunk for safety)
     chunk_size = 20
-    chunks = [card_data_list[i:i + chunk_size] for i in range(0, len(card_data_list), chunk_size)]
+    chunks = [card_data_list[i : i + chunk_size] for i in range(0, len(card_data_list), chunk_size)]
 
     print(f"Split into {len(chunks)} batches of size {chunk_size}.")
     print(f"Distributing across {num_workers} workers...")
@@ -125,10 +130,11 @@ async def scrape_all_ebay_parallel(num_workers: int = 2):
         total_processed += len(res)
         total_success += sum(1 for r in res if r)
 
-    print(f"\n=== eBay Scraping Complete ===")
+    print("\n=== eBay Scraping Complete ===")
     print(f"Processed: {total_processed}")
     print(f"Success: {total_success}")
     print(f"Failed: {total_processed - total_success}")
+
 
 async def scrape_all_blokpax():
     """Scrape all Blokpax WOTF storefronts for floor prices and sales"""
@@ -154,7 +160,7 @@ async def scrape_all_blokpax():
             if floor_bpx:
                 print(f"  Floor: {floor_bpx:,.0f} BPX (${floor_usd:.2f} USD)")
             else:
-                print(f"  Floor: No listings")
+                print("  Floor: No listings")
             print(f"  Listed: {listed} / {total} tokens")
 
             # Save snapshot
@@ -170,9 +176,7 @@ async def scrape_all_blokpax():
                 session.add(snapshot)
 
                 # Update storefront record
-                storefront = session.exec(
-                    select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)
-                ).first()
+                storefront = session.exec(select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)).first()
                 if storefront:
                     storefront.floor_price_bpx = floor_bpx
                     storefront.floor_price_usd = floor_usd
@@ -200,7 +204,7 @@ async def scrape_all_blokpax():
             print(f"  ERROR: {e}")
             results["errors"] += 1
 
-    print(f"\n=== Blokpax Scraping Complete ===")
+    print("\n=== Blokpax Scraping Complete ===")
     print(f"Storefronts: {results['floors']}")
     print(f"Sales found: {results['sales']}")
     print(f"Errors: {results['errors']}")
@@ -216,7 +220,7 @@ async def scrape_all_opensea():
 
     COLLECTION_MAP = {
         "https://opensea.io/collection/wotf-character-proofs": "Character Proofs",
-        "https://opensea.io/collection/wotf-existence-collector-boxes": "Collector Booster Box"
+        "https://opensea.io/collection/wotf-existence-collector-boxes": "Collector Booster Box",
     }
 
     await BrowserManager.get_browser()
@@ -250,7 +254,7 @@ async def scrape_all_opensea():
                     avg_price=stats["floor_price_usd"],
                     volume=int(stats.get("total_volume", 0)),
                     inventory=stats["listed_count"] if stats["listed_count"] > 0 else int(stats["owners"] * 0.1),
-                    lowest_ask=stats["floor_price_usd"]
+                    lowest_ask=stats["floor_price_usd"],
                 )
 
                 session.add(snapshot)
@@ -259,6 +263,7 @@ async def scrape_all_opensea():
                 print(f"✅ Saved OpenSea Snapshot ID: {snapshot.id} for {card.name}")
     finally:
         await BrowserManager.close()
+
 
 async def main(num_workers: int):
     start_time = time.time()
@@ -278,10 +283,11 @@ async def main(num_workers: int):
 
         # Count existing listings for tracking new ones
         from app.models.market import MarketPrice
+
         initial_listing_count = len(session.exec(select(MarketPrice).where(MarketPrice.listing_type == "active")).all())
         initial_sale_count = len(session.exec(select(MarketPrice).where(MarketPrice.listing_type == "sold")).all())
 
-    print(f"📊 Current Data in Neon:")
+    print("📊 Current Data in Neon:")
     print(f"   - Cards: {card_count}")
     print(f"   - Snapshots: {snapshot_count}")
     print()
@@ -323,15 +329,16 @@ async def main(num_workers: int):
         new_listings=max(0, new_listings),
         new_sales=max(0, new_sales),
         duration_seconds=duration,
-        errors=0
+        errors=0,
     )
+
 
 if __name__ == "__main__":
     # Parse number of workers from args (default 2)
     num_workers = int(sys.argv[1]) if len(sys.argv) > 1 else 2
 
     # Set multiprocessing start method BEFORE starting async event loop
-    mp.set_start_method('spawn', force=True)
+    mp.set_start_method("spawn", force=True)
 
     # Run async main
     asyncio.run(main(num_workers=num_workers))
