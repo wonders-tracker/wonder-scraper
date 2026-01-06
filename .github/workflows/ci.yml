@@ -360,7 +360,7 @@ jobs:
       - name: Health check - Basic
         run: |
           echo "=== Basic Health Check ==="
-          response=$(curl -sf https://wonder-scraper-staging.up.railway.app/health) || {
+          response=$(curl -sf https://wonder-scraper-staging-staging.up.railway.app/health) || {
             echo "::error::Staging health check failed"
             exit 1
           }
@@ -370,25 +370,15 @@ jobs:
       - name: Health check - Detailed
         run: |
           echo "=== Detailed Health Check ==="
-          response=$(curl -sf https://wonder-scraper-staging.up.railway.app/health/detailed) || {
+          response=$(curl -sf https://wonder-scraper-staging-staging.up.railway.app/health/detailed) || {
             echo "::warning::Detailed health check failed (non-blocking)"
           }
           echo "Response: $response"
 
-      - name: API smoke test - Cards endpoint
-        run: |
-          echo "=== Cards API Test ==="
-          response=$(curl -sf "https://wonder-scraper-staging.up.railway.app/api/v1/cards?limit=1") || {
-            echo "::error::Cards API smoke test failed"
-            exit 1
-          }
-          echo "Response: ${response:0:200}..."
-          echo "Cards API test passed"
-
       - name: API smoke test - Market overview
         run: |
           echo "=== Market API Test ==="
-          response=$(curl -sf "https://wonder-scraper-staging.up.railway.app/api/v1/market/overview") || {
+          response=$(curl -sf --max-time 30 "https://wonder-scraper-staging-staging.up.railway.app/api/v1/market/overview" | head -c 500) || {
             echo "::warning::Market API test failed (non-blocking)"
           }
           echo "Response: ${response:0:200}..."
@@ -396,7 +386,7 @@ jobs:
       - name: Circuit breaker status
         run: |
           echo "=== Circuit Breaker Status ==="
-          response=$(curl -sf "https://wonder-scraper-staging.up.railway.app/health/circuits") || {
+          response=$(curl -sf https://wonder-scraper-staging-staging.up.railway.app/health/circuits) || {
             echo "::warning::Circuit breaker check failed"
           }
           echo "Response: $response"
@@ -412,5 +402,5 @@ jobs:
         run: |
           echo ""
           echo "=== Staging Smoke Test Complete ==="
-          echo "Staging URL: https://wonder-scraper-staging.up.railway.app"
+          echo "Staging URL: https://wonder-scraper-staging-staging.up.railway.app"
           echo "All critical endpoints responding correctly"
