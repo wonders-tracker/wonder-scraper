@@ -1065,3 +1065,261 @@ def send_portfolio_summary(to_email: str, user_name: str, portfolio_data: Dict[s
     except Exception as e:
         print(f"[Email] Failed to send portfolio summary to {to_email}: {e}")
         return False
+
+
+def send_product_update(
+    to_email: str,
+    user_name: str,
+    update_data: Dict[str, Any],
+) -> bool:
+    """
+    Send product update/changelog email.
+
+    update_data should include:
+    - version: str (e.g., "January 2025" or "v2.1")
+    - headline: str (main update title)
+    - intro: str (brief intro paragraph)
+    - features: list of dicts with:
+        - title: str
+        - description: str
+        - icon: str (emoji)
+    - cta_text: str (optional, defaults to "EXPLORE UPDATES")
+    - cta_url: str (optional, defaults to frontend URL)
+    """
+    if not settings.RESEND_API_KEY:
+        print("[Email] Skipping product update - RESEND_API_KEY not configured")
+        return False
+
+    version = update_data.get("version", "Update")
+    headline = update_data.get("headline", "What's New")
+    intro = update_data.get("intro", "")
+    features = update_data.get("features", [])
+    cta_text = update_data.get("cta_text", "EXPLORE UPDATES")
+    cta_url = update_data.get("cta_url", settings.FRONTEND_URL)
+
+    # Build feature rows
+    feature_rows = ""
+    for feature in features:
+        icon = feature.get("icon", "→")
+        title = feature.get("title", "")
+        description = feature.get("description", "")
+        feature_rows += f"""
+        <tr>
+            <td style="padding: 16px 0; border-bottom: 1px solid #333;">
+                <table cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                        <td style="width: 40px; vertical-align: top; font-size: 20px; padding-top: 2px;">{icon}</td>
+                        <td style="vertical-align: top;">
+                            <p style="margin: 0 0 6px 0; color: #fff; font-size: 14px; font-weight: bold;">{title}</p>
+                            <p style="margin: 0; color: #888; font-size: 13px; line-height: 1.5;">{description}</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>"""
+
+    content = f"""
+        <!-- Version Badge -->
+        <table cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+            <tr>
+                <td style="background: #333; padding: 6px 12px; font-size: 10px; letter-spacing: 2px; color: #888;">
+                    {version.upper()}
+                </td>
+            </tr>
+        </table>
+
+        <!-- Headline -->
+        <h1 style="margin: 0 0 16px 0; color: #fff; font-size: 24px; font-weight: bold; line-height: 1.3;">
+            {headline}
+        </h1>
+
+        <!-- Intro -->
+        <p style="margin: 0 0 28px 0; color: #888; font-size: 14px; line-height: 1.6;">
+            {intro}
+        </p>
+
+        <!-- Features -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            {feature_rows}
+        </table>
+
+        <!-- CTA -->
+        <table cellpadding="0" cellspacing="0">
+            <tr>
+                <td style="background: #7dd3a8; padding: 14px 28px;">
+                    <a href="{cta_url}" style="color: #111; font-size: 11px; font-weight: bold; letter-spacing: 2px; text-decoration: none;">{cta_text} →</a>
+                </td>
+            </tr>
+        </table>
+
+        <!-- Sign off -->
+        <p style="margin: 32px 0 0 0; color: #666; font-size: 12px; line-height: 1.6;">
+            Thanks for being part of WondersTracker.<br>
+            — Cody
+        </p>
+    """
+
+    try:
+        _send_email(
+            {
+                "from": "Cody from WondersTracker <cody@wonderstracker.com>",
+                "to": [to_email],
+                "subject": f"{headline} — {version}",
+                "html": _email_wrapper(content, "PRODUCT UPDATE"),
+            }
+        )
+        print(f"[Email] Product update sent to {to_email}")
+        return True
+    except Exception as e:
+        print(f"[Email] Failed to send product update to {to_email}: {e}")
+        return False
+
+
+def send_detailed_product_update(
+    to_email: str,
+    user_name: str,
+    update_data: Dict[str, Any],
+) -> bool:
+    """
+    Send detailed product update email with sections, bullet points, and optional images.
+
+    update_data should include:
+    - version: str (e.g., "January 2025")
+    - headline: str (main update title)
+    - intro: str (brief intro paragraph)
+    - sections: list of dicts with:
+        - title: str
+        - description: str
+        - bullets: list[str] (optional details)
+        - image_url: str (optional screenshot URL)
+    - cta_text: str (optional)
+    - cta_url: str (optional)
+    """
+    if not settings.RESEND_API_KEY:
+        print("[Email] Skipping detailed product update - RESEND_API_KEY not configured")
+        return False
+
+    version = update_data.get("version", "Update")
+    headline = update_data.get("headline", "What's New")
+    intro = update_data.get("intro", "")
+    sections = update_data.get("sections", [])
+    cta_text = update_data.get("cta_text", "SEE FULL CHANGELOG")
+    cta_url = update_data.get("cta_url", f"{settings.FRONTEND_URL}/changelog")
+
+    # Build section rows
+    section_html = ""
+    for i, section in enumerate(sections):
+        title = section.get("title", "")
+        description = section.get("description", "")
+        bullets = section.get("bullets", [])
+        image_url = section.get("image_url")
+
+        # Build bullet list if provided
+        bullet_html = ""
+        if bullets:
+            bullet_items = "".join(
+                f'<tr><td style="color: #7dd3a8; padding-right: 8px; vertical-align: top;">→</td>'
+                f'<td style="color: #888; font-size: 12px; line-height: 1.5; padding-bottom: 6px;">{b}</td></tr>'
+                for b in bullets
+            )
+            bullet_html = f"""
+                <table cellpadding="0" cellspacing="0" style="margin-top: 12px;">
+                    {bullet_items}
+                </table>
+            """
+
+        # Build image if provided
+        image_html = ""
+        if image_url:
+            image_html = f"""
+                <table cellpadding="0" cellspacing="0" style="margin-top: 16px;">
+                    <tr>
+                        <td style="background: #222; border: 1px solid #333; padding: 8px;">
+                            <img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; display: block;" />
+                        </td>
+                    </tr>
+                </table>
+            """
+
+        # Section number
+        num = i + 1
+
+        section_html += f"""
+        <tr>
+            <td style="padding: 24px 0; border-bottom: 1px solid #333;">
+                <!-- Section header -->
+                <table cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                        <td style="width: 32px; height: 32px; background: #333; text-align: center; vertical-align: middle; font-size: 14px; font-weight: bold; color: #7dd3a8;">{num}</td>
+                        <td style="padding-left: 14px; vertical-align: middle;">
+                            <p style="margin: 0; color: #fff; font-size: 16px; font-weight: bold;">{title}</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Description -->
+                <p style="margin: 14px 0 0 0; color: #888; font-size: 13px; line-height: 1.6;">
+                    {description}
+                </p>
+
+                {bullet_html}
+                {image_html}
+            </td>
+        </tr>
+        """
+
+    content = f"""
+        <!-- Version Badge -->
+        <table cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+            <tr>
+                <td style="background: #7dd3a8; padding: 6px 12px; font-size: 10px; letter-spacing: 2px; color: #111; font-weight: bold;">
+                    {version.upper()}
+                </td>
+            </tr>
+        </table>
+
+        <!-- Headline -->
+        <h1 style="margin: 0 0 16px 0; color: #fff; font-size: 26px; font-weight: bold; line-height: 1.3;">
+            {headline}
+        </h1>
+
+        <!-- Intro -->
+        <p style="margin: 0 0 32px 0; color: #888; font-size: 14px; line-height: 1.7;">
+            {intro}
+        </p>
+
+        <!-- Sections -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 32px;">
+            {section_html}
+        </table>
+
+        <!-- CTA -->
+        <table cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+            <tr>
+                <td style="background: #7dd3a8; padding: 14px 28px;">
+                    <a href="{cta_url}" style="color: #111; font-size: 11px; font-weight: bold; letter-spacing: 2px; text-decoration: none;">{cta_text} →</a>
+                </td>
+            </tr>
+        </table>
+
+        <!-- Sign off -->
+        <p style="margin: 0; color: #666; font-size: 12px; line-height: 1.6;">
+            Thanks for being part of WondersTracker.<br><br>
+            — Cody
+        </p>
+    """
+
+    try:
+        _send_email(
+            {
+                "from": "Cody from WondersTracker <cody@wonderstracker.com>",
+                "to": [to_email],
+                "subject": f"{headline} — {version}",
+                "html": _email_wrapper(content, "PRODUCT UPDATE"),
+            }
+        )
+        print(f"[Email] Detailed product update sent to {to_email}")
+        return True
+    except Exception as e:
+        print(f"[Email] Failed to send detailed product update to {to_email}: {e}")
+        return False
