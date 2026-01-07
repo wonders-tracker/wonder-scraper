@@ -2,13 +2,13 @@ from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Type alias for notification callback
-StateChangeCallback = Callable[[str, str, str], None]  # (name, old_state, new_state)
+# Type alias for notification callback - return value is ignored
+StateChangeCallback = Callable[[str, str, str], Any]  # (name, old_state, new_state)
 
 # Global notification callback - set by application on startup
 _notification_callback: Optional[StateChangeCallback] = None
