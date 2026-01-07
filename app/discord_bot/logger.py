@@ -365,7 +365,9 @@ def log_circuit_breaker_change(name: str, old_state: str, new_state: str) -> boo
     else:  # half_open
         emoji = "🟡"
         title = f"{emoji} Circuit HALF-OPEN: {name}"
-        description = f"**{name.upper()}** scraper circuit breaker is **TESTING**\n\nAllowing limited requests to test recovery."
+        description = (
+            f"**{name.upper()}** scraper circuit breaker is **TESTING**\n\nAllowing limited requests to test recovery."
+        )
         color = 0xF59E0B  # Yellow
 
     return _send_log(

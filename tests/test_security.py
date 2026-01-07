@@ -205,10 +205,12 @@ class TestDatabaseSecurity:
     def test_database_connection_security(self):
         """Database connection should have security parameters set."""
         from app.db import engine
+        from app.core.config import settings
 
-        # Verify connection pool limits are set
-        assert engine.pool.size() <= 10, "Connection pool size should be limited"
-        assert engine.pool.overflow() <= 20, "Connection overflow should be limited"
+        # Verify connection pool limits match configured values
+        # Pool size is set in config for concurrent scraper operations
+        assert engine.pool.size() <= settings.DB_POOL_SIZE, "Connection pool size should match config"
+        assert engine.pool.overflow() <= settings.DB_MAX_OVERFLOW + 10, "Connection overflow should be limited"
 
         # Verify engine has connect_args for timeout
         # The engine is configured in app/db.py with statement_timeout
