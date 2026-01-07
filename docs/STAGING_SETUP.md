@@ -8,8 +8,21 @@ This guide walks through setting up the complete staging environment.
 |-----------|-----------|
 | **Backend** | https://wonder-scraper-staging-staging.up.railway.app |
 | **Health Check** | https://wonder-scraper-staging-staging.up.railway.app/health |
+| **Detailed Health** | https://wonder-scraper-staging-staging.up.railway.app/health/detailed |
+| **Circuit Breakers** | https://wonder-scraper-staging-staging.up.railway.app/health/circuits |
 | **Database** | Neon `staging` branch |
 | **Railway Service** | `wonder-scraper-staging` in `staging` environment |
+| **Railway Project** | `dynamic-prosperity` |
+
+## Current Production Environment
+
+| Component | URL/Value |
+|-----------|-----------|
+| **Backend** | https://wonder-scraper-production.up.railway.app |
+| **Frontend** | https://wonderstracker.com |
+| **API (via proxy)** | https://wonderstracker.com/api/v1 |
+| **Database** | Neon `main` branch |
+| **Railway Service** | `wonder-scraper` in `production` environment |
 
 ## Prerequisites
 
@@ -255,3 +268,124 @@ curl https://wonderstracker.com/api/v1/health/detailed
 1. Verify Neon staging branch exists
 2. Check connection string has `-pooler` suffix
 3. Verify IP allowlist (if using Neon's IP restrictions)
+
+## CI/CD Pipeline
+
+### Automated Checks
+
+Every push triggers these CI jobs:
+
+| Job | Duration | Purpose |
+|-----|----------|---------|
+| backend-test | ~3m | Pytest with PostgreSQL |
+| backend-lint | ~30s | Ruff + ty type checker |
+| frontend-test | ~45s | TypeScript + ESLint + Build |
+| frontend-bundle-integrity | ~8s | Validates production bundle |
+| security-scan | ~15s | Trivy vulnerability scan |
+| migration-check | ~5s | Detects dangerous migrations (PRs only) |
+
+### Staging-Specific Checks
+
+On push to `staging` branch:
+
+| Job | Duration | Purpose |
+|-----|----------|---------|
+| staging-smoke-test | ~10s | Health checks + auth validation |
+
+### Production-Specific Checks
+
+On PRs to `main` branch:
+
+| Job | Duration | Purpose |
+|-----|----------|---------|
+| production-auth-check | ~5s | Validates production OAuth config |
+
+### Auth Configuration Validation
+
+CI automatically validates:
+- Discord redirect URI matches expected domain
+- HTTPS is used
+- Callback path is correct (`/api/v1/auth/discord/callback`)
+
+**Staging:** Redirect URI must match staging Railway URL
+**Production:** Redirect URI must NOT point to Railway (must use frontend domain)
+
+## OAuth Configuration
+
+### Discord Redirect URIs
+
+**CRITICAL:** Always update Discord Developer Portal BEFORE changing Railway env vars.
+
+| Environment | Redirect URI |
+|-------------|-------------|
+| Production | `https://wonderstracker.com/api/v1/auth/discord/callback` |
+| Staging | `https://wonder-scraper-staging-staging.up.railway.app/api/v1/auth/discord/callback` |
+| Local | `http://localhost:8000/api/v1/auth/discord/callback` |
+
+### Updating Redirect URI
+
+1. Go to https://discord.com/developers/applications
+2. Select your app (Client ID: `1441887300081680545`)
+3. Go to **OAuth2** → **Redirects**
+4. Add the new redirect URI
+5. Save changes
+6. **THEN** update Railway environment variable:
+   ```bash
+   railway environment production
+   railway variables --set "DISCORD_REDIRECT_URI=https://wonderstracker.com/api/v1/auth/discord/callback"
+   railway redeploy -y
+   ```
+
+### Why This Matters
+
+Discord OAuth flow:
+```
+User → Discord Login → Discord Callback → Backend Sets Cookies → Frontend
+```
+
+If redirect URI domain ≠ frontend domain, cookies won't be sent to frontend = broken auth.
+
+## Quick Reference
+
+### Deploy to Staging
+```bash
+# From feature branch
+gh pr create --base staging
+gh pr merge <PR_NUMBER> --merge
+curl https://wonder-scraper-staging-staging.up.railway.app/health
+```
+
+### Deploy to Production
+```bash
+# From staging
+gh pr create --base main --head staging --title "Release: description"
+gh pr merge <PR_NUMBER> --merge
+curl https://wonder-scraper-production.up.railway.app/health
+```
+
+### Emergency Rollback
+```bash
+# Railway rollback
+railway environment production
+railway rollback
+
+# Or via dashboard: Railway → Deployments → Rollback
+```
+
+### Check Logs
+```bash
+# Staging
+railway environment staging
+railway logs
+
+# Production
+railway environment production
+railway logs
+```
+
+### Update Environment Variable
+```bash
+railway environment production  # or staging
+railway variables --set "KEY=value"
+railway redeploy -y
+```
