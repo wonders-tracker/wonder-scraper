@@ -101,8 +101,9 @@ jobs:
           ALGORITHM: HS256
         run: |
           echo "🧪 Running tests (SaaS: ${{ steps.saas-check.outputs.saas_available }})"
-          # Run tests - SaaS tests are auto-skipped when saas/ module not available
-          poetry run pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
+          # Run tests with fail-fast and minimal output for speed
+          # SaaS tests are auto-skipped when saas/ module not available
+          poetry run pytest tests/ -x --tb=short --cov=app --cov-report=xml
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -124,9 +125,18 @@ jobs:
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-lint-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-root
+        run: poetry install --no-interaction --no-root --only=dev
 
       - name: Run ruff check
         run: poetry run ruff check app/ --output-format=github
@@ -164,10 +174,17 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Build
+      - name: Build production bundle
         run: npm run build
         env:
-          VITE_API_URL: http://localhost:8000
+          VITE_API_URL: https://wonder-scraper-production.up.railway.app
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 1
 
   frontend-bundle-integrity:
     name: Frontend Bundle Integrity
@@ -181,20 +198,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build production bundle
-        run: npm run build
-        env:
-          VITE_API_URL: https://wonder-scraper-production.up.railway.app
+          name: frontend-dist
+          path: frontend/dist
 
       - name: Validate bundle structure
         run: |
@@ -354,8 +362,15 @@ jobs:
     steps:
       - name: Wait for Railway deployment
         run: |
-          echo "Waiting 90 seconds for Railway staging deployment..."
-          sleep 90
+          echo "Polling for Railway staging deployment (max 2 min)..."
+          for i in {1..12}; do
+            if curl -sf https://wonder-scraper-staging-staging.up.railway.app/health > /dev/null 2>&1; then
+              echo "Staging is up after $((i*10)) seconds"
+              break
+            fi
+            echo "Attempt $i/12 - waiting 10s..."
+            sleep 10
+          done
 
       - name: Health check - Basic
         run: |
