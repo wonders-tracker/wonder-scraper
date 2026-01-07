@@ -198,20 +198,145 @@ curl -s https://api.wonderstracker.com/health/detailed | python -m json.tool
 - Column type changes
 - NOT NULL without defaults
 
-## CI/CD
+## CI/CD Pipeline
 
-GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push to main/staging/preview:
+GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push to main/staging/preview.
 
-**All branches:**
-- **backend-test**: Runs pytest with PostgreSQL
-- **backend-lint**: Runs ruff check/format and ty type check
-- **frontend-test**: Runs typecheck, lint, and build
-- **frontend-bundle-integrity**: Validates production bundle structure
-- **security-scan**: Trivy vulnerability scanner
-- **migration-check**: Detects dangerous database migrations (PRs only)
+### CI Jobs
 
-**Staging branch only:**
-- **staging-smoke-test**: Health checks and API tests after deploy
+| Job | Trigger | Duration | Description |
+|-----|---------|----------|-------------|
+| **backend-test** | All branches | ~3m | Pytest with PostgreSQL service container |
+| **backend-lint** | All branches | ~30s | Ruff check/format + ty type check (cached) |
+| **frontend-test** | All branches | ~45s | TypeScript, ESLint, Vite build |
+| **frontend-bundle-integrity** | All branches | ~8s | Validates React chunks, syntax check (reuses build artifact) |
+| **security-scan** | All branches | ~15s | Trivy vulnerability scanner |
+| **migration-check** | PRs only | ~5s | Detects DROP/ALTER operations |
+| **staging-smoke-test** | staging push | ~10s | Health checks + auth validation |
+| **production-auth-check** | PRs to main | ~5s | Validates production auth config |
+
+### Running CI Locally
+
+```bash
+# Run all checks locally
+./scripts/ci-local.sh
+
+# Backend only
+./scripts/ci-local.sh backend
+
+# Frontend only
+./scripts/ci-local.sh frontend
+
+# Quick lint check
+./scripts/ci-local.sh quick
+```
+
+### CI Optimizations
+
+- **Dependency caching**: Backend lint uses cached virtualenv
+- **Build artifact reuse**: Frontend bundle integrity reuses build from frontend-test
+- **Polling over sleep**: Staging smoke test polls for deployment (vs fixed 90s wait)
+- **Fail-fast tests**: Backend tests use `-x` flag for faster failure feedback
+
+## Deployment
+
+### Production Deployment
+
+```bash
+# 1. Create release PR
+gh pr create --base main --head staging --title "Release: description"
+
+# 2. Merge (auto-deploys to Railway + Vercel)
+gh pr merge <PR_NUMBER> --merge
+
+# 3. Verify
+curl https://wonder-scraper-production.up.railway.app/health
+```
+
+### Staging Deployment
+
+```bash
+# Merge feature to staging (auto-deploys)
+gh pr merge <PR_NUMBER> --merge
+
+# Verify
+curl https://wonder-scraper-staging-staging.up.railway.app/health
+```
+
+### Railway CLI Commands
+
+```bash
+# Switch environments
+railway environment production
+railway environment staging
+
+# Check variables
+railway variables
+
+# Update variable
+railway variables --set "KEY=value"
+
+# Redeploy
+railway redeploy -y
+
+# View logs
+railway logs
+```
+
+### Rollback
+
+**Railway (code):**
+1. Go to Railway Dashboard → Service → Deployments
+2. Find previous working deployment
+3. Click **Rollback**
+
+**Or via CLI:**
+```bash
+railway rollback
+```
+
+**Neon (database):**
+```bash
+# Point-in-time recovery
+neonctl branches restore staging --timestamp "2024-01-01T00:00:00Z"
+
+# Reset staging to production
+neonctl branches delete staging
+neonctl branches create --name staging --parent main
+```
+
+## OAuth Configuration
+
+### Discord OAuth Setup
+
+**CRITICAL:** When changing `DISCORD_REDIRECT_URI`, update Discord Developer Portal FIRST.
+
+**Production redirect URI:**
+```
+https://wonderstracker.com/api/v1/auth/discord/callback
+```
+
+**Staging redirect URI:**
+```
+https://wonder-scraper-staging-staging.up.railway.app/api/v1/auth/discord/callback
+```
+
+**To update:**
+1. Go to https://discord.com/developers/applications
+2. Select app → OAuth2 → Redirects
+3. Add/update redirect URI
+4. Save
+5. THEN update Railway environment variable
+
+### Auth Flow
+
+```
+User → Frontend → Discord OAuth → Backend Callback → Set Cookies → Redirect to Frontend
+```
+
+Cookies must be set on the same domain as the frontend for auth to work:
+- Production: `wonderstracker.com` (via Vercel proxy)
+- Staging: Direct Railway URL (no separate frontend)
 
 ## Key Directories
 
