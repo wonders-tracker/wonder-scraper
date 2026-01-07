@@ -27,6 +27,7 @@ class User(SQLModel, table=True):
 
     # Email Marketing
     personal_welcome_sent_at: Optional[datetime] = Field(default=None, nullable=True)  # 1-day delayed personal welcome
+    marketing_emails_enabled: bool = Field(default=True)  # User can unsubscribe from digests/promos
 
     # Password Reset (token is hashed before storage)
     password_reset_token_hash: Optional[str] = Field(default=None, nullable=True, index=True)

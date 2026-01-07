@@ -64,6 +64,29 @@ def complete_onboarding(
     return {"message": "Onboarding completed", "onboarding_completed": True}
 
 
+class UnsubscribeRequest(BaseModel):
+    marketing_emails: bool = False
+
+
+@router.post("/me/unsubscribe")
+def unsubscribe_from_emails(
+    request: UnsubscribeRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    Unsubscribe from marketing emails (digests, promotions).
+    Account-related emails (password reset, security) are still sent.
+    """
+    current_user.marketing_emails_enabled = request.marketing_emails
+    session.add(current_user)
+    session.commit()
+    return {
+        "message": "Email preferences updated",
+        "marketing_emails_enabled": current_user.marketing_emails_enabled,
+    }
+
+
 # ============== API KEY MANAGEMENT ==============
 
 
