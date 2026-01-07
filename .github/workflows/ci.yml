@@ -398,9 +398,84 @@ jobs:
             echo "::warning::Some circuit breakers are not healthy"
           fi
 
+      - name: Auth configuration validation
+        run: |
+          echo "=== Auth Configuration Validation ==="
+
+          # Get Discord login URL
+          DISCORD_URL=$(curl -sf https://wonder-scraper-staging-staging.up.railway.app/api/v1/auth/discord/login | jq -r '.url')
+          echo "Discord OAuth URL: $DISCORD_URL"
+
+          # Extract redirect_uri
+          REDIRECT_URI=$(echo "$DISCORD_URL" | grep -oP 'redirect_uri=\K[^&]+' | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))")
+          echo "Redirect URI: $REDIRECT_URI"
+
+          # CRITICAL: Redirect URI must NOT point directly to Railway backend
+          # It must go through the frontend domain (Vercel proxy) so cookies work
+          if echo "$REDIRECT_URI" | grep -q "railway.app"; then
+            echo "::error::CRITICAL: Discord redirect_uri points to Railway backend!"
+            echo "::error::This breaks auth because cookies will be set on wrong domain."
+            echo "::error::DISCORD_REDIRECT_URI must use frontend domain (e.g., wonderstracker.com)"
+            exit 1
+          fi
+
+          # Check HTTPS
+          if ! echo "$REDIRECT_URI" | grep -q "^https://"; then
+            echo "::error::redirect_uri must use HTTPS"
+            exit 1
+          fi
+          echo "✓ HTTPS check passed"
+
+          # Check path
+          if ! echo "$REDIRECT_URI" | grep -q "/api/v1/auth/discord/callback"; then
+            echo "::error::redirect_uri has incorrect path"
+            exit 1
+          fi
+          echo "✓ Path check passed"
+
+          echo ""
+          echo "✓ Auth configuration validation PASSED"
+
       - name: Smoke test summary
         run: |
           echo ""
           echo "=== Staging Smoke Test Complete ==="
           echo "Staging URL: https://wonder-scraper-staging-staging.up.railway.app"
           echo "All critical endpoints responding correctly"
+
+  production-auth-check:
+    name: Production Auth Config Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+
+    steps:
+      - name: Validate production auth configuration
+        run: |
+          echo "=== Production Auth Configuration Check ==="
+          echo "Verifying current production auth config is correct..."
+
+          # Get Discord login URL from production
+          DISCORD_URL=$(curl -sf https://wonder-scraper-production.up.railway.app/api/v1/auth/discord/login | jq -r '.url') || {
+            echo "::warning::Could not reach production API"
+            exit 0
+          }
+
+          echo "Discord OAuth URL: $DISCORD_URL"
+
+          # Extract redirect_uri
+          REDIRECT_URI=$(echo "$DISCORD_URL" | grep -oP 'redirect_uri=\K[^&]+' | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))")
+          echo "Redirect URI: $REDIRECT_URI"
+
+          # Validate redirect_uri points to frontend domain, not Railway backend
+          if echo "$REDIRECT_URI" | grep -q "railway.app"; then
+            echo "::error::PRODUCTION AUTH MISCONFIGURED!"
+            echo "::error::Discord redirect_uri points to Railway backend: $REDIRECT_URI"
+            echo "::error::This breaks authentication - cookies set on wrong domain."
+            echo ""
+            echo "Fix: Update DISCORD_REDIRECT_URI in Railway production to:"
+            echo "  https://wonderstracker.com/api/v1/auth/discord/callback"
+            exit 1
+          fi
+
+          echo "✓ Production auth configuration is correct"
+          echo "  Redirect URI: $REDIRECT_URI"
