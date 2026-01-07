@@ -13,8 +13,7 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-from unittest.mock import patch, MagicMock
+from sqlmodel import Session
 
 from app.main import app
 from app.db import get_session
@@ -26,6 +25,7 @@ from app.core.jwt import decode_token
 @pytest.fixture
 def client(test_session: Session):
     """Create test client with overridden database session."""
+
     def get_test_session():
         yield test_session
 
@@ -58,16 +58,13 @@ class TestRegistrationFlow:
         """Registration should create user and return user data."""
         response = client.post(
             "/api/v1/auth/register",
-            json={
-                "email": "newuser@test.com",
-                "password": "validpassword123"
-            },
+            json={"email": "newuser@test.com", "password": "validpassword123"},
             headers={
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         assert response.status_code == 200
@@ -83,16 +80,13 @@ class TestRegistrationFlow:
         # Register
         register_response = client.post(
             "/api/v1/auth/register",
-            json={
-                "email": "reglogin@test.com",
-                "password": "validpassword123"
-            },
+            json={"email": "reglogin@test.com", "password": "validpassword123"},
             headers={
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         assert register_response.status_code == 200
 
@@ -108,7 +102,7 @@ class TestRegistrationFlow:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         assert login_response.status_code == 200
@@ -122,16 +116,13 @@ class TestRegistrationFlow:
 
         response = client.post(
             "/api/v1/auth/register",
-            json={
-                "email": user.email,
-                "password": "anotherpassword123"
-            },
+            json={"email": user.email, "password": "anotherpassword123"},
             headers={
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         assert response.status_code == 400
@@ -141,9 +132,7 @@ class TestRegistrationFlow:
 class TestLoginFlow:
     """E2E tests for user login."""
 
-    def test_login_returns_tokens_and_sets_cookies(
-        self, client: TestClient, registered_user: tuple[User, str]
-    ):
+    def test_login_returns_tokens_and_sets_cookies(self, client: TestClient, registered_user: tuple[User, str]):
         """Login should return access token and set refresh cookie."""
         user, password = registered_user
 
@@ -158,7 +147,7 @@ class TestLoginFlow:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         assert response.status_code == 200
@@ -177,9 +166,7 @@ class TestLoginFlow:
         # Should set refresh token cookie
         assert "refresh_token" in response.cookies
 
-    def test_login_with_wrong_password_fails(
-        self, client: TestClient, registered_user: tuple[User, str]
-    ):
+    def test_login_with_wrong_password_fails(self, client: TestClient, registered_user: tuple[User, str]):
         """Login with wrong password should fail with 400."""
         user, _ = registered_user
 
@@ -194,7 +181,7 @@ class TestLoginFlow:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         # API returns 400 for invalid credentials (not 401)
@@ -214,7 +201,7 @@ class TestLoginFlow:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         # API returns 400 for invalid credentials
@@ -224,9 +211,7 @@ class TestLoginFlow:
 class TestRefreshFlow:
     """E2E tests for token refresh."""
 
-    def test_refresh_returns_new_access_token(
-        self, client: TestClient, registered_user: tuple[User, str]
-    ):
+    def test_refresh_returns_new_access_token(self, client: TestClient, registered_user: tuple[User, str]):
         """Refresh should return a valid access token."""
         user, password = registered_user
 
@@ -239,7 +224,7 @@ class TestRefreshFlow:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         assert login_response.status_code == 200
 
@@ -272,9 +257,7 @@ class TestRefreshFlow:
         # Token should have proper structure
         assert new_access.count(".") == 2  # JWT has 3 parts
 
-    def test_refresh_rotates_refresh_token(
-        self, client: TestClient, registered_user: tuple[User, str]
-    ):
+    def test_refresh_rotates_refresh_token(self, client: TestClient, registered_user: tuple[User, str]):
         """Refresh should rotate the refresh token (cookie changes)."""
         user, password = registered_user
 
@@ -287,7 +270,7 @@ class TestRefreshFlow:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         original_refresh = login_response.cookies.get("refresh_token")
         assert original_refresh is not None
@@ -329,9 +312,7 @@ class TestRefreshFlow:
 class TestProtectedResourceAccess:
     """E2E tests for accessing protected resources."""
 
-    def test_access_protected_with_valid_token(
-        self, client: TestClient, registered_user: tuple[User, str]
-    ):
+    def test_access_protected_with_valid_token(self, client: TestClient, registered_user: tuple[User, str]):
         """Should access protected resource with valid access token."""
         user, password = registered_user
 
@@ -344,7 +325,7 @@ class TestProtectedResourceAccess:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         access_token = login_response.json()["access_token"]
 
@@ -357,7 +338,7 @@ class TestProtectedResourceAccess:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         assert me_response.status_code == 200
@@ -373,7 +354,7 @@ class TestProtectedResourceAccess:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         assert response.status_code == 401
@@ -382,9 +363,7 @@ class TestProtectedResourceAccess:
 class TestLogoutFlow:
     """E2E tests for logout."""
 
-    def test_logout_clears_cookies(
-        self, client: TestClient, registered_user: tuple[User, str]
-    ):
+    def test_logout_clears_cookies(self, client: TestClient, registered_user: tuple[User, str]):
         """Logout should clear auth cookies."""
         user, password = registered_user
 
@@ -397,7 +376,7 @@ class TestLogoutFlow:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         access_token = login_response.json()["access_token"]
 
@@ -422,15 +401,13 @@ class TestLogoutFlow:
             if "refresh_token" in cookie or "access_token" in cookie:
                 # Cookie should be expired/deleted (contains max-age=0 or expires in past)
                 cookie_lower = cookie.lower()
-                assert "max-age=0" in cookie_lower or 'expires=' in cookie_lower
+                assert "max-age=0" in cookie_lower or "expires=" in cookie_lower
 
 
 class TestPasswordResetFlow:
     """E2E tests for password reset."""
 
-    def test_forgot_password_accepts_valid_email(
-        self, client: TestClient, registered_user: tuple[User, str]
-    ):
+    def test_forgot_password_accepts_valid_email(self, client: TestClient, registered_user: tuple[User, str]):
         """Forgot password should accept valid email (security: same response for invalid)."""
         user, _ = registered_user
 
@@ -442,7 +419,7 @@ class TestPasswordResetFlow:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         # Should always return 200 to not leak user existence
@@ -458,15 +435,13 @@ class TestPasswordResetFlow:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         # Should return 200 even for non-existent email (security)
         assert response.status_code == 200
 
-    def test_reset_password_with_valid_token(
-        self, test_session: Session, client: TestClient
-    ):
+    def test_reset_password_with_valid_token(self, test_session: Session, client: TestClient):
         """Reset password should work with valid token."""
         # Create user with reset token
         raw_token = secrets.token_urlsafe(32)
@@ -485,16 +460,13 @@ class TestPasswordResetFlow:
         # Reset password
         response = client.post(
             "/api/v1/auth/reset-password",
-            json={
-                "token": raw_token,
-                "new_password": "newpassword456"
-            },
+            json={"token": raw_token, "new_password": "newpassword456"},
             headers={
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         assert response.status_code == 200
@@ -506,9 +478,7 @@ class TestPasswordResetFlow:
         # Token should be cleared
         assert user.password_reset_token_hash is None
 
-    def test_reset_password_with_expired_token_fails(
-        self, test_session: Session, client: TestClient
-    ):
+    def test_reset_password_with_expired_token_fails(self, test_session: Session, client: TestClient):
         """Reset password should fail with expired token."""
         raw_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
@@ -525,16 +495,13 @@ class TestPasswordResetFlow:
 
         response = client.post(
             "/api/v1/auth/reset-password",
-            json={
-                "token": raw_token,
-                "new_password": "newpassword456"
-            },
+            json={"token": raw_token, "new_password": "newpassword456"},
             headers={
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         assert response.status_code == 400
@@ -565,7 +532,7 @@ class TestInactiveUserFlow:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
 
         # API returns 400 for inactive user
@@ -590,7 +557,7 @@ class TestCompleteUserJourney:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         assert register_response.status_code == 200
         assert register_response.json()["email"] == email
@@ -604,7 +571,7 @@ class TestCompleteUserJourney:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         assert login_response.status_code == 200
         access_token_1 = login_response.json()["access_token"]
@@ -619,7 +586,7 @@ class TestCompleteUserJourney:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         assert me_response_1.status_code == 200
         assert me_response_1.json()["email"] == email
@@ -648,7 +615,7 @@ class TestCompleteUserJourney:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         assert me_response_2.status_code == 200
 

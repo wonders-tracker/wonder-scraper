@@ -1,10 +1,11 @@
 from sqlmodel import Session, text
 from app.db import engine
 
+
 def migrate_marketprice():
     with Session(engine) as session:
         print("Checking for missing columns in 'marketprice' table...")
-        
+
         # Check if listing_type column exists
         try:
             session.exec(text("SELECT listing_type FROM marketprice LIMIT 1"))
@@ -21,6 +22,6 @@ def migrate_marketprice():
                 session.rollback()
                 print(f"Failed to add column: {e}")
 
+
 if __name__ == "__main__":
     migrate_marketprice()
-

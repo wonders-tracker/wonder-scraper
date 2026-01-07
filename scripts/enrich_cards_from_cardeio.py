@@ -25,7 +25,6 @@ Usage:
 import argparse
 import asyncio
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -77,7 +76,7 @@ def normalize_name(name: str) -> str:
     # Normalize quotes
     normalized = normalized.replace("'", "'").replace("'", "'")
     # Remove double quotes entirely (DB has "Fixem" but Carde.io has Fixem)
-    normalized = normalized.replace('"', '')
+    normalized = normalized.replace('"', "")
     # Apply manual aliases for known typos
     normalized = NAME_ALIASES.get(normalized, normalized)
     return normalized
@@ -224,7 +223,7 @@ async def enrich_cards(
                     session.commit()  # Commit each card to avoid idle timeout
                     stats["updated_fields"] += 1
                 except AttributeError as e:
-                    print(f"  Error: Card model missing fields. Run migration first.")
+                    print("  Error: Card model missing fields. Run migration first.")
                     print(f"  Details: {e}")
                     stats["errors"] += 1
                     continue
@@ -235,7 +234,7 @@ async def enrich_cards(
 
                 if current_image:
                     if verbose:
-                        print(f"  Image: Already has image")
+                        print("  Image: Already has image")
                     stats["skipped_images"] += 1
                 else:
                     print(f"  Image: {cardeio_image_url}")
@@ -263,7 +262,7 @@ async def enrich_cards(
                         else:
                             stats["errors"] += 1
                     else:
-                        print(f"  -> Would upload to Vercel Blob")
+                        print("  -> Would upload to Vercel Blob")
 
             if changes or (not skip_images and cardeio_image_url):
                 print()

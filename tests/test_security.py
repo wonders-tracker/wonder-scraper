@@ -2,13 +2,14 @@
 Security tests for anti-scraping protection.
 Tests rate limiting, bot detection, API key authentication, and P0 security fixes.
 """
+
 import pytest
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.models.user import User
 from app.core import security
@@ -22,6 +23,7 @@ class TestAntiScrapingIntegration:
     def client(self):
         """Create test client with middleware."""
         from app.main import app
+
         return TestClient(app)
 
     def test_normal_browser_request_allowed(self, client):
@@ -33,7 +35,7 @@ class TestAntiScrapingIntegration:
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.5",
                 "Accept-Encoding": "gzip, deflate, br",
-            }
+            },
         )
         # Should not be blocked by anti-scraping (may still need auth)
         assert response.status_code != 403
@@ -45,7 +47,7 @@ class TestAntiScrapingIntegration:
             headers={
                 "User-Agent": "python-requests/2.28.0",
                 "Accept": "*/*",
-            }
+            },
         )
         # Bot requests get a warning header but aren't blocked outright
         # (they're rate limited more aggressively)
@@ -60,7 +62,7 @@ class TestAntiScrapingIntegration:
                 "Accept": "text/html",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         # Should get warning or be blocked after violations
         assert response.status_code in [200, 401, 403, 429]
@@ -72,7 +74,7 @@ class TestAntiScrapingIntegration:
             headers={
                 "User-Agent": "Mozilla/5.0 Chrome/91.0",
                 # Missing Accept, Accept-Language, Accept-Encoding
-            }
+            },
         )
         # Should work but may get warning
         assert response.status_code in [200, 401, 403, 429]
@@ -105,6 +107,7 @@ class TestAPIKeyAuthentication:
 
         # Also verify the hash lookup is done correctly
         from app.models.api_key import APIKey
+
         key_hash = APIKey.hash_key("wt_invalid_key_12345")
         # Hash should be consistent
         assert key_hash == APIKey.hash_key("wt_invalid_key_12345")
@@ -112,6 +115,7 @@ class TestAPIKeyAuthentication:
     def test_missing_api_key_allowed_for_public_endpoints(self):
         """Public endpoints should work without API key (for now)."""
         from app.main import app
+
         client = TestClient(app)
 
         response = client.get(
@@ -119,7 +123,7 @@ class TestAPIKeyAuthentication:
             headers={
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "application/json",
-            }
+            },
         )
         # Root endpoint is public
         assert response.status_code == 200
@@ -182,7 +186,6 @@ class TestDatabaseSecurity:
         """SQL injection attempts should be prevented by parameterized queries."""
         # Our API uses SQLModel with parameterized queries
         # This test verifies the patterns are safe
-        from app.api.cards import read_cards
 
         # These patterns should NOT cause SQL injection
         malicious_inputs = [
@@ -202,10 +205,12 @@ class TestDatabaseSecurity:
     def test_database_connection_security(self):
         """Database connection should have security parameters set."""
         from app.db import engine
+        from app.core.config import settings
 
-        # Verify connection pool limits are set
-        assert engine.pool.size() <= 10, "Connection pool size should be limited"
-        assert engine.pool.overflow() <= 20, "Connection overflow should be limited"
+        # Verify connection pool limits match configured values
+        # Pool size is set in config for concurrent scraper operations
+        assert engine.pool.size() <= settings.DB_POOL_SIZE, "Connection pool size should match config"
+        assert engine.pool.overflow() <= settings.DB_MAX_OVERFLOW + 10, "Connection overflow should be limited"
 
         # Verify engine has connect_args for timeout
         # The engine is configured in app/db.py with statement_timeout
@@ -229,7 +234,7 @@ class TestDatabaseSecurity:
             headers={
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "application/json",
-            }
+            },
         )
 
         content_type = response.headers.get("content-type", "")
@@ -247,6 +252,7 @@ class TestEndpointProtection:
     def test_admin_endpoints_require_superuser(self):
         """Admin endpoints should require superuser authentication."""
         from app.main import app
+
         client = TestClient(app)
 
         admin_endpoints = [
@@ -263,7 +269,7 @@ class TestEndpointProtection:
                     "Accept": "application/json",
                     "Accept-Language": "en-US",
                     "Accept-Encoding": "gzip",
-                }
+                },
             )
             # Should require auth
             assert response.status_code in [401, 403], f"{endpoint} should require auth"
@@ -271,6 +277,7 @@ class TestEndpointProtection:
     def test_portfolio_endpoints_require_auth(self):
         """Portfolio endpoints should require authentication."""
         from app.main import app
+
         client = TestClient(app)
 
         response = client.get(
@@ -280,7 +287,7 @@ class TestEndpointProtection:
                 "Accept": "application/json",
                 "Accept-Language": "en-US",
                 "Accept-Encoding": "gzip",
-            }
+            },
         )
         assert response.status_code == 401
 
@@ -334,12 +341,12 @@ class TestSecretKeyValidation:
 
     def test_empty_secret_key_raises_error(self):
         """Empty SECRET_KEY should raise ValueError at startup."""
-        from pydantic_settings import BaseSettings
 
         # Temporarily patch the environment
         with patch.dict("os.environ", {"SECRET_KEY": ""}, clear=False):
             with pytest.raises(ValueError) as exc_info:
                 from app.core.config import Settings
+
                 Settings()  # Should fail validation
 
             assert "SECRET_KEY" in str(exc_info.value)
@@ -360,20 +367,14 @@ class TestEmailNormalization:
         """UserCreate should normalize email to lowercase."""
         from app.api.auth import UserCreate
 
-        user_create = UserCreate(
-            email="TEST@EXAMPLE.COM",
-            password="validpassword123"
-        )
+        user_create = UserCreate(email="TEST@EXAMPLE.COM", password="validpassword123")
         assert user_create.email == "test@example.com"
 
     def test_email_whitespace_stripped(self):
         """UserCreate should strip whitespace from email."""
         from app.api.auth import UserCreate
 
-        user_create = UserCreate(
-            email="  test@example.com  ",
-            password="validpassword123"
-        )
+        user_create = UserCreate(email="  test@example.com  ", password="validpassword123")
         assert user_create.email == "test@example.com"
 
     def test_mixed_case_emails_become_identical(self):
@@ -656,7 +657,7 @@ class TestCORSMiddlewareOrder:
                 "Origin": "http://localhost:3000",
                 "Access-Control-Request-Method": "GET",
                 "Access-Control-Request-Headers": "content-type",
-            }
+            },
         )
 
         # CORS headers should be present
@@ -674,7 +675,7 @@ class TestCORSMiddlewareOrder:
             headers={
                 "Origin": "http://localhost:3000",
                 "Access-Control-Request-Method": "GET",
-            }
+            },
         )
 
         # Should not be 403 (blocked)

@@ -8,12 +8,10 @@ Tests cover:
 - Model relationships
 """
 
-import pytest
-from datetime import datetime, timedelta, date, timezone
+from datetime import datetime, date, timezone
 from sqlmodel import Session, select
 
 from app.models.portfolio import PortfolioCard, PortfolioItem, PurchaseSource
-from app.models.card import Card
 from app.models.user import User
 
 
@@ -200,9 +198,7 @@ class TestPortfolioCardModel:
     def test_query_by_source(self, test_session: Session, sample_portfolio_cards):
         """Test filtering portfolio cards by source."""
         ebay_cards = test_session.exec(
-            select(PortfolioCard)
-            .where(PortfolioCard.source == "eBay")
-            .where(PortfolioCard.deleted_at.is_(None))
+            select(PortfolioCard).where(PortfolioCard.source == "eBay").where(PortfolioCard.deleted_at.is_(None))
         ).all()
 
         assert len(ebay_cards) >= 2  # At least 2 eBay cards from fixture
@@ -210,15 +206,11 @@ class TestPortfolioCardModel:
     def test_query_graded_cards(self, test_session: Session, sample_portfolio_cards):
         """Test filtering for graded cards."""
         graded = test_session.exec(
-            select(PortfolioCard)
-            .where(PortfolioCard.grading.isnot(None))
-            .where(PortfolioCard.deleted_at.is_(None))
+            select(PortfolioCard).where(PortfolioCard.grading.isnot(None)).where(PortfolioCard.deleted_at.is_(None))
         ).all()
 
         raw = test_session.exec(
-            select(PortfolioCard)
-            .where(PortfolioCard.grading.is_(None))
-            .where(PortfolioCard.deleted_at.is_(None))
+            select(PortfolioCard).where(PortfolioCard.grading.is_(None)).where(PortfolioCard.deleted_at.is_(None))
         ).all()
 
         assert len(graded) >= 1  # At least 1 graded from fixture

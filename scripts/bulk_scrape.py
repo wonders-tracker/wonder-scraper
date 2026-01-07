@@ -8,6 +8,7 @@ from app.models.market import MarketSnapshot
 from scripts.scrape_card import scrape_card
 from app.scraper.browser import BrowserManager
 
+
 async def bulk_scrape(limit: int = 1000, force_all: bool = False):
     """
     Scrapes a batch of cards.
@@ -15,7 +16,7 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
     """
     print(f"Starting Bulk Scrape (Limit: {limit}, Force: {force_all})...", flush=True)
     print("Connecting to database...", flush=True)
-    
+
     with Session(engine) as session:
         print("Database connected. Fetching cards...", flush=True)
         # Get all cards
@@ -24,7 +25,7 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
 
         cards_to_scrape = []
         cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
-        
+
         for card in all_cards:
             if force_all:
                 cards_to_scrape.append(card)
@@ -36,15 +37,15 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
                     .order_by(MarketSnapshot.timestamp.desc())
                     .limit(1)
                 ).first()
-                
+
                 if not snapshot or snapshot.timestamp < cutoff_time:
                     cards_to_scrape.append(card)
-                
+
             if len(cards_to_scrape) >= limit:
                 break
-                
+
     print(f"Found {len(cards_to_scrape)} cards needing update (out of {len(all_cards)} total).", flush=True)
-    
+
     if not cards_to_scrape:
         print("No cards need updating.")
         return
@@ -73,7 +74,7 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
                     search_term=search_term,
                     set_name=card.set_name,
                     product_type=card.product_type,  # Pass product type
-                    is_backfill=True  # Bulk scrape should capture max historical data
+                    is_backfill=True,  # Bulk scrape should capture max historical data
                 )
             except Exception as e:
                 print(f"Error scraping {card.name}: {e}", flush=True)
@@ -87,11 +88,13 @@ async def bulk_scrape(limit: int = 1000, force_all: bool = False):
         await BrowserManager.close()
         print("Bulk Scrape Complete.", flush=True)
 
+
 if __name__ == "__main__":
     import sys
+
     # Parse command line args
     limit = int(sys.argv[1]) if len(sys.argv) > 1 else 10000  # Higher default for full backfill
-    force_all = '--force' in sys.argv or len(sys.argv) <= 2  # Default to force for backfill
+    force_all = "--force" in sys.argv or len(sys.argv) <= 2  # Default to force for backfill
 
     print(f"Running bulk scrape with limit={limit}, force_all={force_all}")
     asyncio.run(bulk_scrape(limit=limit, force_all=force_all))

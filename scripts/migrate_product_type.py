@@ -1,6 +1,7 @@
 from sqlmodel import Session, text
 from app.db import engine
 
+
 def migrate():
     with Session(engine) as session:
         print("Checking for product_type column in card table...")
@@ -14,6 +15,6 @@ def migrate():
             session.commit()
             print("Added 'product_type' column.")
 
+
 if __name__ == "__main__":
     migrate()
-

@@ -117,15 +117,11 @@ class TestBulkLotIntegration:
         with Session(engine) as session:
             # Count bulk lots
             bulk_count = session.exec(
-                select(func.count())
-                .select_from(MarketPrice)
-                .where(MarketPrice.is_bulk_lot == True)  # noqa: E712
+                select(func.count()).select_from(MarketPrice).where(MarketPrice.is_bulk_lot == True)  # noqa: E712
             ).one()
 
             # Count total listings
-            total_count = session.exec(
-                select(func.count()).select_from(MarketPrice)
-            ).one()
+            total_count = session.exec(select(func.count()).select_from(MarketPrice)).one()
 
             # Verify bulk lots are flagged (should be >0 after backfill)
             assert bulk_count >= 0

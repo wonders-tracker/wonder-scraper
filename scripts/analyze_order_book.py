@@ -26,6 +26,7 @@ from app.db import engine
 # Query Functions
 # =============================================================================
 
+
 def get_asks(card_id: int, platform: str = "ebay", days: int = 30) -> list[dict]:
     """Get active listings (ASK side) for a platform."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
@@ -183,6 +184,7 @@ def get_top_cards_by_listings(limit: int = 10) -> list[dict]:
 # ASCII Visualization
 # =============================================================================
 
+
 def create_price_buckets(prices: list[float], num_buckets: int = 8) -> list[dict]:
     """Create price buckets for visualization."""
     if not prices:
@@ -202,22 +204,20 @@ def create_price_buckets(prices: list[float], num_buckets: int = 8) -> list[dict
             count = sum(1 for p in prices if bucket_min <= p <= bucket_max)
         else:
             count = sum(1 for p in prices if bucket_min <= p < bucket_max)
-        buckets.append({
-            "min": round(bucket_min, 2),
-            "max": round(bucket_max, 2),
-            "mid": round((bucket_min + bucket_max) / 2, 2),
-            "count": count
-        })
+        buckets.append(
+            {
+                "min": round(bucket_min, 2),
+                "max": round(bucket_max, 2),
+                "mid": round((bucket_min + bucket_max) / 2, 2),
+                "count": count,
+            }
+        )
 
     return buckets
 
 
 def render_ascii_order_book(
-    bids: list[dict],
-    asks: list[dict],
-    title: str = "Order Book",
-    width: int = 70,
-    num_buckets: int = 8
+    bids: list[dict], asks: list[dict], title: str = "Order Book", width: int = 70, num_buckets: int = 8
 ) -> str:
     """Render ASCII order book with bids on left, asks on right."""
     bid_prices = [b["price"] for b in bids if b.get("price")]
@@ -227,9 +227,7 @@ def render_ascii_order_book(
     ask_buckets = create_price_buckets(ask_prices, num_buckets)
 
     max_count = max(
-        max((b["count"] for b in bid_buckets), default=0),
-        max((b["count"] for b in ask_buckets), default=0),
-        1
+        max((b["count"] for b in bid_buckets), default=0), max((b["count"] for b in ask_buckets), default=0), 1
     )
 
     bar_width = (width - 24) // 2
@@ -260,7 +258,7 @@ def render_ascii_order_book(
         if i < len(bid_buckets_rev):
             b = bid_buckets_rev[i]
             bar_len = int(b["count"] / max_count * bar_width)
-            bid_bar = '█' * bar_len
+            bid_bar = "█" * bar_len
             bid_str = f"${b['mid']:>6.2f} {bid_bar:>{bar_width}} {b['count']:>3}"
         else:
             bid_str = " " * (width // 2 - 1)
@@ -269,7 +267,7 @@ def render_ascii_order_book(
         if i < len(ask_buckets):
             a = ask_buckets[i]
             bar_len = int(a["count"] / max_count * bar_width)
-            ask_bar = '█' * bar_len
+            ask_bar = "█" * bar_len
             ask_str = f"{a['count']:>3} {ask_bar:<{bar_width}} ${a['mid']:<6.2f}"
         else:
             ask_str = " " * (width // 2 - 1)
@@ -317,8 +315,8 @@ def render_depth_chart(bids: list[dict], asks: list[dict], width: int = 70) -> s
         bid_bar_len = int(bid_cum / max_depth * (bar_width // 2 - 2))
         ask_bar_len = int(ask_cum / max_depth * (bar_width // 2 - 2))
 
-        bid_bar = '█' * bid_bar_len
-        ask_bar = '█' * ask_bar_len
+        bid_bar = "█" * bid_bar_len
+        ask_bar = "█" * ask_bar_len
 
         lines.append(f"${price_level:>8.2f} {bid_bar:>{bar_width//2-1}}|{ask_bar:<{bar_width//2-1}}")
 
@@ -360,13 +358,14 @@ def analyze_spread(bids: list[dict], asks: list[dict], highest_bid_override: flo
         "mid_price": mid_price,
         "bid_depth": len(bid_prices),
         "ask_depth": len(ask_prices),
-        "efficiency": efficiency
+        "efficiency": efficiency,
     }
 
 
 # =============================================================================
 # Main
 # =============================================================================
+
 
 def main():
     parser = ArgumentParser(description="Analyze bid-ask order book")
@@ -390,7 +389,7 @@ def main():
 
         if not args.card_id and not args.card_name:
             print("\nUsage: python scripts/analyze_order_book.py --card-id <ID>")
-            print("       python scripts/analyze_order_book.py --card-name \"Card Name\"")
+            print('       python scripts/analyze_order_book.py --card-name "Card Name"')
             if top_cards:
                 args.card_id = top_cards[0]["id"]
                 print(f"\nUsing top card: {top_cards[0]['name']}")
@@ -400,7 +399,7 @@ def main():
     # Find card
     card = find_card(args.card_id, args.card_name)
     if not card:
-        print(f"\nCard not found!")
+        print("\nCard not found!")
         return
 
     card_id = card["id"]
@@ -438,33 +437,25 @@ def main():
 
         if asks:
             print(f"\n  ASK range: ${min(a['price'] for a in asks):.2f} - ${max(a['price'] for a in asks):.2f}")
-            print(f"  Lowest 5 asks:")
+            print("  Lowest 5 asks:")
             for a in asks[:5]:
-                treatment = a.get('treatment') or 'N/A'
+                treatment = a.get("treatment") or "N/A"
                 print(f"    ${a['price']:>8.2f}  {treatment:<20}")
 
         if sales:
             print(f"\n  BID range: ${min(s['price'] for s in sales):.2f} - ${max(s['price'] for s in sales):.2f}")
-            print(f"  Highest 5 sales:")
+            print("  Highest 5 sales:")
             for s in sales[:5]:
-                treatment = s.get('treatment') or 'N/A'
+                treatment = s.get("treatment") or "N/A"
                 print(f"    ${s['price']:>8.2f}  {treatment:<20}")
 
         # Platform order book visualization
         if asks or sales:
-            print(render_ascii_order_book(
-                bids=sales,
-                asks=asks,
-                title=f"{platform.upper()} Order Book: {card_name}"
-            ))
+            print(render_ascii_order_book(bids=sales, asks=asks, title=f"{platform.upper()} Order Book: {card_name}"))
 
     # Combined view if multiple platforms
     if len(platforms) > 1 and (all_asks or all_sales):
-        print(render_ascii_order_book(
-            bids=all_sales,
-            asks=all_asks,
-            title=f"COMBINED Order Book: {card_name}"
-        ))
+        print(render_ascii_order_book(bids=all_sales, asks=all_asks, title=f"COMBINED Order Book: {card_name}"))
 
     # =========================================================================
     # Blokpax Data (from dedicated tables)
@@ -488,8 +479,10 @@ def main():
     print(f"  BID side: {len(bpx_sales)} sales + {len(bpx_bids)} open offers")
 
     if bpx_sales:
-        print(f"\n  Sales price range: ${min(s['price'] for s in bpx_sales):.2f} - ${max(s['price'] for s in bpx_sales):.2f}")
-        print(f"  Recent sales:")
+        print(
+            f"\n  Sales price range: ${min(s['price'] for s in bpx_sales):.2f} - ${max(s['price'] for s in bpx_sales):.2f}"
+        )
+        print("  Recent sales:")
         for s in bpx_sales[:5]:
             print(f"    ${s['price']:>8.2f}  {s.get('title', 'N/A')[:40]}")
 
@@ -497,11 +490,7 @@ def main():
     bpx_all_bids = bpx_sales + bpx_bids
 
     if bpx_all_bids or bpx_asks:
-        print(render_ascii_order_book(
-            bids=bpx_all_bids,
-            asks=bpx_asks,
-            title=f"Blokpax Order Book: {card_name}"
-        ))
+        print(render_ascii_order_book(bids=bpx_all_bids, asks=bpx_asks, title=f"Blokpax Order Book: {card_name}"))
 
         # Add to combined totals
         all_sales.extend(bpx_sales)
@@ -520,7 +509,7 @@ def main():
     print("\n--- Spread Analysis ---")
 
     combined_spread = analyze_spread(all_sales, all_asks)
-    print(f"\nCombined (All Platforms - Sales vs Asks):")
+    print("\nCombined (All Platforms - Sales vs Asks):")
     if "error" not in combined_spread:
         print(f"  Best Bid (highest sale): ${combined_spread['best_bid']:>8.2f}")
         print(f"  Best Ask (lowest list):  ${combined_spread['best_ask']:>8.2f}")
@@ -532,7 +521,7 @@ def main():
 
     if bpx_all_bids or bpx_asks:
         bpx_spread = analyze_spread(bpx_all_bids, bpx_asks)
-        print(f"\nBlokpax:")
+        print("\nBlokpax:")
         if "error" not in bpx_spread:
             print(f"  Best Bid:   ${bpx_spread['best_bid']:>8.2f}")
             print(f"  Best Ask:   ${bpx_spread['best_ask']:>8.2f}")

@@ -11,7 +11,6 @@ Tests cover:
 """
 
 import pytest
-from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from app.services.floor_price import (
@@ -137,9 +136,7 @@ class TestOrderBookFallback(TestFloorPriceService):
         )
 
         with patch.object(service, "_get_sales_floor", return_value=None):
-            with patch.object(
-                service.order_book_analyzer, "estimate_floor", return_value=ob_result
-            ):
+            with patch.object(service.order_book_analyzer, "estimate_floor", return_value=ob_result):
                 result = service.get_floor_price(card_id=123)
 
         assert result.confidence == ConfidenceLevel.HIGH
@@ -157,9 +154,7 @@ class TestOrderBookFallback(TestFloorPriceService):
         )
 
         with patch.object(service, "_get_sales_floor", return_value=None):
-            with patch.object(
-                service.order_book_analyzer, "estimate_floor", return_value=ob_result
-            ):
+            with patch.object(service.order_book_analyzer, "estimate_floor", return_value=ob_result):
                 result = service.get_floor_price(card_id=123)
 
         assert result.confidence == ConfidenceLevel.MEDIUM
@@ -177,9 +172,7 @@ class TestOrderBookFallback(TestFloorPriceService):
         )
 
         with patch.object(service, "_get_sales_floor", return_value=None):
-            with patch.object(
-                service.order_book_analyzer, "estimate_floor", return_value=ob_result
-            ):
+            with patch.object(service.order_book_analyzer, "estimate_floor", return_value=ob_result):
                 result = service.get_floor_price(card_id=123)
 
         assert result.confidence == ConfidenceLevel.LOW
@@ -202,9 +195,7 @@ class TestLowConfidenceSales(TestFloorPriceService):
         )
 
         with patch.object(service, "_get_sales_floor", return_value=sparse_sales):
-            with patch.object(
-                service.order_book_analyzer, "estimate_floor", return_value=low_ob_result
-            ):
+            with patch.object(service.order_book_analyzer, "estimate_floor", return_value=low_ob_result):
                 result = service.get_floor_price(card_id=123)
 
         assert result.price == 22.00
@@ -217,9 +208,7 @@ class TestLowConfidenceSales(TestFloorPriceService):
         sparse_sales = {"price": 23.00, "count": 3, "platforms": ["opensea"]}
 
         with patch.object(service, "_get_sales_floor", return_value=sparse_sales):
-            with patch.object(
-                service.order_book_analyzer, "estimate_floor", return_value=None
-            ):
+            with patch.object(service.order_book_analyzer, "estimate_floor", return_value=None):
                 result = service.get_floor_price(card_id=123)
 
         assert result.price == 23.00
@@ -245,9 +234,7 @@ class TestTimeWindowExpansion(TestFloorPriceService):
             return None
 
         with patch.object(service, "_get_sales_floor", side_effect=mock_get_sales):
-            with patch.object(
-                service.order_book_analyzer, "estimate_floor", return_value=None
-            ):
+            with patch.object(service.order_book_analyzer, "estimate_floor", return_value=None):
                 result = service.get_floor_price(card_id=123)
 
         assert result.price == 30.00
@@ -257,9 +244,7 @@ class TestTimeWindowExpansion(TestFloorPriceService):
     def test_returns_none_when_no_data_in_90_days(self, service):
         """Should return NONE source when no data even in 90 days."""
         with patch.object(service, "_get_sales_floor", return_value=None):
-            with patch.object(
-                service.order_book_analyzer, "estimate_floor", return_value=None
-            ):
+            with patch.object(service.order_book_analyzer, "estimate_floor", return_value=None):
                 result = service.get_floor_price(card_id=123)
 
         assert result.price is None

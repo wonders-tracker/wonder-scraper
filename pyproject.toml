@@ -68,6 +68,8 @@ deprecated = "ignore"
 possibly-missing-attribute = "ignore"
 # Suppress unresolved-import for optional saas module (uses try/except pattern)
 unresolved-import = "ignore"
+# Suppress unresolved-attribute for third-party libs without type stubs (jwt, etc)
+unresolved-attribute = "ignore"
 
 [tool.ruff]
 line-length = 120

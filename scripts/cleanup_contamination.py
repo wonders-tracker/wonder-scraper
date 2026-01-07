@@ -22,53 +22,116 @@ from app.services.ai_extractor import get_ai_extractor
 
 # WOTF indicators - if present, listing is definitely WOTF (even if PSA graded)
 WOTF_INDICATORS = [
-    'wonders of the first', 'wotf', 'wonders first',
-    'existence set', 'existence booster', 'existence collector',
-    'existence 1st', 'existence formless', 'existence classic',
-    'genesis set', 'genesis booster',
-    'formless foil', 'stonefoil', 'stone foil',
-    'classic paper', 'classic foil',
-    '/401',  # Card number format
+    "wonders of the first",
+    "wotf",
+    "wonders first",
+    "existence set",
+    "existence booster",
+    "existence collector",
+    "existence 1st",
+    "existence formless",
+    "existence classic",
+    "genesis set",
+    "genesis booster",
+    "formless foil",
+    "stonefoil",
+    "stone foil",
+    "classic paper",
+    "classic foil",
+    "/401",  # Card number format
 ]
 
 # Non-WOTF indicators that should trigger deletion
 # NOTE: PSA/CGC grading is NOT included here - handled separately
 NON_WOTF_INDICATORS = {
     "Yu-Gi-Oh": [
-        "mp22-en", "mp23-en", "mp24-en", "mp25-en",
-        "mged-en", "mago-en", "maze-en",
-        "tin of the", "pharaoh's gods", "pharaohs gods",
-        "konami", "yugioh", "yu-gi-oh",
-        "ruddy rose dragon", "roxrose dragon", "albion the branded",
-        "trishula", "ice barrier", "red-eyes black dragon",
-        "dark magician", "exodia", "slifer", "obelisk",
-        "1st edition gold rare", "gold rare lp", "gold rare nm",
-        "duelist", "lcyw-en", "lckc-en",
+        "mp22-en",
+        "mp23-en",
+        "mp24-en",
+        "mp25-en",
+        "mged-en",
+        "mago-en",
+        "maze-en",
+        "tin of the",
+        "pharaoh's gods",
+        "pharaohs gods",
+        "konami",
+        "yugioh",
+        "yu-gi-oh",
+        "ruddy rose dragon",
+        "roxrose dragon",
+        "albion the branded",
+        "trishula",
+        "ice barrier",
+        "red-eyes black dragon",
+        "dark magician",
+        "exodia",
+        "slifer",
+        "obelisk",
+        "1st edition gold rare",
+        "gold rare lp",
+        "gold rare nm",
+        "duelist",
+        "lcyw-en",
+        "lckc-en",
     ],
     "Dragon Ball Z": [
-        "dragonball", "dragon ball", "dbz ccg",
-        "android 20", "android 17", "android 18",
-        "hercule", "goku", "vegeta", "frieza", "gohan", "piccolo",
-        "wa-066", "wa-079", "gold stamp",
+        "dragonball",
+        "dragon ball",
+        "dbz ccg",
+        "android 20",
+        "android 17",
+        "android 18",
+        "hercule",
+        "goku",
+        "vegeta",
+        "frieza",
+        "gohan",
+        "piccolo",
+        "wa-066",
+        "wa-079",
+        "gold stamp",
     ],
     "Pokemon": [
-        "pokemon", "pokémon",
-        "pikachu", "charizard", "mewtwo", "eevee",
-        "scarlet violet", "evolving skies", "shining fates",
+        "pokemon",
+        "pokémon",
+        "pikachu",
+        "charizard",
+        "mewtwo",
+        "eevee",
+        "scarlet violet",
+        "evolving skies",
+        "shining fates",
         # NOT including PSA/CGC - WOTF cards can be graded too
     ],
     "One Piece": [
-        "one piece tcg", "one piece card",
-        "luffy", "zoro", "straw hat",
-        "op01", "op02", "op03", "op04", "op05",
+        "one piece tcg",
+        "one piece card",
+        "luffy",
+        "zoro",
+        "straw hat",
+        "op01",
+        "op02",
+        "op03",
+        "op04",
+        "op05",
     ],
     "MTG": [
-        "magic the gathering", "mtg ",
-        "planeswalker", "wizards of the coast",
+        "magic the gathering",
+        "mtg ",
+        "planeswalker",
+        "wizards of the coast",
     ],
     "Sports": [
-        "topps", "panini", "upper deck", "bowman", "prizm",
-        "nba", "nfl", "mlb", "nhl",
+        "topps",
+        "panini",
+        "upper deck",
+        "bowman",
+        "prizm",
+        "nba",
+        "nfl",
+        "mlb",
+        "nhl",
     ],
 }
 
@@ -86,9 +149,7 @@ def find_contaminated_listings(session: Session, use_ai: bool = False) -> list:
     contaminated = []
 
     # Get all sold listings
-    listings = session.exec(
-        select(MarketPrice).where(MarketPrice.listing_type == "sold")
-    ).all()
+    listings = session.exec(select(MarketPrice).where(MarketPrice.listing_type == "sold")).all()
 
     ai_extractor = get_ai_extractor() if use_ai else None
 
@@ -114,20 +175,20 @@ def find_contaminated_listings(session: Session, use_ai: bool = False) -> list:
 
         if detected_tcg:
             # Get card name for context
-            card = session.exec(
-                select(Card).where(Card.id == listing.card_id)
-            ).first()
+            card = session.exec(select(Card).where(Card.id == listing.card_id)).first()
             card_name = card.name if card else "Unknown"
 
-            contaminated.append({
-                "id": listing.id,
-                "card_id": listing.card_id,
-                "card_name": card_name,
-                "title": listing.title,
-                "price": listing.price,
-                "detected_tcg": detected_tcg,
-                "indicator": indicator_found,
-            })
+            contaminated.append(
+                {
+                    "id": listing.id,
+                    "card_id": listing.card_id,
+                    "card_name": card_name,
+                    "title": listing.title,
+                    "price": listing.price,
+                    "detected_tcg": detected_tcg,
+                    "indicator": indicator_found,
+                }
+            )
 
     return contaminated
 
@@ -150,10 +211,10 @@ def cleanup_contamination(dry_run: bool = True, use_ai: bool = False):
             by_tcg[tcg].append(item)
 
         print(f"\n{'='*60}")
-        print(f"CONTAMINATION REPORT")
+        print("CONTAMINATION REPORT")
         print(f"{'='*60}")
         print(f"Total contaminated listings: {len(contaminated)}")
-        print(f"\nBreakdown by TCG:")
+        print("\nBreakdown by TCG:")
         for tcg, items in sorted(by_tcg.items(), key=lambda x: -len(x[1])):
             print(f"  - {tcg}: {len(items)} listings")
 
@@ -188,15 +249,13 @@ def cleanup_contamination(dry_run: bool = True, use_ai: bool = False):
             # Delete contaminated listings
             ids_to_delete = [item["id"] for item in contaminated]
 
-            session.exec(
-                delete(MarketPrice).where(MarketPrice.id.in_(ids_to_delete))
-            )
+            session.exec(delete(MarketPrice).where(MarketPrice.id.in_(ids_to_delete)))
             session.commit()
 
             print(f"\n✅ Deleted {len(ids_to_delete)} contaminated listings")
 
             # Show summary of what was removed
-            print(f"\nRemoved by TCG:")
+            print("\nRemoved by TCG:")
             for tcg, items in sorted(by_tcg.items(), key=lambda x: -len(x[1])):
                 print(f"  - {tcg}: {len(items)} listings")
 
@@ -207,11 +266,7 @@ def find_duplicate_ebay_items(session: Session) -> list:
 
     duplicates = session.exec(
         select(MarketPrice.external_id, sa_func.count(MarketPrice.id).label("count"))
-        .where(
-            MarketPrice.platform == "ebay",
-            MarketPrice.external_id.isnot(None),
-            MarketPrice.external_id != ""
-        )
+        .where(MarketPrice.platform == "ebay", MarketPrice.external_id.isnot(None), MarketPrice.external_id != "")
         .group_by(MarketPrice.external_id)
         .having(sa_func.count(MarketPrice.id) > 1)
     ).all()
@@ -229,7 +284,7 @@ def cleanup_duplicates(dry_run: bool = True):
             return
 
         print(f"\n{'='*60}")
-        print(f"DUPLICATE LISTINGS REPORT")
+        print("DUPLICATE LISTINGS REPORT")
         print(f"{'='*60}")
         print(f"Found {len(duplicates)} external_ids with duplicates")
 
@@ -252,7 +307,7 @@ def cleanup_duplicates(dry_run: bool = True):
         print(f"Total duplicate records to remove: {total_to_remove}")
 
         if dry_run:
-            print(f"\n🔍 DRY RUN - No changes made")
+            print("\n🔍 DRY RUN - No changes made")
             print("Run without --dry-run to delete duplicates")
         else:
             confirm = input(f"\nDelete {total_to_remove} duplicate records? (yes/no): ")
@@ -260,9 +315,7 @@ def cleanup_duplicates(dry_run: bool = True):
                 print("Aborted.")
                 return
 
-            session.exec(
-                delete(MarketPrice).where(MarketPrice.id.in_(ids_to_delete))
-            )
+            session.exec(delete(MarketPrice).where(MarketPrice.id.in_(ids_to_delete)))
             session.commit()
 
             print(f"✅ Deleted {total_to_remove} duplicate listings")

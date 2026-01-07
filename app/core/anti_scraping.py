@@ -3,6 +3,7 @@ Anti-scraping middleware and utilities.
 Detects bots, headless browsers, and enforces rate limits.
 """
 
+import heapq
 import time
 import re
 import hashlib
@@ -128,8 +129,9 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
 
         if len(self._ip_last_seen) > self._max_tracked_ips:
             overflow = len(self._ip_last_seen) - self._max_tracked_ips
-            # Drop oldest entries first
-            for ip, _ in sorted(self._ip_last_seen.items(), key=lambda item: item[1])[:overflow]:
+            # Drop oldest entries first - O(k log n) instead of O(n log n) full sort
+            oldest = heapq.nsmallest(overflow, self._ip_last_seen.items(), key=lambda x: x[1])
+            for ip, _ in oldest:
                 self._clear_ip_state(ip)
 
     def _mark_ip_active(self, ip: str, now: Optional[float] = None):

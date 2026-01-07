@@ -9,6 +9,7 @@ This column categorizes sealed products into subtypes like:
 
 Run: python -m scripts.add_product_subtype
 """
+
 from sqlmodel import text, Session
 from app.db import engine
 
@@ -18,16 +19,20 @@ def migrate():
     with Session(engine) as session:
         try:
             # Add product_subtype column if it doesn't exist
-            session.exec(text('''
+            session.exec(
+                text("""
                 ALTER TABLE marketprice
                 ADD COLUMN IF NOT EXISTS product_subtype VARCHAR;
-            '''))
+            """)
+            )
 
             # Add index on product_subtype for faster queries
-            session.exec(text('''
+            session.exec(
+                text("""
                 CREATE INDEX IF NOT EXISTS ix_marketprice_product_subtype
                 ON marketprice (product_subtype);
-            '''))
+            """)
+            )
 
             session.commit()
             print("Migration successful!")

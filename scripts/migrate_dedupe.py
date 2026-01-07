@@ -1,6 +1,7 @@
 from sqlmodel import Session, text
 from app.db import engine
 
+
 def migrate():
     with Session(engine) as session:
         print("Checking for external_id column in marketprice...")
@@ -27,6 +28,6 @@ def migrate():
             session.commit()
             print("Added 'url' column.")
 
+
 if __name__ == "__main__":
     migrate()
-

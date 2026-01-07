@@ -19,12 +19,13 @@ import argparse
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 
 from sqlmodel import Session
 from sqlalchemy import text
 
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.db import engine
@@ -35,29 +36,29 @@ def extract_grading_from_title(title: str) -> Optional[str]:
     title_lower = title.lower()
 
     # PSA grades
-    psa_match = re.search(r'psa\s*(\d+(?:\.\d+)?)', title_lower)
+    psa_match = re.search(r"psa\s*(\d+(?:\.\d+)?)", title_lower)
     if psa_match:
         return f"PSA {psa_match.group(1)}"
 
     # BGS grades
-    bgs_match = re.search(r'bgs\s*(\d+(?:\.\d+)?)', title_lower)
+    bgs_match = re.search(r"bgs\s*(\d+(?:\.\d+)?)", title_lower)
     if bgs_match:
         return f"BGS {bgs_match.group(1)}"
 
     # CGC grades
-    cgc_match = re.search(r'cgc\s*(\d+(?:\.\d+)?)', title_lower)
+    cgc_match = re.search(r"cgc\s*(\d+(?:\.\d+)?)", title_lower)
     if cgc_match:
         return f"CGC {cgc_match.group(1)}"
 
     # TAG SLAB (common for WOTF)
-    if 'tag' in title_lower and 'slab' in title_lower:
-        tag_match = re.search(r'tag\s*(?:slab)?\s*(\d+(?:\.\d+)?)', title_lower)
+    if "tag" in title_lower and "slab" in title_lower:
+        tag_match = re.search(r"tag\s*(?:slab)?\s*(\d+(?:\.\d+)?)", title_lower)
         if tag_match:
             return f"TAG {tag_match.group(1)}"
         return "TAG SLAB"
 
     # Generic slab/graded mentions
-    if 'slab' in title_lower or 'graded' in title_lower:
+    if "slab" in title_lower or "graded" in title_lower:
         return "GRADED"
 
     return None
@@ -70,9 +71,9 @@ def extract_quantity_from_title(title: str) -> Optional[int]:
     # Skip if title contains known card names with X in them
     # (Carbon-X7, X7v1, etc. are card names, not quantities)
     skip_patterns = [
-        r'carbon-x\d',  # Carbon-X7 card name
-        r'x\d+v\d',     # X7v1 variant naming
-        r'experiment\s*x',  # Experiment X series
+        r"carbon-x\d",  # Carbon-X7 card name
+        r"x\d+v\d",  # X7v1 variant naming
+        r"experiment\s*x",  # Experiment X series
     ]
     for pattern in skip_patterns:
         if re.search(pattern, title_lower):
@@ -80,28 +81,28 @@ def extract_quantity_from_title(title: str) -> Optional[int]:
 
     # Patterns like "X3", "x2", "X 3" at START of title or after separator
     # Must have space/separator before to avoid matching card names like "Carbon-X7"
-    x_match = re.search(r'(?:^|[\s\-])x\s*(\d+)(?:\s|$|-)', title_lower)
+    x_match = re.search(r"(?:^|[\s\-])x\s*(\d+)(?:\s|$|-)", title_lower)
     if x_match:
         qty = int(x_match.group(1))
         if qty > 1 and qty <= 20:  # Reasonable lot size
             return qty
 
     # Patterns like "3x", "2x " at START of title or after separator
-    num_x_match = re.search(r'(?:^|[\s\-])(\d+)\s*x(?:\s|$|-)', title_lower)
+    num_x_match = re.search(r"(?:^|[\s\-])(\d+)\s*x(?:\s|$|-)", title_lower)
     if num_x_match:
         qty = int(num_x_match.group(1))
         if qty > 1 and qty <= 20:
             return qty
 
     # "lot of X"
-    lot_match = re.search(r'lot\s+of\s+(\d+)', title_lower)
+    lot_match = re.search(r"lot\s+of\s+(\d+)", title_lower)
     if lot_match:
         qty = int(lot_match.group(1))
         if qty > 1 and qty <= 50:
             return qty
 
     # "Xct" like "3ct"
-    ct_match = re.search(r'\b(\d+)\s*ct\b', title_lower)
+    ct_match = re.search(r"\b(\d+)\s*ct\b", title_lower)
     if ct_match:
         qty = int(ct_match.group(1))
         if qty > 1 and qty <= 20:
@@ -128,40 +129,40 @@ def normalize_card_name(name: str) -> str:
     normalized = normalized.replace('"', '"').replace('"', '"')
 
     # Remove commas (card names often have commas, titles often don't)
-    normalized = normalized.replace(',', '')
+    normalized = normalized.replace(",", "")
 
     # Normalize hyphens to spaces (Cave-Dwelling -> Cave Dwelling)
-    normalized = normalized.replace('-', ' ')
+    normalized = normalized.replace("-", " ")
 
     # Normalize spaces
-    normalized = re.sub(r'\s+', ' ', normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
 
     # Handle "of the" vs "of" variations
-    normalized = re.sub(r'\bof the\b', 'of', normalized)
+    normalized = re.sub(r"\bof the\b", "of", normalized)
 
     # Handle "the" at start (sometimes dropped in titles)
-    normalized = re.sub(r'^the\s+', '', normalized)
+    normalized = re.sub(r"^the\s+", "", normalized)
 
     return normalized.strip()
 
 
 # Common spelling variations/typos found in eBay titles
 SPELLING_CORRECTIONS = {
-    'issac': 'isaac',
-    'mutaded': 'mutated',
-    'deathsworm': 'deathsworn',
-    'rooting': 'rootling',
-    'ceacean': 'cetacean',
-    'cetaccean': 'cetacean',
-    'lyonnaisa': 'lyonnisia',
-    'volris': 'voluris',
+    "issac": "isaac",
+    "mutaded": "mutated",
+    "deathsworm": "deathsworn",
+    "rooting": "rootling",
+    "ceacean": "cetacean",
+    "cetaccean": "cetacean",
+    "lyonnaisa": "lyonnisia",
+    "volris": "voluris",
     "bath'al": "bathr'al",  # Missing 'r'
-    'bathal': "bathr'al",  # Missing apostrophe and r
-    'chieftan': 'chieftain',  # Common misspelling
-    'flok': 'floki',  # Truncated name
-    'cave dwelling': 'cave-dwelling',  # Missing hyphen
-    'drogothar destroyer': 'drogothar the destroyer',  # Missing 'the'
-    'aether valkyr': 'aether valkyre',  # Check card name
+    "bathal": "bathr'al",  # Missing apostrophe and r
+    "chieftan": "chieftain",  # Common misspelling
+    "flok": "floki",  # Truncated name
+    "cave dwelling": "cave-dwelling",  # Missing hyphen
+    "drogothar destroyer": "drogothar the destroyer",  # Missing 'the'
+    "aether valkyr": "aether valkyre",  # Check card name
 }
 
 
@@ -175,10 +176,12 @@ def apply_spelling_corrections(text: str) -> str:
 
 def strip_punctuation(text: str) -> str:
     """Remove all punctuation for fuzzy matching."""
-    return re.sub(r'[^\w\s]', '', text.lower())
+    return re.sub(r"[^\w\s]", "", text.lower())
 
 
-def find_best_card_match(title: str, session, current_card_id: Optional[int] = None) -> Optional[Tuple[int, str, float]]:
+def find_best_card_match(
+    title: str, session, current_card_id: Optional[int] = None
+) -> Optional[Tuple[int, str, float]]:
     """
     Find the best matching card for a listing title.
     Returns (card_id, card_name, confidence) or None.
@@ -187,9 +190,11 @@ def find_best_card_match(title: str, session, current_card_id: Optional[int] = N
     Will not suggest a shorter match if a longer card name is already assigned.
     """
     # Get all single cards
-    cards = session.execute(text("""
+    cards = session.execute(
+        text("""
         SELECT id, name FROM card WHERE product_type = 'Single'
-    """)).all()
+    """)
+    ).all()
 
     title_lower = title.lower()
     title_normalized = normalize_card_name(title)
@@ -229,14 +234,16 @@ def find_best_card_match(title: str, session, current_card_id: Optional[int] = N
 
             # Add bonus for names that appear at the START of the title (after "Wonders of...")
             # This helps prioritize the actual card name over incidental matches
-            wonders_prefix = re.search(r'wonders of the first\s*', title_lower)
+            wonders_prefix = re.search(r"wonders of the first\s*", title_lower)
             if wonders_prefix:
-                title_after_prefix = title_lower[wonders_prefix.end():]
+                title_after_prefix = title_lower[wonders_prefix.end() :]
                 title_after_norm = normalize_card_name(title_after_prefix)
                 title_after_corr = apply_spelling_corrections(title_after_norm)
-                if (title_after_prefix.startswith(name_lower) or
-                    title_after_norm.startswith(name_normalized) or
-                    title_after_corr.startswith(name_normalized)):
+                if (
+                    title_after_prefix.startswith(name_lower)
+                    or title_after_norm.startswith(name_normalized)
+                    or title_after_corr.startswith(name_normalized)
+                ):
                     score += 100  # Strong bonus for title-start matches
 
             if score > best_score:
@@ -257,7 +264,8 @@ def cleanup_grading(session, dry_run: bool = True) -> dict:
     results = {"updated": 0, "skipped": 0}
 
     # Find listings with grading keywords but no grading field
-    listings = session.execute(text("""
+    listings = session.execute(
+        text("""
         SELECT mp.id, mp.title, mp.grading
         FROM marketprice mp
         JOIN card c ON mp.card_id = c.id
@@ -271,7 +279,8 @@ def cleanup_grading(session, dry_run: bool = True) -> dict:
             OR (LOWER(mp.title) LIKE '%tag%' AND LOWER(mp.title) LIKE '%slab%')
             OR LOWER(mp.title) LIKE '%graded%'
         )
-    """)).all()
+    """)
+    ).all()
 
     print(f"\nFound {len(listings)} listings with grading keywords but no grading field")
 
@@ -283,9 +292,12 @@ def cleanup_grading(session, dry_run: bool = True) -> dict:
             print(f"         -> Grading: {grading}")
 
             if not dry_run:
-                session.execute(text("""
+                session.execute(
+                    text("""
                     UPDATE marketprice SET grading = :grading WHERE id = :id
-                """), {"grading": grading, "id": listing_id})
+                """),
+                    {"grading": grading, "id": listing_id},
+                )
                 results["updated"] += 1
             else:
                 results["updated"] += 1
@@ -303,7 +315,8 @@ def cleanup_quantity(session, dry_run: bool = True) -> dict:
     results = {"updated": 0, "skipped": 0}
 
     # Find listings with quantity keywords but quantity = 1
-    listings = session.execute(text("""
+    listings = session.execute(
+        text("""
         SELECT mp.id, mp.title, mp.quantity
         FROM marketprice mp
         JOIN card c ON mp.card_id = c.id
@@ -317,7 +330,8 @@ def cleanup_quantity(session, dry_run: bool = True) -> dict:
             OR LOWER(mp.title) LIKE '% lot %'
             OR LOWER(mp.title) ~ '[2-9]ct'
         )
-    """)).all()
+    """)
+    ).all()
 
     print(f"\nFound {len(listings)} listings with quantity keywords but quantity=1")
 
@@ -329,9 +343,12 @@ def cleanup_quantity(session, dry_run: bool = True) -> dict:
             print(f"         -> Quantity: {quantity}")
 
             if not dry_run:
-                session.execute(text("""
+                session.execute(
+                    text("""
                     UPDATE marketprice SET quantity = :qty WHERE id = :id
-                """), {"qty": quantity, "id": listing_id})
+                """),
+                    {"qty": quantity, "id": listing_id},
+                )
                 results["updated"] += 1
             else:
                 results["updated"] += 1
@@ -350,7 +367,8 @@ def cleanup_mismatches(session, dry_run: bool = True) -> dict:
 
     # Find mismatched listings - but use normalized comparison to catch "of the" vs "of"
     # We'll do the exact check in Python to be more flexible
-    listings = session.execute(text("""
+    listings = session.execute(
+        text("""
         SELECT mp.id, mp.card_id, c.name as current_card, mp.title
         FROM marketprice mp
         JOIN card c ON mp.card_id = c.id
@@ -358,7 +376,8 @@ def cleanup_mismatches(session, dry_run: bool = True) -> dict:
         AND mp.platform = 'ebay'
         AND LOWER(mp.title) NOT LIKE '%' || LOWER(c.name) || '%'
         ORDER BY mp.price DESC
-    """)).all()
+    """)
+    ).all()
 
     print(f"\nFound {len(listings)} listings where title doesn't contain exact card name")
 
@@ -376,10 +395,10 @@ def cleanup_mismatches(session, dry_run: bool = True) -> dict:
 
         # Check if current card matches via any normalization method
         matches = (
-            card_normalized in title_normalized or
-            card_normalized in title_corrected or
-            card_stripped in title_stripped or
-            card_stripped in title_stripped_corrected
+            card_normalized in title_normalized
+            or card_normalized in title_corrected
+            or card_stripped in title_stripped
+            or card_stripped in title_stripped_corrected
         )
 
         if not matches:
@@ -387,7 +406,9 @@ def cleanup_mismatches(session, dry_run: bool = True) -> dict:
         else:
             results["kept_current"] += 1
 
-    print(f"After normalized matching: {len(filtered_listings)} truly mismatched ({results['kept_current']} were actually correct)")
+    print(
+        f"After normalized matching: {len(filtered_listings)} truly mismatched ({results['kept_current']} were actually correct)"
+    )
 
     for listing_id, current_card_id, current_card_name, title in filtered_listings:
         best_match = find_best_card_match(title, session, current_card_id)
@@ -401,19 +422,25 @@ def cleanup_mismatches(session, dry_run: bool = True) -> dict:
 
                 if not dry_run:
                     try:
-                        session.execute(text("""
+                        session.execute(
+                            text("""
                             UPDATE marketprice SET card_id = :card_id WHERE id = :id
-                        """), {"card_id": new_card_id, "id": listing_id})
+                        """),
+                            {"card_id": new_card_id, "id": listing_id},
+                        )
                         session.commit()
                         results["updated"] += 1
                     except Exception as e:
                         session.rollback()
                         if "duplicate key" in str(e).lower() or "unique" in str(e).lower():
-                            print(f"         DUPLICATE: Deleting duplicate listing")
+                            print("         DUPLICATE: Deleting duplicate listing")
                             # Delete the duplicate instead of updating
-                            session.execute(text("""
+                            session.execute(
+                                text("""
                                 DELETE FROM marketprice WHERE id = :id
-                            """), {"id": listing_id})
+                            """),
+                                {"id": listing_id},
+                            )
                             session.commit()
                             results["updated"] += 1
                         else:

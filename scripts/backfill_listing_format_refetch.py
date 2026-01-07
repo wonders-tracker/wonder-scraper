@@ -6,17 +6,16 @@ listing format (auction, buy_it_now, best_offer) from the HTML.
 
 Uses Pydoll (undetected Chrome) to bypass eBay's bot protection.
 """
+
 import asyncio
-import re
 import time
-from datetime import datetime
 from typing import Optional
 
 from bs4 import BeautifulSoup
 from sqlmodel import Session, select, col
 from app.db import engine
 from app.models.market import MarketPrice
-from app.scraper.browser import get_page_content, BrowserManager
+from app.scraper.browser import get_page_content
 from app.scraper.ebay import _extract_bid_count, _extract_listing_format
 
 
@@ -27,7 +26,7 @@ async def fetch_and_extract(url: str) -> tuple[Optional[str], int]:
     """
     try:
         html = await get_page_content(url)
-        soup = BeautifulSoup(html, 'lxml')
+        soup = BeautifulSoup(html, "lxml")
 
         # Use the scraper's extraction functions
         bid_count = _extract_bid_count(soup)
@@ -41,7 +40,7 @@ async def fetch_and_extract(url: str) -> tuple[Optional[str], int]:
 
 async def backfill_batch(listings: list[MarketPrice], dry_run: bool = False) -> dict:
     """Process a batch of listings sequentially (Pydoll doesn't support concurrent tabs well)."""
-    stats = {'auction': 0, 'buy_it_now': 0, 'best_offer': 0, 'unknown': 0, 'failed': 0}
+    stats = {"auction": 0, "buy_it_now": 0, "best_offer": 0, "unknown": 0, "failed": 0}
     updates = []
 
     for listing in listings:
@@ -52,7 +51,7 @@ async def backfill_batch(listings: list[MarketPrice], dry_run: bool = False) -> 
             url = f"https://www.ebay.com/itm/{listing.external_id}"
 
         if not url:
-            stats['failed'] += 1
+            stats["failed"] += 1
             continue
 
         listing_format, bid_count = await fetch_and_extract(url)
@@ -61,7 +60,7 @@ async def backfill_batch(listings: list[MarketPrice], dry_run: bool = False) -> 
             stats[listing_format] += 1
             updates.append((listing.id, listing_format, bid_count))
         else:
-            stats['unknown'] += 1
+            stats["unknown"] += 1
 
     # Batch update database
     if not dry_run and updates:
@@ -78,10 +77,7 @@ async def backfill_batch(listings: list[MarketPrice], dry_run: bool = False) -> 
 
 
 def backfill_listing_format_refetch(
-    listing_type: str = 'active',
-    limit: Optional[int] = None,
-    batch_size: int = 20,
-    dry_run: bool = False
+    listing_type: str = "active", limit: Optional[int] = None, batch_size: int = 20, dry_run: bool = False
 ):
     """
     Backfill listing_format by re-fetching from eBay.
@@ -96,13 +92,11 @@ def backfill_listing_format_refetch(
         # Get listings without listing_format
         stmt = select(MarketPrice).where(col(MarketPrice.listing_format).is_(None))
 
-        if listing_type != 'all':
+        if listing_type != "all":
             stmt = stmt.where(MarketPrice.listing_type == listing_type)
 
         # Need URL or external_id to fetch
-        stmt = stmt.where(
-            (col(MarketPrice.url).is_not(None)) | (col(MarketPrice.external_id).is_not(None))
-        )
+        stmt = stmt.where((col(MarketPrice.url).is_not(None)) | (col(MarketPrice.external_id).is_not(None)))
 
         if limit:
             stmt = stmt.limit(limit)
@@ -115,11 +109,13 @@ def backfill_listing_format_refetch(
             return
 
     # Process in batches
-    total_stats = {'auction': 0, 'buy_it_now': 0, 'best_offer': 0, 'unknown': 0, 'failed': 0}
+    total_stats = {"auction": 0, "buy_it_now": 0, "best_offer": 0, "unknown": 0, "failed": 0}
 
     for i in range(0, len(listings), batch_size):
-        batch = listings[i:i + batch_size]
-        print(f"Processing batch {i // batch_size + 1} ({i + 1}-{min(i + batch_size, len(listings))} of {len(listings)})...")
+        batch = listings[i : i + batch_size]
+        print(
+            f"Processing batch {i // batch_size + 1} ({i + 1}-{min(i + batch_size, len(listings))} of {len(listings)})..."
+        )
 
         stats = asyncio.run(backfill_batch(batch, dry_run))
 
@@ -140,20 +136,14 @@ def backfill_listing_format_refetch(
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Backfill listing_format by re-fetching from eBay")
-    parser.add_argument("--type", choices=['active', 'sold', 'all'], default='active',
-                        help="Which listings to process")
-    parser.add_argument("--limit", type=int, default=None,
-                        help="Max listings to process")
-    parser.add_argument("--batch-size", type=int, default=20,
-                        help="Concurrent requests per batch")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Preview without saving")
+    parser.add_argument("--type", choices=["active", "sold", "all"], default="active", help="Which listings to process")
+    parser.add_argument("--limit", type=int, default=None, help="Max listings to process")
+    parser.add_argument("--batch-size", type=int, default=20, help="Concurrent requests per batch")
+    parser.add_argument("--dry-run", action="store_true", help="Preview without saving")
     args = parser.parse_args()
 
     backfill_listing_format_refetch(
-        listing_type=args.type,
-        limit=args.limit,
-        batch_size=args.batch_size,
-        dry_run=args.dry_run
+        listing_type=args.type, limit=args.limit, batch_size=args.batch_size, dry_run=args.dry_run
     )

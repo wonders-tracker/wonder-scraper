@@ -23,7 +23,7 @@ from openai import OpenAI
 sys.path.insert(0, str(Path(__file__).parent.parent))
 load_dotenv()
 
-from sqlmodel import Session, select, func, col
+from sqlmodel import Session, select, func
 from app.db import engine
 from app.discord_bot.stats import calculate_market_stats
 from app.models.market import MarketPrice
@@ -33,6 +33,7 @@ from app.models.card import Card, Rarity
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
+
 
 def get_week_dates(date_str: str | None = None) -> tuple[datetime, datetime, str]:
     if date_str:
@@ -86,6 +87,7 @@ def get_trend_indicator(pct: float) -> tuple[str, str, str]:
 # DATA QUERIES
 # =============================================================================
 
+
 def get_top_sales(session: Session, start: datetime, end: datetime, limit: int = 10):
     """Get top individual sales by price."""
     return session.exec(
@@ -127,15 +129,17 @@ def get_weekly_stats_history(session: Session, end_date: datetime, weeks: int = 
         week_end = week_end.replace(hour=23, minute=59, second=59)
 
         stats = calculate_market_stats(session=session, period="weekly", start_date=week_start, end_date=week_end)
-        history.append({
-            "week": i,
-            "start": week_start,
-            "end": week_end,
-            "sales": stats.total_sales,
-            "volume": stats.total_volume_usd,
-            "avg_price": stats.avg_sale_price,
-            "unique_cards": stats.unique_cards_traded,
-        })
+        history.append(
+            {
+                "week": i,
+                "start": week_start,
+                "end": week_end,
+                "sales": stats.total_sales,
+                "volume": stats.total_volume_usd,
+                "avg_price": stats.avg_sale_price,
+                "unique_cards": stats.unique_cards_traded,
+            }
+        )
     return history
 
 
@@ -156,7 +160,10 @@ def get_rarity_breakdown(session: Session, start: datetime, end: datetime) -> li
         .group_by(Rarity.name)
         .order_by(func.sum(MarketPrice.price).desc())
     ).all()
-    return [{"rarity": r[0] or "Unknown", "count": r[1], "volume": float(r[2] or 0), "avg": float(r[3] or 0)} for r in results]
+    return [
+        {"rarity": r[0] or "Unknown", "count": r[1], "volume": float(r[2] or 0), "avg": float(r[3] or 0)}
+        for r in results
+    ]
 
 
 def get_treatment_premiums(session: Session, start: datetime, end: datetime) -> dict:
@@ -256,13 +263,15 @@ def get_hot_cards(session: Session, current_start: datetime, current_end: dateti
 
                 if vol_trend and price_stable:
                     signal = "🔥 Strong" if vols[-1] >= 2 * vols[0] else "👀 Watch"
-                    hot_cards.append({
-                        "card_id": card_id,
-                        "name": data["name"],
-                        "vol_trend": "→".join(str(v) for v in vols),
-                        "price_change": (prices[-1] - prices[0]) / prices[0] * 100 if prices[0] else 0,
-                        "signal": signal,
-                    })
+                    hot_cards.append(
+                        {
+                            "card_id": card_id,
+                            "name": data["name"],
+                            "vol_trend": "→".join(str(v) for v in vols),
+                            "price_change": (prices[-1] - prices[0]) / prices[0] * 100 if prices[0] else 0,
+                            "signal": signal,
+                        }
+                    )
 
     return sorted(hot_cards, key=lambda x: -len(x["vol_trend"]))[:5]
 
@@ -303,16 +312,18 @@ def get_outlier_sales(session: Session, start: datetime, end: datetime) -> list[
             if avg > 0:
                 deviation = (sale.price - avg) / avg
                 if abs(deviation) > 0.4:  # 40% deviation
-                    outliers.append({
-                        "card_id": card.id,
-                        "name": card.name,
-                        "price": sale.price,
-                        "avg": avg,
-                        "deviation": deviation * 100,
-                        "treatment": sale.treatment or "Paper",
-                        "date": sale.sold_date.strftime("%m/%d") if sale.sold_date else "—",
-                        "is_deal": deviation < 0,
-                    })
+                    outliers.append(
+                        {
+                            "card_id": card.id,
+                            "name": card.name,
+                            "price": sale.price,
+                            "avg": avg,
+                            "deviation": deviation * 100,
+                            "treatment": sale.treatment or "Paper",
+                            "date": sale.sold_date.strftime("%m/%d") if sale.sold_date else "—",
+                            "is_deal": deviation < 0,
+                        }
+                    )
 
     # Sort by absolute deviation, return top outliers
     return sorted(outliers, key=lambda x: -abs(x["deviation"]))[:6]
@@ -361,15 +372,22 @@ def get_monthly_heatmap(session: Session, end_date: datetime) -> list[list[int]]
 # ANALYSIS GENERATION
 # =============================================================================
 
+
 def generate_template_analysis(stats) -> str:
     parts = []
 
     if stats.volume_trend_pct > 20:
-        parts.append(f"This week saw robust trading activity with volume up {fmt_pct(stats.volume_trend_pct)} compared to the previous period. With {stats.total_sales:,} completed sales totaling {fmt_price(stats.total_volume_usd)}, the market is showing strong momentum.")
+        parts.append(
+            f"This week saw robust trading activity with volume up {fmt_pct(stats.volume_trend_pct)} compared to the previous period. With {stats.total_sales:,} completed sales totaling {fmt_price(stats.total_volume_usd)}, the market is showing strong momentum."
+        )
     elif stats.volume_trend_pct < -20:
-        parts.append(f"Market activity cooled this week with volume down {fmt_pct(stats.volume_trend_pct, False)} from the previous period. The {stats.total_sales:,} completed sales generated {fmt_price(stats.total_volume_usd)} in total volume.")
+        parts.append(
+            f"Market activity cooled this week with volume down {fmt_pct(stats.volume_trend_pct, False)} from the previous period. The {stats.total_sales:,} completed sales generated {fmt_price(stats.total_volume_usd)} in total volume."
+        )
     else:
-        parts.append(f"The market maintained steady activity this week with {stats.total_sales:,} sales generating {fmt_price(stats.total_volume_usd)} in trading volume.")
+        parts.append(
+            f"The market maintained steady activity this week with {stats.total_sales:,} sales generating {fmt_price(stats.total_volume_usd)} in trading volume."
+        )
 
     gainers = [m for m in stats.top_movers if m.get("pct_change", 0) > 0]
     losers = [m for m in stats.top_movers if m.get("pct_change", 0) < 0]
@@ -379,14 +397,18 @@ def generate_template_analysis(stats) -> str:
         note = f" {g['reason']}." if g.get("reason") else ""
         if g.get("confidence") == "low":
             note = " However, with limited sales data, this movement should be viewed cautiously."
-        parts.append(f"**{g['name']}** led the gainers with a {fmt_pct(g['pct_change'])} move to {fmt_price(g['current_price'])} on {g.get('volume', 0)} sale(s).{note}")
+        parts.append(
+            f"**{g['name']}** led the gainers with a {fmt_pct(g['pct_change'])} move to {fmt_price(g['current_price'])} on {g.get('volume', 0)} sale(s).{note}"
+        )
 
     if losers:
         l = losers[0]
         note = f" {l['reason']}." if l.get("reason") else ""
         if l.get("confidence") == "low":
             note = " This may be noise from limited data."
-        parts.append(f"On the downside, **{l['name']}** declined {fmt_pct(l['pct_change'], False)} to {fmt_price(l['current_price'])}.{note}")
+        parts.append(
+            f"On the downside, **{l['name']}** declined {fmt_pct(l['pct_change'], False)} to {fmt_price(l['current_price'])}.{note}"
+        )
 
     return "\n\n".join(parts)
 
@@ -405,8 +427,26 @@ def generate_ai_analysis(stats, week_start, week_end) -> str:
         "total_volume": stats.total_volume_usd,
         "volume_trend": stats.volume_trend_pct,
         "treatment_breakdown": stats.treatment_breakdown,
-        "gainers": [{"name": g["name"], "change": g["pct_change"], "sales": g.get("volume"), "reason": g.get("reason"), "confidence": g.get("confidence")} for g in gainers],
-        "losers": [{"name": l["name"], "change": l["pct_change"], "sales": l.get("volume"), "reason": l.get("reason"), "confidence": l.get("confidence")} for l in losers],
+        "gainers": [
+            {
+                "name": g["name"],
+                "change": g["pct_change"],
+                "sales": g.get("volume"),
+                "reason": g.get("reason"),
+                "confidence": g.get("confidence"),
+            }
+            for g in gainers
+        ],
+        "losers": [
+            {
+                "name": l["name"],
+                "change": l["pct_change"],
+                "sales": l.get("volume"),
+                "reason": l.get("reason"),
+                "confidence": l.get("confidence"),
+            }
+            for l in losers
+        ],
     }
 
     try:
@@ -414,8 +454,14 @@ def generate_ai_analysis(stats, week_start, week_end) -> str:
         resp = client.chat.completions.create(
             model="openai/gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "Expert TCG market analyst. Skeptical of small samples. Write 2-3 short paragraphs."},
-                {"role": "user", "content": f"Analyze this week's WOTF market data. Be skeptical of low confidence moves.\n{json.dumps(data)}"}
+                {
+                    "role": "system",
+                    "content": "Expert TCG market analyst. Skeptical of small samples. Write 2-3 short paragraphs.",
+                },
+                {
+                    "role": "user",
+                    "content": f"Analyze this week's WOTF market data. Be skeptical of low confidence moves.\n{json.dumps(data)}",
+                },
             ],
             temperature=0.7,
             max_tokens=500,
@@ -429,6 +475,7 @@ def generate_ai_analysis(stats, week_start, week_end) -> str:
 # =============================================================================
 # MDX GENERATION
 # =============================================================================
+
 
 def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple[str, str]:
     week_start, week_end, date_string = get_week_dates(date_str)
@@ -479,17 +526,21 @@ def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple
         for day_str, count, volume in daily_data:
             day_name = datetime.strptime(day_str, "%Y-%m-%d").strftime("%a")
             bar = ascii_bar(count, max_daily, 10)
-            daily_rows += f'''
+            daily_rows += f"""
 <div className="flex items-center gap-2 py-0.5">
   <span className="w-8 text-muted-foreground">{day_name}</span>
   <code className="text-cyan-500/70">{bar}</code>
   <span className="w-8 text-right tabular-nums text-xs">{count}</span>
   <span className="w-16 text-right tabular-nums text-xs text-muted-foreground">{fmt_price(volume)}</span>
-</div>'''
+</div>"""
 
     # Navigation
     nav_prev = f'<a href="/blog/weekly-movers-{prev_date}" className="text-muted-foreground hover:text-foreground transition-colors">← Previous Week</a>'
-    nav_next = f'<a href="/blog/weekly-movers-{next_date}" className="text-muted-foreground hover:text-foreground transition-colors">Next Week →</a>' if next_visible else '<span className="text-muted-foreground/50">Latest Report</span>'
+    nav_next = (
+        f'<a href="/blog/weekly-movers-{next_date}" className="text-muted-foreground hover:text-foreground transition-colors">Next Week →</a>'
+        if next_visible
+        else '<span className="text-muted-foreground/50">Latest Report</span>'
+    )
 
     # Week summary line
     if stats.volume_trend_pct > 20:
@@ -505,12 +556,12 @@ def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple
     top_3_sales = ""
     for sale, card in top_sales[:3]:
         treatment = sale.treatment or "Paper"
-        top_3_sales += f'''
+        top_3_sales += f"""
 <a href="/cards/{card.id}" className="group">
   <div className="text-2xl font-mono font-bold group-hover:text-primary transition-colors">{fmt_price(sale.price)}</div>
   <div className="text-sm truncate">{card.name}</div>
   <div className="text-xs text-muted-foreground">{treatment}</div>
-</a>'''
+</a>"""
 
     # Daily bars - simplified
     daily_bars = ""
@@ -519,13 +570,13 @@ def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple
         for day_str, count, volume in daily_data:
             day_name = datetime.strptime(day_str, "%Y-%m-%d").strftime("%a")
             bar = ascii_bar(count, max_daily, 32)
-            daily_bars += f'''
+            daily_bars += f"""
 <div className="flex items-center gap-3">
   <span className="w-10 text-muted-foreground">{day_name}</span>
   <code className="text-primary/60 flex-1">{bar}</code>
   <span className="w-6 text-right tabular-nums">{count}</span>
   <span className="w-20 text-right tabular-nums text-muted-foreground">{fmt_price(volume)}</span>
-</div>'''
+</div>"""
 
     # Gainers - simplified, top 3 (deduplicated by card_id)
     seen_gainer_ids = set()
@@ -540,7 +591,7 @@ def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple
     for g in gainers:
         conf = "●" if g.get("confidence") == "high" else "○" if g.get("confidence") == "medium" else "◌"
         sparkline = g.get("sparkline", "─" * 10)
-        gainer_lines += f'''
+        gainer_lines += f"""
 <div className="flex items-center gap-3 py-2">
   <span className="w-4 text-muted-foreground">{conf}</span>
   <a href="/cards/{g['card_id']}" className="flex-1 truncate hover:text-primary transition-colors">{g["name"]}</a>
@@ -548,7 +599,7 @@ def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple
   <span className="w-20 text-right font-mono font-semibold text-green-500">{fmt_pct(g["pct_change"])}</span>
   <span className="w-20 text-right font-mono">→ {fmt_price(g["current_price"])}</span>
   <span className="w-16 text-right text-muted-foreground text-sm">{g.get("volume", 0)} sale{"s" if g.get("volume", 0) != 1 else ""}</span>
-</div>'''
+</div>"""
 
     # Losers - simplified, top 3 (deduplicated by card_id)
     seen_loser_ids = set()
@@ -563,7 +614,7 @@ def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple
     for l in losers:
         conf = "●" if l.get("confidence") == "high" else "○" if l.get("confidence") == "medium" else "◌"
         sparkline = l.get("sparkline", "─" * 10)
-        loser_lines += f'''
+        loser_lines += f"""
 <div className="flex items-center gap-3 py-2">
   <span className="w-4 text-muted-foreground">{conf}</span>
   <a href="/cards/{l['card_id']}" className="flex-1 truncate hover:text-primary transition-colors">{l["name"]}</a>
@@ -571,7 +622,7 @@ def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple
   <span className="w-20 text-right font-mono font-semibold text-red-500">{fmt_pct(l["pct_change"])}</span>
   <span className="w-20 text-right font-mono">→ {fmt_price(l["current_price"])}</span>
   <span className="w-16 text-right text-muted-foreground text-sm">{l.get("volume", 0)} sale{"s" if l.get("volume", 0) != 1 else ""}</span>
-</div>'''
+</div>"""
 
     # Rarity breakdown - side by side with treatment
     rarity_bars = ""
@@ -579,12 +630,12 @@ def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple
         max_rv = max(r["volume"] for r in rarity_data) or 1
         for r in rarity_data[:4]:
             bar = ascii_bar(r["count"], max(x["count"] for x in rarity_data), 12)
-            rarity_bars += f'''
+            rarity_bars += f"""
 <div className="flex items-center gap-2">
   <span className="w-20 text-muted-foreground truncate">{r["rarity"]}</span>
   <code className="text-purple-500/50">{bar}</code>
   <span className="tabular-nums">{r["count"]}×</span>
-</div>'''
+</div>"""
 
     # Treatment breakdown
     treatment_bars = ""
@@ -592,25 +643,25 @@ def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple
         max_tc = max(t["count"] for t in stats.treatment_breakdown.values())
         for t, d in sorted(stats.treatment_breakdown.items(), key=lambda x: -x[1]["count"])[:4]:
             bar = ascii_bar(d["count"], max_tc, 12)
-            treatment_bars += f'''
+            treatment_bars += f"""
 <div className="flex items-center gap-2">
   <span className="w-28 text-muted-foreground truncate">{t}</span>
   <code className="text-green-500/50">{bar}</code>
   <span className="tabular-nums">{d["count"]}×</span>
-</div>'''
+</div>"""
 
     # Outliers - simplified
     outlier_lines = ""
     for o in outliers[:3]:
         icon = "▼" if o["is_deal"] else "▲"
         color = "text-green-500" if o["is_deal"] else "text-amber-500"
-        outlier_lines += f'''
+        outlier_lines += f"""
 <div className="flex items-center gap-3 py-1">
   <span className="w-12 text-muted-foreground">{o["date"]}</span>
   <a href="/cards/{o['card_id']}" className="flex-1 truncate hover:text-primary transition-colors">{o["name"]}</a>
   <span className="font-mono font-bold">{fmt_price(o["price"])}</span>
   <span className="{color} font-mono">{icon} {fmt_pct(o["deviation"])} vs avg</span>
-</div>'''
+</div>"""
 
     # Outlier section (built separately to avoid nested f-strings)
     outlier_section = ""
@@ -626,7 +677,7 @@ def generate_mdx_post(date_str: str | None = None, use_ai: bool = True) -> tuple
     # ASSEMBLE MDX
     # =================
 
-    mdx = f'''---
+    mdx = f"""---
 title: "Weekly Market Report: {start_disp} - {end_disp}"
 slug: "weekly-movers-{date_string}"
 description: "Wonders of the First TCG market report. {stats.total_sales:,} sales, {fmt_price(stats.total_volume_usd)} volume."
@@ -726,7 +777,7 @@ readTime: 3
 **Data Notes** · Confidence: ● consistent data · ○ treatment mix changed · ◌ thin volume · Sparklines = 30d trend · Prices from completed eBay/Blokpax sales
 
 </div>
-'''
+"""
     return mdx, date_string
 
 
@@ -741,6 +792,7 @@ def main():
         content, date_string = generate_mdx_post(args.date, not args.no_ai)
     except Exception as e:
         import traceback
+
         print(f"Error: {e}")
         traceback.print_exc()
         sys.exit(1)

@@ -18,7 +18,6 @@ Usage:
 import argparse
 import csv
 import logging
-import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -89,9 +88,7 @@ def get_treatments_for_card(session: Session, card_id: int) -> list[str]:
     return [row[0] for row in result.fetchall() if row[0]]
 
 
-def get_sales_timeline(
-    session: Session, card_id: int, treatment: Optional[str], days: int
-) -> list[dict]:
+def get_sales_timeline(session: Session, card_id: int, treatment: Optional[str], days: int) -> list[dict]:
     """Get chronological sales for a card/treatment."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -109,9 +106,7 @@ def get_sales_timeline(
                COALESCE(NULLIF(product_subtype, ''), treatment) = :treatment)
         ORDER BY COALESCE(sold_date, scraped_at) ASC
     """)
-    result = session.execute(
-        query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment}
-    )
+    result = session.execute(query, {"card_id": card_id, "cutoff": cutoff, "treatment": treatment})
     return [dict(row._mapping) for row in result.fetchall()]
 
 
@@ -159,9 +154,7 @@ def simulate_orderbook_at_date(
     # v2: Accept even 1 listing (lowered from 3)
     if len(listings) < 1:
         # Fall back to recent sales
-        return simulate_sales_fallback_at_date(
-            session, card_id, treatment, as_of_date, lookback_days
-        )
+        return simulate_sales_fallback_at_date(session, card_id, treatment, as_of_date, lookback_days)
 
     prices = [row["price"] for row in listings]
     lowest_ask = min(prices)  # v2: Use lowest ask as floor!
@@ -317,9 +310,7 @@ def run_backtest(
                     prediction_date = prediction_date.replace(tzinfo=timezone.utc)
 
                 # Get prediction at this point in time
-                prediction = simulate_orderbook_at_date(
-                    session, card_id, treatment, prediction_date
-                )
+                prediction = simulate_orderbook_at_date(session, card_id, treatment, prediction_date)
 
                 if not prediction:
                     continue
@@ -345,9 +336,7 @@ def run_backtest(
 
                 error = predicted_floor - next_sale_price
                 abs_error = abs(error)
-                pct_error = (
-                    (abs_error / next_sale_price * 100) if next_sale_price > 0 else 0
-                )
+                pct_error = (abs_error / next_sale_price * 100) if next_sale_price > 0 else 0
                 days_to_sale = (next_sale_date - prediction_date).days
 
                 results.append(
@@ -482,15 +471,13 @@ def print_summary(results: list[BacktestResult]) -> None:
     # Bias check
     overestimates = sum(1 for r in results if r.error > 0)
     underestimates = sum(1 for r in results if r.error < 0)
-    logger.info(f"\nBias Check:")
+    logger.info("\nBias Check:")
     logger.info(f"  Overestimates (predicted > actual): {overestimates} ({overestimates/len(results)*100:.1f}%)")
     logger.info(f"  Underestimates (predicted < actual): {underestimates} ({underestimates/len(results)*100:.1f}%)")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Backtest OrderBook floor predictions against actual sales"
-    )
+    parser = argparse.ArgumentParser(description="Backtest OrderBook floor predictions against actual sales")
     parser.add_argument(
         "--days",
         type=int,

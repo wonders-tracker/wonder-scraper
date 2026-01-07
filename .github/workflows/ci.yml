@@ -101,8 +101,9 @@ jobs:
           ALGORITHM: HS256
         run: |
           echo "🧪 Running tests (SaaS: ${{ steps.saas-check.outputs.saas_available }})"
-          # Run tests - SaaS tests are auto-skipped when saas/ module not available
-          poetry run pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
+          # Run tests with fail-fast and minimal output for speed
+          # SaaS tests are auto-skipped when saas/ module not available
+          poetry run pytest tests/ -x --tb=short --cov=app --cov-report=xml
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -124,9 +125,18 @@ jobs:
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-lint-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-root
+        run: poetry install --no-interaction --no-root --only=dev
 
       - name: Run ruff check
         run: poetry run ruff check app/ --output-format=github
@@ -164,10 +174,17 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Build
+      - name: Build production bundle
         run: npm run build
         env:
-          VITE_API_URL: http://localhost:8000
+          VITE_API_URL: https://wonder-scraper-production.up.railway.app
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 1
 
   frontend-bundle-integrity:
     name: Frontend Bundle Integrity
@@ -181,20 +198,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build production bundle
-        run: npm run build
-        env:
-          VITE_API_URL: https://wonder-scraper-production.up.railway.app
+          name: frontend-dist
+          path: frontend/dist
 
       - name: Validate bundle structure
         run: |
@@ -275,3 +283,218 @@ jobs:
           scan-ref: '.'
           severity: 'CRITICAL,HIGH'
           exit-code: '0'
+
+  migration-check:
+    name: Migration Safety Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for migration changes
+        id: migration-check
+        run: |
+          echo "=== Checking for migration changes ==="
+
+          # Get list of changed migration files
+          MIGRATIONS=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E 'alembic/versions/.*\.py$' || true)
+
+          if [ -z "$MIGRATIONS" ]; then
+            echo "No migration files changed"
+            echo "has_migrations=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "has_migrations=true" >> $GITHUB_OUTPUT
+          echo ""
+          echo "Migration files detected:"
+          echo "$MIGRATIONS"
+          echo ""
+
+          # Check for potentially dangerous operations
+          DANGEROUS=false
+
+          echo "=== Scanning for dangerous operations ==="
+          for file in $MIGRATIONS; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+
+              # Check for DROP operations
+              if grep -iE "drop_table|drop_column|drop_index|drop_constraint" "$file" 2>/dev/null; then
+                echo "::warning file=$file::Destructive operation detected (DROP)"
+                DANGEROUS=true
+              fi
+
+              # Check for column type changes
+              if grep -iE "alter_column.*type=" "$file" 2>/dev/null; then
+                echo "::warning file=$file::Column type change detected - may cause data loss"
+                DANGEROUS=true
+              fi
+
+              # Check for NOT NULL without default
+              if grep -iE "nullable=False" "$file" 2>/dev/null && ! grep -iE "server_default" "$file" 2>/dev/null; then
+                echo "::warning file=$file::NOT NULL constraint without server_default - may fail on existing data"
+              fi
+            fi
+          done
+
+          if [ "$DANGEROUS" = true ]; then
+            echo ""
+            echo "::warning::Potentially dangerous migration detected. Please review carefully before merging."
+            echo "Ensure you have:"
+            echo "  1. Tested on staging environment first"
+            echo "  2. Backup plan for data recovery"
+            echo "  3. Downgrade migration that reverses the change"
+          fi
+
+          echo ""
+          echo "Migration check complete"
+
+  staging-smoke-test:
+    name: Staging Smoke Test
+    runs-on: ubuntu-latest
+    needs: [backend-test, backend-lint, frontend-test]
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+
+    steps:
+      - name: Wait for Railway deployment
+        run: |
+          echo "Polling for Railway staging deployment (max 2 min)..."
+          for i in {1..12}; do
+            if curl -sf https://wonder-scraper-staging-staging.up.railway.app/health > /dev/null 2>&1; then
+              echo "Staging is up after $((i*10)) seconds"
+              break
+            fi
+            echo "Attempt $i/12 - waiting 10s..."
+            sleep 10
+          done
+
+      - name: Health check - Basic
+        run: |
+          echo "=== Basic Health Check ==="
+          response=$(curl -sf https://wonder-scraper-staging-staging.up.railway.app/health) || {
+            echo "::error::Staging health check failed"
+            exit 1
+          }
+          echo "Response: $response"
+          echo "Basic health check passed"
+
+      - name: Health check - Detailed
+        run: |
+          echo "=== Detailed Health Check ==="
+          response=$(curl -sf https://wonder-scraper-staging-staging.up.railway.app/health/detailed) || {
+            echo "::warning::Detailed health check failed (non-blocking)"
+          }
+          echo "Response: $response"
+
+      - name: API smoke test - Market overview
+        run: |
+          echo "=== Market API Test ==="
+          response=$(curl -sf --max-time 30 "https://wonder-scraper-staging-staging.up.railway.app/api/v1/market/overview" | head -c 500) || {
+            echo "::warning::Market API test failed (non-blocking)"
+          }
+          echo "Response: ${response:0:200}..."
+
+      - name: Circuit breaker status
+        run: |
+          echo "=== Circuit Breaker Status ==="
+          response=$(curl -sf https://wonder-scraper-staging-staging.up.railway.app/health/circuits) || {
+            echo "::warning::Circuit breaker check failed"
+          }
+          echo "Response: $response"
+
+          # Check if all circuits are healthy
+          if echo "$response" | grep -q '"all_healthy":true'; then
+            echo "All circuit breakers healthy"
+          else
+            echo "::warning::Some circuit breakers are not healthy"
+          fi
+
+      - name: Auth configuration validation
+        run: |
+          echo "=== Auth Configuration Validation ==="
+
+          STAGING_URL="https://wonder-scraper-staging-staging.up.railway.app"
+
+          # Get Discord login URL
+          DISCORD_URL=$(curl -sf ${STAGING_URL}/api/v1/auth/discord/login | jq -r '.url')
+          echo "Discord OAuth URL: $DISCORD_URL"
+
+          # Extract redirect_uri
+          REDIRECT_URI=$(echo "$DISCORD_URL" | grep -oP 'redirect_uri=\K[^&]+' | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))")
+          echo "Redirect URI: $REDIRECT_URI"
+
+          # For staging: redirect_uri should match the staging URL (no separate frontend)
+          # For production: this is checked in production-auth-check job
+          STAGING_HOST=$(echo "$STAGING_URL" | sed 's|https://||')
+          if ! echo "$REDIRECT_URI" | grep -q "$STAGING_HOST"; then
+            echo "::error::redirect_uri host doesn't match staging URL"
+            echo "::error::Expected: $STAGING_HOST"
+            echo "::error::Got: $REDIRECT_URI"
+            exit 1
+          fi
+          echo "✓ Redirect URI matches staging host"
+
+          # Check HTTPS
+          if ! echo "$REDIRECT_URI" | grep -q "^https://"; then
+            echo "::error::redirect_uri must use HTTPS"
+            exit 1
+          fi
+          echo "✓ HTTPS check passed"
+
+          # Check path
+          if ! echo "$REDIRECT_URI" | grep -q "/api/v1/auth/discord/callback"; then
+            echo "::error::redirect_uri has incorrect path"
+            exit 1
+          fi
+          echo "✓ Path check passed"
+
+          echo ""
+          echo "✓ Auth configuration validation PASSED"
+
+      - name: Smoke test summary
+        run: |
+          echo ""
+          echo "=== Staging Smoke Test Complete ==="
+          echo "Staging URL: https://wonder-scraper-staging-staging.up.railway.app"
+          echo "All critical endpoints responding correctly"
+
+  production-auth-check:
+    name: Production Auth Config Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+
+    steps:
+      - name: Validate production auth configuration
+        run: |
+          echo "=== Production Auth Configuration Check ==="
+          echo "Verifying current production auth config is correct..."
+
+          # Get Discord login URL from production
+          DISCORD_URL=$(curl -sf https://wonder-scraper-production.up.railway.app/api/v1/auth/discord/login | jq -r '.url') || {
+            echo "::warning::Could not reach production API"
+            exit 0
+          }
+
+          echo "Discord OAuth URL: $DISCORD_URL"
+
+          # Extract redirect_uri
+          REDIRECT_URI=$(echo "$DISCORD_URL" | grep -oP 'redirect_uri=\K[^&]+' | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))")
+          echo "Redirect URI: $REDIRECT_URI"
+
+          # Validate redirect_uri points to frontend domain, not Railway backend
+          if echo "$REDIRECT_URI" | grep -q "railway.app"; then
+            echo "::error::PRODUCTION AUTH MISCONFIGURED!"
+            echo "::error::Discord redirect_uri points to Railway backend: $REDIRECT_URI"
+            echo "::error::This breaks authentication - cookies set on wrong domain."
+            echo ""
+            echo "Fix: Update DISCORD_REDIRECT_URI in Railway production to:"
+            echo "  https://wonderstracker.com/api/v1/auth/discord/callback"
+            exit 1
+          fi
+
+          echo "✓ Production auth configuration is correct"
+          echo "  Redirect URI: $REDIRECT_URI"

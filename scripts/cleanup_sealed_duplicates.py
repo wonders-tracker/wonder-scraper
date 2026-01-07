@@ -15,15 +15,14 @@ from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 from sqlalchemy import text
 
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.db import engine
-from app.models.market import MarketPrice
-from app.models.card import Card
 from app.scraper.ebay import score_sealed_match
 
 
@@ -52,13 +51,9 @@ def find_duplicates(session: Session) -> dict:
     # Group by external_id
     duplicates = defaultdict(list)
     for ext_id, mp_id, card_id, title, card_name, product_type in results:
-        duplicates[ext_id].append({
-            "mp_id": mp_id,
-            "card_id": card_id,
-            "title": title,
-            "card_name": card_name,
-            "product_type": product_type
-        })
+        duplicates[ext_id].append(
+            {"mp_id": mp_id, "card_id": card_id, "title": title, "card_name": card_name, "product_type": product_type}
+        )
 
     return duplicates
 
@@ -76,11 +71,7 @@ def cleanup_duplicates(dry_run: bool = True):
         print(f"{'#'*80}")
         print(f"\n  Found {len(duplicates)} external_ids with duplicates across cards\n")
 
-        stats = {
-            "kept": 0,
-            "deleted": 0,
-            "errors": 0
-        }
+        stats = {"kept": 0, "deleted": 0, "errors": 0}
 
         for ext_id, entries in duplicates.items():
             title = entries[0]["title"]
@@ -112,10 +103,7 @@ def cleanup_duplicates(dry_run: bool = True):
                     stats["deleted"] += 1
                 else:
                     try:
-                        session.execute(
-                            text("DELETE FROM marketprice WHERE id = :id"),
-                            {"id": mp_id}
-                        )
+                        session.execute(text("DELETE FROM marketprice WHERE id = :id"), {"id": mp_id})
                         session.commit()
                         print(f"  [DELETED] ID {mp_id} -> {entry['card_name']}")
                         stats["deleted"] += 1
@@ -136,7 +124,7 @@ def cleanup_duplicates(dry_run: bool = True):
         print(f"  Errors: {stats['errors']}")
 
         if dry_run:
-            print(f"\n  Run with --execute to apply these changes")
+            print("\n  Run with --execute to apply these changes")
 
 
 def main():

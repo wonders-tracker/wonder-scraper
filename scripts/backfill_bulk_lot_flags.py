@@ -122,16 +122,15 @@ def print_stats(stats: dict, dry_run: bool):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Backfill is_bulk_lot flags for MarketPrice listings"
-    )
+    parser = argparse.ArgumentParser(description="Backfill is_bulk_lot flags for MarketPrice listings")
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Preview changes without committing to database",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Show each detected bulk lot",
     )

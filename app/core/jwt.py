@@ -75,7 +75,7 @@ def decode_token(token: str) -> Optional[dict]:
         return payload
     except jwt.ExpiredSignatureError:
         return None
-    except jwt.PyJWTError:
+    except jwt.InvalidTokenError:
         return None
 
 
@@ -88,7 +88,7 @@ def get_token_expiry(token: str) -> Optional[datetime]:
         if exp:
             return datetime.fromtimestamp(exp, tz=timezone.utc)
         return None
-    except jwt.PyJWTError:
+    except jwt.InvalidTokenError:
         return None
 
 

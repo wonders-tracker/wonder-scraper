@@ -13,7 +13,6 @@ Tests cover:
 - Invalid/malformed response handling
 """
 
-import pytest
 from datetime import datetime
 from app.scraper.blokpax import (
     bpx_to_float,
@@ -22,7 +21,6 @@ from app.scraper.blokpax import (
     parse_sale,
     is_wotf_asset,
     _parse_datetime,
-    BPX_DECIMALS,
 )
 
 
@@ -191,15 +189,9 @@ class TestAssetParsing:
                 "token_id": "100",
                 "attributes": [
                     {"trait_type": "Box Art", "value": "Dragon"},
-                    {"trait_type": "Serial Number", "value": "100/3393"}
+                    {"trait_type": "Serial Number", "value": "100/3393"},
                 ],
-                "asset": {
-                    "owner_count": 1,
-                    "token_count": 1,
-                    "floor_listing": None,
-                    "listings": [],
-                    "offers": []
-                }
+                "asset": {"owner_count": 1, "token_count": 1, "floor_listing": None, "listings": [], "offers": []},
             }
         }
 
@@ -241,12 +233,12 @@ class TestAssetParsing:
                         "price": 500000000000000,  # 500,000 BPX
                         "quantity": 1,
                         "seller": {"address": "0xseller"},
-                        "created_at": "2025-10-30T05:56:30.000000Z"
+                        "created_at": "2025-10-30T05:56:30.000000Z",
                     },
                     "listings": [],
-                    "offers": []
+                    "offers": [],
                 },
-                "attributes": []
+                "attributes": [],
             }
         }
 
@@ -277,19 +269,19 @@ class TestAssetParsing:
                             "price": 100000000000000,  # 100,000 BPX
                             "quantity": 1,
                             "seller": {"username": "0xseller1"},
-                            "created_at": "2025-10-30T05:56:30.000000Z"
+                            "created_at": "2025-10-30T05:56:30.000000Z",
                         },
                         {
                             "id": "102",
                             "price": 150000000000000,  # 150,000 BPX
                             "quantity": 2,
                             "seller": {"username": "0xseller2"},
-                            "created_at": "2025-10-31T10:00:00.000000Z"
-                        }
+                            "created_at": "2025-10-31T10:00:00.000000Z",
+                        },
                     ],
-                    "offers": []
+                    "offers": [],
                 },
-                "attributes": []
+                "attributes": [],
             }
         }
 
@@ -337,7 +329,7 @@ class TestAssetParsing:
                             "quantity": 1,
                             "offerer": {"address": "0xbuyer1"},
                             "offer_status": "open",
-                            "created_at": "2025-10-30T05:56:30.000000Z"
+                            "created_at": "2025-10-30T05:56:30.000000Z",
                         },
                         {
                             "id": "202",
@@ -345,11 +337,11 @@ class TestAssetParsing:
                             "quantity": 2,
                             "offerer": {"address": "0xbuyer2"},
                             "offer_status": "open",
-                            "created_at": "2025-10-31T10:00:00.000000Z"
-                        }
-                    ]
+                            "created_at": "2025-10-31T10:00:00.000000Z",
+                        },
+                    ],
                 },
-                "attributes": []
+                "attributes": [],
             }
         }
 
@@ -385,14 +377,8 @@ class TestAssetParsing:
             "network_id": 1,
             "contract_address": "0xabc",
             "token_id": "1",
-            "asset": {
-                "owner_count": 1,
-                "token_count": 1,
-                "floor_listing": None,
-                "listings": [],
-                "offers": []
-            },
-            "attributes": []
+            "asset": {"owner_count": 1, "token_count": 1, "floor_listing": None, "listings": [], "offers": []},
+            "attributes": [],
         }
 
         slug = "wotf-existence-collector-boxes"
@@ -412,12 +398,7 @@ class TestAssetParsing:
                 "network_id": 1,
                 "contract_address": "0xabc",
                 "token_id": "1",
-                "asset": {
-                    "owner_count": 1,
-                    "token_count": 1,
-                    "listings": [],
-                    "offers": []
-                }
+                "asset": {"owner_count": 1, "token_count": 1, "listings": [], "offers": []},
             }
         }
 
@@ -441,13 +422,8 @@ class TestAssetParsing:
                 "network_id": 1,
                 "contract_address": "0xabc",
                 "token_id": "1",
-                "asset": {
-                    "owner_count": 1,
-                    "token_count": 1,
-                    "listings": [],
-                    "offers": []
-                },
-                "attributes": []
+                "asset": {"owner_count": 1, "token_count": 1, "listings": [], "offers": []},
+                "attributes": [],
             }
         }
 
@@ -472,12 +448,9 @@ class TestSaleParsing:
                 "quantity": 1,
                 "seller": {"address": "0xseller"},
                 "buyer": {"address": "0xbuyer"},
-                "filled_at": "2025-11-01T12:00:00.000000Z"
+                "filled_at": "2025-11-01T12:00:00.000000Z",
             },
-            "asset": {
-                "id": "123456",
-                "name": "WOTF Existence Collector Box #100"
-            }
+            "asset": {"id": "123456", "name": "WOTF Existence Collector Box #100"},
         }
 
         bpx_price_usd = 0.002
@@ -505,12 +478,9 @@ class TestSaleParsing:
                 "listing_status": "active",
                 "price": 500000000000000,
                 "quantity": 1,
-                "seller": {"address": "0xseller"}
+                "seller": {"address": "0xseller"},
             },
-            "asset": {
-                "id": "123456",
-                "name": "WOTF Collector Box"
-            }
+            "asset": {"id": "123456", "name": "WOTF Collector Box"},
         }
 
         bpx_price_usd = 0.002
@@ -527,12 +497,9 @@ class TestSaleParsing:
                 "listing_status": "cancelled",
                 "price": 500000000000000,
                 "quantity": 1,
-                "seller": {"address": "0xseller"}
+                "seller": {"address": "0xseller"},
             },
-            "asset": {
-                "id": "123456",
-                "name": "WOTF Collector Box"
-            }
+            "asset": {"id": "123456", "name": "WOTF Collector Box"},
         }
 
         bpx_price_usd = 0.002
@@ -550,13 +517,10 @@ class TestSaleParsing:
                 "price": 500000000000000,
                 "quantity": 1,
                 "seller": {"address": "0xseller"},
-                "buyer": {"address": "0xbuyer"}
+                "buyer": {"address": "0xbuyer"},
                 # No filled_at field
             },
-            "asset": {
-                "id": "123456",
-                "name": "WOTF Collector Box"
-            }
+            "asset": {"id": "123456", "name": "WOTF Collector Box"},
         }
 
         bpx_price_usd = 0.002
@@ -578,12 +542,9 @@ class TestSaleParsing:
                 "quantity": 1,
                 "seller": {"address": "0xseller"},
                 "buyer": {"address": "0xbuyer"},
-                "filled_at": "2025-11-01T12:00:00.000000Z"
+                "filled_at": "2025-11-01T12:00:00.000000Z",
             },
-            "asset": {
-                "id": "123456",
-                "name": "WOTF Collector Box"
-            }
+            "asset": {"id": "123456", "name": "WOTF Collector Box"},
         }
 
         bpx_price_usd = 0.002
@@ -604,12 +565,9 @@ class TestSaleParsing:
                 "quantity": 5,
                 "seller": {"address": "0xseller"},
                 "buyer": {"address": "0xbuyer"},
-                "filled_at": "2025-11-01T12:00:00.000000Z"
+                "filled_at": "2025-11-01T12:00:00.000000Z",
             },
-            "asset": {
-                "id": "123456",
-                "name": "WOTF Art Proof"
-            }
+            "asset": {"id": "123456", "name": "WOTF Art Proof"},
         }
 
         bpx_price_usd = 0.002
@@ -648,7 +606,7 @@ class TestInvalidResponseHandling:
                 "network_id": 1,
                 "contract_address": "0xabc",
                 "token_id": "1",
-                "attributes": []
+                "attributes": [],
                 # No "asset" section
             }
         }
@@ -679,22 +637,17 @@ class TestInvalidResponseHandling:
                     "owner_count": 1,
                     "token_count": 1,
                     "listings": [
-                        {
-                            "id": "101",
-                            "price": 100000000000000,
-                            "quantity": 1,
-                            "seller": {"address": "0xseller1"}
-                        },
+                        {"id": "101", "price": 100000000000000, "quantity": 1, "seller": {"address": "0xseller1"}},
                         {
                             # Malformed - missing price
                             "id": "102",
                             "quantity": 1,
-                            "seller": {"address": "0xseller2"}
-                        }
+                            "seller": {"address": "0xseller2"},
+                        },
                     ],
-                    "offers": []
+                    "offers": [],
                 },
-                "attributes": []
+                "attributes": [],
             }
         }
 
@@ -725,10 +678,7 @@ class TestInvalidResponseHandling:
     def test_parse_sale_missing_listing(self):
         """Should handle missing listing section."""
         activity = {
-            "asset": {
-                "id": "123456",
-                "name": "WOTF Collector Box"
-            }
+            "asset": {"id": "123456", "name": "WOTF Collector Box"}
             # No "listing" section
         }
         bpx_price_usd = 0.002
@@ -748,7 +698,7 @@ class TestInvalidResponseHandling:
                 "quantity": 1,
                 "seller": {"address": "0xseller"},
                 "buyer": {"address": "0xbuyer"},
-                "filled_at": "2025-11-01T12:00:00.000000Z"
+                "filled_at": "2025-11-01T12:00:00.000000Z",
             }
             # No "asset" section
         }
@@ -788,13 +738,8 @@ class TestEdgeCases:
                 "network_id": 137,  # Polygon
                 "contract_address": "0xabc",
                 "token_id": "1",
-                "asset": {
-                    "owner_count": 1,
-                    "token_count": 1,
-                    "listings": [],
-                    "offers": []
-                },
-                "attributes": []
+                "asset": {"owner_count": 1, "token_count": 1, "listings": [], "offers": []},
+                "attributes": [],
             }
         }
 
@@ -814,13 +759,8 @@ class TestEdgeCases:
                 "network_id": 1,
                 "contract_address": "0xabc",
                 "token_id": "1",
-                "asset": {
-                    "owner_count": 10,
-                    "token_count": 100,
-                    "listings": [],
-                    "offers": []
-                },
-                "attributes": []
+                "asset": {"owner_count": 10, "token_count": 100, "listings": [], "offers": []},
+                "attributes": [],
             }
         }
 
@@ -849,12 +789,12 @@ class TestEdgeCases:
                             "id": 789,  # Numeric listing ID
                             "price": 100000000000000,
                             "quantity": 1,
-                            "seller": {"address": "0xseller"}
+                            "seller": {"address": "0xseller"},
                         }
                     ],
-                    "offers": []
+                    "offers": [],
                 },
-                "attributes": []
+                "attributes": [],
             }
         }
 
@@ -893,13 +833,13 @@ class TestEdgeCases:
                         {
                             "id": "101",
                             "price": 100000000000000,
-                            "quantity": 1
+                            "quantity": 1,
                             # No seller field at all
                         }
                     ],
-                    "offers": []
+                    "offers": [],
                 },
-                "attributes": []
+                "attributes": [],
             }
         }
 
@@ -929,7 +869,7 @@ class TestRealWorldScenarios:
                 "token_id": "929",
                 "attributes": [
                     {"trait_type": "Box Art", "value": "Dragon"},
-                    {"trait_type": "Serial Number", "value": "929/3393"}
+                    {"trait_type": "Serial Number", "value": "929/3393"},
                 ],
                 "asset": {
                     "owner_count": 1,
@@ -939,7 +879,7 @@ class TestRealWorldScenarios:
                         "price": 475000000000000,  # 475,000 BPX
                         "quantity": 1,
                         "seller": {"address": "0xabcdef1234567890"},
-                        "created_at": "2025-10-30T05:56:30.000000Z"
+                        "created_at": "2025-10-30T05:56:30.000000Z",
                     },
                     "listings": [],
                     "offers": [
@@ -949,10 +889,10 @@ class TestRealWorldScenarios:
                             "quantity": 1,
                             "offerer": {"address": "0x9876543210fedcba"},
                             "offer_status": "open",
-                            "created_at": "2025-10-29T10:00:00.000000Z"
+                            "created_at": "2025-10-29T10:00:00.000000Z",
                         }
-                    ]
-                }
+                    ],
+                },
             }
         }
 
@@ -994,7 +934,7 @@ class TestRealWorldScenarios:
                 "token_id": "1234",
                 "attributes": [
                     {"trait_type": "Character", "value": "Progo"},
-                    {"trait_type": "Edition", "value": "Art Proof"}
+                    {"trait_type": "Edition", "value": "Art Proof"},
                 ],
                 "asset": {
                     "owner_count": 1,
@@ -1006,11 +946,11 @@ class TestRealWorldScenarios:
                             "price": 75000000000000,  # 75,000 BPX
                             "quantity": 1,
                             "seller": {"address": "0xartist"},
-                            "created_at": "2025-11-01T08:30:00.000000Z"
+                            "created_at": "2025-11-01T08:30:00.000000Z",
                         }
                     ],
-                    "offers": []
-                }
+                    "offers": [],
+                },
             }
         }
 

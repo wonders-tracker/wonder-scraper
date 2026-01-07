@@ -11,7 +11,6 @@ Tests cover:
 """
 
 import pytest
-from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from app.services.market_patterns import (

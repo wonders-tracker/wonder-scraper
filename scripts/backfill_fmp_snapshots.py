@@ -12,14 +12,12 @@ Usage:
 
 import argparse
 from datetime import datetime, timedelta, timezone
-from collections import defaultdict
 
 from sqlalchemy import text
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.db import engine
-from app.models.card import Card
-from app.models.market import FMPSnapshot, MarketPrice
+from app.models.market import FMPSnapshot
 from app.services.pricing import FMP_AVAILABLE
 
 
@@ -99,9 +97,7 @@ def get_cards_with_sales(session: Session) -> list[tuple[int, str, str]]:
     return [(r[0], r[1], r[2]) for r in result]
 
 
-def get_treatments_for_card(
-    session: Session, card_id: int, as_of_date: datetime, lookback_days: int = 30
-) -> list[str]:
+def get_treatments_for_card(session: Session, card_id: int, as_of_date: datetime, lookback_days: int = 30) -> list[str]:
     """Get all treatments that have sales for a card in the given period."""
     cutoff_start = as_of_date - timedelta(days=lookback_days)
 
@@ -165,9 +161,7 @@ def backfill_fmp_snapshots(
         print()
 
         # Check for existing snapshots
-        existing_count = session.execute(
-            text("SELECT COUNT(*) FROM fmpsnapshot")
-        ).scalar()
+        existing_count = session.execute(text("SELECT COUNT(*) FROM fmpsnapshot")).scalar()
         if existing_count > 0:
             print(f"WARNING: {existing_count} existing snapshots found")
             if execute:
@@ -200,9 +194,7 @@ def backfill_fmp_snapshots(
 
             for card_id, card_name, set_name in cards:
                 # Calculate aggregate floor (all treatments)
-                floor, vwap, sales_count = calculate_floor_at_date(
-                    session, card_id, snapshot_time
-                )
+                floor, vwap, sales_count = calculate_floor_at_date(session, card_id, snapshot_time)
 
                 if floor is not None and sales_count >= 1:
                     snapshot = FMPSnapshot(
@@ -291,9 +283,7 @@ if __name__ == "__main__":
     end = None
 
     if args.start_date:
-        start = datetime.strptime(args.start_date, "%Y-%m-%d").replace(
-            tzinfo=timezone.utc
-        )
+        start = datetime.strptime(args.start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     if args.end_date:
         end = datetime.strptime(args.end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
 

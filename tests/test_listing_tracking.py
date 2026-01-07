@@ -24,6 +24,7 @@ from app.models.card import Card
 # UNIT TESTS - No database required
 # =============================================================================
 
+
 class TestListedAtFieldBehavior:
     """Unit tests for the listed_at field on MarketPrice model."""
 
@@ -37,7 +38,7 @@ class TestListedAtFieldBehavior:
             treatment="Classic Paper",
             platform="ebay",
         )
-        assert hasattr(mp, 'listed_at')
+        assert hasattr(mp, "listed_at")
 
     def test_listed_at_defaults_to_none(self):
         """listed_at should default to None."""
@@ -401,6 +402,7 @@ class TestDataValidation:
 # INTEGRATION TESTS - Require PostgreSQL database
 # =============================================================================
 
+
 @pytest.mark.integration
 class TestDatabasePersistence:
     """Integration tests for database persistence."""
@@ -521,7 +523,7 @@ class TestDatabasePersistence:
                     MarketPrice.card_id == card.id,
                     MarketPrice.listed_at >= start,
                     MarketPrice.listed_at <= end,
-                    MarketPrice.external_id.like(f"test_range_%_{now.timestamp()}")
+                    MarketPrice.external_id.like(f"test_range_%_{now.timestamp()}"),
                 )
             ).all()
 
@@ -559,10 +561,7 @@ class TestDatabasePersistence:
         try:
             # Find by external_id
             found = integration_session.exec(
-                select(MarketPrice).where(
-                    MarketPrice.external_id == external_id,
-                    MarketPrice.listing_type == "active"
-                )
+                select(MarketPrice).where(MarketPrice.external_id == external_id, MarketPrice.listing_type == "active")
             ).first()
 
             assert found is not None
@@ -620,7 +619,7 @@ class TestDatabasePersistence:
                     MarketPrice.card_id == card.id,
                     MarketPrice.listing_type == "active",
                     MarketPrice.scraped_at < cutoff,
-                    MarketPrice.external_id.like(f"test_%_{now.timestamp()}")
+                    MarketPrice.external_id.like(f"test_%_{now.timestamp()}"),
                 )
             ).all()
 
@@ -673,7 +672,7 @@ class TestActiveToSoldConversionLogic:
                 select(MarketPrice).where(
                     MarketPrice.card_id == card.id,
                     MarketPrice.listing_type == "active",
-                    MarketPrice.external_id.in_(external_ids)
+                    MarketPrice.external_id.in_(external_ids),
                 )
             ).all()
 

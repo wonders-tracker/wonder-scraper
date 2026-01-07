@@ -39,10 +39,16 @@ from app.discord_bot.logger import (
 )
 from app.models.market import MarketPrice
 from app.core.metrics import scraper_metrics
+from app.core.circuit_breaker import CircuitBreakerRegistry
 from app.services.meta_sync import sync_all_meta_status
+from app.services.task_queue import enqueue_task_sync, get_queue_stats_sync, cleanup_old_tasks_sync
 from datetime import datetime, timedelta, timezone
 
 scheduler = AsyncIOScheduler()
+
+# Global lock to prevent browser job collisions
+# Only one browser-using job can run at a time to avoid resource conflicts
+_browser_job_lock = asyncio.Lock()
 
 
 async def scrape_single_card(card: Card):
@@ -101,6 +107,23 @@ async def job_update_market_data():
     Optimized polling job - scrapes cards in batches with concurrency control.
     Includes robust error handling for browser startup and database failures.
     """
+    # Acquire browser lock to prevent collision with other browser jobs
+    if _browser_job_lock.locked():
+        print("[Polling] Another browser job is running, skipping this run")
+        return
+
+    async with _browser_job_lock:
+        await _job_update_market_data_impl()
+
+
+async def _job_update_market_data_impl():
+    """Implementation of market data update (called under lock)."""
+    # Check circuit breaker before starting
+    ebay_circuit = CircuitBreakerRegistry.get("ebay", failure_threshold=5, recovery_timeout=300.0)
+    if not ebay_circuit.allow_request():
+        print("[Polling] eBay circuit breaker OPEN - skipping update (recovery in ~5 min)")
+        return
+
     print(f"[{datetime.now(timezone.utc)}] Starting Scheduled Market Update...")
     start_time = time.time()
 
@@ -262,15 +285,19 @@ async def job_update_market_data():
                 )
                 if consecutive_scrape_failures >= max_consecutive_scrape_failures:
                     print("[Polling] CIRCUIT BREAKER: eBay likely blocking us, aborting job early")
+                    # Record failure with circuit breaker - will trip after threshold
+                    ebay_circuit.record_failure()
                     log_warning(
                         "🔴 eBay Scraper Blocked",
                         f"Market update aborted after {consecutive_scrape_failures} consecutive batch failures.\n"
                         f"Progress: {successful}/{len(cards_to_update)} cards successful.\n"
+                        f"Circuit breaker state: {ebay_circuit.state.value}\n"
                         "eBay may be rate-limiting or blocking our requests.",
                     )
                     break
             else:
                 consecutive_scrape_failures = 0  # Reset on any success
+                ebay_circuit.record_success()  # Record success with circuit breaker
 
             # Brief delay between batches
             if i + batch_size < len(cards_to_update):
@@ -331,6 +358,21 @@ async def job_update_blokpax_data():
     Scheduled job to update Blokpax floor prices and sales.
     Runs on a separate interval from eBay since it's lightweight (API-based).
     """
+    # Acquire browser lock (OpenSea scraping needs browser)
+    if _browser_job_lock.locked():
+        print("[Blokpax] Another browser job is running, skipping this run")
+        return
+
+    async with _browser_job_lock:
+        await _job_update_blokpax_data_impl()
+
+
+async def _job_update_blokpax_data_impl():
+    """Implementation of Blokpax/OpenSea update (called under lock)."""
+    # Check circuit breakers before starting
+    blokpax_circuit = CircuitBreakerRegistry.get("blokpax", failure_threshold=3, recovery_timeout=600.0)
+    opensea_circuit = CircuitBreakerRegistry.get("opensea", failure_threshold=3, recovery_timeout=600.0)
+
     print(f"[{datetime.now(timezone.utc)}] Starting Blokpax Update...")
     start_time = time.time()
 
@@ -346,6 +388,9 @@ async def job_update_blokpax_data():
         print(f"[Blokpax] BPX Price: ${bpx_price:.6f} USD")
 
         for slug in WOTF_STOREFRONTS:
+            if not blokpax_circuit.allow_request():
+                print("[Blokpax] Circuit breaker OPEN, skipping remaining storefronts")
+                break
             try:
                 # Scrape floor prices with deep_scan=True to actually compute floor from listings
                 # Without deep_scan, only metadata is fetched and floor_price stays stale
@@ -395,9 +440,11 @@ async def job_update_blokpax_data():
                     sales = [s for s in sales if is_wotf_asset(s.asset_name)]
                 total_sales += len(sales)
 
+                blokpax_circuit.record_success()
                 await asyncio.sleep(1)
 
             except Exception as e:
+                blokpax_circuit.record_failure()
                 print(f"[Blokpax] Error on {slug}: {e}")
                 errors += 1
 
@@ -428,50 +475,55 @@ async def job_update_blokpax_data():
 
     # ===== OpenSea Active Listings =====
     opensea_listings = 0
-    try:
-        print(f"[{datetime.now(timezone.utc)}] Scraping OpenSea Active Listings...")
-
-        # Ensure browser is in clean state before OpenSea (may have stale state from eBay)
+    if not opensea_circuit.allow_request():
+        print("[OpenSea] Circuit breaker OPEN, skipping")
+    else:
         try:
-            await BrowserManager.close()
-            await asyncio.sleep(2)
-        except (asyncio.TimeoutError, RuntimeError, OSError):
-            # Browser cleanup can fail if already closed or crashed - safe to ignore
-            pass
+            print(f"[{datetime.now(timezone.utc)}] Scraping OpenSea Active Listings...")
 
-        with Session(engine) as session:
-            for collection_slug, card_name in OPENSEA_WOTF_COLLECTIONS.items():
-                try:
-                    # Find the card in DB
-                    card = session.execute(select(Card).where(Card.name == card_name)).scalars().first()
+            # Ensure browser is in clean state before OpenSea (may have stale state from eBay)
+            try:
+                await BrowserManager.close()
+                await asyncio.sleep(2)
+            except (asyncio.TimeoutError, RuntimeError, OSError):
+                # Browser cleanup can fail if already closed or crashed - safe to ignore
+                pass
 
-                    if not card:
-                        print(f"[OpenSea] Card '{card_name}' not found in DB, skipping")
+            with Session(engine) as session:
+                for collection_slug, card_name in OPENSEA_WOTF_COLLECTIONS.items():
+                    try:
+                        # Find the card in DB
+                        card = session.execute(select(Card).where(Card.name == card_name)).scalars().first()
+
+                        if not card:
+                            print(f"[OpenSea] Card '{card_name}' not found in DB, skipping")
+                            continue
+
+                        scraped, saved = await scrape_opensea_listings_to_db(
+                            session, collection_slug, ensure_int(card.id), card_name
+                        )
+                        opensea_listings += saved
+                        opensea_circuit.record_success()
+
+                    except Exception as e:
+                        opensea_circuit.record_failure()
+                        print(f"[OpenSea] Error scraping {collection_slug}: {e}")
+                        errors += 1
                         continue
 
-                    scraped, saved = await scrape_opensea_listings_to_db(
-                        session, collection_slug, ensure_int(card.id), card_name
-                    )
-                    opensea_listings += saved
+            print(f"[OpenSea] Active listings: {opensea_listings} synced to marketprice")
 
-                except Exception as e:
-                    print(f"[OpenSea] Error scraping {collection_slug}: {e}")
-                    errors += 1
-                    continue
-
-        print(f"[OpenSea] Active listings: {opensea_listings} synced to marketprice")
-
-    except Exception as e:
-        print(f"[OpenSea] Fatal error: {e}")
-        log_scrape_error("OpenSea Scheduled", str(e))
-        errors += 1
-    finally:
-        # Clean up browser after OpenSea scraping
-        try:
-            await BrowserManager.close()
-        except (asyncio.TimeoutError, RuntimeError, OSError):
-            # Browser cleanup can fail if already closed or crashed - safe to ignore
-            pass
+        except Exception as e:
+            print(f"[OpenSea] Fatal error: {e}")
+            log_scrape_error("OpenSea Scheduled", str(e))
+            errors += 1
+        finally:
+            # Clean up browser after OpenSea scraping
+            try:
+                await BrowserManager.close()
+            except (asyncio.TimeoutError, RuntimeError, OSError):
+                # Browser cleanup can fail if already closed or crashed - safe to ignore
+                pass
 
     total_listings += opensea_listings
 
@@ -839,6 +891,17 @@ async def job_seller_priority_queue():
 
     Uses shared BrowserManager for resource efficiency.
     """
+    # Acquire browser lock to prevent collision with other browser jobs
+    if _browser_job_lock.locked():
+        print("[Seller Priority] Another browser job is running, skipping this run")
+        return
+
+    async with _browser_job_lock:
+        await _job_seller_priority_queue_impl()
+
+
+async def _job_seller_priority_queue_impl():
+    """Implementation of seller priority queue (called under lock)."""
     print(f"[{datetime.now(timezone.utc)}] Starting Seller Priority Queue...")
 
     try:
@@ -918,6 +981,17 @@ async def job_backfill_seller_data():
     Uses shared BrowserManager for resource efficiency.
     Handles backlog while job_seller_priority_queue handles new listings.
     """
+    # Acquire browser lock to prevent collision with other browser jobs
+    if _browser_job_lock.locked():
+        print("[Seller Backfill] Another browser job is running, skipping this run")
+        return
+
+    async with _browser_job_lock:
+        await _job_backfill_seller_data_impl()
+
+
+async def _job_backfill_seller_data_impl():
+    """Implementation of seller backfill (called under lock)."""
     print(f"[{datetime.now(timezone.utc)}] Starting Seller Data Backfill...")
 
     try:
@@ -1191,6 +1265,109 @@ async def job_sync_meta_status():
         log_scrape_error("Meta Sync", str(e))
 
 
+async def job_enqueue_stale_cards():
+    """
+    Enqueue stale cards to the persistent task queue for worker processing.
+
+    This job runs every 30 minutes and adds cards needing updates to the
+    task queue. A separate worker process (run_task_queue_worker.py) then
+    processes these tasks with crash resilience.
+
+    Benefits over inline processing:
+    - Crash recovery: tasks survive worker restarts
+    - Distributed processing: multiple workers can claim tasks
+    - Priority handling: high-priority cards processed first
+    - Retry logic: failed tasks automatically retry up to max_attempts
+    """
+    print(f"[{datetime.now(timezone.utc)}] Enqueuing stale cards to task queue...")
+
+    try:
+        with Session(engine) as session:
+            # Same logic as job_update_market_data to find stale cards
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=1)
+
+            # Subquery for latest snapshot per card
+            latest_snapshots = (
+                select(MarketSnapshot.card_id, func.max(MarketSnapshot.timestamp).label("latest_timestamp"))
+                .group_by(MarketSnapshot.card_id)
+                .subquery()
+            )
+
+            # Get cards needing updates (no snapshot in last hour, or never scraped)
+            cards_query = (
+                select(Card)
+                .outerjoin(latest_snapshots, col(Card.id) == latest_snapshots.c.card_id)
+                .where(
+                    (latest_snapshots.c.latest_timestamp < cutoff_time) | (latest_snapshots.c.latest_timestamp == None)  # noqa: E711
+                )
+            )
+
+            cards = list(session.execute(cards_query).scalars().all())
+
+            if not cards:
+                print("[Queue] No stale cards to enqueue")
+                stats = get_queue_stats_sync(session, source="ebay")
+                print(f"[Queue] Current queue stats: {stats}")
+                return
+
+            enqueued = 0
+            skipped = 0
+
+            for card in cards:
+                try:
+                    # Enqueue with default priority (0)
+                    # Higher priority cards (e.g., popular ones) could use priority=1
+                    task = enqueue_task_sync(
+                        session,
+                        card_id=card.id,
+                        source="ebay",
+                        priority=0,
+                        max_attempts=3,
+                    )
+                    # enqueue_task_sync returns existing task if already queued
+                    if task.attempts == 0:
+                        enqueued += 1
+                    else:
+                        skipped += 1
+                except Exception as e:
+                    print(f"[Queue] Error enqueuing card {card.name}: {e}")
+                    skipped += 1
+
+            stats = get_queue_stats_sync(session, source="ebay")
+            print(f"[Queue] Enqueued {enqueued} cards ({skipped} already queued). Stats: {stats}")
+
+    except Exception as e:
+        print(f"[Queue] Error during enqueue job: {e}")
+        log_scrape_error("Enqueue Stale Cards", str(e))
+
+
+async def job_cleanup_task_queue():
+    """
+    Clean up old completed/failed tasks from the task queue.
+    Runs daily at 3 AM UTC.
+
+    Prevents the scrape_task table from growing unbounded by removing
+    tasks that are no longer needed for tracking or debugging.
+
+    Keeps tasks for 7 days to allow for:
+    - Debugging recent failures
+    - Analyzing completion patterns
+    - Identifying recurring issues
+    """
+    print(f"[{datetime.now(timezone.utc)}] Cleaning up task queue...")
+
+    try:
+        with Session(engine) as session:
+            result = cleanup_old_tasks_sync(session, days_to_keep=7)
+            print(
+                f"[Queue Cleanup] Deleted {result['completed_deleted']} completed, "
+                f"{result['failed_deleted']} failed tasks"
+            )
+    except Exception as e:
+        print(f"[Queue Cleanup] Error: {e}")
+        log_scrape_error("Task Queue Cleanup", str(e))
+
+
 def start_scheduler():
     # Job configuration for durability:
     # - max_instances=1: Prevent overlapping runs
@@ -1338,12 +1515,41 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # Task queue cleanup daily at 3 AM UTC
+    # Removes completed/failed tasks older than 7 days to prevent table bloat
+    scheduler.add_job(
+        job_cleanup_task_queue,
+        CronTrigger(hour=3, minute=0),
+        id="job_cleanup_task_queue",
+        max_instances=1,
+        misfire_grace_time=7200,  # 2 hours
+        coalesce=True,
+        replace_existing=True,
+    )
+
+    # Task queue enqueue job: 30 min interval
+    # Alternative to job_update_market_data for distributed worker processing
+    # Enqueues stale cards to the persistent task queue for crash-resilient processing
+    # Use with: python scripts/run_task_queue_worker.py
+    # NOTE: This is disabled by default. Enable if running separate worker processes.
+    if settings.USE_TASK_QUEUE:
+        scheduler.add_job(
+            job_enqueue_stale_cards,
+            IntervalTrigger(minutes=30),
+            id="job_enqueue_stale_cards",
+            max_instances=1,
+            misfire_grace_time=900,  # 15 minutes
+            coalesce=True,
+            replace_existing=True,
+        )
+
     scheduler.start()
     print("Scheduler started (with misfire handling):")
     print("  - job_update_market_data (eBay): 30m interval, 15m grace [batch=8, 4 concurrent tabs]")
     print("  - job_update_blokpax_data (Blokpax+OpenSea): 8h interval, 1h grace")
     print("  - job_market_insights (Discord AI): 9:00 & 18:00 UTC, 1h grace")
     print("  - job_sync_meta_status (Meta): 4:00 UTC daily, 2h grace")
+    print("  - job_cleanup_task_queue (Queue Cleanup): 3:00 UTC daily, 2h grace")
     print("  - job_send_daily_digests (Email): 9:15 UTC daily, 1h grace")
     print("  - job_send_personal_welcome_emails (Email): 10:00 UTC daily, 1h grace")
     print("  - job_send_weekly_reports (Email): Mon 9:30 UTC, 2h grace")
@@ -1351,3 +1557,5 @@ def start_scheduler():
     print("  - job_seller_priority_queue (Seller): 1h interval, 30m grace")
     print("  - job_backfill_seller_data (Seller): 4h interval, 1h grace")
     print("  - job_scraper_health_check (Monitoring): 2h interval, 30m grace")
+    if settings.USE_TASK_QUEUE:
+        print("  - job_enqueue_stale_cards (Queue): 30m interval, 15m grace [requires worker process]")

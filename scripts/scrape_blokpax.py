@@ -10,10 +10,11 @@ Usage:
     python scripts/scrape_blokpax.py --redemptions      # Scrape collector box redemptions
     python scripts/scrape_blokpax.py --deep             # Deep scan for floor prices
 """
+
 import asyncio
 import argparse
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import List
 
 from sqlmodel import Session, select
@@ -23,14 +24,11 @@ from app.scraper.blokpax import (
     get_bpx_price,
     fetch_storefront,
     fetch_storefront_assets,
-    fetch_storefront_activity,
     scrape_storefront_floor,
-    scrape_all_listings,
     scrape_recent_sales,
     scrape_all_offers,
     scrape_redemption_stats,
     parse_asset,
-    parse_sale,
     is_wotf_asset,
 )
 from app.models.blokpax import (
@@ -64,9 +62,7 @@ async def scrape_storefront_metadata(slug: str) -> dict:
 
         # Store in DB
         with Session(engine) as session:
-            existing = session.exec(
-                select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)
-            ).first()
+            existing = session.exec(select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)).first()
 
             if existing:
                 existing.name = name
@@ -129,7 +125,7 @@ async def scrape_floor_prices(slugs: List[str] = None, deep_scan: bool = False):
             if floor_bpx:
                 print(f"  Floor: {floor_bpx:,.0f} BPX (${floor_usd:.2f} USD)")
             else:
-                print(f"  Floor: No listings")
+                print("  Floor: No listings")
             print(f"  Listed: {listed} / {total} tokens")
 
             # Fetch redemption stats for collector boxes
@@ -159,9 +155,7 @@ async def scrape_floor_prices(slugs: List[str] = None, deep_scan: bool = False):
                 session.add(snapshot)
 
                 # Update storefront record
-                storefront = session.exec(
-                    select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)
-                ).first()
+                storefront = session.exec(select(BlokpaxStorefront).where(BlokpaxStorefront.slug == slug)).first()
                 if storefront:
                     storefront.floor_price_bpx = floor_bpx
                     storefront.floor_price_usd = floor_usd
@@ -212,9 +206,7 @@ async def scrape_sales(slugs: List[str] = None, max_pages: int = 3):
                 for sale in sales:
                     # Check if already indexed
                     existing = session.exec(
-                        select(BlokpaxSale).where(
-                            BlokpaxSale.listing_id == sale.listing_id
-                        )
+                        select(BlokpaxSale).where(BlokpaxSale.listing_id == sale.listing_id)
                     ).first()
 
                     if existing:
@@ -277,9 +269,7 @@ async def scrape_offers(slugs: List[str] = None, max_pages: int = 200):
                 for offer in offers:
                     # Check if already indexed
                     existing = session.exec(
-                        select(BlokpaxOfferDB).where(
-                            BlokpaxOfferDB.external_id == offer.offer_id
-                        )
+                        select(BlokpaxOfferDB).where(BlokpaxOfferDB.external_id == offer.offer_id)
                     ).first()
 
                     if existing:
@@ -350,8 +340,7 @@ async def scrape_redemptions(slug: str = "wotf-existence-collector-boxes"):
                 # Check if already indexed
                 existing = session.exec(
                     select(BlokpaxRedemption).where(
-                        BlokpaxRedemption.asset_id == r.asset_id,
-                        BlokpaxRedemption.redeemed_at == r.redeemed_at
+                        BlokpaxRedemption.asset_id == r.asset_id, BlokpaxRedemption.redeemed_at == r.redeemed_at
                     )
                 ).first()
 
@@ -429,11 +418,7 @@ async def scrape_all_assets(slug: str, max_pages: int = 10):
             if slug == "reward-room" and not is_wotf_asset(asset.name):
                 continue
 
-            existing = session.exec(
-                select(BlokpaxAssetDB).where(
-                    BlokpaxAssetDB.external_id == asset.asset_id
-                )
-            ).first()
+            existing = session.exec(select(BlokpaxAssetDB).where(BlokpaxAssetDB.external_id == asset.asset_id)).first()
 
             if existing:
                 # Update existing
@@ -470,32 +455,16 @@ async def scrape_all_assets(slug: str, max_pages: int = 10):
 
 async def main():
     parser = argparse.ArgumentParser(description="Blokpax WOTF Scraper")
+    parser.add_argument("--slug", type=str, help="Specific storefront slug to scrape")
+    parser.add_argument("--floors", action="store_true", help="Only scrape floor prices")
+    parser.add_argument("--sales", action="store_true", help="Only scrape recent sales")
+    parser.add_argument("--assets", action="store_true", help="Index all assets (slow)")
+    parser.add_argument("--offers", action="store_true", help="Only scrape active offers/bids")
+    parser.add_argument("--pages", type=int, default=3, help="Max pages to scrape")
     parser.add_argument(
-        "--slug", type=str, help="Specific storefront slug to scrape"
+        "--deep", action="store_true", help="Deep scan: check each asset for listings (slow but accurate)"
     )
-    parser.add_argument(
-        "--floors", action="store_true", help="Only scrape floor prices"
-    )
-    parser.add_argument(
-        "--sales", action="store_true", help="Only scrape recent sales"
-    )
-    parser.add_argument(
-        "--assets", action="store_true", help="Index all assets (slow)"
-    )
-    parser.add_argument(
-        "--offers", action="store_true", help="Only scrape active offers/bids"
-    )
-    parser.add_argument(
-        "--pages", type=int, default=3, help="Max pages to scrape"
-    )
-    parser.add_argument(
-        "--deep", action="store_true",
-        help="Deep scan: check each asset for listings (slow but accurate)"
-    )
-    parser.add_argument(
-        "--redemptions", action="store_true",
-        help="Scrape collector box redemption data"
-    )
+    parser.add_argument("--redemptions", action="store_true", help="Scrape collector box redemption data")
     args = parser.parse_args()
 
     # Determine which storefronts to scrape
@@ -544,11 +513,7 @@ async def main():
         # Log scrape complete to Discord
         duration = time.time() - start_time
         log_scrape_complete(
-            cards_processed=len(slugs),
-            new_listings=0,
-            new_sales=new_sales,
-            duration_seconds=duration,
-            errors=errors
+            cards_processed=len(slugs), new_listings=0, new_sales=new_sales, duration_seconds=duration, errors=errors
         )
 
     print("\n" + "=" * 60)
