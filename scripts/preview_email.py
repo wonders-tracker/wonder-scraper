@@ -27,6 +27,8 @@ from app.core.config import settings
 
 def get_product_update_html() -> str:
     """Generate detailed product update email HTML."""
+    img_base = f"{settings.FRONTEND_URL}/emails/jan-2025"
+
     sections = [
         {
             "title": "Fair Market Price Algorithm",
@@ -36,6 +38,7 @@ def get_product_update_html() -> str:
                 "Dynamic multipliers calculated from real sales data",
                 "Liquidity adjustment factors in supply/demand",
             ],
+            "image": f"{img_base}/card-prices.png",
         },
         {
             "title": "Confidence Scores",
@@ -54,6 +57,7 @@ def get_product_update_html() -> str:
                 "Filters outlier listings (damaged cards, price manipulation)",
                 "Falls back to sales data when listings are sparse",
             ],
+            "image": f"{img_base}/dashboard.png",
         },
         {
             "title": "OpenSea Integration",
@@ -80,6 +84,7 @@ def get_product_update_html() -> str:
         title = section.get("title", "")
         description = section.get("description", "")
         bullets = section.get("bullets", [])
+        image = section.get("image")
         num = i + 1
 
         bullet_items = "".join(
@@ -92,6 +97,18 @@ def get_product_update_html() -> str:
             if bullets
             else ""
         )
+
+        image_html = ""
+        if image:
+            image_html = f'''
+                <table cellpadding="0" cellspacing="0" style="margin-top: 16px;" width="100%">
+                    <tr>
+                        <td style="background: #222; border: 1px solid #333; padding: 4px;">
+                            <img src="{image}" alt="{title}" style="max-width: 100%; height: auto; display: block; border-radius: 4px;" />
+                        </td>
+                    </tr>
+                </table>
+            '''
 
         section_html += f"""
         <tr>
@@ -106,6 +123,7 @@ def get_product_update_html() -> str:
                 </table>
                 <p style="margin: 14px 0 0 0; color: #888; font-size: 13px; line-height: 1.6;">{description}</p>
                 {bullet_html}
+                {image_html}
             </td>
         </tr>
         """
