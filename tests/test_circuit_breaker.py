@@ -37,7 +37,7 @@ class TestCircuitBreakerInitialization:
 
     def test_default_initialization(self):
         """Test that CircuitBreaker initializes with correct defaults."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
 
         assert cb.name == "test"
         assert cb.failure_threshold == 5
@@ -65,7 +65,7 @@ class TestCircuitBreakerInitialization:
 
     def test_starts_in_closed_state(self):
         """Test that CircuitBreaker starts in CLOSED state."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
         assert cb.state == CircuitState.CLOSED
 
 
@@ -74,7 +74,7 @@ class TestStateTransitions:
 
     def test_closed_to_open_after_failure_threshold(self):
         """Test CLOSED -> OPEN after failure_threshold failures."""
-        cb = CircuitBreaker(name="test", failure_threshold=3)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=3)
 
         # Record failures below threshold
         cb.record_failure()
@@ -87,7 +87,7 @@ class TestStateTransitions:
 
     def test_open_to_half_open_after_recovery_timeout(self):
         """Test OPEN -> HALF_OPEN after recovery_timeout via allow_request."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, recovery_timeout=60.0)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, recovery_timeout=60.0)
 
         # Open the circuit
         cb.record_failure()
@@ -104,7 +104,7 @@ class TestStateTransitions:
 
     def test_half_open_to_closed_after_successful_calls(self):
         """Test HALF_OPEN -> CLOSED after successful calls."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, half_open_max_calls=3)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, half_open_max_calls=3)
 
         # Open the circuit
         cb.record_failure()
@@ -130,7 +130,7 @@ class TestStateTransitions:
 
     def test_half_open_to_open_on_failure_during_recovery(self):
         """Test HALF_OPEN -> OPEN on failure during recovery."""
-        cb = CircuitBreaker(name="test", failure_threshold=1)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1)
 
         # Open the circuit
         cb.record_failure()
@@ -166,7 +166,7 @@ class TestRecordSuccess:
 
     def test_record_success_in_half_open_increments_success_count(self):
         """Test that record_success in HALF_OPEN increments success count."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, half_open_max_calls=3)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, half_open_max_calls=3)
 
         # Get to HALF_OPEN state via allow_request
         cb.record_failure()
@@ -184,7 +184,7 @@ class TestRecordSuccess:
 
     def test_record_success_in_closed_does_not_change_success_count(self):
         """Test that record_success in CLOSED doesn't track success count."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
 
         cb.record_success()
         cb.record_success()
@@ -198,7 +198,7 @@ class TestRecordFailure:
 
     def test_record_failure_increments_count(self):
         """Test that record_failure increments failure count."""
-        cb = CircuitBreaker(name="test", failure_threshold=10)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=10)
 
         assert cb._failure_count == 0
 
@@ -213,7 +213,7 @@ class TestRecordFailure:
 
     def test_record_failure_sets_last_failure_time(self):
         """Test that record_failure sets last_failure_time."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
 
         assert cb._last_failure_time is None
 
@@ -228,7 +228,7 @@ class TestRecordFailure:
 
     def test_record_failure_opens_circuit_at_threshold(self):
         """Test that circuit opens when failure threshold is reached."""
-        cb = CircuitBreaker(name="test", failure_threshold=3)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=3)
 
         cb.record_failure()
         assert cb._state == CircuitState.CLOSED
@@ -245,7 +245,7 @@ class TestAllowRequest:
 
     def test_allow_request_when_closed(self):
         """Test that requests are allowed when circuit is CLOSED."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
 
         assert cb._state == CircuitState.CLOSED
         assert cb.allow_request() is True
@@ -256,7 +256,7 @@ class TestAllowRequest:
 
     def test_allow_request_when_open(self):
         """Test that requests are blocked when circuit is OPEN."""
-        cb = CircuitBreaker(name="test", failure_threshold=1)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1)
 
         # Open the circuit
         cb.record_failure()
@@ -268,7 +268,7 @@ class TestAllowRequest:
 
     def test_allow_request_when_half_open(self):
         """Test that limited requests are allowed when circuit is HALF_OPEN."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, half_open_max_calls=3)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, half_open_max_calls=3)
 
         # Get to HALF_OPEN state via allow_request
         cb.record_failure()
@@ -288,7 +288,7 @@ class TestAllowRequest:
 
     def test_allow_request_triggers_state_transition(self):
         """Test that allow_request can trigger OPEN -> HALF_OPEN transition."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, recovery_timeout=60.0)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, recovery_timeout=60.0)
 
         # Open the circuit
         cb.record_failure()
@@ -380,7 +380,7 @@ class TestRecoveryTimeoutTransition:
 
     def test_recovery_timeout_transition(self):
         """Test that state transitions exactly at recovery timeout."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, recovery_timeout=30.0)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, recovery_timeout=30.0)
 
         # Open the circuit
         cb.record_failure()
@@ -398,7 +398,7 @@ class TestRecoveryTimeoutTransition:
 
     def test_recovery_timeout_resets_half_open_calls(self):
         """Test that transitioning to HALF_OPEN resets half_open_calls counter."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, recovery_timeout=60.0)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, recovery_timeout=60.0)
 
         # Open the circuit
         cb.record_failure()
@@ -414,7 +414,7 @@ class TestRecoveryTimeoutTransition:
 
     def test_no_transition_without_last_failure_time(self):
         """Test that OPEN state doesn't transition if last_failure_time is None."""
-        cb = CircuitBreaker(name="test", failure_threshold=1)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1)
 
         # Manually set state to OPEN without recording failure
         cb._state = CircuitState.OPEN
@@ -430,7 +430,7 @@ class TestHalfOpenMaxCallsLimit:
 
     def test_half_open_max_calls_limit(self):
         """Test that HALF_OPEN state limits number of allowed calls."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, half_open_max_calls=2)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, half_open_max_calls=2)
 
         # Get to HALF_OPEN via allow_request
         cb.record_failure()
@@ -470,12 +470,12 @@ class TestThreadSafety:
 
     def test_has_lock(self):
         """Test that CircuitBreaker has a lock for thread safety."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
         assert hasattr(cb, "_lock")
 
     def test_record_success_uses_lock(self):
         """Test that record_success acquires the lock."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
 
         # Mock the lock to verify it's used
         with patch.object(cb, "_lock") as mock_lock:
@@ -489,7 +489,7 @@ class TestThreadSafety:
 
     def test_record_failure_uses_lock(self):
         """Test that record_failure acquires the lock."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
 
         with patch.object(cb, "_lock") as mock_lock:
             mock_lock.__enter__ = MagicMock(return_value=None)
@@ -502,7 +502,7 @@ class TestThreadSafety:
 
     def test_allow_request_uses_lock(self):
         """Test that allow_request acquires the lock."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
 
         with patch.object(cb, "_lock") as mock_lock:
             mock_lock.__enter__ = MagicMock(return_value=None)
@@ -519,7 +519,7 @@ class TestLogging:
 
     def test_logs_closed_to_open_transition(self):
         """Test that CLOSED -> OPEN transition is logged."""
-        cb = CircuitBreaker(name="test_log", failure_threshold=1)
+        cb = CircuitBreaker(name="test_log", persist=False, failure_threshold=1)
 
         with patch("app.core.circuit_breaker.logger") as mock_logger:
             cb.record_failure()
@@ -531,7 +531,7 @@ class TestLogging:
 
     def test_logs_half_open_to_open_transition(self):
         """Test that HALF_OPEN -> OPEN transition is logged."""
-        cb = CircuitBreaker(name="test_log", failure_threshold=1)
+        cb = CircuitBreaker(name="test_log", persist=False, failure_threshold=1)
 
         # Get to HALF_OPEN via allow_request
         cb.record_failure()
@@ -565,7 +565,7 @@ class TestLogging:
 
     def test_logs_open_to_half_open_transition(self):
         """Test that OPEN -> HALF_OPEN transition is logged."""
-        cb = CircuitBreaker(name="test_log", failure_threshold=1)
+        cb = CircuitBreaker(name="test_log", persist=False, failure_threshold=1)
 
         # Open the circuit
         cb.record_failure()
@@ -586,7 +586,7 @@ class TestEdgeCases:
 
     def test_failure_threshold_of_one(self):
         """Test circuit breaker with failure_threshold of 1."""
-        cb = CircuitBreaker(name="test", failure_threshold=1)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1)
 
         assert cb._state == CircuitState.CLOSED
         cb.record_failure()
@@ -594,7 +594,7 @@ class TestEdgeCases:
 
     def test_half_open_max_calls_of_one(self):
         """Test circuit breaker with half_open_max_calls of 1."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, half_open_max_calls=1)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, half_open_max_calls=1)
 
         # Get to HALF_OPEN via allow_request
         cb.record_failure()
@@ -614,7 +614,7 @@ class TestEdgeCases:
 
     def test_very_short_recovery_timeout(self):
         """Test circuit breaker with very short recovery timeout."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, recovery_timeout=0.001)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, recovery_timeout=0.001)
 
         cb.record_failure()
         assert cb._state == CircuitState.OPEN
@@ -631,7 +631,7 @@ class TestEdgeCases:
 
     def test_rapid_state_changes(self):
         """Test rapid open/close cycles."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, half_open_max_calls=1)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, half_open_max_calls=1)
 
         for _ in range(5):
             # CLOSED -> OPEN
@@ -649,7 +649,7 @@ class TestEdgeCases:
 
     def test_success_before_any_failure(self):
         """Test that success with no prior failures works correctly."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
 
         cb.record_success()
         cb.record_success()
@@ -659,7 +659,7 @@ class TestEdgeCases:
 
     def test_multiple_successes_in_half_open(self):
         """Test multiple successes needed to close in HALF_OPEN."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, half_open_max_calls=5)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, half_open_max_calls=5)
 
         # Get to HALF_OPEN via allow_request
         cb.record_failure()
@@ -693,7 +693,7 @@ class TestEdgeCases:
 
     def test_state_property_is_idempotent_in_closed(self):
         """Test that accessing state property doesn't change CLOSED state."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
 
         # Access state multiple times
         for _ in range(10):
@@ -701,7 +701,7 @@ class TestEdgeCases:
 
     def test_state_property_is_idempotent_in_half_open(self):
         """Test that accessing state property doesn't change HALF_OPEN state."""
-        cb = CircuitBreaker(name="test", failure_threshold=1)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1)
 
         # Get to HALF_OPEN via allow_request
         cb.record_failure()
@@ -716,7 +716,7 @@ class TestEdgeCases:
 
     def test_check_recovery_transition_private_method(self):
         """Test the _check_recovery_transition private method."""
-        cb = CircuitBreaker(name="test", failure_threshold=1, recovery_timeout=60.0)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1, recovery_timeout=60.0)
 
         # Open the circuit
         cb.record_failure()
@@ -734,7 +734,7 @@ class TestEdgeCases:
 
     def test_check_recovery_transition_does_nothing_when_closed(self):
         """Test that _check_recovery_transition does nothing when CLOSED."""
-        cb = CircuitBreaker(name="test")
+        cb = CircuitBreaker(name="test", persist=False)
 
         # Call when CLOSED
         with cb._lock:
@@ -744,7 +744,7 @@ class TestEdgeCases:
 
     def test_check_recovery_transition_does_nothing_when_half_open(self):
         """Test that _check_recovery_transition does nothing when HALF_OPEN."""
-        cb = CircuitBreaker(name="test", failure_threshold=1)
+        cb = CircuitBreaker(name="test", persist=False, failure_threshold=1)
 
         # Get to HALF_OPEN
         cb.record_failure()
