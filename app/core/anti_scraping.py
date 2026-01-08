@@ -7,12 +7,18 @@ import heapq
 import time
 import re
 import hashlib
-from collections import defaultdict
-from typing import Tuple, Dict, Set, List, Optional
+from collections import deque
+from typing import Tuple, Dict, Set, List, Optional, Deque
+
+from cachetools import TTLCache
 from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from app.core.config import settings
+
+# Memory bounds
+MAX_REQUESTS_PER_IP = 100  # Max request history per IP
+MAX_FINGERPRINTS_PER_IP = 10  # Max fingerprints tracked per IP
 
 
 class AntiScrapingMiddleware(BaseHTTPMiddleware):
@@ -106,14 +112,27 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.enabled = enabled
 
-        # Rate limiting storage (in-memory, use Redis for multi-worker)
-        self._requests: Dict[str, list] = defaultdict(list)  # {ip: [(timestamp, path), ...]}
-        self._blocked_ips: Dict[str, float] = {}  # {ip: blocked_until_timestamp}
-        self._fingerprints: Dict[str, Set[str]] = defaultdict(set)  # {ip: {fingerprint1, ...}}
-        self._suspicious_ips: Dict[str, int] = defaultdict(int)  # {ip: violation_count}
-        self._ip_last_seen: Dict[str, float] = {}
         self._state_ttl = settings.ANTI_SCRAPING_STATE_TTL_SECONDS
         self._max_tracked_ips = settings.ANTI_SCRAPING_MAX_TRACKED_IPS
+
+        # Rate limiting storage with TTL and bounded size
+        # {ip: deque([(timestamp, path), ...])} - bounded per IP with deque maxlen
+        self._requests: TTLCache[str, Deque[Tuple[float, str]]] = TTLCache(
+            maxsize=self._max_tracked_ips, ttl=self._state_ttl
+        )
+        # {ip: blocked_until_timestamp}
+        self._blocked_ips: TTLCache[str, float] = TTLCache(
+            maxsize=self._max_tracked_ips, ttl=self._state_ttl
+        )
+        # {ip: {fingerprint1, ...}} - bounded per IP
+        self._fingerprints: TTLCache[str, Set[str]] = TTLCache(
+            maxsize=self._max_tracked_ips, ttl=self._state_ttl
+        )
+        # {ip: violation_count}
+        self._suspicious_ips: TTLCache[str, int] = TTLCache(
+            maxsize=self._max_tracked_ips, ttl=self._state_ttl
+        )
+        self._ip_last_seen: Dict[str, float] = {}
 
         # Compile patterns
         self._bot_pattern = re.compile("|".join(self.BOT_PATTERNS), re.IGNORECASE)
@@ -235,6 +254,12 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
 
         return False, ""
 
+    def _get_requests(self, ip: str) -> Deque[Tuple[float, str]]:
+        """Get or create request deque for IP with bounded size."""
+        if ip not in self._requests:
+            self._requests[ip] = deque(maxlen=MAX_REQUESTS_PER_IP)
+        return self._requests[ip]
+
     def _check_rate_limit(self, ip: str, path: str) -> Tuple[bool, int]:
         """
         Check rate limits. Returns (is_limited, retry_after_seconds).
@@ -250,31 +275,40 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
             if now < self._blocked_ips[ip]:
                 return True, int(self._blocked_ips[ip] - now)
             else:
-                del self._blocked_ips[ip]
+                try:
+                    del self._blocked_ips[ip]
+                except KeyError:
+                    pass  # Already expired
 
-        # Clean old requests (older than 1 minute)
-        self._requests[ip] = [(ts, p) for ts, p in self._requests[ip] if now - ts < 60]
+        # Get requests deque (bounded)
+        requests_deque = self._get_requests(ip)
 
-        requests_list = self._requests[ip]
+        # Clean old requests from left (oldest) - O(k) not O(n)
+        cutoff = now - 60
+        while requests_deque and requests_deque[0][0] < cutoff:
+            requests_deque.popleft()
 
         # Check per-minute limit (60 req/min)
-        if len(requests_list) >= 60:
+        if len(requests_deque) >= 60:
             return True, 60
 
         # Check burst limit (10 req/5sec)
-        recent_requests = [ts for ts, p in requests_list if now - ts < 5]
-        if len(recent_requests) >= 10:
+        burst_cutoff = now - 5
+        recent_count = sum(1 for ts, _ in requests_deque if ts >= burst_cutoff)
+        if recent_count >= 10:
             return True, 5
 
         return False, 0
 
     def _record_request(self, ip: str, path: str):
         """Record a request for rate limiting."""
-        self._requests[ip].append((time.time(), path))
+        requests_deque = self._get_requests(ip)
+        requests_deque.append((time.time(), path))
 
     def _record_violation(self, ip: str, reason: str, block_seconds: int = 300):
         """Record a violation and potentially block the IP."""
-        self._suspicious_ips[ip] += 1
+        current = self._suspicious_ips.get(ip, 0)
+        self._suspicious_ips[ip] = current + 1
 
         # Block after 3 violations
         if self._suspicious_ips[ip] >= 3:
@@ -391,7 +425,12 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
 
         # 5. Track fingerprints (detect rotating IPs with same fingerprint)
         fingerprint = self._get_fingerprint(request)
-        self._fingerprints[ip].add(fingerprint)
+        if ip not in self._fingerprints:
+            self._fingerprints[ip] = set()
+        fp_set = self._fingerprints[ip]
+        # Bound fingerprints per IP to prevent memory growth
+        if len(fp_set) < MAX_FINGERPRINTS_PER_IP:
+            fp_set.add(fingerprint)
 
         # If IP has many fingerprints, it's suspicious (but not blocked)
         # This could indicate proxy rotation
@@ -402,13 +441,25 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
 
 
 # Rate limiter for API key validation
+# Max API keys to track
+MAX_TRACKED_API_KEYS = 10000
+
+
 class APIKeyRateLimiter:
     """Rate limiter specifically for API key-based access."""
 
     def __init__(self):
-        self._minute_requests: Dict[str, list] = defaultdict(list)  # {key_hash: [timestamps]}
-        self._day_requests: Dict[str, int] = defaultdict(int)  # {key_hash: count}
-        self._day_start: Dict[str, float] = {}  # {key_hash: day_start_timestamp}
+        # Use TTLCache to auto-expire and bound memory
+        # 24-hour TTL for daily counters, 1-hour for minute counters
+        self._minute_requests: TTLCache[str, Deque[float]] = TTLCache(
+            maxsize=MAX_TRACKED_API_KEYS, ttl=3600
+        )
+        self._day_requests: TTLCache[str, int] = TTLCache(
+            maxsize=MAX_TRACKED_API_KEYS, ttl=86400
+        )
+        self._day_start: TTLCache[str, float] = TTLCache(
+            maxsize=MAX_TRACKED_API_KEYS, ttl=86400
+        )
 
     def _get_day_start(self) -> float:
         """Get the start of the current UTC day as a timestamp."""
@@ -417,6 +468,12 @@ class APIKeyRateLimiter:
         now = datetime.now(timezone.utc)
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         return day_start.timestamp()
+
+    def _get_minute_requests(self, key_hash: str) -> Deque[float]:
+        """Get or create minute requests deque for API key."""
+        if key_hash not in self._minute_requests:
+            self._minute_requests[key_hash] = deque(maxlen=100)  # Max 100 per minute
+        return self._minute_requests[key_hash]
 
     def check_limit(self, key_hash: str, per_minute: int = 60, per_day: int = 10000) -> Tuple[bool, str]:
         """
@@ -434,31 +491,40 @@ class APIKeyRateLimiter:
             self._day_start[key_hash] = current_day_start
 
         # Check daily limit
-        if self._day_requests[key_hash] >= per_day:
+        day_count = self._day_requests.get(key_hash, 0)
+        if day_count >= per_day:
             return False, "daily_limit"
 
-        # Clean minute requests
-        self._minute_requests[key_hash] = [ts for ts in self._minute_requests[key_hash] if now - ts < 60]
+        # Get and clean minute requests
+        minute_deque = self._get_minute_requests(key_hash)
+        cutoff = now - 60
+        while minute_deque and minute_deque[0] < cutoff:
+            minute_deque.popleft()
 
         # Check per-minute limit
-        if len(self._minute_requests[key_hash]) >= per_minute:
+        if len(minute_deque) >= per_minute:
             return False, "minute_limit"
 
         return True, ""
 
     def record_request(self, key_hash: str):
         """Record a request for an API key."""
-        self._minute_requests[key_hash].append(time.time())
-        self._day_requests[key_hash] += 1
+        minute_deque = self._get_minute_requests(key_hash)
+        minute_deque.append(time.time())
+        current = self._day_requests.get(key_hash, 0)
+        self._day_requests[key_hash] = current + 1
 
     def get_usage(self, key_hash: str) -> Dict[str, int]:
         """Get current usage stats for an API key."""
         now = time.time()
-        # Clean minute requests for accurate count
-        self._minute_requests[key_hash] = [ts for ts in self._minute_requests[key_hash] if now - ts < 60]
+        # Get and clean minute requests for accurate count
+        minute_deque = self._get_minute_requests(key_hash)
+        cutoff = now - 60
+        while minute_deque and minute_deque[0] < cutoff:
+            minute_deque.popleft()
         return {
-            "requests_this_minute": len(self._minute_requests[key_hash]),
-            "requests_today": self._day_requests[key_hash],
+            "requests_this_minute": len(minute_deque),
+            "requests_today": self._day_requests.get(key_hash, 0),
         }
 
 

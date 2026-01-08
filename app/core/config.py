@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     # we can have up to 4*2*2=16 concurrent DB operations
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 15
+    # Force Neon pooler mode (smaller local pool when using external pooler)
+    # Auto-detected from "-pooler" in hostname, but can be forced via env var
+    NEON_POOLER: bool = False
 
     # Auth tokens
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # Short-lived access token
