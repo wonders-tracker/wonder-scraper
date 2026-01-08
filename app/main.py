@@ -181,8 +181,18 @@ app.add_middleware(
     cast(Any, CORSMiddleware),
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Explicitly list allowed methods instead of ["*"] for security
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    # Explicitly list allowed headers for security
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+        "X-API-Key",
+        "X-CSRF-Token",
+    ],
     expose_headers=["X-Bot-Warning", "X-Automation-Warning"],
 )
 
