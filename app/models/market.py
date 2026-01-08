@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlmodel import Field, SQLModel
-from sqlalchemy import Index, Column
+from sqlalchemy import Index, Column, UniqueConstraint
 from sqlalchemy.types import JSON
 from datetime import datetime, timezone
 
@@ -106,6 +106,8 @@ class MarketPrice(SQLModel, table=True):
         Index("ix_marketprice_card_listed_at", "card_id", "listed_at"),
         # For time-filtered sold listings (uses sold_date)
         Index("ix_marketprice_card_sold_date", "card_id", "sold_date"),
+        # Prevent duplicate listings from same platform (NULL external_ids allowed)
+        UniqueConstraint("external_id", "platform", name="uq_marketprice_external_platform"),
     )
 
 

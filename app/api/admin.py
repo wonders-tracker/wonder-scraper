@@ -58,37 +58,37 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
         with Session(engine) as session:
             all_cards = session.execute(select(Card)).scalars().all()
 
-            cards_to_scrape = []
-            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=4)
+            if force_all:
+                cards_to_scrape = all_cards[:limit]
+            else:
+                # Get latest snapshot timestamp for all cards in ONE query (fixes N+1)
+                from sqlalchemy import text
+                cutoff_time = datetime.now(timezone.utc) - timedelta(hours=4)
+                cutoff_naive = cutoff_time.replace(tzinfo=None)
 
-            for card in all_cards:
-                if force_all:
-                    cards_to_scrape.append(card)
-                else:
-                    snapshot = (
-                        session.execute(
-                            select(MarketSnapshot)
-                            .where(MarketSnapshot.card_id == card.id)
-                            .order_by(col(MarketSnapshot.timestamp).desc(), col(MarketSnapshot.id).desc())
-                            .limit(1)
-                        )
-                        .scalars()
-                        .first()
-                    )
+                latest_snapshots = session.execute(
+                    text("""
+                        SELECT card_id, MAX(timestamp) as latest_ts
+                        FROM marketsnapshot
+                        GROUP BY card_id
+                    """)
+                ).all()
+                snapshot_map = {row[0]: row[1] for row in latest_snapshots}
 
-                    # Handle both naive and aware timestamps
-                    if not snapshot:
+                cards_to_scrape = []
+                for card in all_cards:
+                    latest_ts = snapshot_map.get(card.id)
+                    if latest_ts is None:
+                        # No snapshot exists - needs scraping
                         cards_to_scrape.append(card)
-                        continue
-                    snapshot_ts = snapshot.timestamp
-                    compare_cutoff = cutoff_time
-                    if snapshot_ts.tzinfo is None:
-                        compare_cutoff = cutoff_time.replace(tzinfo=None)
-                    if snapshot_ts < compare_cutoff:
-                        cards_to_scrape.append(card)
+                    else:
+                        # Compare timestamps (handle naive vs aware)
+                        compare_cutoff = cutoff_naive if latest_ts.tzinfo is None else cutoff_time
+                        if latest_ts < compare_cutoff:
+                            cards_to_scrape.append(card)
 
-                if len(cards_to_scrape) >= limit:
-                    break
+                    if len(cards_to_scrape) >= limit:
+                        break
 
         if not cards_to_scrape:
             _running_jobs[job_id]["status"] = "completed"
@@ -757,37 +757,42 @@ async def list_all_api_keys(
     current_user: User = Depends(deps.get_current_superuser),
 ):
     """List all API keys across all users (admin only)."""
-    from sqlmodel import Session, select
+    from sqlmodel import Session, text
     from app.db import engine
-    from app.models.api_key import APIKey
-    from app.models.user import User as UserModel
 
     with Session(engine) as session:
-        # Get all API keys with user info
-        keys = session.execute(select(APIKey).order_by(col(APIKey.created_at).desc())).scalars().all()
+        # Get all API keys with user info in a single JOIN query (fixes N+1)
+        keys_result = session.execute(
+            text("""
+                SELECT
+                    ak.id, ak.user_id, u.email as user_email, ak.key_prefix, ak.name,
+                    ak.is_active, ak.rate_limit_per_minute, ak.rate_limit_per_day,
+                    ak.requests_today, ak.requests_total, ak.last_used_at,
+                    ak.created_at, ak.expires_at
+                FROM apikey ak
+                LEFT JOIN "user" u ON ak.user_id = u.id
+                ORDER BY ak.created_at DESC
+            """)
+        ).all()
 
-        result = []
-        for key in keys:
-            user = session.get(UserModel, key.user_id)
-            result.append(
-                {
-                    "id": key.id,
-                    "user_id": key.user_id,
-                    "user_email": user.email if user else "Unknown",
-                    "key_prefix": key.key_prefix,
-                    "name": key.name,
-                    "is_active": key.is_active,
-                    "rate_limit_per_minute": key.rate_limit_per_minute,
-                    "rate_limit_per_day": key.rate_limit_per_day,
-                    "requests_today": key.requests_today,
-                    "requests_total": key.requests_total,
-                    "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None,
-                    "created_at": key.created_at.isoformat() if key.created_at else None,
-                    "expires_at": key.expires_at.isoformat() if key.expires_at else None,
-                }
-            )
-
-        return result
+        return [
+            {
+                "id": row[0],
+                "user_id": row[1],
+                "user_email": row[2] or "Unknown",
+                "key_prefix": row[3],
+                "name": row[4],
+                "is_active": row[5],
+                "rate_limit_per_minute": row[6],
+                "rate_limit_per_day": row[7],
+                "requests_today": row[8],
+                "requests_total": row[9],
+                "last_used_at": row[10].isoformat() if row[10] else None,
+                "created_at": row[11].isoformat() if row[11] else None,
+                "expires_at": row[12].isoformat() if row[12] else None,
+            }
+            for row in keys_result
+        ]
 
 
 @router.get("/api-keys/stats")
