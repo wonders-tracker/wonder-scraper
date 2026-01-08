@@ -103,13 +103,15 @@ jobs:
           echo "🧪 Running tests (SaaS: ${{ steps.saas-check.outputs.saas_available }})"
           # Run tests with fail-fast and minimal output for speed
           # SaaS tests are auto-skipped when saas/ module not available
-          poetry run pytest tests/ -x --tb=short --cov=app --cov-report=xml
+          # --reruns 2: Retry failed tests up to 2 times (catches flaky tests)
+          # --reruns-delay 1: Wait 1 second between retries
+          poetry run pytest tests/ -x --tb=short --cov=app --cov-report=xml --cov-fail-under=60 --reruns 2 --reruns-delay 1
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
-          fail_ci_if_error: false
+          fail_ci_if_error: true  # Fail if coverage upload fails
 
   backend-lint:
     name: Backend Lint
@@ -133,7 +135,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-lint-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}  # Share cache with backend-test
 
       - name: Install dependencies
         run: poetry install --no-interaction --no-root --only=dev
@@ -282,7 +284,7 @@ jobs:
           scan-type: 'fs'
           scan-ref: '.'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          exit-code: '1'  # Block builds with CRITICAL/HIGH vulnerabilities
 
   migration-check:
     name: Migration Safety Check
@@ -343,11 +345,15 @@ jobs:
 
           if [ "$DANGEROUS" = true ]; then
             echo ""
-            echo "::warning::Potentially dangerous migration detected. Please review carefully before merging."
-            echo "Ensure you have:"
-            echo "  1. Tested on staging environment first"
-            echo "  2. Backup plan for data recovery"
-            echo "  3. Downgrade migration that reverses the change"
+            echo "::error::DANGEROUS MIGRATION DETECTED - Build blocked"
+            echo "Destructive operations (DROP TABLE/COLUMN, type changes) require manual approval."
+            echo ""
+            echo "To proceed with this migration:"
+            echo "  1. Test on staging environment first"
+            echo "  2. Ensure backup plan for data recovery"
+            echo "  3. Add downgrade migration that reverses the change"
+            echo "  4. Add 'migration-approved' label to PR after review"
+            exit 1
           fi
 
           echo ""
