@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, desc
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
+from cachetools import TTLCache
 
 from app.core.typing import col
 from app.db import get_session
@@ -23,8 +24,6 @@ from app.models.blokpax import (
 router = APIRouter()
 
 # Module-level caches with TTL
-from cachetools import TTLCache
-
 # Summary endpoint cache (5 min) - expensive aggregation
 _summary_cache: TTLCache = TTLCache(maxsize=10, ttl=300)
 _summary_cache_lock = threading.Lock()

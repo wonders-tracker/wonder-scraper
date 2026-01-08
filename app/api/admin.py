@@ -40,7 +40,6 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
     from datetime import timedelta
     from app.db import engine
     from app.models.card import Card
-    from app.models.market import MarketSnapshot
     from scripts.scrape_card import scrape_card
     from app.scraper.browser import BrowserManager
     from app.discord_bot.logger import log_scrape_start, log_scrape_complete, log_scrape_error

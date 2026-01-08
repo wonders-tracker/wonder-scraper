@@ -111,8 +111,10 @@ class TestAntiScrapingMiddleware:
 
         # Add 60 requests with old timestamps (outside burst window but inside minute window)
         base_time = time.time() - 30  # 30 seconds ago
+        # Initialize the request history for this IP first
+        request_history = middleware._get_requests(test_ip)
         for i in range(60):
-            middleware._requests[test_ip].append((base_time + i * 0.5, "/api/v1/cards"))
+            request_history.append((base_time + i * 0.5, "/api/v1/cards"))
 
         # Now the 61st request should be rate limited (per-minute limit)
         is_limited, retry_after = middleware._check_rate_limit(test_ip, "/api/v1/cards")
