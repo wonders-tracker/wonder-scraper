@@ -199,10 +199,19 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
     }
     // Custom event for auth changes (login/logout in this tab)
     window.addEventListener('auth-change', handleAuthChange)
-    // Revalidate when tab becomes visible (handles cross-tab logout)
+
+    // Debounced visibility change handler - only refetch if tab was hidden for >30s
+    // This prevents excessive API calls when quickly switching tabs
+    let lastHiddenTime = 0
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        queryClient.invalidateQueries({ queryKey: ['me'] })
+      if (document.visibilityState === 'hidden') {
+        lastHiddenTime = Date.now()
+      } else if (document.visibilityState === 'visible') {
+        const hiddenDuration = Date.now() - lastHiddenTime
+        // Only refetch if tab was hidden for more than 30 seconds
+        if (hiddenDuration > 30000) {
+          queryClient.invalidateQueries({ queryKey: ['me'] })
+        }
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -223,7 +232,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
           }
       },
       retry: false,
-      staleTime: 60 * 1000, // 1 minute - shorter for better cross-tab sync
+      staleTime: 5 * 60 * 1000, // 5 minutes - balanced between freshness and performance
   })
 
   // Handle onboarding redirect after user data loads (non-blocking)

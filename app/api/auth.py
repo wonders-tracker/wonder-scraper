@@ -229,8 +229,9 @@ def refresh_access_token(request: Request, session: Session = Depends(get_sessio
             detail="Invalid token payload",
         )
 
-    # Find user with row lock to prevent race conditions
-    user = session.exec(select(User).where(User.email == email).with_for_update()).first()
+    # Find user - no lock needed since token hash check prevents race conditions
+    # If concurrent refresh happens, one will fail hash validation (acceptable)
+    user = session.exec(select(User).where(User.email == email)).first()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
