@@ -158,9 +158,10 @@ def read_cards(
             snapshots_by_card[snap.card_id] = []
         snapshots_by_card[snap.card_id].append(snap)
 
-    # Batch fetch rarities
-    rarities = session.execute(select(Rarity)).scalars().all()
-    rarity_map = {r.id: r.name for r in rarities}
+    # Batch fetch rarities (cached for 1 hour)
+    from app.core.reference_cache import get_rarity_map
+
+    rarity_map = get_rarity_map(session)
 
     # Batch fetch actual LAST SALE price (Postgres DISTINCT ON)
     last_sale_map = {}
@@ -238,10 +239,10 @@ def read_cards(
             # Batch calculate floor prices per variant using unified FloorPriceService
             # Unified approach: Singles use 'treatment', Sealed uses 'product_subtype'
             floor_service = get_floor_price_service(session)
-            platform_filter_sql = f"AND platform = '{platform}'" if platform else ""
 
             # Query for lowest ask per variant (active listings)
             # Note: Must GROUP BY the full CASE expression, not the alias
+            # Uses parameterized platform_clause to prevent SQL injection
             lowest_ask_by_variant_query = text(f"""
                 SELECT card_id,
                        CASE
@@ -253,7 +254,7 @@ def read_cards(
                 FROM marketprice
                 WHERE card_id = ANY(:card_ids)
                   AND listing_type = 'active'
-                  {platform_filter_sql}
+                  {platform_clause}
                 GROUP BY card_id,
                          CASE
                              WHEN product_subtype IS NOT NULL AND product_subtype != ''
@@ -293,7 +294,7 @@ def read_cards(
                         floor_price_map[card_id] = result.price
 
             # Fetch lowest ask by variant (active listings)
-            lowest_ask_variant_results = session.execute(lowest_ask_by_variant_query, {"card_ids": card_ids}).all()
+            lowest_ask_variant_results = session.execute(lowest_ask_by_variant_query, query_params_base).all()
             for row in lowest_ask_variant_results:
                 card_id, variant, lowest_ask = row[0], row[1], round(float(row[2]), 2)
                 if card_id not in lowest_ask_by_variant_map:
@@ -327,40 +328,30 @@ def read_cards(
                 volume_results = session.execute(volume_query, query_params_base).all()
             volume_map = {row[0]: row[1] for row in volume_results}
 
-            # Fetch average price with conditional rolling window
-            # Try 30d first, fallback to 90d, then all-time
-            # Delta = how does latest sale compare to historical average?
-            # Use COALESCE(sold_date, scraped_at) for consistent time filtering
-            for days, label in [(30, "30d"), (90, "90d"), (None, "all")]:
-                if days:
-                    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-                    avg_query = text(f"""
-                        SELECT card_id, AVG(price) as avg_price
-                        FROM marketprice
-                        WHERE card_id = ANY(:card_ids)
+            # Fetch average price with conditional rolling window in a single query
+            # Uses FILTER to compute 30d, 90d, and all-time averages in one pass
+            # COALESCE prefers shorter windows: 30d → 90d → all-time
+            cutoff_30d_avg = datetime.now(timezone.utc) - timedelta(days=30)
+            cutoff_90d_avg = datetime.now(timezone.utc) - timedelta(days=90)
+            avg_query = text(f"""
+                WITH avg_prices AS (
+                    SELECT card_id,
+                        AVG(price) FILTER (WHERE COALESCE(sold_date, scraped_at) >= :cutoff_30d) as avg_30d,
+                        AVG(price) FILTER (WHERE COALESCE(sold_date, scraped_at) >= :cutoff_90d) as avg_90d,
+                        AVG(price) as avg_all
+                    FROM marketprice
+                    WHERE card_id = ANY(:card_ids)
                         AND listing_type = 'sold'
-                        AND COALESCE(sold_date, scraped_at) >= :cutoff
+                        AND is_bulk_lot = FALSE
                         {platform_clause}
-                        GROUP BY card_id
-                    """)
-                    avg_params = {**query_params_base, "cutoff": cutoff}
-                    results = session.execute(avg_query, avg_params).all()
-                else:
-                    # All-time average
-                    avg_query = text(f"""
-                        SELECT card_id, AVG(price) as avg_price
-                        FROM marketprice
-                        WHERE card_id = ANY(:card_ids)
-                        AND listing_type = 'sold'
-                        {platform_clause}
-                        GROUP BY card_id
-                    """)
-                    results = session.execute(avg_query, query_params_base).all()
-
-                # Only add cards not already in map (prefer shorter windows)
-                for row in results:
-                    if row[0] not in avg_price_map:
-                        avg_price_map[row[0]] = row[1]
+                    GROUP BY card_id
+                )
+                SELECT card_id, COALESCE(avg_30d, avg_90d, avg_all) as rolling_avg
+                FROM avg_prices
+            """)
+            avg_params = {**query_params_base, "cutoff_30d": cutoff_30d_avg, "cutoff_90d": cutoff_90d_avg}
+            avg_results = session.execute(avg_query, avg_params).all()
+            avg_price_map = {row[0]: row[1] for row in avg_results}
 
         except Exception as e:
             print(f"Error fetching sales data: {e}")

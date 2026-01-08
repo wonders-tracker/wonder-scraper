@@ -22,10 +22,20 @@ from app.models.blokpax import (
 
 router = APIRouter()
 
-# Module-level cache for summary endpoint (expensive aggregation)
-_summary_cache: dict[str, tuple[Any, datetime]] = {}
+# Module-level caches with TTL
+from cachetools import TTLCache
+
+# Summary endpoint cache (5 min) - expensive aggregation
+_summary_cache: TTLCache = TTLCache(maxsize=10, ttl=300)
 _summary_cache_lock = threading.Lock()
-_SUMMARY_CACHE_TTL = timedelta(minutes=5)
+
+# Storefronts list cache (5 min) - rarely changes
+_storefronts_cache: TTLCache = TTLCache(maxsize=10, ttl=300)
+_storefronts_cache_lock = threading.Lock()
+
+# Sales endpoints cache (2 min) - more frequent updates
+_sales_cache: TTLCache = TTLCache(maxsize=50, ttl=120)
+_sales_cache_lock = threading.Lock()
 
 
 # Pydantic schemas for API responses
@@ -113,9 +123,24 @@ def list_storefronts(
 ) -> Any:
     """
     List all WOTF storefronts with current floor prices.
+    Cached for 5 minutes.
     """
+    cache_key = "storefronts_list"
+
+    # Check cache first
+    with _storefronts_cache_lock:
+        cached = _storefronts_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     storefronts = session.exec(select(BlokpaxStorefront).order_by(col(BlokpaxStorefront.name))).all()
-    return [BlokpaxStorefrontOut.model_validate(s) for s in storefronts]
+    result = [BlokpaxStorefrontOut.model_validate(s) for s in storefronts]
+
+    # Cache the result
+    with _storefronts_cache_lock:
+        _storefronts_cache[cache_key] = result
+
+    return result
 
 
 @router.get("/storefronts/{slug}", response_model=BlokpaxStorefrontOut)
@@ -172,7 +197,16 @@ def get_storefront_sales(
 ) -> Any:
     """
     Get recent sales for a specific storefront.
+    Cached for 2 minutes.
     """
+    cache_key = f"storefront_sales_{slug}_{days}_{limit}"
+
+    # Check cache first
+    with _sales_cache_lock:
+        cached = _sales_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     # For reward-room, we filter WOTF assets in the scraper
     # For dedicated storefronts, all sales are WOTF
 
@@ -188,7 +222,13 @@ def get_storefront_sales(
         select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff).order_by(desc(BlokpaxSale.filled_at)).limit(limit)
     ).all()
 
-    return [BlokpaxSaleOut.model_validate(s) for s in sales]
+    result = [BlokpaxSaleOut.model_validate(s) for s in sales]
+
+    # Cache the result
+    with _sales_cache_lock:
+        _sales_cache[cache_key] = result
+
+    return result
 
 
 @router.get("/sales", response_model=List[BlokpaxSaleOut])
@@ -199,14 +239,29 @@ def list_all_sales(
 ) -> Any:
     """
     Get recent sales across all WOTF storefronts.
+    Cached for 2 minutes.
     """
+    cache_key = f"all_sales_{days}_{limit}"
+
+    # Check cache first
+    with _sales_cache_lock:
+        cached = _sales_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     sales = session.exec(
         select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff).order_by(desc(BlokpaxSale.filled_at)).limit(limit)
     ).all()
 
-    return [BlokpaxSaleOut.model_validate(s) for s in sales]
+    result = [BlokpaxSaleOut.model_validate(s) for s in sales]
+
+    # Cache the result
+    with _sales_cache_lock:
+        _sales_cache[cache_key] = result
+
+    return result
 
 
 @router.get("/assets", response_model=List[BlokpaxAssetOut])
@@ -241,10 +296,9 @@ def get_blokpax_summary(
 
     # Check cache first
     with _summary_cache_lock:
-        if cache_key in _summary_cache:
-            cached_result, cached_at = _summary_cache[cache_key]
-            if datetime.now(timezone.utc) - cached_at < _SUMMARY_CACHE_TTL:
-                return cached_result
+        cached = _summary_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
     storefronts = session.exec(select(BlokpaxStorefront)).all()
 
@@ -300,7 +354,7 @@ def get_blokpax_summary(
 
     # Cache the result
     with _summary_cache_lock:
-        _summary_cache[cache_key] = (result, datetime.now(timezone.utc))
+        _summary_cache[cache_key] = result
 
     return result
 
