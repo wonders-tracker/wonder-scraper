@@ -109,41 +109,53 @@ def read_market_overview(
     floor_cutoff = datetime.now(timezone.utc) - timedelta(days=floor_days)
 
     # SINGLE CONSOLIDATED CTE QUERY - replaces 6+ separate queries
+    # NOTE: Floor price calculation now includes Blokpax sales to match FloorPriceService
     consolidated_query = text("""
         WITH card_sales AS (
-            -- All sold listings with effective date
+            -- All sold listings with effective date (eBay, OpenSea)
             SELECT
                 card_id,
                 price,
                 COALESCE(sold_date, scraped_at) as sale_date,
-                ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY COALESCE(sold_date, scraped_at) DESC) as rn_desc,
-                ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn_price
+                ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY COALESCE(sold_date, scraped_at) DESC) as rn_desc
             FROM marketprice
             WHERE listing_type = 'sold' AND is_bulk_lot = FALSE
         ),
+        blokpax_sales AS (
+            -- Blokpax sales (merged with marketprice for floor calculation)
+            SELECT card_id, price_usd as price, filled_at as sale_date
+            FROM blokpaxsale
+        ),
+        all_sales AS (
+            -- Combined sales from all platforms
+            SELECT card_id, price, sale_date FROM card_sales
+            UNION ALL
+            SELECT card_id, price, sale_date FROM blokpax_sales
+        ),
         last_sale AS (
-            -- Most recent sale per card (any time)
+            -- Most recent sale per card (any time, eBay/OpenSea only for consistency)
             SELECT card_id, price as last_price
             FROM card_sales WHERE rn_desc = 1
         ),
         period_stats AS (
-            -- Stats for the selected time period
+            -- Stats for the selected time period (all platforms)
             SELECT
                 card_id,
                 COUNT(*) as sale_count,
                 SUM(price) as total_value,
                 AVG(price) as vwap
-            FROM card_sales
+            FROM all_sales
             WHERE sale_date >= :cutoff_time
             GROUP BY card_id
         ),
         floor_prices AS (
-            -- Floor = avg of 4 lowest prices in floor window
+            -- Floor = avg of 4 lowest prices in floor window (all platforms)
+            -- This matches FloorPriceService logic
             SELECT card_id, ROUND(AVG(price)::numeric, 2) as floor_price
             FROM (
                 SELECT card_id, price,
                        ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn
-                FROM card_sales
+                FROM all_sales
                 WHERE sale_date >= :floor_cutoff
             ) ranked
             WHERE rn <= 4

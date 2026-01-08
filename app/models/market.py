@@ -100,6 +100,12 @@ class MarketPrice(SQLModel, table=True):
         Index("ix_marketprice_listing_scraped", "listing_type", "scraped_at"),
         # For platform filter on listings page
         Index("ix_marketprice_platform", "platform"),
+        # For platform-filtered floor prices
+        Index("ix_marketprice_card_platform", "card_id", "platform"),
+        # For time-filtered active listings (uses listed_at)
+        Index("ix_marketprice_card_listed_at", "card_id", "listed_at"),
+        # For time-filtered sold listings (uses sold_date)
+        Index("ix_marketprice_card_sold_date", "card_id", "sold_date"),
     )
 
 

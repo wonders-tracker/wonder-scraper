@@ -886,6 +886,73 @@ def read_active_listings(
     return [MarketPriceOut.model_validate(a) for a in active]
 
 
+@router.get("/{card_id}/listings")
+def read_card_listings(
+    card_id: str,  # Accept string to support both ID and slug
+    session: Session = Depends(get_session),
+    sold_limit: int = Query(default=100, ge=1, le=200, description="Max sold listings to return"),
+    active_limit: int = Query(default=100, ge=1, le=200, description="Max active listings to return"),
+) -> Any:
+    """
+    Get both sold and active listings in a single call.
+    Combines /history and /active endpoints to reduce frontend API calls.
+
+    Returns:
+        {
+            "sold": { items: [...], total: N, hasMore: bool },
+            "active": { items: [...], total: N },
+            "card_id": int
+        }
+    """
+    card, _ = get_card_by_id_or_slug(session, card_id)
+
+    # Fetch sold listings
+    sold_stmt = (
+        select(MarketPrice)
+        .where(MarketPrice.card_id == card.id, MarketPrice.listing_type == "sold")
+        .order_by(desc(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at)))
+        .limit(sold_limit + 1)  # Fetch +1 to check hasMore
+    )
+    sold_prices = session.execute(sold_stmt).scalars().all()
+    has_more_sold = len(sold_prices) > sold_limit
+    if has_more_sold:
+        sold_prices = sold_prices[:sold_limit]
+
+    # Fetch active listings
+    active_stmt = (
+        select(MarketPrice)
+        .where(MarketPrice.card_id == card.id, MarketPrice.listing_type == "active")
+        .order_by(desc(MarketPrice.scraped_at))
+        .limit(active_limit)
+    )
+    active_prices = session.execute(active_stmt).scalars().all()
+
+    # Get total counts efficiently with a single query
+    count_query = text("""
+        SELECT
+            COUNT(*) FILTER (WHERE listing_type = 'sold') as sold_total,
+            COUNT(*) FILTER (WHERE listing_type = 'active') as active_total
+        FROM marketprice
+        WHERE card_id = :card_id
+    """)
+    counts = session.execute(count_query, {"card_id": card.id}).first()
+    sold_total = counts[0] if counts else 0
+    active_total = counts[1] if counts else 0
+
+    return {
+        "card_id": card.id,
+        "sold": {
+            "items": [MarketPriceOut.model_validate(p) for p in sold_prices],
+            "total": sold_total,
+            "hasMore": has_more_sold,
+        },
+        "active": {
+            "items": [MarketPriceOut.model_validate(a) for a in active_prices],
+            "total": active_total,
+        },
+    }
+
+
 @router.get("/{card_id}/pricing")
 def read_card_pricing(
     card_id: str,  # Accept string to support both ID and slug
