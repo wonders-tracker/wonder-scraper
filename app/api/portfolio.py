@@ -885,7 +885,7 @@ def get_portfolio_value_history(
     """
     Get portfolio value history over time.
     Returns daily portfolio value based on cards owned at each date.
-    Now uses treatment-specific pricing for accurate historical values.
+    Uses treatment-specific pricing with proper historical lookback.
     """
 
     # Get all user's portfolio cards (including purchase dates)
@@ -906,8 +906,10 @@ def get_portfolio_value_history(
     card_ids = list(set(c.card_id for c in cards))
     treatments = list(set(c.treatment for c in cards))
 
-    # Get historical prices for all cards WITH treatment-specific pricing
-    # Use SQLAlchemy ORM for SQLite compatibility
+    # Get historical prices - include data from BEFORE start_date for baseline prices
+    # This ensures we have price history even if no sales occurred in the display window
+    lookback_date = start_date - timedelta(days=90)  # 90 day lookback for baseline
+
     sale_date_col = func.date(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at))
 
     price_results = session.exec(
@@ -920,7 +922,7 @@ def get_portfolio_value_history(
         .where(col(MarketPrice.card_id).in_(card_ids))
         .where(col(MarketPrice.treatment).in_(treatments))
         .where(MarketPrice.listing_type == "sold")
-        .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= start_date)
+        .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= lookback_date)
         .group_by(col(MarketPrice.card_id), col(MarketPrice.treatment), sale_date_col)
         .order_by(col(MarketPrice.card_id), col(MarketPrice.treatment), sale_date_col)
     ).all()
@@ -939,14 +941,28 @@ def get_portfolio_value_history(
             sale_date = date_type.fromisoformat(sale_date)
         price_by_card_treatment_date[key][sale_date] = float(avg_price)
 
-    # Get current prices as fallback using batch fetch
+    # Get current prices as ultimate fallback
     card_treatment_pairs = [(c.card_id, c.treatment) for c in cards]
     current_prices = batch_get_treatment_market_prices(session, card_treatment_pairs)
+
+    # Pre-compute last known price for each card+treatment before start_date
+    # This gives us a baseline if no sales occur in the display window
+    baseline_prices: dict[tuple[int, str], float] = {}
+    for key, date_prices in price_by_card_treatment_date.items():
+        sorted_dates = sorted(date_prices.keys())
+        # Find the last price on or before start_date
+        for d in reversed(sorted_dates):
+            if d <= start_date:
+                baseline_prices[key] = date_prices[d]
+                break
 
     # Calculate daily portfolio value
     history = []
     cost_basis_history = []
     current_date = start_date
+
+    # Track last known price per card for forward-filling
+    last_known_price: dict[tuple[int, str], float] = baseline_prices.copy()
 
     while current_date <= end_date:
         daily_value = 0.0
@@ -961,20 +977,21 @@ def get_portfolio_value_history(
             # Add cost basis
             daily_cost += card.purchase_price
 
-            # Get treatment-specific price for this card on this date
+            # Get treatment-specific price for this card
             key = (card.card_id, card.treatment)
             card_prices = price_by_card_treatment_date.get(key, {})
 
-            # Find the most recent price on or before current_date
-            price = None
-            for d in sorted(card_prices.keys(), reverse=True):
-                if d <= current_date:
-                    price = card_prices[d]
-                    break
-
-            # If no historical price, use current price
-            if price is None:
+            # Check if there's a price on exactly this date
+            if current_date in card_prices:
+                price = card_prices[current_date]
+                last_known_price[key] = price
+            elif key in last_known_price:
+                # Use last known price (forward-fill)
+                price = last_known_price[key]
+            else:
+                # Ultimate fallback: current price or purchase price
                 price = current_prices.get(key, card.purchase_price)
+                last_known_price[key] = price
 
             daily_value += price
 
