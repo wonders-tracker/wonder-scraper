@@ -305,8 +305,8 @@ class TestFailedLoginTracking:
         is_limited, retry_after = limiter.is_rate_limited(ip)
         assert is_limited is False
 
-        # Failed attempts should be reset
-        assert limiter._failed_attempts[ip] == 0
+        # Failed attempts should be reset (TTLCache removes expired entries)
+        assert limiter._failed_attempts.get(ip, 0) == 0
         assert ip not in limiter._lockouts
 
     @patch("app.core.rate_limit.time.time")
