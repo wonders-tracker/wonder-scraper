@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 _floor_cache: dict[tuple, tuple[Any, datetime]] = {}
 _cache_lock = threading.Lock()
 _CACHE_TTL = timedelta(minutes=5)
+# Set of keys currently being computed (prevents duplicate work)
+_computing_keys: set[tuple] = set()
 
 
 def _get_cached_floor(key: tuple) -> Optional[Any]:
@@ -43,10 +45,26 @@ def _get_cached_floor(key: tuple) -> Optional[Any]:
     return None
 
 
+def _try_acquire_compute_lock(key: tuple) -> bool:
+    """Try to acquire computation lock for a key. Returns True if acquired."""
+    with _cache_lock:
+        if key in _computing_keys:
+            return False
+        _computing_keys.add(key)
+        return True
+
+
+def _release_compute_lock(key: tuple) -> None:
+    """Release computation lock for a key."""
+    with _cache_lock:
+        _computing_keys.discard(key)
+
+
 def _set_cached_floor(key: tuple, result: Any) -> None:
-    """Cache a floor price result."""
+    """Cache a floor price result and release compute lock."""
     with _cache_lock:
         _floor_cache[key] = (result, datetime.now(timezone.utc))
+        _computing_keys.discard(key)  # Release lock when caching
         # Simple cache eviction: remove old entries if cache grows too large
         if len(_floor_cache) > 1000:
             now = datetime.now(timezone.utc)
@@ -59,6 +77,7 @@ def clear_floor_cache() -> None:
     """Clear the floor price cache. Useful for testing."""
     with _cache_lock:
         _floor_cache.clear()
+        _computing_keys.clear()
 
 
 class FloorPriceSource(str, Enum):

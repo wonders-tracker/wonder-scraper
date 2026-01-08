@@ -3,6 +3,7 @@ Blokpax API endpoints for frontend integration.
 Provides access to WOTF storefront data, floor prices, and sales history.
 """
 
+import threading
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, desc
@@ -20,6 +21,11 @@ from app.models.blokpax import (
 )
 
 router = APIRouter()
+
+# Module-level cache for summary endpoint (expensive aggregation)
+_summary_cache: dict[str, tuple[Any, datetime]] = {}
+_summary_cache_lock = threading.Lock()
+_SUMMARY_CACHE_TTL = timedelta(minutes=5)
 
 
 # Pydantic schemas for API responses
@@ -62,6 +68,7 @@ class BlokpaxSaleOut(BaseModel):
     quantity: int
     seller_address: str
     buyer_address: str
+    treatment: Optional[str] = None
     filled_at: datetime
     card_id: Optional[int] = None
 
@@ -228,7 +235,17 @@ def get_blokpax_summary(
 ) -> Any:
     """
     Get a summary of all WOTF Blokpax data for dashboard display.
+    Cached for 5 minutes to avoid repeated expensive aggregations.
     """
+    cache_key = "blokpax_summary"
+
+    # Check cache first
+    with _summary_cache_lock:
+        if cache_key in _summary_cache:
+            cached_result, cached_at = _summary_cache[cache_key]
+            if datetime.now(timezone.utc) - cached_at < _SUMMARY_CACHE_TTL:
+                return cached_result
+
     storefronts = session.exec(select(BlokpaxStorefront)).all()
 
     # Calculate totals
@@ -239,16 +256,28 @@ def get_blokpax_summary(
     floors = [sf.floor_price_usd for sf in storefronts if sf.floor_price_usd]
     lowest_floor = min(floors) if floors else None
 
-    # Get recent sales count (last 24h)
+    # Get recent sales count (last 24h) and volume (last 7d) in single efficient query
+    from sqlalchemy import text
+
     cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
-    recent_sales = len(session.exec(select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_24h)).all())
-
-    # Get total sales volume (last 7d)
     cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
-    week_sales = session.exec(select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_7d)).all()
-    volume_7d_usd = sum(s.price_usd * s.quantity for s in week_sales)
 
-    return {
+    # Single aggregate query instead of loading all records into memory
+    sales_stats = session.execute(
+        text("""
+            SELECT
+                COUNT(*) FILTER (WHERE filled_at >= :cutoff_24h) as sales_24h,
+                COALESCE(SUM(price_usd * quantity) FILTER (WHERE filled_at >= :cutoff_7d), 0) as volume_7d
+            FROM blokpaxsale
+            WHERE filled_at >= :cutoff_7d
+        """),
+        {"cutoff_24h": cutoff_24h, "cutoff_7d": cutoff_7d}
+    ).first()
+
+    recent_sales = int(sales_stats[0]) if sales_stats else 0
+    volume_7d_usd = float(sales_stats[1]) if sales_stats else 0.0
+
+    result = {
         "storefronts": [
             {
                 "slug": sf.slug,
@@ -268,6 +297,12 @@ def get_blokpax_summary(
             "volume_7d_usd": volume_7d_usd,
         },
     }
+
+    # Cache the result
+    with _summary_cache_lock:
+        _summary_cache[cache_key] = (result, datetime.now(timezone.utc))
+
+    return result
 
 
 @router.get("/offers", response_model=List[BlokpaxOfferOut])

@@ -97,6 +97,66 @@ def create_portfolio_item(
     )
 
 
+def batch_get_live_market_prices(session: Session, card_ids: List[int]) -> dict[int, float]:
+    """
+    Batch fetch live market prices for multiple cards in efficient queries.
+    Returns dict of card_id -> price.
+    Much faster than calling get_live_market_price in a loop (fixes N+1 query).
+    """
+    if not card_ids:
+        return {}
+
+    prices: dict[int, float] = {}
+
+    # Query 1: Get most recent sold price per card
+    from sqlalchemy import text
+
+    last_sale_query = text("""
+        SELECT DISTINCT ON (card_id) card_id, price
+        FROM marketprice
+        WHERE card_id = ANY(:card_ids) AND listing_type = 'sold'
+        ORDER BY card_id, COALESCE(sold_date, scraped_at) DESC
+    """)
+    last_sales = session.execute(last_sale_query, {"card_ids": card_ids}).all()
+    for row in last_sales:
+        prices[row[0]] = float(row[1])
+
+    # Query 2: For cards without sales, get lowest active ask
+    missing_ids = [cid for cid in card_ids if cid not in prices]
+    if missing_ids:
+        active_query = text("""
+            SELECT card_id, MIN(price) as lowest_ask
+            FROM marketprice
+            WHERE card_id = ANY(:card_ids) AND listing_type = 'active'
+            GROUP BY card_id
+        """)
+        active_results = session.execute(active_query, {"card_ids": missing_ids}).all()
+        for row in active_results:
+            if row[0] not in prices:
+                prices[row[0]] = float(row[1])
+
+    # Query 3: Final fallback to snapshot avg_price for remaining cards
+    still_missing = [cid for cid in card_ids if cid not in prices]
+    if still_missing:
+        snapshot_query = text("""
+            SELECT DISTINCT ON (card_id) card_id, avg_price
+            FROM marketsnapshot
+            WHERE card_id = ANY(:card_ids) AND avg_price IS NOT NULL
+            ORDER BY card_id, timestamp DESC
+        """)
+        snapshot_results = session.execute(snapshot_query, {"card_ids": still_missing}).all()
+        for row in snapshot_results:
+            if row[0] not in prices and row[1]:
+                prices[row[0]] = float(row[1])
+
+    # Set 0.0 for any cards with no data
+    for cid in card_ids:
+        if cid not in prices:
+            prices[cid] = 0.0
+
+    return prices
+
+
 @router.get("/", response_model=List[PortfolioItemOut])
 def read_portfolio(
     session: Session = Depends(get_session),
@@ -104,17 +164,25 @@ def read_portfolio(
 ) -> Any:
     """
     Retrieve user's portfolio with calculated stats.
+    Uses batch queries to avoid N+1 performance issues.
     """
     stmt = select(PortfolioItem).where(PortfolioItem.user_id == current_user.id)
     items = session.exec(stmt).all()
 
+    if not items:
+        return []
+
+    # Batch fetch all card info in one query
+    card_ids = list(set(item.card_id for item in items))
+    cards_map = {c.id: c for c in session.exec(select(Card).where(col(Card.id).in_(card_ids))).all()}
+
+    # Batch fetch all market prices in optimized queries (fixes N+1)
+    market_prices = batch_get_live_market_prices(session, card_ids)
+
     results = []
     for item in items:
-        # Fetch Card Info
-        card = session.get(Card, item.card_id)
-
-        # Get LIVE market price (prefers recent sale > lowest_ask > snapshot)
-        current_price = get_live_market_price(session, item.card_id)
+        card = cards_map.get(item.card_id)
+        current_price = market_prices.get(item.card_id, 0.0)
 
         current_value = current_price * item.quantity
         cost_basis = item.purchase_price * item.quantity
