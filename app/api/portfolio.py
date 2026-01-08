@@ -912,6 +912,7 @@ def get_portfolio_value_history(
 
     sale_date_col = func.date(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at))
 
+    # Query 1: Treatment-specific prices
     price_results = session.exec(
         select(
             MarketPrice.card_id,
@@ -927,7 +928,32 @@ def get_portfolio_value_history(
         .order_by(col(MarketPrice.card_id), col(MarketPrice.treatment), sale_date_col)
     ).all()
 
-    # Build price lookup: {(card_id, treatment): {date: price}}
+    # Query 2: Card-level prices (any treatment) as fallback for historical trends
+    card_level_results = session.exec(
+        select(
+            MarketPrice.card_id,
+            sale_date_col.label("sale_date"),
+            func.avg(MarketPrice.price).label("avg_price"),
+        )
+        .where(col(MarketPrice.card_id).in_(card_ids))
+        .where(MarketPrice.listing_type == "sold")
+        .where(func.coalesce(MarketPrice.sold_date, MarketPrice.scraped_at) >= lookback_date)
+        .group_by(col(MarketPrice.card_id), sale_date_col)
+        .order_by(col(MarketPrice.card_id), sale_date_col)
+    ).all()
+
+    # Build card-level price lookup: {card_id: {date: price}}
+    price_by_card_date: dict[int, dict] = {}
+    for row in card_level_results:
+        cid, sale_date, avg_price = row[0], row[1], row[2]
+        if cid not in price_by_card_date:
+            price_by_card_date[cid] = {}
+        if isinstance(sale_date, str):
+            from datetime import date as date_type
+            sale_date = date_type.fromisoformat(sale_date)
+        price_by_card_date[cid][sale_date] = float(avg_price)
+
+    # Build treatment-specific price lookup: {(card_id, treatment): {date: price}}
     price_by_card_treatment_date: dict[tuple[int, str], dict] = {}
     for row in price_results:
         cid, treatment, sale_date, avg_price = row[0], row[1], row[2], row[3]
@@ -948,13 +974,25 @@ def get_portfolio_value_history(
     # Pre-compute last known price for each card+treatment before start_date
     # This gives us a baseline if no sales occur in the display window
     baseline_prices: dict[tuple[int, str], float] = {}
+
+    # First try treatment-specific prices
     for key, date_prices in price_by_card_treatment_date.items():
         sorted_dates = sorted(date_prices.keys())
-        # Find the last price on or before start_date
         for d in reversed(sorted_dates):
             if d <= start_date:
                 baseline_prices[key] = date_prices[d]
                 break
+
+    # For cards without treatment-specific baselines, try card-level prices
+    for card in cards:
+        key = (card.card_id, card.treatment)
+        if key not in baseline_prices and card.card_id in price_by_card_date:
+            card_level_dates = price_by_card_date[card.card_id]
+            sorted_dates = sorted(card_level_dates.keys())
+            for d in reversed(sorted_dates):
+                if d <= start_date:
+                    baseline_prices[key] = card_level_dates[d]
+                    break
 
     # Calculate daily portfolio value
     history = []
@@ -981,12 +1019,24 @@ def get_portfolio_value_history(
             key = (card.card_id, card.treatment)
             card_prices = price_by_card_treatment_date.get(key, {})
 
-            # Check if there's a price on exactly this date
+            # Price lookup with fallback chain:
+            # 1. Treatment-specific price for this exact date
+            # 2. Card-level price for this exact date (any treatment)
+            # 3. Last known price (forward-fill from previous dates)
+            # 4. Current market price or purchase price
+
+            card_level_prices = price_by_card_date.get(card.card_id, {})
+
             if current_date in card_prices:
+                # Treatment-specific price available
                 price = card_prices[current_date]
                 last_known_price[key] = price
+            elif current_date in card_level_prices:
+                # Card-level price as fallback (shows market movement)
+                price = card_level_prices[current_date]
+                last_known_price[key] = price
             elif key in last_known_price:
-                # Use last known price (forward-fill)
+                # Forward-fill from last known price
                 price = last_known_price[key]
             else:
                 # Ultimate fallback: current price or purchase price
