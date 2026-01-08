@@ -153,7 +153,7 @@ class TestRecordSuccess:
 
     def test_record_success_resets_failure_count(self):
         """Test that record_success resets failure count when CLOSED."""
-        cb = CircuitBreaker(name="test", failure_threshold=5)
+        cb = CircuitBreaker(name="test_success_reset", failure_threshold=5, persist=False)
 
         # Accumulate some failures (but not enough to open)
         cb.record_failure()

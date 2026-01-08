@@ -202,6 +202,79 @@ def cleanup_stale_profiles():
         pass
 
 
+def startup_cleanup_sync() -> dict:
+    """
+    Aggressive synchronous cleanup for startup - kills ALL Chrome processes.
+
+    This should be called ONCE at app startup to ensure a clean slate,
+    especially after crashes/restarts where orphan Chrome processes may remain.
+
+    Returns dict with cleanup stats for logging.
+    """
+    stats = {"chrome_killed": 0, "profiles_cleaned": 0, "errors": []}
+
+    # Kill ALL Chrome/Chromium processes - no mercy
+    kill_commands = [
+        ["pkill", "-9", "-f", "chrome"],
+        ["pkill", "-9", "-f", "chromium"],
+        ["killall", "-9", "chrome"],
+        ["killall", "-9", "chromium"],
+    ]
+
+    for cmd in kill_commands:
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=5)
+            if result.returncode == 0:
+                stats["chrome_killed"] += 1
+        except subprocess.TimeoutExpired:
+            stats["errors"].append(f"{cmd[0]} timed out")
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+            pass
+
+    # Wait for processes to die
+    import time
+
+    time.sleep(1)
+
+    # Clean ALL pydoll profiles (not just old ones)
+    try:
+        tmp_dir = tempfile.gettempdir()
+        for item in os.listdir(tmp_dir):
+            if item.startswith("pydoll_profile_"):
+                path = os.path.join(tmp_dir, item)
+                try:
+                    st = os.lstat(path)
+                    if stat.S_ISDIR(st.st_mode) and not stat.S_ISLNK(st.st_mode):
+                        shutil.rmtree(path, ignore_errors=True)
+                        stats["profiles_cleaned"] += 1
+                except (OSError, PermissionError):
+                    pass
+    except (OSError, PermissionError) as e:
+        stats["errors"].append(f"Profile cleanup: {e}")
+
+    return stats
+
+
+def get_chrome_process_count() -> int:
+    """
+    Get count of running Chrome/Chromium processes.
+    Useful for monitoring and health checks.
+    """
+    try:
+        # Count chrome processes (works on Linux/macOS)
+        result = subprocess.run(
+            ["pgrep", "-c", "-f", "chrome|chromium"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return int(result.stdout.strip())
+        return 0
+    except (subprocess.SubprocessError, ValueError, FileNotFoundError):
+        return 0
+
+
 class BrowserManager:
     _browser: Optional[Chrome] = None
     _lock = asyncio.Lock()

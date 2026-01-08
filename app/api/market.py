@@ -357,14 +357,16 @@ def read_marquee_data(
         }
 
         # Categorize by price movement
-        if item["price_delta"] > 5 and len(gainers) < 15:
+        price_delta = item["price_delta"] or 0
+        item_volume = item["volume"] or 0
+        if price_delta > 5 and len(gainers) < 15:
             gainers.append(item)
-        elif item["price_delta"] < -5 and len(losers) < 10:
+        elif price_delta < -5 and len(losers) < 10:
             losers.append(item)
-        elif item["volume"] > 0 and len(volume) < 10:
+        elif item_volume > 0 and len(volume) < 10:
             volume.append(item)
-            total_volume += item["volume"]
-            total_dollar_volume += item["dollar_volume"]
+            total_volume += item_volume
+            total_dollar_volume += item["dollar_volume"] or 0
         elif len(recent) < 20:
             recent.append(item)
 
@@ -456,6 +458,9 @@ def read_market_listings(
 
     # Calculate time cutoff for time_period filter
     time_cutoffs = {
+        "1h": timedelta(hours=1),
+        "6h": timedelta(hours=6),
+        "24h": timedelta(hours=24),
         "7d": timedelta(days=7),
         "30d": timedelta(days=30),
         "90d": timedelta(days=90),
