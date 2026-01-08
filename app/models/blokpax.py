@@ -128,6 +128,9 @@ class BlokpaxSale(SQLModel, table=True):
     seller_address: str
     buyer_address: str
 
+    # Treatment extracted from asset traits (e.g., "Hologram Foil", "Classic Foil")
+    treatment: Optional[str] = Field(default=None, index=True)
+
     filled_at: datetime = Field(index=True)
     scraped_at: datetime = Field(default_factory=utc_now)
 
