@@ -211,7 +211,9 @@ def startup_cleanup_sync() -> dict:
 
     Returns dict with cleanup stats for logging.
     """
-    stats = {"chrome_killed": 0, "profiles_cleaned": 0, "errors": []}
+    chrome_killed = 0
+    profiles_cleaned = 0
+    errors: list[str] = []
 
     # Kill ALL Chrome/Chromium processes - no mercy
     kill_commands = [
@@ -225,9 +227,9 @@ def startup_cleanup_sync() -> dict:
         try:
             result = subprocess.run(cmd, capture_output=True, timeout=5)
             if result.returncode == 0:
-                stats["chrome_killed"] += 1
+                chrome_killed += 1
         except subprocess.TimeoutExpired:
-            stats["errors"].append(f"{cmd[0]} timed out")
+            errors.append(f"{cmd[0]} timed out")
         except (subprocess.SubprocessError, FileNotFoundError, OSError):
             pass
 
@@ -246,13 +248,13 @@ def startup_cleanup_sync() -> dict:
                     st = os.lstat(path)
                     if stat.S_ISDIR(st.st_mode) and not stat.S_ISLNK(st.st_mode):
                         shutil.rmtree(path, ignore_errors=True)
-                        stats["profiles_cleaned"] += 1
+                        profiles_cleaned += 1
                 except (OSError, PermissionError):
                     pass
     except (OSError, PermissionError) as e:
-        stats["errors"].append(f"Profile cleanup: {e}")
+        errors.append(f"Profile cleanup: {e}")
 
-    return stats
+    return {"chrome_killed": chrome_killed, "profiles_cleaned": profiles_cleaned, "errors": errors}
 
 
 def get_chrome_process_count() -> int:
