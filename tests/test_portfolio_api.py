@@ -122,8 +122,10 @@ class TestPortfolioCardCreate:
             headers=auth_headers,
         )
 
-        assert response.status_code == 400
-        assert "negative" in response.json()["detail"].lower()
+        assert response.status_code == 422  # Pydantic validation error
+        # Pydantic returns error in different format
+        error_detail = response.json()["detail"]
+        assert any("negative" in str(e).lower() for e in error_detail)
 
     def test_create_portfolio_card_unauthenticated(self, client, sample_cards):
         """Test that unauthenticated request returns 401."""
@@ -403,7 +405,7 @@ class TestPortfolioCardUpdate:
         assert data["grading"] == "BGS 9.5"
 
     def test_update_invalid_price(self, client, sample_portfolio_cards, auth_headers):
-        """Test that negative price update returns 400."""
+        """Test that negative price update returns 422 (Pydantic validation)."""
         card_id = sample_portfolio_cards[0].id
         response = client.patch(
             f"/api/v1/portfolio/cards/{card_id}",
@@ -411,7 +413,7 @@ class TestPortfolioCardUpdate:
             headers=auth_headers,
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422  # Pydantic validation error
 
 
 class TestPortfolioCardDelete:
