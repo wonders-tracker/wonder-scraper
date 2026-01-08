@@ -950,6 +950,7 @@ def get_portfolio_value_history(
             price_by_card_date[cid] = {}
         if isinstance(sale_date, str):
             from datetime import date as date_type
+
             sale_date = date_type.fromisoformat(sale_date)
         price_by_card_date[cid][sale_date] = float(avg_price)
 

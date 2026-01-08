@@ -17,16 +17,18 @@ logger = logging.getLogger(__name__)
 
 
 # Paths to exclude from detailed timing (health checks, static files)
-EXCLUDED_PATHS = frozenset({
-    "/health",
-    "/health/detailed",
-    "/health/mode",
-    "/health/metrics",
-    "/health/circuits",
-    "/health/performance",
-    "/favicon.ico",
-    "/robots.txt",
-})
+EXCLUDED_PATHS = frozenset(
+    {
+        "/health",
+        "/health/detailed",
+        "/health/mode",
+        "/health/metrics",
+        "/health/circuits",
+        "/health/performance",
+        "/favicon.ico",
+        "/robots.txt",
+    }
+)
 
 
 def _normalize_endpoint(path: str, method: str) -> str:

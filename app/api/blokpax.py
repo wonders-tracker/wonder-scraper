@@ -324,7 +324,7 @@ def get_blokpax_summary(
             FROM blokpaxsale
             WHERE filled_at >= :cutoff_7d
         """),
-        {"cutoff_24h": cutoff_24h, "cutoff_7d": cutoff_7d}
+        {"cutoff_24h": cutoff_24h, "cutoff_7d": cutoff_7d},
     ).first()
 
     recent_sales = int(sales_stats[0]) if sales_stats else 0

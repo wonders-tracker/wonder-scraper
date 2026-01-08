@@ -62,6 +62,7 @@ async def run_backfill_job(job_id: str, limit: int, force_all: bool, is_backfill
             else:
                 # Get latest snapshot timestamp for all cards in ONE query (fixes N+1)
                 from sqlalchemy import text
+
                 cutoff_time = datetime.now(timezone.utc) - timedelta(hours=4)
                 cutoff_naive = cutoff_time.replace(tzinfo=None)
 

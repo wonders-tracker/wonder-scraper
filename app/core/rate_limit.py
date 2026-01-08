@@ -35,13 +35,9 @@ class RateLimiter:
             maxsize=MAX_TRACKED_IPS, ttl=REQUEST_TTL_SECONDS
         )
         # {ip: lockout_until_timestamp} - auto-expires
-        self._lockouts: TTLCache[str, float] = TTLCache(
-            maxsize=MAX_TRACKED_IPS, ttl=LOCKOUT_TTL_SECONDS
-        )
+        self._lockouts: TTLCache[str, float] = TTLCache(maxsize=MAX_TRACKED_IPS, ttl=LOCKOUT_TTL_SECONDS)
         # {ip: failed_attempts} - auto-expires
-        self._failed_attempts: TTLCache[str, int] = TTLCache(
-            maxsize=MAX_TRACKED_IPS, ttl=REQUEST_TTL_SECONDS
-        )
+        self._failed_attempts: TTLCache[str, int] = TTLCache(maxsize=MAX_TRACKED_IPS, ttl=REQUEST_TTL_SECONDS)
 
     def _get_requests(self, ip: str) -> Deque[Tuple[float, int]]:
         """Get or create request deque for IP."""

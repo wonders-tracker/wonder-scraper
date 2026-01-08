@@ -121,17 +121,11 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
             maxsize=self._max_tracked_ips, ttl=self._state_ttl
         )
         # {ip: blocked_until_timestamp}
-        self._blocked_ips: TTLCache[str, float] = TTLCache(
-            maxsize=self._max_tracked_ips, ttl=self._state_ttl
-        )
+        self._blocked_ips: TTLCache[str, float] = TTLCache(maxsize=self._max_tracked_ips, ttl=self._state_ttl)
         # {ip: {fingerprint1, ...}} - bounded per IP
-        self._fingerprints: TTLCache[str, Set[str]] = TTLCache(
-            maxsize=self._max_tracked_ips, ttl=self._state_ttl
-        )
+        self._fingerprints: TTLCache[str, Set[str]] = TTLCache(maxsize=self._max_tracked_ips, ttl=self._state_ttl)
         # {ip: violation_count}
-        self._suspicious_ips: TTLCache[str, int] = TTLCache(
-            maxsize=self._max_tracked_ips, ttl=self._state_ttl
-        )
+        self._suspicious_ips: TTLCache[str, int] = TTLCache(maxsize=self._max_tracked_ips, ttl=self._state_ttl)
         self._ip_last_seen: Dict[str, float] = {}
 
         # Compile patterns
@@ -451,15 +445,9 @@ class APIKeyRateLimiter:
     def __init__(self):
         # Use TTLCache to auto-expire and bound memory
         # 24-hour TTL for daily counters, 1-hour for minute counters
-        self._minute_requests: TTLCache[str, Deque[float]] = TTLCache(
-            maxsize=MAX_TRACKED_API_KEYS, ttl=3600
-        )
-        self._day_requests: TTLCache[str, int] = TTLCache(
-            maxsize=MAX_TRACKED_API_KEYS, ttl=86400
-        )
-        self._day_start: TTLCache[str, float] = TTLCache(
-            maxsize=MAX_TRACKED_API_KEYS, ttl=86400
-        )
+        self._minute_requests: TTLCache[str, Deque[float]] = TTLCache(maxsize=MAX_TRACKED_API_KEYS, ttl=3600)
+        self._day_requests: TTLCache[str, int] = TTLCache(maxsize=MAX_TRACKED_API_KEYS, ttl=86400)
+        self._day_start: TTLCache[str, float] = TTLCache(maxsize=MAX_TRACKED_API_KEYS, ttl=86400)
 
     def _get_day_start(self) -> float:
         """Get the start of the current UTC day as a timestamp."""

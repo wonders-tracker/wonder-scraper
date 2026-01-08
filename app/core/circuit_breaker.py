@@ -38,9 +38,7 @@ def _persist_state(name: str, state: str, failure_count: int, last_failure_at: O
         from app.models.circuit_breaker_state import CircuitBreakerState
 
         with Session(engine) as session:
-            db_state = session.exec(
-                select(CircuitBreakerState).where(CircuitBreakerState.name == name)
-            ).first()
+            db_state = session.exec(select(CircuitBreakerState).where(CircuitBreakerState.name == name)).first()
 
             if db_state:
                 db_state.state = state
@@ -69,9 +67,7 @@ def _load_state(name: str) -> Optional[Dict[str, Any]]:
         from app.models.circuit_breaker_state import CircuitBreakerState
 
         with Session(engine) as session:
-            db_state = session.exec(
-                select(CircuitBreakerState).where(CircuitBreakerState.name == name)
-            ).first()
+            db_state = session.exec(select(CircuitBreakerState).where(CircuitBreakerState.name == name)).first()
 
             if db_state:
                 return {

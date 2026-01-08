@@ -66,12 +66,8 @@ class EndpointMetrics:
             "request_count": self.request_count,
             "slow_request_count": self.slow_request_count,
             "sample_count": len(self.samples),
-            "avg_ms": round(self.total_time_ms / self.request_count, 2)
-            if self.request_count > 0
-            else None,
-            "min_ms": round(self.min_time_ms, 2)
-            if self.min_time_ms != float("inf")
-            else None,
+            "avg_ms": round(self.total_time_ms / self.request_count, 2) if self.request_count > 0 else None,
+            "min_ms": round(self.min_time_ms, 2) if self.min_time_ms != float("inf") else None,
             "max_ms": round(self.max_time_ms, 2) if self.max_time_ms > 0 else None,
             "p50_ms": round(p50, 2) if p50 is not None else None,
             "p95_ms": round(p95, 2) if p95 is not None else None,
@@ -121,10 +117,7 @@ class PerformanceMetricsCollector:
     def get_all_metrics(self) -> dict:
         """Get metrics for all endpoints."""
         with self._lock:
-            return {
-                endpoint: metrics.to_dict()
-                for endpoint, metrics in self._endpoints.items()
-            }
+            return {endpoint: metrics.to_dict() for endpoint, metrics in self._endpoints.items()}
 
     def get_slowest_endpoints(self, n: int = 10, by: str = "p95") -> list[dict]:
         """
@@ -175,9 +168,7 @@ class PerformanceMetricsCollector:
                 "uptime_seconds": round(uptime_seconds, 1),
                 "total_requests": self._total_requests,
                 "slow_requests": self._slow_requests,
-                "slow_request_pct": round(
-                    (self._slow_requests / self._total_requests * 100), 2
-                )
+                "slow_request_pct": round((self._slow_requests / self._total_requests * 100), 2)
                 if self._total_requests > 0
                 else 0,
                 "endpoints_tracked": len(self._endpoints),
