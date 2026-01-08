@@ -393,11 +393,14 @@ def _is_alt_art(title: str) -> bool:
     return False
 
 
-def _detect_treatment(title: str, product_type: str = "Single") -> str:
+def _detect_treatment(title: str, product_type: str = "Single") -> str | None:
     """
     Detects treatment based on title keywords.
-    For singles: card treatments (Foil, Serialized, etc.)
-    For boxes/packs/lots: simplified condition (Sealed, Open Box, Unknown)
+    For singles: card treatments (Foil, Serialized, etc.) or None if unknown
+    For boxes/packs/lots: simplified condition (Sealed, Open Box)
+
+    Returns None for singles when treatment cannot be determined from title keywords.
+    This distinguishes "unknown treatment" from "definitely Classic Paper".
     """
     title_lower = title.lower()
 
@@ -453,12 +456,22 @@ def _detect_treatment(title: str, product_type: str = "Single") -> str:
     elif "foil" in title_lower or "holo" in title_lower or "refractor" in title_lower:
         base_treatment = "Classic Foil"
 
-    # 5. Default for singles
-    else:
+    # 5. Explicit Classic Paper detection (only when specifically mentioned)
+    elif (
+        "classic paper" in title_lower
+        or "paper" in title_lower
+        or "non-foil" in title_lower
+        or "non foil" in title_lower
+    ):
         base_treatment = "Classic Paper"
 
-    # Append Alt Art suffix if applicable
-    if is_alt_art:
+    # 6. Unknown treatment - return None instead of assuming Classic Paper
+    # This allows downstream systems to distinguish "unknown" from "detected Classic Paper"
+    else:
+        base_treatment = None
+
+    # Append Alt Art suffix if applicable (only if base treatment was detected)
+    if is_alt_art and base_treatment:
         return f"{base_treatment} Alt Art"
 
     return base_treatment

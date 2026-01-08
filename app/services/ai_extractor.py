@@ -686,7 +686,7 @@ Always return valid JSON matching the schema exactly.""",
                 "quantity": extracted.get("quantity", 1),
                 "product_type": extracted.get("product_type", "Single"),
                 "condition": extracted.get("condition"),
-                "treatment": extracted.get("treatment", "Classic Paper"),
+                "treatment": extracted.get("treatment"),  # None if AI couldn't determine
                 "confidence": extracted.get("confidence", 0.8),
             }
 
@@ -827,7 +827,7 @@ Always return valid JSON matching the schema exactly.""",
                             "quantity": extracted.get("quantity", 1),
                             "product_type": extracted.get("product_type", "Single"),
                             "condition": extracted.get("condition"),
-                            "treatment": extracted.get("treatment", "Classic Paper"),
+                            "treatment": extracted.get("treatment"),  # None if AI couldn't determine
                             "confidence": extracted.get("confidence", 0.8),
                         }
                     )
@@ -1014,9 +1014,16 @@ Return ONLY valid JSON, no markdown or extra text."""
                 treatment = "Proof/Sample"
             elif "error" in title_lower or "errata" in title_lower:
                 treatment = "Error/Errata"
-            else:
-                # Default for single cards
+            elif (
+                "classic paper" in title_lower
+                or "paper" in title_lower
+                or "non-foil" in title_lower
+                or "non foil" in title_lower
+            ):
                 treatment = "Classic Paper"
+            else:
+                # Unknown treatment - return None to distinguish from detected Classic Paper
+                treatment = None
 
         return {
             "quantity": quantity,
@@ -1119,7 +1126,7 @@ Return ONLY valid JSON, no markdown or extra text."""
             "card_name": card_name,
             "set_name": None,
             "card_number": self._extract_card_number(title_lower),
-            "treatment": "Classic Paper",  # Default
+            "treatment": None,  # None = unknown, set only if detected
             "condition": self._extract_condition(title_lower),
             "is_graded": False,
             "grading_info": None,
