@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.db import engine
 from app.models.card import Card
 from app.models.market import MarketSnapshot
-from app.models.blokpax import BlokpaxStorefront, BlokpaxSnapshot
+from app.models.blokpax import BlokpaxStorefront, BlokpaxSnapshot, BlokpaxSale
 from scripts.scrape_card import scrape_card as scrape_sold_data
 from app.scraper.active import scrape_active_data
 from app.scraper.browser import BrowserManager
@@ -438,6 +438,35 @@ async def _job_update_blokpax_data_impl():
                 sales = await scrape_recent_sales(slug, max_pages=2)
                 if slug == "reward-room":
                     sales = [s for s in sales if is_wotf_asset(s.asset_name)]
+
+                # Save sales to database (deduplicate by listing_id)
+                if sales:
+                    with Session(engine) as sale_session:
+                        saved_count = 0
+                        for sale in sales:
+                            # Check if already exists
+                            existing = sale_session.exec(
+                                select(BlokpaxSale).where(BlokpaxSale.listing_id == sale.listing_id)
+                            ).first()
+                            if not existing:
+                                db_sale = BlokpaxSale(
+                                    listing_id=sale.listing_id,
+                                    asset_id=sale.asset_id,
+                                    asset_name=sale.asset_name,
+                                    price_bpx=sale.price_bpx,
+                                    price_usd=sale.price_usd,
+                                    quantity=sale.quantity,
+                                    seller_address=sale.seller_address or "",
+                                    buyer_address=sale.buyer_address or "",
+                                    treatment=sale.treatment,
+                                    filled_at=sale.filled_at,
+                                )
+                                sale_session.add(db_sale)
+                                saved_count += 1
+                        sale_session.commit()
+                        if saved_count > 0:
+                            print(f"[Blokpax] Saved {saved_count} new sales from {slug}")
+
                 total_sales += len(sales)
 
                 blokpax_circuit.record_success()
