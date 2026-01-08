@@ -19,7 +19,8 @@ import { useCurrentUser } from '../context/UserContext'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
 
-const CARDS_FETCH_LIMIT = Number(import.meta.env.VITE_CARDS_FETCH_LIMIT ?? '200')
+// Reduced from 200 to 50 for faster initial load - users can paginate for more
+const CARDS_FETCH_LIMIT = Number(import.meta.env.VITE_CARDS_FETCH_LIMIT ?? '50')
 
 // Card thumbnail with placeholder fallback for missing/failed images
 // Uses image_url from API response (blob storage URLs with hash)

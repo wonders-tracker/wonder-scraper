@@ -1,4 +1,4 @@
-import { Outlet, createRootRoute, Link, useNavigate, redirect, useLocation } from '@tanstack/react-router'
+import { Outlet, createRootRoute, Link, useNavigate, useLocation } from '@tanstack/react-router'
 import { LayoutDashboard, LineChart, Wallet, Server, LogOut, Shield, Newspaper } from 'lucide-react'
 // Animated icons for micro-interactions
 import { MenuIcon, type MenuIconHandle } from '~/components/ui/menu'
@@ -20,6 +20,7 @@ import { UserProvider } from '../context/UserContext'
 type UserProfile = {
     id: number
     email: string
+    username?: string
     is_superuser: boolean
     onboarding_completed: boolean
     subscription_tier: string
@@ -39,42 +40,38 @@ type Card = {
   price_delta_24h?: number
 }
 
+// Lightweight marquee data from /market/marquee endpoint
+type MarqueeCard = {
+  id: number
+  slug: string
+  name: string
+  set_name: string
+  floor_price: number | null
+  latest_price: number | null
+  price_delta: number
+  volume: number
+  dollar_volume: number
+}
+
+type MarqueeData = {
+  gainers: MarqueeCard[]
+  losers: MarqueeCard[]
+  volume: MarqueeCard[]
+  recent: MarqueeCard[]  // Fallback cards with floor prices
+  metrics: {
+    total_volume: number
+    total_dollar_volume: number
+  }
+  time_period: string
+}
+
 // Paths that should skip onboarding check
 const SKIP_ONBOARDING_PATHS = ['/welcome', '/login', '/signup', '/auth/callback', '/forgot-password', '/reset-password']
 
 export const Route = createRootRoute({
   component: RootComponent,
-  beforeLoad: async ({ location }) => {
-    // Skip onboarding check for auth-related pages
-    if (SKIP_ONBOARDING_PATHS.some(path => location.pathname.startsWith(path))) {
-      return
-    }
-
-    if (typeof window === 'undefined') return
-
-    // Fetch user profile to check onboarding status (uses httpOnly cookie)
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/auth/me`, {
-        credentials: 'include',
-      })
-      if (!response.ok) {
-        // Not authenticated, let them continue to page (will show login prompt if needed)
-        return
-      }
-      const user = await response.json()
-      // Check if onboarding is incomplete: either flag is false OR username is empty
-      const needsOnboarding = user && (user.onboarding_completed === false || !user.username)
-      if (needsOnboarding) {
-        throw redirect({ to: '/welcome' })
-      }
-    } catch (e) {
-      // Network error or not authenticated - continue to page
-      if (e instanceof Response || (e && typeof e === 'object' && 'to' in e)) {
-        throw e // Re-throw redirects
-      }
-      return
-    }
-  },
+  // Note: Onboarding redirect is handled in RootLayout via useEffect after useQuery loads
+  // This avoids a duplicate /auth/me fetch - the useQuery already handles user loading
 })
 
 // User profile dropdown component - positioned relative to avoid portal issues in sticky header
@@ -229,32 +226,84 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
       staleTime: 60 * 1000, // 1 minute - shorter for better cross-tab sync
   })
 
-  // Note: Onboarding redirect is handled in beforeLoad at the route level
+  // Handle onboarding redirect after user data loads (non-blocking)
+  useEffect(() => {
+    // Skip if still loading
+    if (userLoading) return
 
-  // Fetch cards for marquee ticker - uses shared time period
-  // Uses same query key as dashboard so data is shared/cached
-  // slim=true reduces payload by ~50% for faster loading
-  const { data: cards = [], isLoading: isLoadingCards } = useQuery({
-      queryKey: ['cards', timePeriod, 'all'], // Same key as dashboard with productType='all'
+    // Skip onboarding check for auth-related pages
+    if (SKIP_ONBOARDING_PATHS.some(path => location.pathname.startsWith(path))) {
+      return
+    }
+
+    // Check if user needs onboarding
+    if (user && (user.onboarding_completed === false || !user.username)) {
+      navigate({ to: '/welcome' })
+    }
+  }, [user, userLoading, location.pathname, navigate])
+
+  // Fetch lightweight marquee data - only top gainers/losers/volume (~15-20 items)
+  // OPTIMIZED: Replaces fetching 500 cards - reduces payload from ~100KB to ~5KB
+  const { data: marqueeData, isLoading: isLoadingCards } = useQuery({
+      queryKey: ['marquee', timePeriod],
       queryFn: async () => {
-          return await api.get(`cards?limit=500&time_period=${timePeriod}&slim=true`).json<Card[]>()
+          return await api.get(`market/marquee?time_period=${timePeriod}`).json<MarqueeData>()
       },
       staleTime: 5 * 60 * 1000, // 5 minutes
       gcTime: 30 * 60 * 1000, // 30 minutes cache
   })
 
-  // Helper to get delta with fallback
-  const getDelta = (c: Card) => c.price_delta ?? c.price_delta_24h ?? 0
-  const getVolume = (c: Card) => c.volume ?? c.volume_30d ?? 0
+  // Use pre-computed data from the backend
+  // Combine all categories and dedupe for a diverse marquee
+  const marqueeItems = useMemo(() => {
+    const gainers = marqueeData?.gainers ?? []
+    const losers = marqueeData?.losers ?? []
+    const volume = marqueeData?.volume ?? []
+    const recent = marqueeData?.recent ?? []
 
-  const topGainers = useMemo(() => [...cards].filter(c => getDelta(c) > 0).sort((a, b) => getDelta(b) - getDelta(a)).slice(0, 5), [cards])
-  const topLosers = useMemo(() => [...cards].filter(c => getDelta(c) < 0).sort((a, b) => getDelta(a) - getDelta(b)).slice(0, 3), [cards])
-  const topVolume = useMemo(() => [...cards].sort((a, b) => getVolume(b) - getVolume(a)).slice(0, 8), [cards])
-  const marketMetrics = useMemo(() => {
-      const totalVolume = cards.reduce((acc, c) => acc + getVolume(c), 0)
-      const avgVelocity = cards.length > 0 ? totalVolume / cards.length : 0
-      return { totalVolume, avgVelocity }
-  }, [cards])
+    // Track seen IDs to avoid duplicates
+    const seen = new Set<number>()
+    const items: Array<{ card: MarqueeCard; type: 'gainer' | 'loser' | 'volume' | 'recent' }> = []
+
+    // Add gainers first
+    for (const c of gainers) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id)
+        items.push({ card: c, type: 'gainer' })
+      }
+    }
+
+    // Add losers
+    for (const c of losers) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id)
+        items.push({ card: c, type: 'loser' })
+      }
+    }
+
+    // Add volume cards (show as "hot" with volume count)
+    for (const c of volume) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id)
+        items.push({ card: c, type: 'volume' })
+      }
+    }
+
+    // Add recent/priced cards as fallback (show floor price)
+    for (const c of recent) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id)
+        items.push({ card: c, type: 'recent' })
+      }
+    }
+
+    return items
+  }, [marqueeData])
+
+  const marketMetrics = useMemo(() => ({
+      totalVolume: marqueeData?.metrics.total_volume ?? 0,
+      avgVelocity: marqueeData?.metrics.total_dollar_volume ?? 0, // Using dollar volume as "velocity" display
+  }), [marqueeData])
 
   // Refs for mobile menu animated icons
   const menuIconRef = useRef<MenuIconHandle>(null)
@@ -474,13 +523,13 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
         <div className="border-b border-border bg-muted/10 overflow-hidden flex items-center h-8 sticky top-14 z-40">
           {/* Fixed Metrics */}
           <div className="flex items-center px-3 border-r border-border h-full bg-background/50 z-10">
-            <div className="flex items-center gap-2 text-[10px] font-mono mr-3">
-              <span className="text-muted-foreground uppercase">Vol:</span>
-              <span className="font-bold">{marketMetrics.totalVolume}</span>
+            <div className="flex items-center gap-2 text-micro font-mono mr-3">
+              <span className="text-muted-foreground uppercase">Sales:</span>
+              <span className="font-bold">{marketMetrics.totalVolume.toLocaleString()}</span>
             </div>
-            <div className="flex items-center gap-2 text-[10px] font-mono">
-              <span className="text-muted-foreground uppercase">Vel:</span>
-              <span className="font-bold text-brand-300">{Number(marketMetrics.avgVelocity).toFixed(1)}/d</span>
+            <div className="flex items-center gap-2 text-micro font-mono">
+              <span className="text-muted-foreground uppercase">$Vol:</span>
+              <span className="font-bold text-brand-300">${(marketMetrics.avgVelocity / 1000).toFixed(1)}k</span>
             </div>
           </div>
 
@@ -496,25 +545,26 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
                 ))}
               </div>
             ) : (
-              <Marquee pauseOnHover className="[--gap:2rem]">
-                {/* Fallback if lists are empty: show top volume items */}
-                {(topGainers.length === 0 && topLosers.length === 0) && topVolume.map(c => (
-                  <div key={`ticker-vol-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
+              <Marquee pauseOnHover className="[--gap:1.5rem] [--duration:80s]">
+                {marqueeItems.map(({ card: c, type }) => (
+                  <div
+                    key={`ticker-${type}-${c.id}`}
+                    className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap"
+                    onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: c.slug || String(c.id) } })}
+                  >
                     <span className="font-bold uppercase">{c.name}</span>
-                    <span className="text-muted-foreground">${Number(c.latest_price).toFixed(2)}</span>
-                  </div>
-                ))}
-
-                {topGainers.map(c => (
-                  <div key={`ticker-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                    <span className="font-bold uppercase">{c.name}</span>
-                    <span className="text-brand-300">+{getDelta(c).toFixed(1)}%</span>
-                  </div>
-                ))}
-                {topLosers.map(c => (
-                  <div key={`ticker-loss-${c.id}`} className="flex items-center gap-2 text-[10px] font-mono cursor-pointer hover:text-primary transition-colors whitespace-nowrap" onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: String(c.id) } })}>
-                    <span className="font-bold uppercase">{c.name}</span>
-                    <span className="text-red-500">{getDelta(c).toFixed(1)}%</span>
+                    {type === 'gainer' && (
+                      <span className="text-brand-300">+{c.price_delta.toFixed(1)}%</span>
+                    )}
+                    {type === 'loser' && (
+                      <span className="text-red-500">{c.price_delta.toFixed(1)}%</span>
+                    )}
+                    {type === 'volume' && (
+                      <span className="text-blue-400">{c.volume} sales</span>
+                    )}
+                    {type === 'recent' && c.floor_price && (
+                      <span className="text-muted-foreground">${c.floor_price.toFixed(0)}</span>
+                    )}
                   </div>
                 ))}
               </Marquee>
