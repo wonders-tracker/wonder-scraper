@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as UpgradeRouteImport } from './routes/upgrade'
+import { Route as UnsubscribeRouteImport } from './routes/unsubscribe'
+import { Route as ChangelogRouteImport } from './routes/changelog'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -67,6 +69,16 @@ const WelcomeRoute = WelcomeRouteImport.update({
 const UpgradeRoute = UpgradeRouteImport.update({
   id: '/upgrade',
   path: '/upgrade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UnsubscribeRoute = UnsubscribeRouteImport.update({
+  id: '/unsubscribe',
+  path: '/unsubscribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChangelogRoute = ChangelogRouteImport.update({
+  id: '/changelog',
+  path: '/changelog',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -311,6 +323,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/api': typeof ApiRoute
   '/blog': typeof BlogRouteWithChildren
+  '/changelog': typeof ChangelogRoute
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -320,6 +333,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/unsubscribe': typeof UnsubscribeRoute
   '/upgrade': typeof UpgradeRoute
   '/welcome': typeof WelcomeRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
@@ -360,6 +374,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api': typeof ApiRoute
+  '/changelog': typeof ChangelogRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/market': typeof MarketRouteWithChildren
@@ -368,6 +383,7 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/unsubscribe': typeof UnsubscribeRoute
   '/upgrade': typeof UpgradeRoute
   '/welcome': typeof WelcomeRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
@@ -410,6 +426,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/api': typeof ApiRoute
   '/blog': typeof BlogRouteWithChildren
+  '/changelog': typeof ChangelogRoute
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -419,6 +436,7 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/unsubscribe': typeof UnsubscribeRoute
   '/upgrade': typeof UpgradeRoute
   '/welcome': typeof WelcomeRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
@@ -463,6 +481,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/api'
     | '/blog'
+    | '/changelog'
     | '/docs'
     | '/forgot-password'
     | '/login'
@@ -472,6 +491,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reset-password'
     | '/signup'
+    | '/unsubscribe'
     | '/upgrade'
     | '/welcome'
     | '/admin/analytics'
@@ -512,6 +532,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/api'
+    | '/changelog'
     | '/forgot-password'
     | '/login'
     | '/market'
@@ -520,6 +541,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reset-password'
     | '/signup'
+    | '/unsubscribe'
     | '/upgrade'
     | '/welcome'
     | '/admin/analytics'
@@ -561,6 +583,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/api'
     | '/blog'
+    | '/changelog'
     | '/docs'
     | '/forgot-password'
     | '/login'
@@ -570,6 +593,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reset-password'
     | '/signup'
+    | '/unsubscribe'
     | '/upgrade'
     | '/welcome'
     | '/admin/analytics'
@@ -613,6 +637,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   ApiRoute: typeof ApiRoute
   BlogRoute: typeof BlogRouteWithChildren
+  ChangelogRoute: typeof ChangelogRoute
   DocsRoute: typeof DocsRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
@@ -622,6 +647,7 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
+  UnsubscribeRoute: typeof UnsubscribeRoute
   UpgradeRoute: typeof UpgradeRoute
   WelcomeRoute: typeof WelcomeRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
@@ -643,6 +669,20 @@ declare module '@tanstack/react-router' {
       path: '/upgrade'
       fullPath: '/upgrade'
       preLoaderRoute: typeof UpgradeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/unsubscribe': {
+      id: '/unsubscribe'
+      path: '/unsubscribe'
+      fullPath: '/unsubscribe'
+      preLoaderRoute: typeof UnsubscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/changelog': {
+      id: '/changelog'
+      path: '/changelog'
+      fullPath: '/changelog'
+      preLoaderRoute: typeof ChangelogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -1125,6 +1165,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   ApiRoute: ApiRoute,
   BlogRoute: BlogRouteWithChildren,
+  ChangelogRoute: ChangelogRoute,
   DocsRoute: DocsRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
@@ -1134,6 +1175,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
+  UnsubscribeRoute: UnsubscribeRoute,
   UpgradeRoute: UpgradeRoute,
   WelcomeRoute: WelcomeRoute,
   AuthCallbackRoute: AuthCallbackRoute,

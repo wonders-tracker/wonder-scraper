@@ -267,51 +267,38 @@ function CardDetail() {
     }
   }, [cardId])
 
-  // Fetch Card Data
+  // Fetch Card Data - single endpoint, no /market fallback needed
+  // The /cards/{id} endpoint already includes all pricing data (floor, vwap, lowest_ask, etc.)
   const { data: card, isLoading: isLoadingCard } = useQuery({
     queryKey: ['card', cardId],
     queryFn: async () => {
-      // First get card basic info
-      const basic = await api.get(`cards/${cardId}`).json<CardDetail>()
-      // Then get market snapshot
-      try {
-          const market = await api.get(`cards/${cardId}/market`).json<any>()
-          // Consistent priority: prefer live data from /cards/{id} over snapshot from /cards/{id}/market
-          // basic.* = computed live from MarketPrice table
-          // market.* = from MarketSnapshot (historical aggregate)
-          return {
-              ...basic,
-              latest_price: basic.latest_price ?? market.avg_price,
-              volume_30d: basic.volume_30d ?? market.volume,
-              lowest_ask: basic.lowest_ask ?? market.lowest_ask,
-              inventory: basic.inventory ?? market.inventory,
-              max_price: basic.max_price ?? market.max_price,
-              product_type: basic.product_type,
-              market_cap: (basic.floor_price || basic.latest_price || market.avg_price || 0) * (basic.volume_30d || market.volume || 0)
-          }
-      } catch (e) {
-          // If market data fails (404 or 401), return basic info
-          return basic
+      const data = await api.get(`cards/${cardId}`).json<CardDetail>()
+      return {
+        ...data,
+        market_cap: (data.floor_price || data.latest_price || 0) * (data.volume_30d || 0)
       }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes - card data updates infrequently
   })
 
-  // Fetch Sales History (sold + active listings) - paginated for performance
-  // Initial load: 100 recent sales (enough for chart), load more on demand
+  // Fetch Sales History (sold + active listings) - single combined endpoint
+  // Uses /listings endpoint for better performance (one request instead of two)
+  type ListingsResponse = {
+    card_id: number
+    sold: { items: MarketPrice[], total: number, hasMore: boolean }
+    active: { items: MarketPrice[], total: number }
+  }
   const { data: historyData, isLoading: isLoadingHistory } = useQuery({
-      queryKey: ['card-history', cardId],
+      queryKey: ['card-listings', cardId],
       queryFn: async () => {
           try {
-            // Fetch recent sold listings (paginated=true returns {items, total, hasMore})
-            const soldResponse = await api.get(`cards/${cardId}/history?limit=100&paginated=true`).json<{items: MarketPrice[], total: number, hasMore: boolean}>()
-            const activeData = await api.get(`cards/${cardId}/active?limit=100`).json<MarketPrice[]>().catch(() => [])
+            const response = await api.get(`cards/${cardId}/listings?sold_limit=100&active_limit=100`).json<ListingsResponse>()
             // Combine: active listings first, then sold by date
             return {
-              items: [...activeData, ...soldResponse.items],
-              total: soldResponse.total,
-              hasMore: soldResponse.hasMore,
-              activeCount: activeData.length
+              items: [...response.active.items, ...response.sold.items],
+              total: response.sold.total,
+              hasMore: response.sold.hasMore,
+              activeCount: response.active.items.length
             }
           } catch (e) {
               return { items: [], total: 0, hasMore: false, activeCount: 0 }
@@ -324,6 +311,7 @@ function CardDetail() {
   const history = historyData?.items ?? []
 
   // Fetch Snapshot History (for OpenSea/NFT items that don't have individual sales)
+  // Runs in parallel with other queries - no longer waits for listings data
   const { data: snapshots } = useQuery({
       queryKey: ['card-snapshots', cardId],
       queryFn: async () => {
@@ -333,8 +321,6 @@ function CardDetail() {
               return []
           }
       },
-      // Only fetch if we have no sales history (OpenSea items)
-      enabled: !isLoadingHistory,
       staleTime: 5 * 60 * 1000, // 5 minutes - snapshots change slowly
   })
 

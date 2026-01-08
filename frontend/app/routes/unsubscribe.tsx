@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMutation } from '@tanstack/react-query'
-import { api, auth } from '../utils/auth'
+import { api } from '../utils/auth'
 import { useState } from 'react'
 import { Mail, CheckCircle, ArrowLeft } from 'lucide-react'
+import { useCurrentUser } from '../context/UserContext'
 
 export const Route = createFileRoute('/unsubscribe')({
   component: Unsubscribe,
@@ -10,7 +11,8 @@ export const Route = createFileRoute('/unsubscribe')({
 
 function Unsubscribe() {
   const [unsubscribed, setUnsubscribed] = useState(false)
-  const isLoggedIn = auth.isAuthenticated()
+  const { user } = useCurrentUser()
+  const isLoggedIn = !!user
 
   const unsubscribeMutation = useMutation({
     mutationFn: async () => {

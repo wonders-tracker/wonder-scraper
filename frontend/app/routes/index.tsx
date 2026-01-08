@@ -225,6 +225,22 @@ function Home() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
+  // Prefetch card detail data on hover for faster navigation
+  const prefetchCardDetail = (cardSlug: string) => {
+    // Prefetch card data
+    queryClient.prefetchQuery({
+      queryKey: ['card', cardSlug],
+      queryFn: async () => api.get(`cards/${cardSlug}`).json(),
+      staleTime: 2 * 60 * 1000,
+    })
+    // Prefetch listings data (most expensive query)
+    queryClient.prefetchQuery({
+      queryKey: ['card-listings', cardSlug],
+      queryFn: async () => api.get(`cards/${cardSlug}/listings?sold_limit=100&active_limit=100`).json(),
+      staleTime: 2 * 60 * 1000,
+    })
+  }
+
   // Debounced search tracking
   useEffect(() => {
     if (!globalFilter || globalFilter.length < 2) return
@@ -982,6 +998,7 @@ function Home() {
                                                   key={row.id}
                                                   className="hover:bg-muted/30 transition-colors cursor-pointer group"
                                                   onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: row.original.slug || String(row.original.id) } })}
+                                                  onMouseEnter={() => prefetchCardDetail(row.original.slug || String(row.original.id))}
                                               >
                                                   {row.getVisibleCells().map(cell => {
                                                       const align = (cell.column.columnDef.meta as { align?: string })?.align || 'left'
@@ -1100,6 +1117,7 @@ function Home() {
                                                   key={listing.id}
                                                   className="hover:bg-muted/30 transition-colors cursor-pointer"
                                                   onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: listing.card_slug || String(listing.card_id) } })}
+                                                  onMouseEnter={() => prefetchCardDetail(listing.card_slug || String(listing.card_id))}
                                               >
                                                   {/* Card with thumbnail */}
                                                   <td className="px-2 py-1.5">
