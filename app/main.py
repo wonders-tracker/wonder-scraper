@@ -30,6 +30,7 @@ from app.core.saas import get_mode_info
 from contextlib import asynccontextmanager, suppress
 from app.core.scheduler import start_scheduler
 from app.core.anti_scraping import AntiScrapingMiddleware
+from app.middleware.timing import TimingMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 logger = logging.getLogger(__name__)
@@ -153,7 +154,11 @@ origins = list(set([o for o in origins if o]))
 
 # Middleware order matters! They execute in REVERSE order of addition.
 # So the LAST added middleware executes FIRST on the request.
-# Order: CORS -> Proxy -> GZip -> Metering -> AntiScraping
+# Order: CORS -> Proxy -> GZip -> Metering -> AntiScraping -> Timing
+
+# Timing middleware - measures request duration and records performance metrics
+# Added first (runs last on request, first on response) to capture total time
+app.add_middleware(cast(Any, TimingMiddleware))
 
 # Anti-scraping middleware - detects bots, headless browsers, rate limits
 # Protects /api/v1/cards, /api/v1/market, /api/v1/blokpax endpoints
@@ -395,4 +400,31 @@ def health_circuits():
     return {
         "circuits": breakers_info,
         "all_healthy": all(s == "closed" for s in states.values()),
+    }
+
+
+@app.get("/health/performance")
+def health_performance():
+    """
+    Get API performance metrics.
+
+    Returns:
+    - summary: Overall performance stats (total requests, slow %, uptime)
+    - slowest_endpoints: Top 10 slowest endpoints by p95 response time
+    - all_endpoints: Detailed metrics for every tracked endpoint
+
+    Metrics per endpoint include:
+    - request_count: Total requests to this endpoint
+    - slow_request_count: Requests exceeding 500ms threshold
+    - p50_ms, p95_ms, p99_ms: Response time percentiles
+    - avg_ms, min_ms, max_ms: Basic statistics
+
+    Note: Metrics reset on server restart.
+    """
+    from app.core.perf_metrics import perf_metrics
+
+    return {
+        "summary": perf_metrics.get_summary(),
+        "slowest_endpoints": perf_metrics.get_slowest_endpoints(n=10, by="p95"),
+        "all_endpoints": perf_metrics.get_all_metrics(),
     }
