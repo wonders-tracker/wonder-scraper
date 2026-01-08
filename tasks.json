@@ -1,0 +1,493 @@
+{
+  "project": "Card Detail Page Redesign",
+  "branch": "feature/card-detail-redesign",
+  "reference": "TCGPlayer-inspired layout",
+  "created": "2026-01-08",
+  "status": "in_progress",
+  "epics": [
+    {
+      "id": "E1",
+      "name": "Layout Foundation",
+      "description": "Two-column responsive grid system and base structure",
+      "status": "pending",
+      "sprint": 1,
+      "units": [
+        {
+          "id": "E1-U1",
+          "name": "Create two-column grid layout component",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/routes/cards.$cardId.tsx", "frontend/app/components/CardDetailLayout.tsx"],
+          "acceptance_criteria": [
+            "Desktop: 40% left column (card), 60% right column (price box)",
+            "Tablet: 50/50 split",
+            "Mobile: Single column stack",
+            "Smooth breakpoint transitions",
+            "No horizontal scroll at any viewport"
+          ]
+        },
+        {
+          "id": "E1-U2",
+          "name": "Build CardHero component (left column)",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/components/CardHero.tsx"],
+          "acceptance_criteria": [
+            "Large card image with zoom on hover",
+            "Card name as h1 with set name subtitle",
+            "Product details section (Card Number, Rarity, Type, Orbital)",
+            "Card text/description if available",
+            "Artist credit if available",
+            "Proper image fallback for missing images"
+          ]
+        },
+        {
+          "id": "E1-U3",
+          "name": "Create page section containers",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/ui/Section.tsx"],
+          "acceptance_criteria": [
+            "Consistent section spacing (32px desktop, 24px mobile)",
+            "Section headers with optional 'View More' links",
+            "Divider lines between major sections",
+            "Max-width container (1400px) with padding"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E2",
+      "name": "Price Box & Actions",
+      "description": "Right-side pricing display with treatment selector and listing panel",
+      "status": "pending",
+      "sprint": 1,
+      "units": [
+        {
+          "id": "E2-U1",
+          "name": "Build PriceBox component",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/components/PriceBox.tsx"],
+          "acceptance_criteria": [
+            "Treatment/condition dropdown selector",
+            "Large price display ($XX.XX format)",
+            "Price source indicator (Floor/FMP/Lowest Ask)",
+            "Shipping estimate or 'varies' indicator",
+            "Seller count badge (e.g., '12 sellers')"
+          ]
+        },
+        {
+          "id": "E2-U2",
+          "name": "Build ListingsPanel (slide-out or modal)",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/components/ListingsPanel.tsx"],
+          "acceptance_criteria": [
+            "Triggered by 'View X Listings' button",
+            "Shows paginated list of external listings",
+            "Each listing: seller, price, platform (eBay/Blokpax), condition",
+            "Click-through links to external sites",
+            "Close button and click-outside-to-close",
+            "Loading and empty states"
+          ]
+        },
+        {
+          "id": "E2-U3",
+          "name": "Add portfolio/watchlist actions",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/PriceBox.tsx"],
+          "acceptance_criteria": [
+            "Add to Portfolio button (opens existing modal)",
+            "Add to Watchlist toggle button",
+            "Visual feedback on action completion",
+            "Login prompt for unauthenticated users"
+          ]
+        },
+        {
+          "id": "E2-U4",
+          "name": "Price comparison summary",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/PriceBox.tsx"],
+          "acceptance_criteria": [
+            "Show lowest price per platform (eBay, Blokpax)",
+            "Platform logos/icons",
+            "Direct links to platform search",
+            "Last updated timestamp"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E3",
+      "name": "Market Data Section",
+      "description": "Price Points, Price History chart, and snapshot metrics",
+      "status": "pending",
+      "sprint": 2,
+      "units": [
+        {
+          "id": "E3-U1",
+          "name": "Build PricePoints component",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/components/PricePoints.tsx"],
+          "acceptance_criteria": [
+            "Market Price (FMP) with tooltip explanation",
+            "Most Recent Sale price and date",
+            "Med Volatility indicator (calculate from std dev)",
+            "Listed Median from active listings",
+            "Current Quantity (active listing count)",
+            "Current Sellers (unique seller count)",
+            "Info icons with tooltips for each metric"
+          ]
+        },
+        {
+          "id": "E3-U2",
+          "name": "Refactor PriceHistoryChart with time toggles",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/components/charts/PriceHistoryChart.tsx"],
+          "acceptance_criteria": [
+            "Time range buttons: 1M, 3M, 6M, 1Y, ALL",
+            "Active state styling on selected range",
+            "Chart updates smoothly on range change",
+            "Y-axis scales appropriately to data range",
+            "Tooltip shows date, price, treatment on hover",
+            "Loading skeleton while fetching"
+          ]
+        },
+        {
+          "id": "E3-U3",
+          "name": "Build ThreeMonthSnapshot component",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/ThreeMonthSnapshot.tsx"],
+          "acceptance_criteria": [
+            "Low Sale Price with date",
+            "High Sale Price with date",
+            "Total Sold count",
+            "Avg Daily Sold calculation",
+            "Visual card/box layout matching TCGPlayer",
+            "Link to 'View More Data'"
+          ]
+        },
+        {
+          "id": "E3-U4",
+          "name": "Treatment Comparison Prices section",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/TreatmentComparison.tsx"],
+          "acceptance_criteria": [
+            "Table showing all treatments for this card",
+            "Columns: Treatment, Floor Price, FMP, Volume",
+            "Clickable rows to filter page by treatment",
+            "Highlight current selected treatment",
+            "Sort by price or volume"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E4",
+      "name": "Listings Table",
+      "description": "Full paginated listings table with seller details",
+      "status": "pending",
+      "sprint": 2,
+      "units": [
+        {
+          "id": "E4-U1",
+          "name": "Build ListingsTable component",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/components/ListingsTable.tsx"],
+          "acceptance_criteria": [
+            "Columns: Seller, Condition/Treatment, Price, Shipping, Platform, Action",
+            "Sortable columns (price, date)",
+            "Pagination (10/25/50 per page options)",
+            "Row count header (e.g., '1,000+ Listings')",
+            "Alternating row colors for readability"
+          ]
+        },
+        {
+          "id": "E4-U2",
+          "name": "Seller info display",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/ListingsTable.tsx"],
+          "acceptance_criteria": [
+            "Seller name as link to their store/profile",
+            "Feedback score (e.g., '100% (1,234 Sales)')",
+            "Platform badge (eBay/Blokpax icon)",
+            "Truncate long seller names with tooltip"
+          ]
+        },
+        {
+          "id": "E4-U3",
+          "name": "Listing row actions",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/ListingsTable.tsx"],
+          "acceptance_criteria": [
+            "View on [Platform] button",
+            "Opens in new tab",
+            "Track click for analytics",
+            "Disabled state for unavailable listings"
+          ]
+        },
+        {
+          "id": "E4-U4",
+          "name": "Table filtering and sorting",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/ListingsTable.tsx"],
+          "acceptance_criteria": [
+            "Sort by dropdown (Price + Shipping, Price, Recently Listed)",
+            "Filter by platform (All, eBay, Blokpax)",
+            "Filter by treatment if multiple",
+            "Persist filter state in URL params",
+            "Clear filters button"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E5",
+      "name": "Similar Cards Section",
+      "description": "Related cards carousel/grid",
+      "status": "pending",
+      "sprint": 3,
+      "units": [
+        {
+          "id": "E5-U1",
+          "name": "Build SimilarCards carousel component",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/components/SimilarCards.tsx"],
+          "acceptance_criteria": [
+            "Horizontal scrollable carousel",
+            "Arrow navigation buttons",
+            "Touch swipe support on mobile",
+            "Card shows: image, name, price, listings count",
+            "Click navigates to that card's detail page"
+          ]
+        },
+        {
+          "id": "E5-U2",
+          "name": "API: Get card variants endpoint",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["app/api/cards.py"],
+          "acceptance_criteria": [
+            "Returns same card with different treatments",
+            "Includes floor price for each variant",
+            "Includes listing count for each",
+            "Ordered by price or popularity"
+          ]
+        },
+        {
+          "id": "E5-U3",
+          "name": "API: Get similar cards endpoint",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["app/api/cards.py"],
+          "acceptance_criteria": [
+            "Returns cards of same rarity from same set",
+            "Excludes current card",
+            "Includes floor price and volume",
+            "Limit to 10-12 cards"
+          ]
+        },
+        {
+          "id": "E5-U4",
+          "name": "Integrate variants and similar sections",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/routes/cards.$cardId.tsx"],
+          "acceptance_criteria": [
+            "Show 'Other Printings' section with variants",
+            "Show 'Similar Cards' section with same-rarity cards",
+            "Loading skeletons for both",
+            "Empty state if no variants/similar cards"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E6",
+      "name": "Mobile Optimization",
+      "description": "Responsive behavior and mobile-specific UX",
+      "status": "pending",
+      "sprint": 3,
+      "units": [
+        {
+          "id": "E6-U1",
+          "name": "Implement vertical stack layout",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/routes/cards.$cardId.tsx"],
+          "acceptance_criteria": [
+            "Order: Image -> Price Box -> Chart -> Price Points -> Listings",
+            "Proper spacing between stacked sections",
+            "Full-width components on mobile",
+            "No horizontal overflow"
+          ]
+        },
+        {
+          "id": "E6-U2",
+          "name": "Build sticky price header",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/components/StickyPriceHeader.tsx"],
+          "acceptance_criteria": [
+            "Appears when scrolling past price box",
+            "Shows: Card name, price, 'View Listings' button",
+            "Compact height (48-56px)",
+            "Smooth show/hide animation",
+            "Z-index above content, below modals"
+          ]
+        },
+        {
+          "id": "E6-U3",
+          "name": "Mobile listings view",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/ui/mobile-card-list.tsx"],
+          "acceptance_criteria": [
+            "Card-based layout instead of table on mobile",
+            "Each card shows key info without horizontal scroll",
+            "Infinite scroll or 'Load More' button",
+            "Touch-friendly tap targets (44px min)"
+          ]
+        },
+        {
+          "id": "E6-U4",
+          "name": "Mobile chart interactions",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/charts/PriceHistoryChart.tsx"],
+          "acceptance_criteria": [
+            "Time range buttons wrap or scroll horizontally",
+            "Touch-friendly tooltip on tap",
+            "Pinch-to-zoom disabled (use time range instead)",
+            "Chart height adjusted for mobile viewport"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E7",
+      "name": "Polish & Integration",
+      "description": "Final polish, testing, and integration",
+      "status": "pending",
+      "sprint": 4,
+      "units": [
+        {
+          "id": "E7-U1",
+          "name": "Loading states and skeletons",
+          "status": "pending",
+          "priority": "P0",
+          "files": ["frontend/app/components/ui/skeleton.tsx"],
+          "acceptance_criteria": [
+            "Skeleton loaders for all async sections",
+            "Consistent skeleton styling",
+            "No layout shift when data loads",
+            "Graceful error states with retry"
+          ]
+        },
+        {
+          "id": "E7-U2",
+          "name": "Error boundaries and fallbacks",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/components/ErrorBoundary.tsx"],
+          "acceptance_criteria": [
+            "Error boundary around each major section",
+            "Section-level error doesn't break whole page",
+            "User-friendly error messages",
+            "Report issue link in error states"
+          ]
+        },
+        {
+          "id": "E7-U3",
+          "name": "Analytics tracking",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/services/analytics.ts"],
+          "acceptance_criteria": [
+            "Track listing click-throughs by platform",
+            "Track treatment selector changes",
+            "Track time range changes on chart",
+            "Track similar card clicks"
+          ]
+        },
+        {
+          "id": "E7-U4",
+          "name": "Performance optimization",
+          "status": "pending",
+          "priority": "P1",
+          "files": ["frontend/app/routes/cards.$cardId.tsx"],
+          "acceptance_criteria": [
+            "Lazy load below-fold sections",
+            "Image optimization and lazy loading",
+            "Virtualized listings table for large datasets",
+            "Core Web Vitals targets met (LCP < 2.5s)"
+          ]
+        },
+        {
+          "id": "E7-U5",
+          "name": "Visual QA and polish",
+          "status": "pending",
+          "priority": "P2",
+          "files": [],
+          "acceptance_criteria": [
+            "Consistent spacing and typography",
+            "Hover states on all interactive elements",
+            "Focus states for accessibility",
+            "Dark mode compatibility verified",
+            "Cross-browser testing (Chrome, Safari, Firefox)"
+          ]
+        }
+      ]
+    }
+  ],
+  "sprints": [
+    {
+      "id": 1,
+      "name": "Foundation & Core UI",
+      "epics": ["E1", "E2"],
+      "goal": "Two-column layout with price box and listings panel working",
+      "status": "pending",
+      "units_count": 7
+    },
+    {
+      "id": 2,
+      "name": "Market Data & Listings",
+      "epics": ["E3", "E4"],
+      "goal": "Complete market data section and full listings table",
+      "status": "pending",
+      "units_count": 8
+    },
+    {
+      "id": 3,
+      "name": "Similar Cards & Mobile",
+      "epics": ["E5", "E6"],
+      "goal": "Similar cards section and mobile optimization complete",
+      "status": "pending",
+      "units_count": 8
+    },
+    {
+      "id": 4,
+      "name": "Polish & Ship",
+      "epics": ["E7"],
+      "goal": "Production-ready with all polish and performance optimizations",
+      "status": "pending",
+      "units_count": 5
+    }
+  ],
+  "current_sprint": 1,
+  "current_unit": null,
+  "total_units": 28,
+  "completed_units": 0
+}
