@@ -27,7 +27,10 @@ from app.core.config import settings
 
 def get_product_update_html() -> str:
     """Generate detailed product update email HTML."""
-    img_base = f"{settings.FRONTEND_URL}/emails/jan-2025"
+    # Use local file paths for preview, production URL for actual sends
+    import os
+    local_path = os.path.abspath("frontend/public/emails/jan-2025")
+    img_base = f"file://{local_path}"
 
     sections = [
         {
