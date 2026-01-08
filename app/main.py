@@ -3,35 +3,37 @@ import logging
 import os
 import resource
 import sys
+from contextlib import asynccontextmanager, suppress
 from typing import Any, cast
+
 import anyio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from app.core.config import settings
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
 from app.api import (
+    admin,
+    analytics,
     auth,
+    billing,
+    blog,
+    blokpax,
     cards,
+    market,
+    meta,
     portfolio,
     users,
-    market,
-    admin,
-    blokpax,
-    analytics,
-    meta,
-    billing,
-    webhooks,
     watchlist,
-    blog,
+    webhooks,
 )
 from app.api.billing import BILLING_AVAILABLE
-from app.middleware.metering import APIMeteringMiddleware, METERING_AVAILABLE
-from app.core.saas import get_mode_info
-from contextlib import asynccontextmanager, suppress
-from app.core.scheduler import start_scheduler
 from app.core.anti_scraping import AntiScrapingMiddleware
+from app.core.config import settings
+from app.core.saas import get_mode_info
+from app.core.scheduler import start_scheduler
+from app.middleware.metering import METERING_AVAILABLE, APIMeteringMiddleware
 from app.middleware.timing import TimingMiddleware
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,23 @@ async def lifespan(app: FastAPI):
     logger.info(f"SaaS Features: {'ENABLED' if BILLING_AVAILABLE else 'DISABLED (OSS mode)'}")
     logger.info(f"Usage Metering: {'ENABLED' if METERING_AVAILABLE else 'DISABLED'}")
     logger.info("=" * 50)
+
+    # CRITICAL: Aggressive Chrome cleanup on startup
+    # Kills any orphan Chrome processes from previous crashes/restarts
+    # This prevents resource exhaustion from zombie processes
+    try:
+        from app.scraper.browser import startup_cleanup_sync
+
+        logger.info("Running startup Chrome cleanup...")
+        cleanup_stats = startup_cleanup_sync()
+        logger.info(
+            f"Startup cleanup complete: killed {cleanup_stats['chrome_killed']} Chrome instances, "
+            f"cleaned {cleanup_stats['profiles_cleaned']} profiles"
+        )
+        if cleanup_stats["errors"]:
+            logger.warning(f"Cleanup errors (non-fatal): {cleanup_stats['errors']}")
+    except Exception as e:
+        logger.warning(f"Startup Chrome cleanup failed (non-fatal): {e}")
 
     # Register circuit breaker Discord notifications
     from app.core.circuit_breaker import set_notification_callback
@@ -235,13 +254,15 @@ def health_detailed() -> dict:
 
     Returns 200 if core systems healthy, 503 if critical issues.
     """
-    from datetime import datetime, timezone, timedelta
-    from sqlmodel import Session, select
-    from sqlalchemy import func, text
-    from app.db import engine, USING_NEON_POOLER
-    from app.models.market import MarketPrice
-    from app.core.scheduler import scheduler
+    from datetime import datetime, timedelta, timezone
     from typing import Any
+
+    from sqlalchemy import func, text
+    from sqlmodel import Session, select
+
+    from app.core.scheduler import scheduler
+    from app.db import USING_NEON_POOLER, engine
+    from app.models.market import MarketPrice
 
     health_status: dict[str, Any] = {
         "status": "healthy",
@@ -345,6 +366,23 @@ def health_detailed() -> dict:
         }
     except (OSError, ValueError, AttributeError):
         # Memory measurement can fail on some platforms - safe to ignore
+        pass
+
+    # Chrome process count - helps diagnose resource exhaustion
+    try:
+        from app.scraper.browser import get_chrome_process_count
+
+        chrome_count = get_chrome_process_count()
+        # Warn if too many Chrome processes (indicates leak or zombie accumulation)
+        chrome_status = "healthy" if chrome_count <= 2 else "warning" if chrome_count <= 5 else "critical"
+        health_status["checks"]["chrome"] = {
+            "status": chrome_status,
+            "process_count": chrome_count,
+        }
+        if chrome_status == "critical":
+            health_status["status"] = "degraded"
+    except Exception:
+        # Chrome monitoring is optional - safe to ignore failures
         pass
 
     return health_status

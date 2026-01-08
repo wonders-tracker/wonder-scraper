@@ -1,25 +1,25 @@
 # Use pydoll for undetected browser automation
-from pydoll.browser.chromium.chrome import Chrome
-from pydoll.browser.options import ChromiumOptions
-from pydoll.exceptions import (
-    CommandExecutionTimeout,
-    WebSocketConnectionClosed,
-    BrowserNotRunning,
-    FailedToStartBrowser,
-    ConnectionFailed,
-)
-from typing import Optional
 import asyncio
 import os
 import random
 import shutil
 import stat
-import tempfile
 import subprocess
+import tempfile
 import uuid
+from typing import Optional
+
+from pydoll.browser.chromium.chrome import Chrome
+from pydoll.browser.options import ChromiumOptions
+from pydoll.exceptions import (
+    BrowserNotRunning,
+    CommandExecutionTimeout,
+    ConnectionFailed,
+    FailedToStartBrowser,
+    WebSocketConnectionClosed,
+)
 
 from app.core.config import settings
-
 
 # Control concurrent browser tab operations
 # Configured via BROWSER_SEMAPHORE_LIMIT (default 4 tabs for speed vs memory balance)
