@@ -788,7 +788,7 @@ function CardDetail() {
   return (
       <>
           <div className="min-h-screen bg-background text-foreground font-mono flex flex-col">
-            <div className="flex-1 p-6">
+            <div className="flex-1 p-6 pb-24 md:pb-6">
                 <div className="max-w-7xl mx-auto">
                     {/* Navigation */}
                     <div className="flex justify-between items-center mb-8">
@@ -890,7 +890,7 @@ function CardDetail() {
                                         </span>
                                     )}
                                 </div>
-                                <div className="text-3xl sm:text-4xl font-mono font-bold text-brand-300">
+                                <div className="text-3xl sm:text-4xl font-mono font-bold">
                                     ${(() => {
                                         // Get variant-specific price if filter is active
                                         const variantKey = treatmentFilter === 'all' ? null :
@@ -914,12 +914,12 @@ function CardDetail() {
                                     Fair Price
                                 </div>
                                 {isLoggedIn ? (
-                                    <div className="text-3xl sm:text-4xl font-mono font-bold">
+                                    <div className="text-3xl sm:text-4xl font-mono font-bold text-brand-300">
                                         ${pricingData?.fair_market_price?.toFixed(2) || card.vwap?.toFixed(2) || '---'}
                                     </div>
                                 ) : (
                                     <Tooltip content="Log in to see our Fair Market Price">
-                                        <div className="text-3xl sm:text-4xl font-mono font-bold blur-sm select-none cursor-help">
+                                        <div className="text-3xl sm:text-4xl font-mono font-bold blur-sm select-none cursor-help text-brand-300/50">
                                             $XX.XX
                                         </div>
                                     </Tooltip>
@@ -1947,6 +1947,23 @@ function CardDetail() {
                     </div>
                 </>
             )}
+          </div>
+
+          {/* Sticky Mobile Price Bar - visible only on mobile */}
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border px-4 py-3 flex items-center justify-between z-50">
+              <div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Floor Price</div>
+                  <div className="text-xl font-mono font-bold">
+                      ${card.floor_price?.toFixed(2) || card.lowest_ask?.toFixed(2) || '---'}
+                  </div>
+              </div>
+              <button
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded font-bold text-sm uppercase hover:bg-primary/90 transition-colors"
+              >
+                  <Wallet className="w-4 h-4" />
+                  Track
+              </button>
           </div>
       </>
   )

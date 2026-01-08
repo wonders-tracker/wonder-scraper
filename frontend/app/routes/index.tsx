@@ -18,6 +18,7 @@ import { useTimePeriod } from '../context/TimePeriodContext'
 import { useCurrentUser } from '../context/UserContext'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
+import { MobileCardList, type MobileCardItem } from '../components/ui/mobile-card-list'
 
 // Reduced from 200 to 50 for faster initial load - users can paginate for more
 const CARDS_FETCH_LIMIT = Number(import.meta.env.VITE_CARDS_FETCH_LIMIT ?? '50')
@@ -62,9 +63,10 @@ function TrackButton({ onClick, tooltip }: { onClick: () => void; tooltip: strin
         }}
         onMouseEnter={() => iconRef.current?.startAnimation()}
         onMouseLeave={() => iconRef.current?.stopAnimation()}
-        className="p-1.5 rounded border border-border hover:bg-primary hover:text-primary-foreground transition-colors group"
+        className="flex items-center gap-1.5 px-3 py-2 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium text-sm"
       >
         <PlusIcon ref={iconRef} size={14} />
+        <span className="hidden sm:inline">Track</span>
       </button>
     </Tooltip>
   )
@@ -471,7 +473,7 @@ function Home() {
           return (
             <div className="inline-flex flex-col items-center gap-0.5">
                 <div className="inline-flex items-center gap-1 md:gap-2">
-                    <span className="font-mono text-sm lg:text-base">
+                    <span className="font-mono text-base lg:text-lg font-semibold text-brand-300">
                         {hasFloor ? `$${floorPrice.toFixed(2)}` : '---'}
                     </span>
                     {/* Hide delta badge on mobile to save space */}
@@ -479,7 +481,7 @@ function Home() {
                         <span className={clsx(
                             "hidden sm:inline text-[10px] lg:text-xs font-mono px-1 py-0.5 rounded",
                             delta > 0 ? "text-brand-300 bg-brand-300/10" :
-                            "text-red-400 bg-red-500/10"
+                            "text-rose-500 bg-rose-500/10"
                         )}>
                             {delta > 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%
                         </span>
@@ -528,11 +530,11 @@ function Home() {
                 chevronTooltip = 'Good volume (10-29 sales)'
             } else if (vol > 0 && vol < 3) {
                 chevrons = '▼'
-                colorClass = 'text-red-400'
+                colorClass = 'text-rose-500'
                 chevronTooltip = 'Low volume (1-2 sales)'
             } else if (vol === 0) {
                 chevrons = '▼▼'
-                colorClass = 'text-red-500'
+                colorClass = 'text-rose-500'
                 chevronTooltip = 'No sales in period'
             }
 
@@ -649,7 +651,7 @@ function Home() {
             // Color code: fast sell = green, slow = red
             const daysClass = daysToSell !== null
                 ? daysToSell < 3 ? 'text-brand-300'
-                : daysToSell > 14 ? 'text-red-400'
+                : daysToSell > 14 ? 'text-rose-500'
                 : 'text-muted-foreground'
                 : 'text-muted-foreground'
             return (
@@ -712,6 +714,21 @@ function Home() {
       },
     },
   })
+
+  // Transform table data to mobile card format
+  const mobileItems: MobileCardItem[] = useMemo(() => {
+    return table.getRowModel().rows.map(row => ({
+      id: row.original.id,
+      name: row.original.name,
+      subtitle: row.original.set_name,
+      treatment: row.original.last_treatment,
+      price: row.original.floor_price || row.original.vwap,
+      priceChange: row.original.price_delta ?? row.original.price_delta_24h,
+      secondaryValue: row.original.volume ? `${row.original.volume} sales` : undefined,
+      imageUrl: row.original.image_url,
+      onClick: () => navigate({ to: '/cards/$cardId', params: { cardId: row.original.slug || String(row.original.id) } }),
+    }))
+  }, [table.getRowModel().rows, navigate])
 
   // Compute dynamic sidebars
   const topGainers = useMemo(() => {
@@ -972,7 +989,19 @@ function Home() {
                       </div>
                   ) : (
                       <>
-                          <div className="overflow-x-auto flex-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                          {/* Mobile: Card list view */}
+                          <div className="md:hidden p-3 flex-1 overflow-y-auto">
+                              <MobileCardList
+                                  items={mobileItems}
+                                  emptyState={
+                                      <div className="text-center text-muted-foreground text-xs uppercase py-12">
+                                          No market data found.
+                                      </div>
+                                  }
+                              />
+                          </div>
+                          {/* Desktop: Table view */}
+                          <div className="hidden md:block overflow-x-auto flex-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
                               <table className="w-full text-sm text-left min-w-[480px]">
                                   <thead className="text-xs uppercase bg-muted/30 text-muted-foreground border-b border-border sticky top-0 z-10">
                                       {table.getHeaderGroups().map(headerGroup => (
@@ -1025,8 +1054,8 @@ function Home() {
                                   </tbody>
                               </table>
                           </div>
-                          {/* Pagination */}
-                          <div className="border-t border-border px-3 py-2 flex items-center justify-between bg-muted/20">
+                          {/* Pagination - hidden on mobile */}
+                          <div className="border-t border-border px-3 py-2 hidden md:flex items-center justify-between bg-muted/20">
                               <div className="text-xs text-muted-foreground">
                                   Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, table.getFilteredRowModel().rows.length)} of {table.getFilteredRowModel().rows.length} assets
                               </div>
@@ -1159,7 +1188,7 @@ function Home() {
                                                                 <div className={clsx(
                                                                   "text-[10px] lg:text-xs font-mono",
                                                                   priceDelta < -5 ? "text-brand-300" :
-                                                                  priceDelta > 20 ? "text-red-400" :
+                                                                  priceDelta > 20 ? "text-rose-500" :
                                                                   "text-muted-foreground"
                                                                 )}>
                                                                   {priceDelta > 0 ? '+' : ''}{priceDelta.toFixed(0)}%
