@@ -8,6 +8,7 @@ import { PlusIcon } from '~/components/ui/plus'
 import { CheckIcon } from '~/components/ui/check'
 import clsx from 'clsx'
 import { SimpleDropdown } from './ui/dropdown'
+import { useModalAccessibility } from '~/hooks/useFocusTrap'
 
 type CardInfo = {
     id: number
@@ -108,6 +109,12 @@ const parseOpenSeaUrl = (url: string): { chain?: string; contract?: string; toke
 }
 
 export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDrawerProps) {
+    // Accessibility: focus trap, scroll lock, escape to close
+    const { containerRef, modalProps } = useModalAccessibility(isOpen, {
+        onClose,
+        initialFocus: 'input[name="purchase_price"]', // Focus price input on open
+    })
+
     const queryClient = useQueryClient()
     const productType = card.product_type || 'Single'
     const isNFT = productType === 'NFT' || productType === 'Proof'
@@ -300,6 +307,9 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
 
             {/* Drawer - z-[70] to be above backdrop */}
             <div
+                ref={containerRef}
+                {...modalProps}
+                aria-labelledby="portfolio-modal-title"
                 className={clsx(
                     "fixed inset-y-0 right-0 w-full md:w-[420px] bg-card border-l border-border shadow-2xl transform transition-transform duration-300 ease-in-out z-[70] flex flex-col",
                     isOpen ? "translate-x-0" : "translate-x-full"
@@ -332,7 +342,7 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                                 <Wallet className="w-5 h-5 text-primary" />
                             )}
                             <div>
-                                <h2 className="text-lg font-bold uppercase tracking-tight">Add to Portfolio</h2>
+                                <h2 id="portfolio-modal-title" className="text-lg font-bold uppercase tracking-tight">Add to Portfolio</h2>
                                 <p className="text-xs text-muted-foreground">{card.name}</p>
                                 <p className="text-[10px] text-muted-foreground">{card.set_name}</p>
                             </div>

@@ -1,7 +1,5 @@
 from typing import Optional, Tuple
-import threading
 
-from cachetools import TTLCache
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
 
@@ -18,11 +16,6 @@ from app.core.jwt import decode_token
 
 # Cookie name for auth token
 COOKIE_NAME = "access_token"
-
-# User cache: Reduces DB lookups for authenticated requests
-# TTL of 30 seconds - balances freshness with performance
-_user_cache: TTLCache = TTLCache(maxsize=100, ttl=30)
-_user_cache_lock = threading.Lock()
 
 # API Key header name
 API_KEY_HEADER = "X-API-Key"
@@ -52,28 +45,12 @@ def get_token_from_request(request: Request, header_token: Optional[str] = None)
     return None
 
 
-def _get_cached_user(email: str, session: Session) -> Optional[User]:
-    """Get user from cache or database."""
-    with _user_cache_lock:
-        cached = _user_cache.get(email)
-        if cached is not None:
-            return cached
-
-    user = session.exec(select(User).where(User.email == email)).first()
-    if user:
-        with _user_cache_lock:
-            _user_cache[email] = user
-
-    return user
-
-
 def get_current_user(
     request: Request, header_token: Optional[str] = Depends(oauth2_scheme), session: Session = Depends(get_session)
 ) -> User:
     """
     Get current user from JWT token (header or cookie).
     Only accepts access tokens, not refresh tokens.
-    Uses a 30-second cache to reduce DB lookups.
     """
     token = get_token_from_request(request, header_token)
 
@@ -103,8 +80,7 @@ def get_current_user(
     if email is None or not isinstance(email, str):
         raise credentials_exception
 
-    # Use cached user lookup (30s TTL)
-    user = _get_cached_user(email, session)
+    user = session.exec(select(User).where(User.email == email)).first()
     if user is None:
         raise credentials_exception
     if not user.is_active:
@@ -122,7 +98,6 @@ def get_current_user_optional(
     """
     Get current user if authenticated, otherwise return None.
     Useful for endpoints that work for both authenticated and anonymous users.
-    Uses cached user lookup for performance.
     """
     token = get_token_from_request(request, header_token)
 
@@ -142,8 +117,8 @@ def get_current_user_optional(
     if email is None or not isinstance(email, str):
         return None
 
-    # Use cached user lookup (30s TTL)
-    return _get_cached_user(email, session)
+    user = session.exec(select(User).where(User.email == email)).first()
+    return user
 
 
 def get_current_superuser(

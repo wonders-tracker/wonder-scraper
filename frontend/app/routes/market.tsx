@@ -20,13 +20,7 @@ import clsx from 'clsx'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock } from 'lucide-react'
 import { TreatmentBadge } from '../components/TreatmentBadge'
 import { LoginUpsellOverlay } from '../components/LoginUpsellOverlay'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select"
+import { SimpleDropdown } from "../components/ui/dropdown"
 
 export const Route = createFileRoute('/market')({
   component: MarketAnalysis
@@ -701,19 +695,20 @@ function MarketAnalysis() {
                     <h1 className="text-lg font-bold uppercase tracking-tight">Market Pulse</h1>
                     <div className="flex items-center gap-2 ml-4">
                         <Clock className="w-3 h-3 text-muted-foreground" />
-                        <Select value={timeFrame} onValueChange={setTimeFrame}>
-                            <SelectTrigger className="w-[110px] h-8 text-xs">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="1h">1 Hour</SelectItem>
-                                <SelectItem value="24h">24 Hours</SelectItem>
-                                <SelectItem value="7d">7 Days</SelectItem>
-                                <SelectItem value="30d">30 Days</SelectItem>
-                                <SelectItem value="90d">90 Days</SelectItem>
-                                <SelectItem value="all">All Time</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        <SimpleDropdown
+                            value={timeFrame}
+                            onChange={setTimeFrame}
+                            options={[
+                                { value: "1h", label: "1 Hour" },
+                                { value: "24h", label: "24 Hours" },
+                                { value: "7d", label: "7 Days" },
+                                { value: "30d", label: "30 Days" },
+                                { value: "90d", label: "90 Days" },
+                                { value: "all", label: "All Time" },
+                            ]}
+                            size="sm"
+                            triggerClassName="w-[110px]"
+                        />
                     </div>
                     {/* Low Signal Filter */}
                     <label className="flex items-center gap-2 cursor-pointer select-none ml-4">
@@ -1576,20 +1571,18 @@ function MarketAnalysis() {
                                 </span>
                             </div>
 
-                            <Select
+                            <SimpleDropdown
                                 value={String(table.getState().pagination.pageSize)}
-                                onValueChange={(value) => table.setPageSize(Number(value))}
-                            >
-                                <SelectTrigger className="w-[100px] h-8 text-xs">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="10">10 / page</SelectItem>
-                                    <SelectItem value="20">20 / page</SelectItem>
-                                    <SelectItem value="50">50 / page</SelectItem>
-                                    <SelectItem value="100">100 / page</SelectItem>
-                                </SelectContent>
-                            </Select>
+                                onChange={(value) => table.setPageSize(Number(value))}
+                                options={[
+                                    { value: "10", label: "10 / page" },
+                                    { value: "20", label: "20 / page" },
+                                    { value: "50", label: "50 / page" },
+                                    { value: "100", label: "100 / page" },
+                                ]}
+                                size="sm"
+                                triggerClassName="w-[100px]"
+                            />
                         </div>
                     )}
                 </div>
