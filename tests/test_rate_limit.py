@@ -666,6 +666,102 @@ class TestConcurrentRequests:
             assert is_limited is False
 
 
+class TestRateLimiterStats:
+    """Tests for rate limiter stats and clear methods."""
+
+    def test_get_stats_empty(self):
+        """Test get_stats returns zeros when empty."""
+        limiter = RateLimiter()
+        stats = limiter.get_stats()
+
+        assert stats["tracked_ips"] == 0
+        assert stats["active_lockouts"] == 0
+        assert stats["tracked_failures"] == 0
+
+    def test_get_stats_with_data(self):
+        """Test get_stats returns correct counts."""
+        limiter = RateLimiter()
+
+        # Add some requests
+        limiter.record_request("192.168.1.1")
+        limiter.record_request("192.168.1.2")
+
+        # Add some failed logins
+        limiter.record_failed_login("192.168.1.3")
+        limiter.record_failed_login("192.168.1.4")
+
+        # Trigger a lockout
+        for _ in range(5):
+            limiter.record_failed_login("192.168.1.5", lockout_threshold=5)
+
+        stats = limiter.get_stats()
+
+        assert stats["tracked_ips"] == 2
+        assert stats["tracked_failures"] >= 2  # At least 3 and 4
+        assert stats["active_lockouts"] == 1
+
+    def test_clear_removes_all_state(self):
+        """Test clear removes all tracked state."""
+        limiter = RateLimiter()
+
+        # Add some data
+        limiter.record_request("192.168.1.1")
+        limiter.record_failed_login("192.168.1.2")
+        for _ in range(5):
+            limiter.record_failed_login("192.168.1.3", lockout_threshold=5)
+
+        # Verify data exists
+        stats_before = limiter.get_stats()
+        assert stats_before["tracked_ips"] > 0
+
+        # Clear
+        limiter.clear()
+
+        # Verify all cleared
+        stats_after = limiter.get_stats()
+        assert stats_after["tracked_ips"] == 0
+        assert stats_after["active_lockouts"] == 0
+        assert stats_after["tracked_failures"] == 0
+
+
+class TestGetClientIPProxySettings:
+    """Tests for get_client_ip with trust_proxy_headers setting."""
+
+    def test_ignores_proxy_headers_when_untrusted(self):
+        """Test that proxy headers are ignored when trust_proxy_headers=False."""
+        request = Mock(spec=Request)
+        request.headers = Headers({"x-forwarded-for": "203.0.113.1", "x-real-ip": "198.51.100.1"})
+        request.client = Mock()
+        request.client.host = "127.0.0.1"
+
+        # With trust_proxy_headers=False, should use client.host
+        ip = get_client_ip(request, trust_proxy_headers=False)
+
+        assert ip == "127.0.0.1"
+
+    def test_uses_proxy_headers_when_trusted(self):
+        """Test that proxy headers are used when trust_proxy_headers=True."""
+        request = Mock(spec=Request)
+        request.headers = Headers({"x-forwarded-for": "203.0.113.1", "x-real-ip": "198.51.100.1"})
+        request.client = Mock()
+        request.client.host = "127.0.0.1"
+
+        # With trust_proxy_headers=True (default), should use X-Forwarded-For
+        ip = get_client_ip(request, trust_proxy_headers=True)
+
+        assert ip == "203.0.113.1"
+
+    def test_untrusted_falls_back_to_unknown(self):
+        """Test fallback to 'unknown' when untrusted and no client."""
+        request = Mock(spec=Request)
+        request.headers = Headers({"x-forwarded-for": "203.0.113.1"})
+        request.client = None
+
+        ip = get_client_ip(request, trust_proxy_headers=False)
+
+        assert ip == "unknown"
+
+
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
 
