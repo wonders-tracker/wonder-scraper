@@ -382,10 +382,13 @@ class TestObservabilityModels:
 
     def test_request_trace_create(self, integration_session):
         """Test creating a request trace."""
+        import uuid
         from app.models.observability import RequestTrace
 
+        # Use unique request_id to avoid conflicts with previous test runs
+        unique_request_id = f"req_test_{uuid.uuid4().hex[:12]}"
         trace = RequestTrace(
-            request_id="req_test123",
+            request_id=unique_request_id,
             method="GET",
             path="/api/v1/cards",
             status_code=200,
@@ -396,5 +399,5 @@ class TestObservabilityModels:
         integration_session.refresh(trace)
 
         assert trace.id is not None
-        assert trace.request_id == "req_test123"
+        assert trace.request_id == unique_request_id
         assert trace.duration_ms == 150.5

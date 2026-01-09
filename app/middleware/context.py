@@ -64,9 +64,10 @@ def _validate_id(value: Optional[str]) -> Optional[str]:
     return value
 
 
-def _sample_request_trace(
+def _sample_request_trace_sync(
     request_id: str,
     correlation_id: Optional[str],
+    user_id: Optional[int],
     method: str,
     path: str,
     status_code: int,
@@ -75,10 +76,8 @@ def _sample_request_trace(
     error_message: Optional[str] = None,
 ) -> None:
     """
-    Sample slow or error requests to the request_trace table.
-
-    This is fire-and-forget - failures are logged but don't affect the request.
-    Only samples requests that are slow (>500ms) or errors (5xx).
+    Synchronous helper to persist request trace.
+    Called from thread pool to avoid blocking event loop.
     """
     try:
         from sqlmodel import Session
@@ -93,7 +92,7 @@ def _sample_request_trace(
                 path=path[:500],  # Truncate long paths
                 status_code=status_code,
                 duration_ms=duration_ms,
-                user_id=get_user_id(),
+                user_id=user_id,
                 error_type=error_type[:100] if error_type else None,
                 error_message=error_message[:1000] if error_message else None,
             )
@@ -107,12 +106,49 @@ def _sample_request_trace(
             status_code=status_code,
         )
     except Exception as e:
-        # Fire-and-forget - log but don't fail the request
+        # Fire-and-forget - log but don't fail
         logger.warning(
             "Failed to sample request trace",
             request_id=request_id,
             error=str(e),
         )
+
+
+async def _sample_request_trace(
+    request_id: str,
+    correlation_id: Optional[str],
+    user_id: Optional[int],
+    method: str,
+    path: str,
+    status_code: int,
+    duration_ms: float,
+    error_type: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> None:
+    """
+    Sample slow or error requests to the request_trace table.
+
+    Uses thread pool executor to avoid blocking the event loop.
+    Fire-and-forget - failures are logged but don't affect the request.
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    loop = asyncio.get_event_loop()
+    # Use default executor (thread pool) to run sync DB operation
+    loop.run_in_executor(
+        None,  # Default executor
+        _sample_request_trace_sync,
+        request_id,
+        correlation_id,
+        user_id,
+        method,
+        path,
+        status_code,
+        duration_ms,
+        error_type,
+        error_message,
+    )
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -179,9 +215,13 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 is_slow = duration_ms >= SLOW_REQUEST_THRESHOLD_MS
                 is_error = status_code >= 500
                 if is_slow or is_error:
-                    _sample_request_trace(
+                    # Get user_id before context cleanup
+                    user_id = get_user_id()
+                    # Fire-and-forget async trace (runs in thread pool)
+                    await _sample_request_trace(
                         request_id=request_id,
                         correlation_id=correlation_id,
+                        user_id=user_id,
                         method=request.method,
                         path=request.url.path,
                         status_code=status_code,
