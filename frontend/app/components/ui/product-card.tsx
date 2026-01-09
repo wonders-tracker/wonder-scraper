@@ -13,11 +13,48 @@
  * - Accessible link behavior
  */
 
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { formatPrice } from '@/lib/formatters'
 import { Package } from 'lucide-react'
 import { useState } from 'react'
+
+// Clickable filter chip - navigates to browse with filter
+function FilterChip({
+  label,
+  filterKey,
+  filterValue,
+  colorClass,
+}: {
+  label: string
+  filterKey: 'rarity' | 'productType' | 'treatment' | 'set'
+  filterValue: string
+  colorClass?: string
+}) {
+  const navigate = useNavigate()
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    navigate({
+      to: '/browse',
+      search: { [filterKey]: filterValue },
+    })
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      className={cn(
+        'font-medium hover:underline focus:outline-none focus-visible:underline',
+        colorClass
+      )}
+      title={`Browse all ${filterValue}`}
+    >
+      {label}
+    </button>
+  )
+}
 
 // Rarity colors
 const RARITY_COLORS: Record<string, string> = {
@@ -83,7 +120,7 @@ export function ProductCard({
   }
 
   // Get rarity color
-  const rarityColor = rarity ? RARITY_COLORS[rarity.toLowerCase()] || 'text-zinc-400' : null
+  const rarityColor = rarity ? RARITY_COLORS[rarity.toLowerCase()] || 'text-zinc-400' : undefined
 
   // Show product type only if not Single
   const showProductType = productType && productType !== 'Single'
@@ -168,15 +205,32 @@ export function ProductCard({
           {price != null ? formatPrice(price) : '---'}
         </span>
 
-        {/* Rarity · Set · Type - combined line */}
+        {/* Rarity · Set · Type - combined line (clickable to browse) */}
         <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
           {rarity && (
-            <span className={cn('font-medium', rarityColor)}>{rarity}</span>
+            <FilterChip
+              label={rarity}
+              filterKey="rarity"
+              filterValue={rarity}
+              colorClass={rarityColor}
+            />
           )}
           {rarity && setName && <span>·</span>}
-          {setName && <span>{setName}</span>}
+          {setName && (
+            <FilterChip
+              label={setName}
+              filterKey="set"
+              filterValue={setName}
+            />
+          )}
           {showProductType && (setName || rarity) && <span>·</span>}
-          {showProductType && <span>{productType}</span>}
+          {showProductType && (
+            <FilterChip
+              label={productType!}
+              filterKey="productType"
+              filterValue={productType!}
+            />
+          )}
         </div>
 
         {/* Buy Now badge for hot deals - matches PriceBox button style */}
