@@ -22,8 +22,18 @@ import { TreatmentBadge } from '../components/TreatmentBadge'
 import { LoginUpsellOverlay } from '../components/LoginUpsellOverlay'
 import { SimpleDropdown } from "../components/ui/dropdown"
 
+// Search params schema for URL-based tab selection
+type MarketSearchParams = {
+  tab?: AnalyticsTab
+}
+
 export const Route = createFileRoute('/market')({
-  component: MarketAnalysis
+  component: MarketAnalysis,
+  validateSearch: (search: Record<string, unknown>): MarketSearchParams => ({
+    tab: ['table', 'volume', 'sentiment', 'prices', 'deals'].includes(search.tab as string)
+      ? (search.tab as AnalyticsTab)
+      : undefined,
+  }),
 })
 
 type MarketCard = {
@@ -150,10 +160,18 @@ function StaticTabButton({ isActive, onClick, icon: Icon, label }: Omit<TabButto
 
 function MarketAnalysis() {
   const navigate = useNavigate()
+  const searchParams = Route.useSearch()
   const [sorting, setSorting] = useState<SortingState>([{ id: 'volume_30d', desc: true }])
   const [timeFrame, setTimeFrame] = useState('30d')
   const [hideLowSignal, setHideLowSignal] = useState(true)
-  const [activeTab, setActiveTab] = useState<AnalyticsTab>('table')
+  const [activeTab, setActiveTab] = useState<AnalyticsTab>(searchParams.tab || 'table')
+
+  // Sync tab state with URL param
+  useEffect(() => {
+    if (searchParams.tab && searchParams.tab !== activeTab) {
+      setActiveTab(searchParams.tab)
+    }
+  }, [searchParams.tab])
 
   // Check if user is logged in
   const { user } = useCurrentUser()
