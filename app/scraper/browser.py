@@ -203,16 +203,24 @@ def cleanup_stale_profiles():
 
 
 class BrowserManager:
+    """
+    Singleton browser manager with health monitoring and restart safety limits.
+
+    Class Variables:
+        _total_restarts: Absolute restart count (hard limit, never decremented)
+        _max_total_restarts: Give up after this many restarts (default: 20)
+        _restart_count: Restarts within current cycle (resets after extended cooldown)
+    """
+
     _browser: Optional[Chrome] = None
-    _lock = asyncio.Lock()
+    _lock: asyncio.Lock = asyncio.Lock()
     _restart_count: int = 0  # Restarts within current cooldown cycle
     _max_restarts: int = settings.BROWSER_MAX_RESTARTS
-    _total_restarts: int = 0  # Absolute total restarts (prevents infinite loop)
+    _total_restarts: int = 0  # Absolute total restarts (hard safety limit)
     _max_total_restarts: int = 20  # Give up after this many total restarts
     _startup_timeout: int = settings.BROWSER_STARTUP_TIMEOUT
     _page_count: int = 0
     _max_pages_before_restart: int = settings.BROWSER_MAX_PAGES_BEFORE_RESTART
-    _restarting: bool = False  # Flag to coordinate concurrent restart requests
     _last_restart_time: float = 0  # Timestamp of last restart
     _last_health_check: float = 0  # Timestamp of last health check
     _health_check_interval: int = settings.BROWSER_HEALTH_CHECK_INTERVAL
@@ -263,7 +271,11 @@ class BrowserManager:
     async def restart(cls):
         """
         Force restart of the browser instance.
-        Coordinates concurrent restart requests to prevent race conditions.
+
+        Uses atomic state machine to prevent race conditions:
+        - All state changes happen under lock
+        - Cooldown happens under lock (safe because browser is broken anyway)
+        - Concurrent callers wait on lock, then see fresh browser
         """
         import time
 
@@ -275,36 +287,40 @@ class BrowserManager:
                 return cls._browser
 
             # Check absolute limit to prevent infinite restart loops
+            # This limit is NEVER decremented to ensure true safety cutoff
             if cls._total_restarts >= cls._max_total_restarts:
                 raise RuntimeError(
                     f"Browser restart limit exceeded ({cls._total_restarts} restarts). "
                     "Chrome may be broken or system resources exhausted. Manual intervention required."
                 )
 
-            # Increment total counter
+            # Increment counters atomically under lock
             cls._total_restarts += 1
-
-            # Check if we've hit the per-cycle restart limit
-            if cls._restart_count >= cls._max_restarts:
-                print(f"[Browser] Restarted {cls._restart_count} times. Applying extended cooldown...")
-                cls._restart_count = 0
-                # Release lock during cooldown so other operations don't deadlock
-                cls._restarting = True
-
-        # Extended cooldown outside the lock with exponential backoff
-        if cls._restarting:
-            # Exponential backoff: 10s, 20s, 40s, ... up to 5 min max
-            cooldown_multiplier = min(cls._total_restarts // cls._max_restarts, 5)
-            cooldown = settings.BROWSER_EXTENDED_COOLDOWN * (2 ** cooldown_multiplier)
-            cooldown = min(cooldown, 300)  # Cap at 5 minutes
-            print(f"[Browser] Extended cooldown: {cooldown}s (cycle {cooldown_multiplier + 1})")
-            await asyncio.sleep(cooldown)
-
-        async with cls._lock:
-            cls._restarting = False
             cls._restart_count += 1
+
+            # Check if we've hit the per-cycle restart limit (triggers extended cooldown)
+            need_extended_cooldown = cls._restart_count > cls._max_restarts
+            if need_extended_cooldown:
+                # Calculate cooldown with exponential backoff
+                # cycle_number is 0-indexed: first cycle = 0, second = 1, etc.
+                cycle_number = (cls._total_restarts - 1) // cls._max_restarts
+                cooldown_multiplier = min(cycle_number, 5)
+                cooldown = settings.BROWSER_EXTENDED_COOLDOWN * (2 ** cooldown_multiplier)
+                cooldown = min(cooldown, 300)  # Cap at 5 minutes
+
+                print(f"[Browser] Restarted {cls._restart_count} times. "
+                      f"Extended cooldown: {cooldown}s (cycle {cycle_number + 1})")
+                cls._restart_count = 1  # Reset for next cycle (this restart counts as 1)
+
+                # Cooldown under lock - this is safe because:
+                # 1. Browser is already broken, so blocking other tasks is fine
+                # 2. Prevents race conditions where multiple tasks bypass limits
+                # 3. Other tasks will wait, then see the fresh browser
+                await asyncio.sleep(cooldown)
+
             cls._page_count = 0
-            print(f"[Browser] Restarting browser (attempt {cls._restart_count}/{cls._max_restarts})...")
+            print(f"[Browser] Restarting browser (attempt {cls._restart_count}/{cls._max_restarts}, "
+                  f"total: {cls._total_restarts}/{cls._max_total_restarts})...")
 
             # Close existing browser
             await cls._close_internal()
@@ -312,7 +328,7 @@ class BrowserManager:
             # Brief delay before restart
             await asyncio.sleep(settings.BROWSER_RESTART_DELAY)
 
-            # Start new browser (inline to keep lock held)
+            # Start new browser
             try:
                 await cls._start_browser_internal()
                 cls._last_restart_time = time.time()
@@ -390,19 +406,19 @@ class BrowserManager:
         Increment page count and restart browser if threshold reached.
 
         Args:
-            success: Whether the page load was successful. On success, resets
-                     total restart counter since browser is working.
+            success: Whether the page load was successful.
 
         Returns True if browser was restarted.
+
+        Note: We intentionally do NOT decrement _total_restarts on success.
+        This prevents "immortal loop" where a flaky browser (50% success rate)
+        would never hit the safety limit. The total restart counter is a
+        hard safety limit that should only be reset manually or on process restart.
         """
         async with cls._lock:
             cls._page_count += 1
             if success:
                 cls._consecutive_timeouts = 0  # Reset timeout counter on success
-                # Browser is working - reset total restart counter to prevent
-                # eventual exhaustion during long-running healthy sessions
-                if cls._total_restarts > 0:
-                    cls._total_restarts = max(0, cls._total_restarts - 1)
             should_restart = cls._page_count >= cls._max_pages_before_restart
 
         if should_restart:

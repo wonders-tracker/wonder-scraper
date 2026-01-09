@@ -132,9 +132,9 @@ async def _sample_request_trace(
     Fire-and-forget - failures are logged but don't affect the request.
     """
     import asyncio
-    from concurrent.futures import ThreadPoolExecutor
 
-    loop = asyncio.get_event_loop()
+    # Use get_running_loop() instead of deprecated get_event_loop()
+    loop = asyncio.get_running_loop()
     # Use default executor (thread pool) to run sync DB operation
     loop.run_in_executor(
         None,  # Default executor
