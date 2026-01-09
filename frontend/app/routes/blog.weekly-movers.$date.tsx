@@ -125,19 +125,19 @@ function WeeklyMoversDetailPage() {
           Back to Market Insights
         </Link>
 
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">Weekly Market Report</h1>
-            <p className="text-lg text-muted-foreground flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
-              {weekStart} — {weekEnd}
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2">Weekly Market Report</h1>
+            <p className="text-sm sm:text-lg text-muted-foreground flex items-center gap-2">
+              <Calendar className="w-4 sm:w-5 h-4 sm:h-5 flex-shrink-0" />
+              <span>{weekStart} — {weekEnd}</span>
             </p>
           </div>
           <a
             href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+            className="self-start p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
             title="Share on Twitter"
           >
             <Share2 className="w-5 h-5" />
