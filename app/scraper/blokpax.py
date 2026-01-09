@@ -1190,7 +1190,7 @@ async def scrape_preslab_sales(session: Session, max_pages: int = 10, save_to_db
                     external_id=listing_id,
                     platform="blokpax",
                     traits=traits if traits else None,
-                    seller_name=listing.get("seller", {}).get("username", "")[:20] if listing.get("seller") else None,
+                    seller_name=listing.get("seller", {}).get("address", "") or listing.get("seller", {}).get("username", ""),
                     scraped_at=datetime.now(timezone.utc),
                 )
 
@@ -1312,7 +1312,7 @@ async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> 
                     external_id=listing.listing_id,
                     platform="blokpax",
                     traits=traits if traits else None,
-                    seller_name=listing.seller_address[:20] if listing.seller_address else None,
+                    seller_name=listing.seller_address if listing.seller_address else None,
                     listed_at=listing.created_at,
                     scraped_at=datetime.now(timezone.utc),
                 )

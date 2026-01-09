@@ -896,7 +896,7 @@ async def scrape_opensea_listings_to_db(
                 external_id=external_id,
                 platform="opensea",
                 traits=listing.traits,
-                seller_name=listing.seller[:20] if listing.seller else None,
+                seller_name=listing.seller[:42] if listing.seller else None,  # ETH addresses are 42 chars
                 url=listing.listing_url,
                 image_url=listing.image_url,
                 listed_at=listing.listed_at,
