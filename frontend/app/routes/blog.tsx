@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, useLocation } from '@tanstack/react-router'
-import { TrendingUp, Newspaper, BookOpen, Rss } from 'lucide-react'
+import { TrendingUp, Newspaper, BookOpen, Rss, BarChart2 } from 'lucide-react'
 
 export const Route = createFileRoute('/blog')({
   component: BlogLayout,
@@ -11,6 +11,7 @@ const BLOG_NAV = [
     items: [
       { href: '/blog', label: 'All Posts', icon: Newspaper },
       { href: '/blog/weekly-movers', label: 'Weekly Reports', icon: TrendingUp },
+      { href: '/blog/market-insights', label: 'Market Insights', icon: BarChart2 },
     ],
   },
   {
@@ -23,14 +24,47 @@ const BLOG_NAV = [
   },
 ]
 
+// Mobile navigation items (flat list for horizontal scroll)
+const MOBILE_NAV = [
+  { href: '/blog', label: 'All', icon: Newspaper },
+  { href: '/blog/weekly-movers', label: 'Weekly', icon: TrendingUp },
+  { href: '/blog/market-insights', label: 'Insights', icon: BarChart2 },
+]
+
 function BlogLayout() {
   const location = useLocation()
   const currentPath = location.pathname
 
   return (
-    <div className="min-h-screen flex">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-card/50 hidden md:flex flex-col fixed top-[104px] left-0 bottom-14 overflow-y-auto">
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* Mobile Navigation - horizontal scroll */}
+      <div className="md:hidden border-b border-border bg-card/50 sticky top-14 z-30">
+        <div className="flex items-center gap-1 p-2 overflow-x-auto scrollbar-none">
+          {MOBILE_NAV.map((item) => {
+            const Icon = item.icon
+            const isActive = currentPath === item.href ||
+              (item.href === '/blog/weekly-movers' && currentPath.startsWith('/blog/weekly-movers')) ||
+              (item.href === '/blog/market-insights' && currentPath.startsWith('/blog/market-insights'))
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-full whitespace-nowrap transition-colors ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground font-medium'
+                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {item.label}
+              </Link>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Desktop Sidebar */}
+      <aside className="w-64 border-r border-border bg-card/50 hidden md:flex flex-col fixed top-14 left-0 bottom-10 overflow-y-auto">
         <div className="p-4 flex-1">
           <nav className="space-y-6">
             {BLOG_NAV.map((section) => (
@@ -42,7 +76,8 @@ function BlogLayout() {
                   {section.items.map((item) => {
                     const Icon = item.icon
                     const isActive = currentPath === item.href ||
-                      (item.href === '/blog/weekly-movers' && currentPath.startsWith('/blog/weekly-movers'))
+                      (item.href === '/blog/weekly-movers' && currentPath.startsWith('/blog/weekly-movers')) ||
+                      (item.href === '/blog/market-insights' && currentPath.startsWith('/blog/market-insights'))
                     return (
                       <li key={item.href}>
                         <Link
@@ -80,7 +115,7 @@ function BlogLayout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 md:ml-64 p-6 md:p-8 min-h-screen pb-20">
+      <main className="flex-1 md:ml-64 p-4 sm:p-6 md:p-8 min-h-screen pb-20">
         <Outlet />
       </main>
     </div>
