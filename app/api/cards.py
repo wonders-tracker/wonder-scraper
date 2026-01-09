@@ -1323,22 +1323,27 @@ def read_card_variants(
             WITH treatment_stats AS (
                 SELECT
                     treatment,
-                    -- Floor price: avg of 4 lowest sold prices
+                    -- Floor price: avg of 4 lowest sold prices (excluding bulk lots)
                     (SELECT AVG(price) FROM (
                         SELECT price FROM marketprice
                         WHERE card_id = :card_id
                         AND treatment = mp.treatment
                         AND listing_type = 'sold'
-                        AND sold_date >= :cutoff
+                        AND COALESCE(sold_date, scraped_at) >= :cutoff
+                        AND (is_bulk_lot = FALSE OR is_bulk_lot IS NULL)
                         ORDER BY price ASC
                         LIMIT 4
                     ) lowest) as floor_price,
-                    -- Lowest ask from active listings
-                    MIN(CASE WHEN listing_type = 'active' THEN price END) as lowest_ask,
-                    -- Active listing count
-                    COUNT(CASE WHEN listing_type = 'active' THEN 1 END) as inventory,
+                    -- Lowest ask from active buy-now listings only
+                    MIN(CASE WHEN listing_type = 'active'
+                             AND (listing_format IN ('buy_it_now', 'best_offer') OR listing_format IS NULL)
+                        THEN price END) as lowest_ask,
+                    -- Active listing count (buy-now only)
+                    COUNT(CASE WHEN listing_type = 'active'
+                               AND (listing_format IN ('buy_it_now', 'best_offer') OR listing_format IS NULL)
+                          THEN 1 END) as inventory,
                     -- Sales count in period
-                    COUNT(CASE WHEN listing_type = 'sold' AND sold_date >= :cutoff THEN 1 END) as sales_count
+                    COUNT(CASE WHEN listing_type = 'sold' AND COALESCE(sold_date, scraped_at) >= :cutoff THEN 1 END) as sales_count
                 FROM marketprice mp
                 WHERE card_id = :card_id
                 AND treatment IS NOT NULL
@@ -1421,21 +1426,28 @@ def read_similar_cards(
                     c.product_type,
                     COALESCE(c.cardeio_image_url, c.image_url) as image_url,
                     r.name as rarity_name,
-                    -- Floor price: avg of 4 lowest sold prices
+                    -- Floor price: avg of 4 lowest sold prices (excluding bulk lots)
                     (SELECT AVG(price) FROM (
                         SELECT price FROM marketprice
                         WHERE card_id = c.id
                         AND listing_type = 'sold'
-                        AND sold_date >= :cutoff
+                        AND COALESCE(sold_date, scraped_at) >= :cutoff
+                        AND (is_bulk_lot = FALSE OR is_bulk_lot IS NULL)
                         ORDER BY price ASC
                         LIMIT 4
                     ) lowest) as floor_price,
-                    -- Lowest ask from active listings
-                    (SELECT MIN(price) FROM marketprice WHERE card_id = c.id AND listing_type = 'active') as lowest_ask,
-                    -- Active listing count
-                    (SELECT COUNT(*) FROM marketprice WHERE card_id = c.id AND listing_type = 'active') as inventory,
+                    -- Lowest ask from active buy-now listings
+                    (SELECT MIN(price) FROM marketprice
+                     WHERE card_id = c.id AND listing_type = 'active'
+                     AND (listing_format IN ('buy_it_now', 'best_offer') OR listing_format IS NULL)) as lowest_ask,
+                    -- Active listing count (buy-now only)
+                    (SELECT COUNT(*) FROM marketprice
+                     WHERE card_id = c.id AND listing_type = 'active'
+                     AND (listing_format IN ('buy_it_now', 'best_offer') OR listing_format IS NULL)) as inventory,
                     -- Sales volume (for sorting by activity)
-                    (SELECT COUNT(*) FROM marketprice WHERE card_id = c.id AND listing_type = 'sold' AND sold_date >= :cutoff) as volume
+                    (SELECT COUNT(*) FROM marketprice
+                     WHERE card_id = c.id AND listing_type = 'sold'
+                     AND COALESCE(sold_date, scraped_at) >= :cutoff) as volume
                 FROM card c
                 LEFT JOIN rarity r ON c.rarity_id = r.id
                 WHERE c.rarity_id = :rarity_id

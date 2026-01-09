@@ -677,6 +677,7 @@ class TestDataQualityIntegration:
             "Proof/Sample",
             "Error/Errata",
             # Alt Art variants
+            "Alt Art",  # Standalone when base treatment is unknown
             "Classic Paper Alt Art",
             "Classic Foil Alt Art",
             "Stonefoil Alt Art",
