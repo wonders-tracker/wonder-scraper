@@ -355,10 +355,10 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
 
         {/* Top Header Navigation */}
         <div className="h-14 border-b border-border sticky top-0 bg-background z-50 flex items-center px-4 justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-3 lg:gap-4 min-w-0">
             {/* Mobile Hamburger */}
             <button
-              className="md:hidden p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              className="md:hidden p-1.5 text-muted-foreground hover:text-foreground transition-colors shrink-0"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               onMouseEnter={() => {
                 menuIconRef.current?.startAnimation()
@@ -373,38 +373,39 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
               {mobileMenuOpen ? <XIcon ref={xIconRef} size={20} /> : <MenuIcon ref={menuIconRef} size={20} />}
             </button>
 
-            <h1 className="text-lg font-bold tracking-tight uppercase flex items-center gap-2">
-              WondersTracker
-              <span className="text-[9px] font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">BETA</span>
+            <h1 className="text-base md:text-lg font-bold tracking-tight uppercase flex items-center gap-1.5 shrink-0">
+              <span className="hidden sm:inline">WondersTracker</span>
+              <span className="sm:hidden">WT</span>
+              <span className="text-[9px] font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded hidden sm:inline">BETA</span>
             </h1>
 
-            <nav className="hidden md:flex items-center gap-1">
-              <Link to="/" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
+            <nav className="hidden md:flex items-center gap-0.5 lg:gap-1">
+              <Link to="/" className="flex items-center gap-1.5 lg:gap-2 px-2 lg:px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
                 <LayoutDashboard className="w-3.5 h-3.5" />
-                <span>Dashboard</span>
+                <span className="hidden lg:inline">Dashboard</span>
               </Link>
-              <Link to="/market" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
+              <Link to="/market" className="flex items-center gap-1.5 lg:gap-2 px-2 lg:px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
                 <LineChart className="w-3.5 h-3.5" />
-                <span>Market</span>
+                <span className="hidden lg:inline">Market</span>
               </Link>
-              <Link to="/blog" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
+              <Link to="/blog" className="flex items-center gap-1.5 lg:gap-2 px-2 lg:px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
                 <Newspaper className="w-3.5 h-3.5" />
-                <span>Blog</span>
+                <span className="hidden lg:inline">Blog</span>
               </Link>
-              <Link to="/portfolio" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
+              <Link to="/portfolio" className="flex items-center gap-1.5 lg:gap-2 px-2 lg:px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
                 <Wallet className="w-3.5 h-3.5" />
-                <span>Portfolio</span>
+                <span className="hidden lg:inline">Portfolio</span>
               </Link>
               {user && (
                 <>
-                  <Link to="/profile" className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
+                  <Link to="/profile" className="flex items-center gap-1.5 lg:gap-2 px-2 lg:px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
                     <UserIcon size={14} />
-                    <span>Profile</span>
+                    <span className="hidden lg:inline">Profile</span>
                   </Link>
                   {user.is_superuser && (
-                    <Link to={"/admin" as any} className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
+                    <Link to={"/admin" as any} className="flex items-center gap-1.5 lg:gap-2 px-2 lg:px-3 py-1.5 text-muted-foreground hover:text-foreground rounded-md transition-colors text-xs font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5">
                       <Shield className="w-3.5 h-3.5" />
-                      <span>Admin</span>
+                      <span className="hidden lg:inline">Admin</span>
                     </Link>
                   )}
                 </>
@@ -412,25 +413,17 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
             </nav>
           </div>
 
-          <div className="flex items-center gap-4">
-            {/* System Status */}
-            <div className="hidden md:flex items-center gap-2">
+          <div className="flex items-center gap-2 lg:gap-3 shrink-0">
+            {/* System Status - dot on lg, text on xl */}
+            <div className="hidden lg:flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-brand-400 animate-pulse"></span>
-              <span className="text-[9px] text-muted-foreground uppercase font-bold">System Online</span>
+              <span className="hidden xl:inline text-[9px] text-muted-foreground uppercase font-bold">Online</span>
             </div>
 
-            {/* Admin Quick Links */}
-            {user?.is_superuser && (
-              <div className="hidden md:flex items-center gap-2 border-r border-border pr-4 mr-2">
-                <Tooltip content="Server Health">
-                    <Link to={"/admin" as any} className="text-muted-foreground hover:text-foreground transition-colors">
-                      <Server className="w-3.5 h-3.5" />
-                    </Link>
-                </Tooltip>
-              </div>
-            )}
-
-            {user ? (
+            {userLoading ? (
+              // Show skeleton while checking auth state to prevent flicker
+              <div className="w-16 h-8 bg-muted rounded animate-pulse" />
+            ) : user ? (
               <div className="relative">
                 <UserDropdown user={user} />
               </div>
@@ -490,7 +483,7 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
                   </Link>
                 </>
               )}
-              {!user && (
+              {!user && !userLoading && (
                 <Link
                   to="/login"
                   className="flex items-center gap-3 px-3 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors text-sm font-bold uppercase"

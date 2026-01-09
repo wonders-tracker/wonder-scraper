@@ -1,10 +1,10 @@
-import { createFileRoute, useParams, useNavigate, Link } from '@tanstack/react-router'
+import { createFileRoute, useParams, useNavigate, Link, useSearch } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
 import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink, Calendar, Flag, AlertTriangle } from 'lucide-react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getFilteredRowModel } from '@tanstack/react-table'
-import { useMemo, useState, useEffect, lazy, Suspense } from 'react'
+import { useMemo, useState, useEffect, lazy, Suspense, useRef } from 'react'
 import { Tooltip } from '../components/ui/tooltip'
 
 // Lazy load chart component (378KB recharts bundle) - only loads when needed
@@ -14,11 +14,14 @@ import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
 import { ConfidenceIndicator } from '../components/ConfidenceIndicator'
 import { SellerBadge } from '../components/SellerBadge'
-import { CardActionSplitButton } from '../components/CardActionSplitButton'
+// CardActionSplitButton removed - actions now in PriceBox
 import { ProductSubtypeBadge, getSubtypeColor } from '../components/ProductSubtypeBadge'
 import { LoginUpsellButton } from '../components/LoginUpsellOverlay'
 import { MetaVote } from '../components/MetaVote'
 import { useCurrentUser } from '../context/UserContext'
+import { CardDetailLayout, Section, CardHero, PriceBox, PriceAlertModal, TreatmentPricingTable, SimilarCards, StickyPriceHeader, useScrollPast, CardDetailHeader } from '../components/card-detail'
+import type { SimilarCard } from '../components/card-detail'
+import { CardDetailPageSkeleton, SkeletonChart, SkeletonTableRows } from '../components/ui/skeleton'
 
 type CardDetail = {
   id: number
@@ -202,7 +205,7 @@ function extractTreatmentFromTitle(title: string): string | null {
     return null
 }
 
-// Server-side loader for SEO meta tags
+// Server-side loader for SEO meta tags and data prefetching
 const API_URL = import.meta.env.VITE_API_URL || 'https://wonderstracker.com/api/v1'
 
 async function fetchCardForSEO(cardId: string) {
@@ -228,37 +231,158 @@ async function fetchCardForSEO(cardId: string) {
   }
 }
 
+// Search params type for URL-backed state
+type CardSearchParams = {
+  treatment?: string
+  range?: TimeRange
+  sort?: 'price' | 'date' | 'seller'
+  dir?: 'asc' | 'desc'
+  page?: number
+}
+
 export const Route = createFileRoute('/cards/$cardId')({
   component: CardDetail,
-  loader: async ({ params }) => {
-    const card = await fetchCardForSEO(params.cardId)
-    return { card }
+  validateSearch: (search: Record<string, unknown>): CardSearchParams => ({
+    treatment: (search.treatment as string) || undefined,
+    range: (['1m', '3m', '6m', '1y', 'all'].includes(search.range as string) ? search.range : undefined) as TimeRange | undefined,
+    sort: (['price', 'date', 'seller'].includes(search.sort as string) ? search.sort : undefined) as CardSearchParams['sort'],
+    dir: (['asc', 'desc'].includes(search.dir as string) ? search.dir : undefined) as CardSearchParams['dir'],
+    page: typeof search.page === 'number' ? search.page : (typeof search.page === 'string' ? parseInt(search.page, 10) || undefined : undefined),
+  }),
+  loader: async ({ params, context }) => {
+    const cardId = params.cardId
+    // Cast context to access queryClient (injected by router)
+    const queryClient = (context as any)?.queryClient
+
+    // Prefetch all critical data in parallel for instant loading
+    // Use Promise.allSettled to not block on failures
+    const prefetchPromises = [
+      // SEO data (for meta tags)
+      fetchCardForSEO(cardId),
+    ]
+
+    // Only prefetch React Query data if queryClient is available (client-side)
+    if (queryClient) {
+      prefetchPromises.push(
+        // Card detail data
+        queryClient.prefetchQuery({
+          queryKey: ['card', cardId],
+          queryFn: async () => {
+            const response = await fetch(`${API_URL}/cards/${cardId}`)
+            if (!response.ok) throw new Error('Failed to fetch card')
+            const data = await response.json()
+            return {
+              ...data,
+              market_cap: (data.floor_price || data.latest_price || 0) * (data.volume_30d || 0)
+            }
+          },
+          staleTime: 2 * 60 * 1000,
+        }),
+        // Listings data (for chart and sales table)
+        queryClient.prefetchQuery({
+          queryKey: ['card-listings', cardId],
+          queryFn: async () => {
+            const response = await fetch(`${API_URL}/cards/${cardId}/listings?sold_limit=100&active_limit=100`)
+            if (!response.ok) return { items: [], total: 0, hasMore: false, activeCount: 0 }
+            const data = await response.json()
+            return {
+              items: [...data.active.items, ...data.sold.items],
+              total: data.sold.total,
+              hasMore: data.sold.hasMore,
+              activeCount: data.active.items.length
+            }
+          },
+          staleTime: 2 * 60 * 1000,
+        }),
+        // Snapshots data
+        queryClient.prefetchQuery({
+          queryKey: ['card-snapshots', cardId],
+          queryFn: async () => {
+            const response = await fetch(`${API_URL}/cards/${cardId}/snapshots?days=365&limit=500`)
+            if (!response.ok) return []
+            return response.json()
+          },
+          staleTime: 5 * 60 * 1000,
+        }),
+      )
+    }
+
+    const [card] = await Promise.allSettled(prefetchPromises)
+    return {
+      card: card.status === 'fulfilled' ? card.value : null
+    }
   },
 })
 
 // Re-export component for potential lazy loading
 export { CardDetail }
 
-type TimeRange = '7d' | '30d' | '90d' | 'all'
-type ChartType = 'line' | 'scatter'
+type TimeRange = '1m' | '3m' | '6m' | '1y' | 'all'
 
 function CardDetail() {
   const { cardId } = useParams({ from: Route.id })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [treatmentFilter, setTreatmentFilter] = useState<string>('all')
+
+  // URL-backed state for shareable links
+  const searchParams = useSearch({ from: Route.id })
+  const treatmentFilter = searchParams.treatment || 'all'
+  const timeRange: TimeRange = searchParams.range || '3m'
+
+  // Helper to update URL search params
+  const updateSearchParams = (updates: Partial<CardSearchParams>) => {
+    navigate({
+      to: '/cards/$cardId',
+      params: { cardId },
+      search: (prev) => {
+        const next = { ...prev, ...updates }
+        // Remove undefined/null values to keep URL clean
+        Object.keys(next).forEach((key) => {
+          if (next[key as keyof CardSearchParams] === undefined || next[key as keyof CardSearchParams] === null) {
+            delete next[key as keyof CardSearchParams]
+          }
+        })
+        return next
+      },
+      replace: true, // Don't add to history stack
+    })
+  }
+
+  // Wrapper functions for URL state updates
+  const setTreatmentFilter = (treatment: string) => {
+    updateSearchParams({ treatment: treatment === 'all' ? undefined : treatment, page: undefined })
+  }
+
+  const setTimeRange = (range: TimeRange) => {
+    updateSearchParams({ range: range === '3m' ? undefined : range })
+  }
+
+  // Local-only state (not URL-backed)
   const [selectedListing, setSelectedListing] = useState<MarketPrice | null>(null)
-  const [timeRange, setTimeRange] = useState<TimeRange>('all')
-  const [chartType, setChartType] = useState<ChartType>('line')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showPriceAlertModal, setShowPriceAlertModal] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportReason, setReportReason] = useState<string>('')
   const [reportNotes, setReportNotes] = useState<string>('')
   const [reportSubmitting, setReportSubmitting] = useState(false)
   const [reportSubmitted, setReportSubmitted] = useState(false)
+  const [showSoldListings, setShowSoldListings] = useState(false)
 
   const { user: currentUser } = useCurrentUser()
   const isLoggedIn = !!currentUser
+
+  // Ref for sticky header scroll detection
+  const priceBoxRef = useRef<HTMLDivElement>(null)
+  const isScrolledPastPriceBox = useScrollPast(priceBoxRef)
+
+  // Reset local-only state when cardId changes (URL state resets via navigation)
+  useEffect(() => {
+    setSelectedListing(null)
+    setShowReportModal(false)
+    setReportReason('')
+    setReportNotes('')
+    setReportSubmitted(false)
+  }, [cardId])
 
   // Track card listing view (with session-based milestone tracking)
   useEffect(() => {
@@ -279,6 +403,7 @@ function CardDetail() {
       }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes - card data updates infrequently
+    // Data is prefetched in route loader - only refetch if stale
   })
 
   // Fetch Sales History (sold + active listings) - single combined endpoint
@@ -305,6 +430,7 @@ function CardDetail() {
           }
       },
       staleTime: 2 * 60 * 1000, // 2 minutes
+      // Data is prefetched in route loader - only refetch if stale
   })
 
   // Backwards compat: extract items array for existing code
@@ -322,6 +448,7 @@ function CardDetail() {
           }
       },
       staleTime: 5 * 60 * 1000, // 5 minutes - snapshots change slowly
+      // Data is prefetched in route loader - only refetch if stale
   })
 
   // Fetch FMP by Treatment data
@@ -362,6 +489,7 @@ function CardDetail() {
           }
       },
       staleTime: 5 * 60 * 1000, // 5 minutes - pricing is computed, changes slowly
+      // Fetch fresh data for each card (queryKey includes cardId)
   })
 
   // Fetch Order Book floor data (OSS-compatible alternative to FMP pricing)
@@ -389,6 +517,7 @@ function CardDetail() {
           }
       },
       staleTime: 5 * 60 * 1000, // 5 minutes
+      // Fetch fresh data for each card (queryKey includes cardId)
   })
 
   // Fetch FMP/Floor price history for chart trend line
@@ -410,6 +539,47 @@ function CardDetail() {
           }
       },
       staleTime: 10 * 60 * 1000, // 10 minutes - historical data changes slowly
+      // Fetch fresh data for each card (queryKey includes cardId)
+  })
+
+  // Fetch card variants (same card, different treatments)
+  type VariantsResponse = {
+    card_id: number
+    card_name: string
+    variants: SimilarCard[]
+    count: number
+  }
+  const { data: variantsData, isLoading: isLoadingVariants } = useQuery({
+    queryKey: ['card-variants', cardId],
+    queryFn: async () => {
+      try {
+        return await api.get(`cards/${cardId}/variants?limit=12`).json<VariantsResponse>()
+      } catch (e) {
+        return null
+      }
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+
+  // Fetch similar cards (same rarity from same set)
+  type SimilarResponse = {
+    card_id: number
+    card_name: string
+    rarity: string
+    set_name: string
+    similar_cards: SimilarCard[]
+    count: number
+  }
+  const { data: similarData, isLoading: isLoadingSimilar } = useQuery({
+    queryKey: ['card-similar', cardId],
+    queryFn: async () => {
+      try {
+        return await api.get(`cards/${cardId}/similar?limit=12`).json<SimilarResponse>()
+      } catch (e) {
+        return null
+      }
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
   // Determine if this is an OpenSea/NFT item (no individual sales, only snapshots)
@@ -570,14 +740,17 @@ function CardDetail() {
       const now = new Date()
       let cutoffDate: Date | null = null
       switch (timeRange) {
-          case '7d':
-              cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-              break
-          case '30d':
+          case '1m':
               cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
               break
-          case '90d':
+          case '3m':
               cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+              break
+          case '6m':
+              cutoffDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000)
+              break
+          case '1y':
+              cutoffDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
               break
           case 'all':
           default:
@@ -586,12 +759,26 @@ function CardDetail() {
 
       // 1. Filter valid sold listings first
       // Use sold_date OR scraped_at as fallback (matches backend COALESCE logic)
+      // Filter out prices under $1 to remove junk/error data
       const validSold = history.filter(h => {
-          const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
+          const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) >= 1
           const effectiveDate = h.sold_date || h.scraped_at
           const validDate = effectiveDate && !isNaN(new Date(effectiveDate).getTime())
           const isSold = h.listing_type === 'sold' || !h.listing_type
           if (!validPrice || !validDate || !isSold) return false
+
+          // Apply treatment filter (fuzzy matching for variants like "Preslab TAG 9")
+          if (treatmentFilter !== 'all') {
+              if (treatmentFilter.startsWith('subtype:')) {
+                  const subtype = treatmentFilter.replace('subtype:', '')
+                  if (h.product_subtype !== subtype) return false
+              } else {
+                  const t = (h.treatment || 'Classic Paper').toLowerCase()
+                  const filter = treatmentFilter.toLowerCase()
+                  // Exact match or starts with (e.g., "Preslab TAG" matches "Preslab TAG 9")
+                  if (!(t === filter || t.startsWith(filter + ' ') || t.startsWith(filter + '-'))) return false
+              }
+          }
 
           // Apply time range filter
           if (cutoffDate) {
@@ -647,9 +834,23 @@ function CardDetail() {
       })
 
       // 4. Add active listings at the right edge (current time)
+      // Filter out prices under $1 to remove junk/error data
       const activeListings = history.filter(h => {
-          const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
-          return h.listing_type === 'active' && validPrice
+          const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) >= 1
+          if (!(h.listing_type === 'active' && validPrice)) return false
+
+          // Apply treatment filter to active listings too (fuzzy matching)
+          if (treatmentFilter !== 'all') {
+              if (treatmentFilter.startsWith('subtype:')) {
+                  const subtype = treatmentFilter.replace('subtype:', '')
+                  if (h.product_subtype !== subtype) return false
+              } else {
+                  const t = (h.treatment || 'Classic Paper').toLowerCase()
+                  const filter = treatmentFilter.toLowerCase()
+                  if (!(t === filter || t.startsWith(filter + ' ') || t.startsWith(filter + '-'))) return false
+              }
+          }
+          return true
       })
 
       // Place active listings at the right side of chart, spaced out by price
@@ -681,8 +882,24 @@ function CardDetail() {
           }
       })
 
-      return [...soldData, ...activeData]
-  }, [history, timeRange, card?.rarity_name])
+      // 5. Compute daily volumes for volume bars
+      const dailyVolumes: Record<string, number> = {}
+      soldData.forEach(d => {
+          const dayKey = new Date(d.timestamp).toISOString().split('T')[0]
+          dailyVolumes[dayKey] = (dailyVolumes[dayKey] || 0) + 1
+      })
+
+      // Add volume to each data point
+      const soldDataWithVolume = soldData.map(d => {
+          const dayKey = new Date(d.timestamp).toISOString().split('T')[0]
+          return { ...d, dailyVolume: dailyVolumes[dayKey] || 0 }
+      })
+
+      // Active listings don't count toward volume
+      const activeDataWithVolume = activeData.map(d => ({ ...d, dailyVolume: 0 }))
+
+      return [...soldDataWithVolume, ...activeDataWithVolume]
+  }, [history, timeRange, treatmentFilter, card?.rarity_name])
 
   // Calculate total sales count (ignoring time filter) for context
   const totalAllTimeSales = useMemo(() => {
@@ -697,8 +914,11 @@ function CardDetail() {
 
   // Calculate chart statistics
   const chartStats = useMemo(() => {
-      if (!chartData.length) return null
-      const prices = chartData.map(d => d.price)
+      // Filter out active listings - only use sold data
+      const soldData = chartData.filter(d => !d.isActive)
+      if (!soldData.length) return null
+
+      const prices = soldData.map(d => d.price)
       const minPrice = Math.min(...prices)
       const maxPrice = Math.max(...prices)
       const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length
@@ -710,13 +930,161 @@ function CardDetail() {
       priceChange = Math.max(-100, Math.min(100, priceChange))
 
       // Only show meaningful trends (at least 2 data points)
-      if (chartData.length < 2) {
+      if (soldData.length < 2) {
           priceChange = 0
       }
 
-      return { minPrice, maxPrice, avgPrice, priceChange, totalSales: chartData.length }
+      // Find dates for low and high prices
+      const minItem = soldData.find(d => d.price === minPrice)
+      const maxItem = soldData.find(d => d.price === maxPrice)
+      const lowDate = minItem?.date || null
+      const highDate = maxItem?.date || null
+
+      // Calculate avg daily sold
+      // Get the time span of the data
+      const timestamps = soldData.map(d => d.timestamp)
+      const firstTs = Math.min(...timestamps)
+      const lastTs = Math.max(...timestamps)
+      const daySpan = Math.max(1, Math.ceil((lastTs - firstTs) / (24 * 60 * 60 * 1000)))
+      const avgDailySold = soldData.length / daySpan
+
+      return {
+        minPrice,
+        maxPrice,
+        avgPrice,
+        priceChange,
+        totalSales: soldData.length,
+        lowDate,
+        highDate,
+        avgDailySold
+      }
   }, [chartData])
-  
+
+  // Compute treatment-filtered metrics for PriceBox
+  const filteredMetrics = useMemo(() => {
+      if (!history) return null
+
+      const now = new Date()
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+      // Filter function for treatment (with fuzzy matching for variants like "Preslab TAG 9")
+      const matchesTreatment = (h: MarketPrice) => {
+          if (treatmentFilter === 'all') return true
+          if (treatmentFilter.startsWith('subtype:')) {
+              const subtype = treatmentFilter.replace('subtype:', '')
+              return h.product_subtype === subtype
+          }
+          const t = (h.treatment || 'Classic Paper').toLowerCase()
+          const filter = treatmentFilter.toLowerCase()
+          // Exact match or starts with (e.g., "Preslab TAG" matches "Preslab TAG 9")
+          return t === filter || t.startsWith(filter + ' ') || t.startsWith(filter + '-')
+      }
+
+      // Get filtered sold items
+      const filteredSold = history.filter(h => {
+          const isSold = h.listing_type === 'sold' || !h.listing_type
+          const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
+          return isSold && validPrice && matchesTreatment(h)
+      })
+
+      // Get filtered active listings
+      const filteredActive = history.filter(h => {
+          const isActive = h.listing_type === 'active'
+          const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
+          return isActive && validPrice && matchesTreatment(h)
+      })
+
+      // 30D Volume: count sales in last 30 days
+      const volume30d = filteredSold.filter(h => {
+          const effectiveDate = h.sold_date || h.scraped_at
+          if (!effectiveDate) return false
+          return new Date(effectiveDate) >= thirtyDaysAgo
+      }).length
+
+      // Highest Sale: max price from all filtered sold
+      const maxPrice = filteredSold.length > 0
+          ? Math.max(...filteredSold.map(h => Number(h.price)))
+          : null
+
+      // Min price (floor) from recent sales for volatility calculation
+      const minPrice = filteredSold.length > 0
+          ? Math.min(...filteredSold.map(h => Number(h.price)))
+          : null
+
+      // Seller Count: unique sellers from active listings
+      const uniqueSellers = new Set(filteredActive.map(h => h.seller_name).filter(Boolean))
+      const sellerCount = uniqueSellers.size
+
+      // Listings Count: count of active listings
+      const listingsCount = filteredActive.length
+
+      // Lowest Ask (Buy Now price): minimum price from active listings
+      const lowestAsk = filteredActive.length > 0
+          ? Math.min(...filteredActive.map(h => Number(h.price)))
+          : null
+
+      // Highest Ask: maximum price from active listings (fallback for highest sale)
+      const highestAsk = filteredActive.length > 0
+          ? Math.max(...filteredActive.map(h => Number(h.price)))
+          : null
+
+      // Price Range: [min, max] from active listings (fallback for market price)
+      const priceRange: [number, number] | null = filteredActive.length >= 2
+          ? [lowestAsk!, highestAsk!]
+          : null
+
+      // Volatility: based on price spread
+      const volatility = maxPrice && minPrice && minPrice > 0
+          ? Math.min((maxPrice / minPrice - 1) / 10, 1) // Normalize to 0-1
+          : null
+
+      return {
+          volume30d,
+          maxPrice,
+          sellerCount,
+          listingsCount,
+          volatility,
+          lowestAsk,
+          highestAsk,
+          priceRange
+      }
+  }, [history, treatmentFilter])
+
+  // Get the lowest-priced active listing for Buy Now button
+  // Only includes listings scraped within the last 24 hours to ensure freshness
+  const lowestActiveListing = useMemo(() => {
+      if (!history) return null
+
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+      // Apply treatment filter matching logic
+      const matchesTreatment = (h: MarketPrice) => {
+          if (treatmentFilter === 'all') return true
+          if (treatmentFilter.startsWith('subtype:')) {
+              const subtype = treatmentFilter.replace('subtype:', '')
+              return h.product_subtype === subtype
+          }
+          const t = (h.treatment || 'Classic Paper').toLowerCase()
+          const filter = treatmentFilter.toLowerCase()
+          return t === filter || t.startsWith(filter + ' ') || t.startsWith(filter + '-')
+      }
+
+      // Get all active listings with valid prices, URLs, and recent scrape time
+      const activeListings = history.filter(h => {
+          const isActive = h.listing_type === 'active'
+          const validPrice = h.price !== undefined && h.price !== null && !isNaN(Number(h.price)) && Number(h.price) > 0
+          const isFresh = h.scraped_at && new Date(h.scraped_at) >= twentyFourHoursAgo
+          return isActive && validPrice && h.url && isFresh && matchesTreatment(h)
+      })
+
+      if (activeListings.length === 0) return null
+
+      // Find the lowest-priced listing
+      return activeListings.reduce((min, h) =>
+          Number(h.price) < Number(min.price) ? h : min
+      )
+  }, [history, treatmentFilter])
+
   // Get all unique treatments for creating lines
   const chartTreatments = useMemo(() => {
       if (!history) return []
@@ -764,14 +1132,7 @@ function CardDetail() {
   }, [card, pricingData, orderBookData])
 
   if (isLoadingCard) {
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-background text-foreground font-mono">
-            <div className="text-center animate-pulse">
-                <div className="text-xl uppercase tracking-widest mb-2">Loading Market Data</div>
-                <div className="text-xs text-muted-foreground">Accessing secure stream...</div>
-            </div>
-        </div>
-    )
+    return <CardDetailPageSkeleton />
   }
 
   if (!card) {
@@ -787,218 +1148,88 @@ function CardDetail() {
 
   return (
       <>
-          <div className="min-h-screen bg-background text-foreground font-mono flex flex-col">
-            <div className="flex-1 p-6 pb-24 md:pb-6">
-                <div className="max-w-7xl mx-auto">
-                    {/* Navigation */}
-                    <div className="flex justify-between items-center mb-8">
-                        <Link to="/" className="flex items-center gap-2 text-xs uppercase text-muted-foreground hover:text-primary transition-colors border border-transparent hover:border-border rounded px-3 py-1">
-                            <ArrowLeft className="w-3 h-3" /> Dashboard
-                        </Link>
-                        
-                        <CardActionSplitButton
-                            cardId={card.id}
-                            cardName={card.name}
-                            onAddToPortfolio={() => setShowAddModal(true)}
-                        />
-                    </div>
-                    
-                    {/* Header Section with Background Image */}
-                    <div className="mb-10 border-b border-border pb-8 relative overflow-hidden rounded-lg -mx-6 px-6">
-                        {/* Background Image with Gradient Scrim */}
-                        {card.cardeio_image_url && (
-                            <>
-                                <div
-                                    className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-50"
-                                    style={{ backgroundImage: `url(${card.cardeio_image_url})` }}
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-r from-background via-background/90 to-background/60" />
-                                <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/30" />
-                            </>
-                        )}
+          {/* Mobile Sticky Header */}
+          <StickyPriceHeader
+            cardName={card.name}
+            price={card.floor_price ?? card.lowest_ask}
+            priceLabel={card.floor_price ? 'Floor' : 'Ask'}
+            isVisible={isScrolledPastPriceBox}
+            onViewListings={() => {
+              // Scroll to listings section
+              document.getElementById('sales-listings-section')?.scrollIntoView({ behavior: 'smooth' })
+            }}
+          />
 
-                        {/* Content */}
-                        <div className="relative z-10">
-                        {/* Title Section */}
-                        <div className="mb-6">
-                            <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
-                                    ID: {card.id.toString().padStart(4, '0')}
-                                </span>
-                                {/* Orbital Badge with dynamic color */}
-                                {card.orbital && (
-                                    <span
-                                        className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider text-white border"
-                                        style={{
-                                            backgroundColor: card.orbital_color ? `${card.orbital_color}40` : undefined,
-                                            borderColor: card.orbital_color || 'transparent'
-                                        }}
-                                    >
-                                        {card.orbital}
-                                    </span>
-                                )}
-                                {/* Card Type Badge */}
-                                {card.card_type && (
-                                    <span className="bg-zinc-800/80 text-zinc-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-zinc-700">
-                                        {card.card_type}
-                                    </span>
-                                )}
-                                {/* Show different badges for NFT vs regular products */}
-                                {card.product_type === 'Proof' || card.name?.toLowerCase().includes('proof') || card.name?.toLowerCase().includes('collector box') ? (
-                                    <>
-                                        <span className="bg-cyan-900/50 text-cyan-400 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-cyan-700">
-                                            NFT
-                                        </span>
-                                        <Tooltip content={
-                                            card.name?.toLowerCase().includes('character proof') ? '0x05f08b01971cf70bcd4e743a8906790cfb9a8fb8' :
-                                            card.name?.toLowerCase().includes('collector box') ? '0x28a11da34a93712b1fde4ad15da217a3b14d9465' : 'Contract Address'
-                                        }>
-                                            <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded text-[10px] font-mono tracking-wider border border-zinc-700">
-                                                {card.name?.toLowerCase().includes('character proof') ? '0x05f0...a8fb' :
-                                                 card.name?.toLowerCase().includes('collector box') ? '0x28a1...d9465' : 'Contract'}
-                                                </span>
-                                            </Tooltip>
-                                        </>
-                                    ) : (
-                                        <span className="bg-zinc-800/80 text-zinc-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-zinc-700">
-                                            Rarity: {card.rarity_name || card.rarity_id}
-                                        </span>
-                                    )}
-                            </div>
-                            <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter mb-2">
-                                {card.card_number && <span className="text-muted-foreground">#{card.card_number} </span>}
-                                {card.name}
-                            </h1>
-                            <div className="text-sm text-muted-foreground uppercase tracking-[0.2em] flex items-center gap-2">
-                                <span className="w-2 h-2 bg-primary rounded-full"></span>
-                                {card.set_name}
-                                {/* Platform indicator for NFTs */}
-                                {(card.product_type === 'Proof' || card.name?.toLowerCase().includes('proof') || card.name?.toLowerCase().includes('collector box')) && (
-                                    <span className="text-cyan-400 text-[10px] ml-2">• OpenSea</span>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Metrics Row - Grid on mobile, flex on larger screens */}
-                        <div className="grid grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:gap-8">
-                            <div>
-                                <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">
-                                    Floor Price
-                                    {treatmentFilter !== 'all' && (
-                                        <span className="ml-2 text-brand-300">
-                                            ({treatmentFilter.startsWith('subtype:') ? treatmentFilter.replace('subtype:', '') : treatmentFilter})
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="text-3xl sm:text-4xl font-mono font-bold">
-                                    ${(() => {
-                                        // Get variant-specific price if filter is active
-                                        const variantKey = treatmentFilter === 'all' ? null :
-                                            treatmentFilter.startsWith('subtype:') ? treatmentFilter.replace('subtype:', '') : treatmentFilter
-                                        const variantFloor = variantKey ? card.floor_by_variant?.[variantKey] : null
-                                        const variantAsk = variantKey ? card.lowest_ask_by_variant?.[variantKey] : null
-
-                                        // Use variant-specific price if available
-                                        if (variantFloor) return variantFloor.toFixed(2)
-                                        if (variantAsk) return variantAsk.toFixed(2)
-
-                                        // Fall back to overall prices
-                                        if (card.floor_price) return card.floor_price.toFixed(2)
-                                        if (card.lowest_ask && card.lowest_ask > 0) return card.lowest_ask.toFixed(2)
-                                        return card.latest_price?.toFixed(2) || '---'
-                                    })()}
-                                </div>
-                            </div>
-                            <div className="sm:border-l sm:border-border sm:pl-8">
-                                <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">
-                                    Fair Price
-                                </div>
-                                {isLoggedIn ? (
-                                    <div className="text-3xl sm:text-4xl font-mono font-bold text-brand-300">
-                                        ${pricingData?.fair_market_price?.toFixed(2) || card.vwap?.toFixed(2) || '---'}
-                                    </div>
-                                ) : (
-                                    <Tooltip content="Log in to see our Fair Market Price">
-                                        <div className="text-3xl sm:text-4xl font-mono font-bold blur-sm select-none cursor-help text-brand-300/50">
-                                            $XX.XX
-                                        </div>
-                                    </Tooltip>
-                                )}
-                            </div>
-                            <div className="sm:border-l sm:border-border sm:pl-8">
-                                <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">30d Vol</div>
-                                <div className="text-3xl sm:text-4xl font-mono font-bold">
-                                    {(card.volume_30d || 0).toLocaleString()}
-                                </div>
-                            </div>
-                            {/* Highest Confirmed Sale */}
-                            <div className="sm:border-l sm:border-border sm:pl-8">
-                                <div className="text-[10px] text-muted-foreground uppercase mb-1 tracking-wider">Highest Sale</div>
-                                <div className="text-3xl sm:text-4xl font-mono font-bold text-brand-400">
-                                    ${card.max_price ? card.max_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '---'}
-                                </div>
-                            </div>
-                            {/* Is Meta - only for single cards, not sealed products */}
-                            {!isSealed && <MetaVote cardId={card.id} />}
-                        </div>
-                        </div>{/* Close z-10 content wrapper */}
-                    </div>
-
-                    {/* Stats Grid - Compact inline layout */}
-                    <div className="flex flex-wrap items-center gap-6 mb-4 text-sm">
-                        <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-brand-300"></div>
-                            <span className="text-[10px] text-muted-foreground uppercase">Lowest Ask</span>
-                            <span className="font-mono font-bold">
-                                {(() => {
-                                    // Get variant-specific ask if filter is active
-                                    const variantKey = treatmentFilter === 'all' ? null :
-                                        treatmentFilter.startsWith('subtype:') ? treatmentFilter.replace('subtype:', '') : treatmentFilter
-                                    const variantAsk = variantKey ? card.lowest_ask_by_variant?.[variantKey] : null
-
-                                    // Use variant-specific price if available
-                                    if (variantAsk) return `$${variantAsk.toFixed(2)}`
-
-                                    // Fall back to overall prices
-                                    return (card.lowest_ask && card.lowest_ask > 0) ? `$${card.lowest_ask.toFixed(2)}` : "---"
-                                })()}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-                            <span className="text-[10px] text-muted-foreground uppercase">Active Listings</span>
-                            <span className="font-mono font-bold">{(card.inventory || 0).toLocaleString()}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
-                            <span className="text-[10px] text-muted-foreground uppercase">Vol (USD)</span>
-                            <span className="font-mono font-bold">${((card.volume_30d || 0) * (card.floor_price || card.latest_price || 0)).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <TrendingUp className="w-3 h-3 text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground uppercase">{timeRange} Trend</span>
-                            {(chartStats?.priceChange ?? 0) === 0 ? (
-                                <span className="font-mono text-muted-foreground">-</span>
-                            ) : (
-                                <span className={clsx("font-mono font-bold", (chartStats?.priceChange ?? 0) > 0 ? "text-brand-300" : "text-red-500")}>
-                                    {(chartStats?.priceChange ?? 0) > 0 ? '↑' : '↓'}{Math.abs(chartStats?.priceChange ?? 0).toFixed(1)}%
-                                </span>
-                            )}
-                        </div>
-                    </div>
-
+          <CardDetailLayout
+            navigation={
+              <CardDetailHeader
+                cardName={card.name}
+                setName={card.set_name}
+                isLoggedIn={isLoggedIn}
+                onSetPriceAlert={() => setShowPriceAlertModal(true)}
+              />
+            }
+            hero={
+              <CardHero card={card} />
+            }
+            priceBox={
+              <div ref={priceBoxRef} className="h-full">
+                <PriceBox
+                  card={card}
+                  treatmentFilter={treatmentFilter}
+                  onTreatmentChange={setTreatmentFilter}
+                  treatmentOptions={unifiedTreatmentData.map(t => ({
+                    value: t.treatment,
+                    label: t.treatment,
+                    floorPrice: t.floor ?? undefined,
+                    listingCount: undefined
+                  }))}
+                  pricingFMP={pricingData?.fair_market_price ?? undefined}
+                  isLoggedIn={isLoggedIn}
+                  onAddToPortfolio={() => setShowAddModal(true)}
+                  metaVoteSlot={!isSealed ? <MetaVote cardId={card.id} /> : undefined}
+                  productDetails={{
+                    cardNumber: card.card_number,
+                    rarity: card.rarity_name,
+                    cardType: card.card_type,
+                    orbital: card.orbital,
+                    orbitalColor: card.orbital_color,
+                    setName: card.set_name
+                  }}
+                  onSetPriceAlert={() => setShowPriceAlertModal(true)}
+                  onViewListings={() => {
+                    document.getElementById('sales-listings-section')?.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                  volatility={filteredMetrics?.volatility ?? undefined}
+                  filteredVolume30d={treatmentFilter !== 'all' ? filteredMetrics?.volume30d : undefined}
+                  filteredMaxPrice={treatmentFilter !== 'all' ? filteredMetrics?.maxPrice : undefined}
+                  filteredSellerCount={treatmentFilter !== 'all' ? filteredMetrics?.sellerCount : undefined}
+                  filteredListingsCount={treatmentFilter !== 'all' ? filteredMetrics?.listingsCount : undefined}
+                  lowestBuyNowPrice={lowestActiveListing?.price ?? null}
+                  buyNowUrl={lowestActiveListing?.url ?? undefined}
+                  filteredMarketPrice={
+                    treatmentFilter !== 'all'
+                      ? (pricingData?.by_treatment?.find(t => t.treatment === treatmentFilter)?.fmp ?? null)
+                      : undefined
+                  }
+                  highestAsk={treatmentFilter !== 'all' ? filteredMetrics?.highestAsk : undefined}
+                  priceRange={treatmentFilter !== 'all' ? filteredMetrics?.priceRange : undefined}
+                />
+              </div>
+            }
+          >
                     {/* Stacked Layout: Chart -> Variant Prices -> FMP -> Sales */}
                     <div className="space-y-4">
 
                         {/* Chart Section (Full Width) - MOVED TO TOP */}
                         <div>
-                            <div className="border border-border rounded bg-card p-1">
+                            <div className="border border-border rounded bg-card">
                                 <div className="w-full bg-muted/10 rounded flex flex-col">
                                     {/* Chart Header with Time Range Buttons */}
-                                    <div className="p-4 border-b border-border/50 flex justify-between items-center">
-                                        <div className="flex items-center gap-4">
-                                            <h3 className="text-xs font-bold uppercase tracking-widest">Price History</h3>
-                                            <div className="flex items-center gap-3 text-[10px]">
+                                    <div className="px-3 py-2 border-b border-border/50 flex justify-between items-center gap-2">
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-xs font-bold uppercase tracking-wider">Price History</h3>
+                                            <div className="flex items-center gap-2 text-xs">
                                                 {chartStats ? (
                                                     <>
                                                         <span className="text-muted-foreground">{chartStats.totalSales} sales</span>
@@ -1012,120 +1243,37 @@ function CardDetail() {
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-2">
-                                            {/* Chart Type Toggle */}
-                                            <div className="flex items-center bg-background rounded border border-border overflow-hidden mr-2">
+                                        {/* Time Range */}
+                                        <div className="flex items-center bg-background rounded border border-border overflow-hidden flex-shrink-0">
+                                            {[
+                                                { value: '1m', label: '1M' },
+                                                { value: '3m', label: '3M' },
+                                                { value: '6m', label: '6M' },
+                                                { value: '1y', label: '1Y' },
+                                                { value: 'all', label: 'ALL' },
+                                            ].map(({ value, label }) => (
                                                 <button
-                                                    onClick={() => setChartType('line')}
+                                                    key={value}
+                                                    onClick={() => setTimeRange(value as TimeRange)}
                                                     className={clsx(
-                                                        "px-3 py-2 min-h-[44px] text-[10px] font-bold uppercase transition-colors touch-manipulation",
-                                                        chartType === 'line' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                                                        "px-2.5 py-1.5 text-xs font-bold uppercase transition-colors",
+                                                        timeRange === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                                                     )}
                                                 >
-                                                    Line
+                                                    {label}
                                                 </button>
-                                                <button
-                                                    onClick={() => setChartType('scatter')}
-                                                    className={clsx(
-                                                        "px-3 py-2 min-h-[44px] text-[10px] font-bold uppercase transition-colors touch-manipulation",
-                                                        chartType === 'scatter' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-                                                    )}
-                                                >
-                                                    Scatter
-                                                </button>
-                                            </div>
-
-                                            {/* Time Range */}
-                                            <div className="flex items-center bg-background rounded border border-border overflow-hidden">
-                                                {['7d', '30d', '90d', 'all'].map((range) => (
-                                                    <button
-                                                        key={range}
-                                                        onClick={() => setTimeRange(range as TimeRange)}
-                                                        className={clsx(
-                                                            "px-3 py-2 min-h-[44px] text-[10px] font-bold uppercase transition-colors touch-manipulation",
-                                                            timeRange === range ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                                                        )}
-                                                    >
-                                                        {range}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Chart Stats Row */}
-                                    <div className="px-4 py-2 border-b border-border/30 flex items-center justify-between text-[10px]">
-                                        <div className="flex items-center gap-6">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-muted-foreground uppercase">Low:</span>
-                                                <span className="font-mono text-rose-400">${chartStats?.minPrice?.toFixed(2) || "---"}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-muted-foreground uppercase">High:</span>
-                                                <span className="font-mono text-brand-300">${chartStats?.maxPrice?.toFixed(2) || "---"}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-muted-foreground uppercase">Avg:</span>
-                                                <span className="font-mono">${chartStats?.avgPrice?.toFixed(2) || "---"}</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Legend */}
-                                        <div className="flex items-center gap-4 flex-wrap">
-                                            {chartType === 'scatter' && (
-                                                isSealed && uniqueSubtypes.length > 0 ? (
-                                                    // Show subtypes for sealed products
-                                                    (uniqueSubtypes.map(subtype => (
-                                                        <div key={subtype} className="flex items-center gap-1">
-                                                            <div
-                                                                className="w-2 h-2 rounded-full"
-                                                                style={{ backgroundColor: getSubtypeColor(subtype) }}
-                                                            />
-                                                            <span className="text-muted-foreground text-xs">{subtype}</span>
-                                                        </div>
-                                                    )))
-                                                ) : (
-                                                    // Show treatments for regular cards
-                                                    (<>
-                                                        <div className="flex items-center gap-1">
-                                                            <div className="w-2 h-2 rounded-full bg-gray-400"></div>
-                                                            <span className="text-muted-foreground">Paper</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1">
-                                                            <div className="w-2 h-2 rounded-full bg-cyan-400"></div>
-                                                            <span className="text-muted-foreground">Foil</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1">
-                                                            <div className="w-2 h-2 rounded-full bg-pink-400"></div>
-                                                            <span className="text-muted-foreground">Formless</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1">
-                                                            <div className="w-2 h-2 rounded-full bg-amber-400"></div>
-                                                            <span className="text-muted-foreground">Serialized</span>
-                                                        </div>
-                                                    </>)
-                                                )
-                                            )}
-                                            <div className="flex items-center gap-1">
-                                                <div className="w-2 h-2 bg-brand-300" style={{ clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" }}></div>
-                                                <span className="text-muted-foreground">Active</span>
-                                            </div>
+                                            ))}
                                         </div>
                                     </div>
 
                                     {/* Chart - lazy loaded */}
-                                    <div className="h-[300px] p-4">
-                                        {chartData.length > 0 ? (
-                                            <Suspense fallback={
-                                                <div className="flex items-center justify-center h-full">
-                                                    <div className="text-muted-foreground text-sm">Loading chart...</div>
-                                                </div>
-                                            }>
+                                    <div className="h-[160px] px-3 pt-1 pb-0">
+                                        {isLoadingHistory ? (
+                                            <SkeletonChart height="h-full" />
+                                        ) : chartData.length > 0 ? (
+                                            <Suspense fallback={<SkeletonChart height="h-full" />}>
                                                 <PriceHistoryChart
                                                     data={chartData}
-                                                    chartType={chartType}
-                                                    floorPrice={card.floor_price ?? undefined}
-                                                    lowestAsk={card.lowest_ask ?? undefined}
                                                     floorHistory={fmpHistory}
                                                 />
                                             </Suspense>
@@ -1133,7 +1281,12 @@ function CardDetail() {
                                             <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                                                 <div className="text-xs uppercase mb-2">
                                                     {timeRange !== 'all' && totalAllTimeSales > 0
-                                                        ? `No sales in last ${timeRange}`
+                                                        ? `No sales in last ${
+                                                            timeRange === '1m' ? '1 month' :
+                                                            timeRange === '3m' ? '3 months' :
+                                                            timeRange === '6m' ? '6 months' :
+                                                            timeRange === '1y' ? 'year' : timeRange
+                                                        }`
                                                         : 'No sales data available'}
                                                 </div>
                                                 <div className="text-[10px]">
@@ -1158,199 +1311,199 @@ function CardDetail() {
                                             </div>
                                         )}
                                     </div>
+
+                                    {/* Inline Stats Row */}
+                                    {chartStats && chartStats.totalSales > 0 && (
+                                        <div className="px-3 py-2 border-t border-border/30 flex items-center justify-between gap-4 text-xs overflow-x-auto">
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <span className="text-muted-foreground uppercase">Low</span>
+                                                <span className="font-mono font-bold text-rose-400">${chartStats.minPrice?.toFixed(2) ?? '---'}</span>
+                                                <span className="text-muted-foreground/60">{chartStats.lowDate ? new Date(chartStats.lowDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <span className="text-muted-foreground uppercase">High</span>
+                                                <span className="font-mono font-bold text-brand-300">${chartStats.maxPrice?.toFixed(2) ?? '---'}</span>
+                                                <span className="text-muted-foreground/60">{chartStats.highDate ? new Date(chartStats.highDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <span className="text-muted-foreground uppercase">Sold</span>
+                                                <span className="font-mono font-bold">{chartStats.totalSales}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <span className="text-muted-foreground uppercase">Avg/Day</span>
+                                                <span className="font-mono font-bold">{chartStats.avgDailySold?.toFixed(1) ?? '---'}</span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Unified Treatment Pricing Table */}
-                        {unifiedTreatmentData.length > 0 && (
-                            <div className="border border-border rounded bg-card relative">
-                                {/* Login gate overlay for FMP column */}
-                                {!isLoggedIn && <LoginUpsellButton title="Sign in to view FMP" />}
-                                <h3 className="text-xs font-bold uppercase tracking-widest p-4 border-b border-border">
-                                    {card.product_type === 'Single' ? 'Treatment' : 'Variant'} Pricing
-                                </h3>
-                                <div className="sm:hidden text-[10px] text-muted-foreground text-center py-2 border-b border-border/50">
-                                    ← Scroll for more →
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="text-left text-muted-foreground text-xs border-b border-border">
-                                                <th className="p-3">{card.product_type === 'Single' ? 'Treatment' : 'Variant'}</th>
-                                                <th className="p-3 text-right">
-                                                    <Tooltip content="Average of 4 lowest recent sales">
-                                                        <span className="cursor-help">Floor</span>
-                                                    </Tooltip>
-                                                </th>
-                                                <th className="p-3 text-right">
-                                                    <Tooltip content="Lowest active listing price">
-                                                        <span className="cursor-help">Ask</span>
-                                                    </Tooltip>
-                                                </th>
-                                                <th className="p-3 text-right">
-                                                    <Tooltip content="Fair Market Price - MAD-trimmed mean">
-                                                        <span className="cursor-help">FMP</span>
-                                                    </Tooltip>
-                                                </th>
-                                                <th className="p-3 text-center">
-                                                    <Tooltip content="Data confidence based on sample size">
-                                                        <span className="cursor-help">Conf</span>
-                                                    </Tooltip>
-                                                </th>
-                                                <th className="p-3 text-right">Sales</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {unifiedTreatmentData.map(row => (
-                                                <tr key={row.treatment} className="border-b border-border/50 hover:bg-muted/50">
-                                                    <td className="p-3">
-                                                        <TreatmentBadge treatment={row.treatment} size="xs" />
-                                                    </td>
-                                                    <td className="p-3 text-right font-mono text-brand-300">
-                                                        {row.floor ? `$${row.floor.toFixed(2)}` : '---'}
-                                                    </td>
-                                                    <td className="p-3 text-right font-mono text-blue-400">
-                                                        {row.ask ? `$${row.ask.toFixed(2)}` : '---'}
-                                                    </td>
-                                                    <td className="p-3 text-right font-mono text-amber-400">
-                                                        {row.fmp ? `$${row.fmp.toFixed(2)}` : '---'}
-                                                    </td>
-                                                    <td className="p-3 flex justify-center">
-                                                        <ConfidenceIndicator score={row.confidence} size="sm" />
-                                                    </td>
-                                                    <td className="p-3 text-right text-muted-foreground">
-                                                        {row.salesCount || '---'}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-
                         {/* Sales Table (Full Width) */}
-                        <div className="border border-border rounded bg-card overflow-hidden">
-                            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/20">
-                                <div className="flex items-center gap-4">
-                                    <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                                        Sales & Listings
-                                        <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px]">{filteredData.length || 0}</span>
-                                    </h3>
+                        <div id="sales-listings-section" className="border border-border rounded bg-card overflow-hidden scroll-mt-16">
+                            {(() => {
+                                const activeListings = filteredData.filter(d => d.listing_type === 'active')
+                                const soldListings = filteredData.filter(d => d.listing_type === 'sold')
+                                const displayListings = showSoldListings ? filteredData : activeListings
 
-                                    {/* Filters */}
-                                    <div className="flex items-center gap-2">
-                                        <Filter className="w-3 h-3 text-muted-foreground" />
-                                        <select
-                                            className="bg-background border border-border rounded text-[10px] uppercase px-2 py-1 focus:outline-none focus:border-primary"
-                                            value={treatmentFilter}
-                                            onChange={(e) => setTreatmentFilter(e.target.value)}
-                                        >
-                                            <option value="all">{isSealed && uniqueSubtypes.length > 0 ? "All Subtypes" : "All Treatments"}</option>
-                                            {uniqueTreatments.map(t => (
-                                                <option key={t} value={t}>{t}</option>
-                                            ))}
-                                            {isSealed && uniqueSubtypes.length > 0 && uniqueSubtypes.map(s => (
-                                                <option key={`subtype-${s}`} value={`subtype:${s}`}>{s}</option>
-                                            ))}
-                                        </select>
+                                return (
+                                    <>
+                                        <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-4">
+                                            <h3 className="text-base sm:text-lg font-bold flex items-center gap-2 flex-wrap">
+                                                <span>{activeListings.length} Listings</span>
+                                                {treatmentFilter !== 'all' && (
+                                                    <span className="text-sm text-muted-foreground font-normal">· {treatmentFilter}</span>
+                                                )}
+                                            </h3>
+                                            {soldListings.length > 0 && (
+                                                <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={showSoldListings}
+                                                        onChange={(e) => setShowSoldListings(e.target.checked)}
+                                                        className="w-4 h-4 rounded border-border bg-background text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="text-xs text-muted-foreground">
+                                                        Show {soldListings.length} sold
+                                                    </span>
+                                                </label>
+                                            )}
+                                        </div>
+
+                            {/* TCGPlayer-style listing rows */}
+                            <div className="divide-y divide-border">
+                                {isLoadingHistory ? (
+                                    // Loading skeletons
+                                    Array.from({ length: 5 }).map((_, i) => (
+                                        <div key={i} className="px-4 py-3 flex items-center gap-4 animate-pulse">
+                                            <div className="flex-1 space-y-1.5">
+                                                <div className="h-4 bg-muted rounded w-28" />
+                                                <div className="h-3 bg-muted rounded w-20" />
+                                            </div>
+                                            <div className="h-5 bg-muted rounded w-16" />
+                                            <div className="h-8 bg-muted rounded w-16" />
+                                        </div>
+                                    ))
+                                ) : displayListings.length ? (
+                                    displayListings.map((listing, idx) => {
+                                        const isSold = listing.listing_type === 'sold'
+                                        const feedbackPercent = listing.seller_feedback_percent
+                                        const feedbackScore = listing.seller_feedback_score
+                                        const saleDate = listing.sold_date || listing.scraped_at
+                                        const treatment = listing.treatment || listing.product_subtype
+
+                                        return (
+                                            <div
+                                                key={listing.id || idx}
+                                                className="px-4 py-3 hover:bg-muted/10 transition-colors"
+                                            >
+                                                {/* Mobile: stacked layout, Desktop: horizontal */}
+                                                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                                                    {/* Left: Seller Info */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="font-semibold text-sm sm:text-base">
+                                                                {listing.seller_name || 'Unknown'}
+                                                            </span>
+                                                            {feedbackScore != null && feedbackPercent != null && (
+                                                                <span className={clsx(
+                                                                    "text-xs sm:text-sm",
+                                                                    feedbackPercent >= 99 ? 'text-brand-300' : feedbackPercent >= 95 ? 'text-yellow-500' : 'text-muted-foreground'
+                                                                )}>
+                                                                    {feedbackPercent.toFixed(0)}% ({feedbackScore.toLocaleString()})
+                                                                </span>
+                                                            )}
+                                                            {isSold && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 uppercase font-bold">
+                                                                    Sold
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {listing.title && (
+                                                            <div className="text-xs sm:text-sm text-muted-foreground mt-1 truncate">
+                                                                {listing.title}
+                                                            </div>
+                                                        )}
+                                                        {isSold && saleDate && (
+                                                            <div className="text-xs text-muted-foreground/70 mt-0.5">
+                                                                {new Date(saleDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Right side: Treatment + Price + Buttons */}
+                                                    <div className="flex items-center gap-2 sm:gap-3 justify-between sm:justify-end shrink-0">
+                                                        {/* Treatment Badge - fixed width for alignment */}
+                                                        <div className="w-[100px] sm:w-[120px] flex justify-end">
+                                                            {treatment && (
+                                                                <TreatmentBadge treatment={treatment} size="sm" />
+                                                            )}
+                                                        </div>
+
+                                                        {/* Price - fixed width for alignment */}
+                                                        <div className="w-[90px] sm:w-[100px] text-right">
+                                                            <span className="text-lg sm:text-xl font-mono font-bold">
+                                                                ${Number(listing.price).toFixed(2)}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Action Buttons - fixed width for alignment */}
+                                                        <div className="w-[50px] sm:w-[180px] flex justify-end gap-1.5 sm:gap-2">
+                                                            <button
+                                                                onClick={() => setSelectedListing(listing)}
+                                                                className="px-2 sm:px-3 py-1.5 sm:py-2 border border-border text-xs font-bold uppercase rounded hover:bg-muted/50 hover:border-muted-foreground/50 transition-colors"
+                                                            >
+                                                                View
+                                                            </button>
+                                                            {listing.url && (
+                                                                <a
+                                                                    href={listing.url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="hidden sm:inline-flex px-3 py-2 bg-primary text-primary-foreground text-xs font-bold uppercase rounded hover:bg-primary/90 transition-colors whitespace-nowrap"
+                                                                >
+                                                                    Go to Listing
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })
+                                ) : (
+                                    <div className="p-8 text-center text-muted-foreground text-xs uppercase">
+                                        No listings available
                                     </div>
-                                </div>
-                            </div>
-
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="text-xs uppercase bg-muted/30 text-muted-foreground sticky top-0">
-                                        {table.getHeaderGroups().map(headerGroup => (
-                                            <tr key={headerGroup.id}>
-                                                {headerGroup.headers.map(header => (
-                                                    <th key={header.id} className="px-4 py-3 font-medium border-b border-border whitespace-nowrap">
-                                                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        ))}
-                                    </thead>
-                                    <tbody className="divide-y divide-border/50">
-                                        {isLoadingHistory ? (
-                                            <tr><td colSpan={5} className="p-12 text-center text-muted-foreground animate-pulse">Fetching ledger data...</td></tr>
-                                        ) : table.getRowModel().rows?.length ? (
-                                            table.getRowModel().rows.map(row => (
-                                                <tr
-                                                    key={row.id}
-                                                    className="hover:bg-muted/30 transition-colors cursor-pointer group"
-                                                    onClick={() => setSelectedListing(row.original)}
-                                                >
-                                                    {row.getVisibleCells().map(cell => (
-                                                        <td key={cell.id} className="px-4 py-3">
-                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan={5} className="p-12 text-center text-muted-foreground text-xs uppercase border-dashed">
-                                                    No verified sales recorded in this period.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
+                                )}
                             </div>
 
                             {/* Pagination Controls */}
-                            {table.getPageCount() > 1 && (
-                                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/10">
-                                    <div className="flex-1 flex justify-between sm:hidden">
-                                        <button
-                                            onClick={() => table.previousPage()}
-                                            disabled={!table.getCanPreviousPage()}
-                                            className="relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-muted-foreground bg-card hover:bg-muted/50 disabled:opacity-50"
-                                        >
-                                            Previous
-                                        </button>
-                                        <button
-                                            onClick={() => table.nextPage()}
-                                            disabled={!table.getCanNextPage()}
-                                            className="ml-3 relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-muted-foreground bg-card hover:bg-muted/50 disabled:opacity-50"
-                                        >
-                                            Next
-                                        </button>
-                                    </div>
-                                    <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">
-                                                Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-1">
-                                            <button
-                                                onClick={() => table.previousPage()}
-                                                disabled={!table.getCanPreviousPage()}
-                                                className="px-2 py-1 rounded border border-border bg-card text-xs font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
-                                            >
-                                                <ChevronLeft className="h-4 w-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => table.nextPage()}
-                                                disabled={!table.getCanNextPage()}
-                                                className="px-2 py-1 rounded border border-border bg-card text-xs font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
-                                            >
-                                                <ChevronRight className="h-4 w-4" />
-                                            </button>
-                                        </div>
-                                    </div>
+                            {displayListings.length > 10 && (
+                                <div className="flex items-center justify-center px-4 py-3 border-t border-border bg-muted/10">
+                                    <p className="text-xs text-muted-foreground">
+                                        Showing {displayListings.length} listings
+                                    </p>
                                 </div>
                             )}
+                        </>
+                    )
+                })()}
                         </div>
 
-                    </div>
-                </div>
-            </div>
+                        {/* Similar Cards - at bottom */}
+                        {(similarData?.similar_cards?.length ?? 0) > 0 && (
+                            <SimilarCards
+                                title="Similar Cards"
+                                cards={similarData?.similar_cards ?? []}
+                                isLoading={isLoadingSimilar}
+                            />
+                        )}
 
-            {/* Promotional Banner */}
+                    </div>
+          </CardDetailLayout>
+
+          {/* Promotional Banner */}
             <div className="border-t border-border bg-black py-8 mt-auto">
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
@@ -1788,6 +1941,26 @@ function CardDetail() {
                 />
             )}
 
+            {/* Price Alert Modal */}
+            {card && (
+                <PriceAlertModal
+                    isOpen={showPriceAlertModal}
+                    onClose={() => setShowPriceAlertModal(false)}
+                    cardId={card.id}
+                    cardName={card.name}
+                    currentPrice={card.floor_price || card.latest_price}
+                    onCreateAlert={async (alert) => {
+                        await api.post('price-alerts', {
+                            json: {
+                                card_id: alert.cardId,
+                                target_price: alert.targetPrice,
+                                alert_type: alert.alertType,
+                            }
+                        }).json()
+                    }}
+                />
+            )}
+
             {/* Report Listing Modal */}
             {showReportModal && selectedListing && (
                 <>
@@ -1947,7 +2120,6 @@ function CardDetail() {
                     </div>
                 </>
             )}
-          </div>
 
           {/* Sticky Mobile Price Bar - visible only on mobile */}
           <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border px-4 py-3 flex items-center justify-between z-50">
