@@ -75,6 +75,18 @@ async def lifespan(app: FastAPI):
     logger.info(f"Usage Metering: {'ENABLED' if METERING_AVAILABLE else 'DISABLED'}")
     logger.info("=" * 50)
 
+    # Initialize Sentry error tracking (if configured)
+    if settings.SENTRY_DSN:
+        from app.core.errors import init_sentry
+
+        init_sentry(
+            dsn=settings.SENTRY_DSN,
+            environment=settings.SENTRY_ENVIRONMENT,
+            traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        )
+    else:
+        logger.info("Sentry disabled (SENTRY_DSN not set)")
+
     # Register circuit breaker Discord notifications
     from app.core.circuit_breaker import set_notification_callback
     from app.discord_bot.logger import log_circuit_breaker_change
@@ -153,11 +165,16 @@ origins = list(set([o for o in origins if o]))
 
 # Middleware order matters! They execute in REVERSE order of addition.
 # So the LAST added middleware executes FIRST on the request.
-# Order: CORS -> Proxy -> GZip -> Metering -> AntiScraping
+# Order: CORS -> Proxy -> GZip -> Context -> Metering -> AntiScraping
 
 # Anti-scraping middleware - detects bots, headless browsers, rate limits
 # Protects /api/v1/cards, /api/v1/market, /api/v1/blokpax endpoints
 app.add_middleware(cast(Any, AntiScrapingMiddleware), enabled=True)
+
+# Request context middleware - adds request_id and correlation_id for tracing
+from app.middleware.context import RequestContextMiddleware
+
+app.add_middleware(cast(Any, RequestContextMiddleware))
 
 # API metering middleware - tracks usage for billing (only when SaaS enabled)
 # This is a no-op pass-through when saas/ module is not available
@@ -178,7 +195,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Bot-Warning", "X-Automation-Warning"],
+    expose_headers=["X-Bot-Warning", "X-Automation-Warning", "X-Request-ID", "X-Correlation-ID"],
 )
 
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
@@ -396,3 +413,33 @@ def health_circuits():
         "circuits": breakers_info,
         "all_healthy": all(s == "closed" for s in states.values()),
     }
+
+
+@app.get("/health/unified")
+def health_unified():
+    """
+    Unified health check with threshold-based alerting.
+
+    Aggregates health from all subsystems:
+    - scraper: Data freshness, job success rates
+    - performance: API latency, slow request rate
+    - circuits: Circuit breaker states
+    - database: Connection health
+    - queue: Task queue depth (if enabled)
+
+    Returns:
+    - status: "ok", "warning", or "critical"
+    - components: Per-component health details
+    - timestamp: Check time
+
+    HTTP 200 for ok/warning, 503 for critical.
+    """
+    from fastapi.responses import JSONResponse
+    from app.core.health_check import HealthCheck
+
+    health = HealthCheck.check_overall_health()
+
+    # Return 503 for critical status (for load balancers)
+    status_code = 503 if health["status"] == "critical" else 200
+
+    return JSONResponse(content=health, status_code=status_code)

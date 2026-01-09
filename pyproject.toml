@@ -37,6 +37,8 @@ alembic = "^1.17.2"
 discord-py = ">=2.0"
 numpy = "^2.4.0"
 email-validator = "^2.3.0"
+sentry-sdk = {extras = ["fastapi", "sqlalchemy"], version = "^2.0.0"}
+structlog = "^24.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.1"

@@ -38,7 +38,7 @@ from app.discord_bot.logger import (
     log_warning,
 )
 from app.models.market import MarketPrice
-from app.core.metrics import scraper_metrics
+from app.core.metrics_persistent import persistent_metrics as scraper_metrics
 from app.core.circuit_breaker import CircuitBreakerRegistry
 from app.services.meta_sync import sync_all_meta_status
 from app.services.task_queue import enqueue_task_sync, get_queue_stats_sync, cleanup_old_tasks_sync

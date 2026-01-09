@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     MEMORY_LOG_INTERVAL_SECONDS: int = 0  # Disabled by default
     USE_TASK_QUEUE: bool = False  # Enable task queue mode (requires worker process)
 
+    # Sentry Error Tracking
+    SENTRY_DSN: str = ""  # Empty = disabled. Set to project DSN to enable.
+    SENTRY_ENVIRONMENT: str = "production"  # production, staging, development
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions traced
+
     # Anti-scraping
     ANTI_SCRAPING_STATE_TTL_SECONDS: int = 900
     ANTI_SCRAPING_MAX_TRACKED_IPS: int = 5000
