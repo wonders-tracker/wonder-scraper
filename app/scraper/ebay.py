@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from datetime import datetime, timedelta, timezone
 from dateutil import parser
 import re
@@ -11,6 +11,23 @@ from app.services.ai_extractor import get_ai_extractor
 from app.db import engine
 from app.scraper.blocklist import load_blocklist
 from app.scraper.utils import is_bulk_lot
+
+# Map eBay "Finish" item specific values to our treatment values
+EBAY_FINISH_TO_TREATMENT = {
+    "formless foil": "Formless Foil",
+    "classic foil": "Classic Foil",
+    "stonefoil": "Stonefoil",
+    "stone foil": "Stonefoil",
+    "ocm serialized": "OCM Serialized",
+    "serialized": "OCM Serialized",
+    "classic paper": "Classic Paper",
+    "paper": "Classic Paper",
+    "prerelease": "Prerelease",
+    "pre-release": "Prerelease",
+    "promo": "Promo",
+    "proof": "Proof/Sample",
+    "sample": "Proof/Sample",
+}
 
 STOPWORDS = {
     "the",
@@ -30,6 +47,203 @@ STOPWORDS = {
     "first",
     "existence",
 }
+
+
+def parse_item_specifics(html_content: str) -> dict:
+    """
+    Parse eBay item specifics from a listing detail page HTML.
+
+    eBay item specifics contain structured data like:
+    - Finish: "Formless Foil", "Classic Foil", etc.
+    - Card Number: "AI-361"
+    - Rarity: "Rare", "Mythic"
+    - Condition: "Ungraded - Near mint or better"
+
+    Returns a dict of lowercase field names to values.
+    """
+    soup = BeautifulSoup(html_content, "lxml")
+    specifics = {}
+
+    # Format 1: Modern eBay layout with ux-labels-values
+    for row in soup.select(".ux-labels-values__labels-content, .ux-labels-values"):
+        label_elem = row.select_one(".ux-labels-values__labels")
+        value_elem = row.select_one(".ux-labels-values__values")
+        if label_elem and value_elem:
+            label = label_elem.get_text(strip=True).rstrip(":")
+            value = value_elem.get_text(strip=True)
+            specifics[label.lower()] = value
+
+    # Format 2: dl/dt/dd style
+    for dt in soup.select("dt"):
+        dd = dt.find_next_sibling("dd")
+        if dd:
+            label = dt.get_text(strip=True).rstrip(":")
+            value = dd.get_text(strip=True)
+            specifics[label.lower()] = value
+
+    # Format 3: Table-based specifics (older format)
+    for row in soup.select(".itemAttr tr, .item-specifics tr"):
+        cells = row.select("td, th")
+        if len(cells) >= 2:
+            label = cells[0].get_text(strip=True).rstrip(":")
+            value = cells[1].get_text(strip=True)
+            specifics[label.lower()] = value
+
+    return specifics
+
+
+def parse_seller_from_listing_page(html_content: str) -> Tuple[Optional[str], Optional[int], Optional[float]]:
+    """
+    Parse seller info from an eBay listing detail page HTML.
+
+    Returns: (seller_name, feedback_score, feedback_percent)
+
+    eBay listing pages show seller info in several formats:
+    1. Seller info section with link to seller's store
+    2. Seller card with feedback stats
+    3. Various JSON-LD structured data
+    """
+    import json
+
+    soup = BeautifulSoup(html_content, "lxml")
+
+    seller_name = None
+    feedback_score = None
+    feedback_percent = None
+
+    # Method 1: Look for seller link in various locations
+    # Format: <a href="https://www.ebay.com/usr/seller_name">seller_name</a>
+    seller_patterns = [
+        'a[href*="/usr/"]',
+        'a[href*="/str/"]',  # Store links
+        '.x-sellercard-atf__info a',
+        '.seller-persona a',
+        '.mbg-l a',
+        'a.seller-link',
+    ]
+
+    for pattern in seller_patterns:
+        seller_link = soup.select_one(pattern)
+        if seller_link:
+            href = seller_link.get("href", "")
+            if isinstance(href, list):
+                href = href[0] if href else ""
+            # Extract from /usr/username or /str/storename
+            match = re.search(r"/(?:usr|str)/([^/?]+)", href)
+            if match:
+                seller_name = match.group(1).strip()
+                break
+            # Fallback: use link text if it looks like a username
+            text = seller_link.get_text(strip=True)
+            if text and re.match(r"^[a-zA-Z0-9_\-\.]+$", text):
+                seller_name = text
+                break
+
+    # Method 2: Look for seller info in structured data (JSON-LD)
+    if not seller_name:
+        for script in soup.select('script[type="application/ld+json"]'):
+            try:
+                data = json.loads(script.string or "")
+                if isinstance(data, dict):
+                    # Check for seller in offers
+                    offers = data.get("offers", {})
+                    if isinstance(offers, dict):
+                        seller = offers.get("seller", {})
+                        if isinstance(seller, dict):
+                            seller_name = seller.get("name")
+                            # Sometimes rating is included
+                            rating = seller.get("aggregateRating", {})
+                            if isinstance(rating, dict):
+                                feedback_percent = rating.get("ratingValue")
+                                feedback_score = rating.get("reviewCount")
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+    # Method 3: Look for feedback info in the page
+    # Format: "99.5% positive feedback" or "(1234)" for score
+    if seller_name and not feedback_score:
+        # Look for feedback elements near seller info
+        feedback_patterns = [
+            '.x-sellercard-atf__data-item',
+            '.seller-feedback',
+            '.mbg-l .mbg-nw',
+            '[class*="feedback"]',
+            '.sl-feedback',
+        ]
+
+        for pattern in feedback_patterns:
+            for elem in soup.select(pattern):
+                text = elem.get_text(strip=True)
+
+                # Parse percentage: "99.5% positive" or "100%"
+                pct_match = re.search(r"([\d.]+)%\s*(?:positive)?", text, re.IGNORECASE)
+                if pct_match:
+                    feedback_percent = float(pct_match.group(1))
+
+                # Parse score: "(1234)" or "1.2K" or "3.8K feedback"
+                score_match = re.search(r"\((\d+(?:,\d+)?)\)", text)
+                if score_match:
+                    feedback_score = int(score_match.group(1).replace(",", ""))
+                else:
+                    k_match = re.search(r"([\d.]+)K", text, re.IGNORECASE)
+                    if k_match:
+                        feedback_score = int(float(k_match.group(1)) * 1000)
+
+    # Method 4: Fallback - search entire page for seller username pattern
+    if not seller_name:
+        # Look for common seller info containers
+        for elem in soup.select('.ux-seller-section, .x-sellercard-atf, [data-testid*="seller"]'):
+            text = elem.get_text(" ", strip=True)
+            # Extract first word that looks like a username
+            words = text.split()
+            for word in words[:5]:  # Check first 5 words
+                clean_word = re.sub(r"[^\w\-\.]", "", word)
+                if len(clean_word) >= 3 and re.match(r"^[a-zA-Z0-9_\-\.]+$", clean_word):
+                    # Avoid common false positives
+                    if clean_word.lower() not in {"seller", "feedback", "positive", "items", "sold", "new", "visit"}:
+                        seller_name = clean_word
+                        break
+            if seller_name:
+                break
+
+    return seller_name, feedback_score, feedback_percent
+
+
+def extract_treatment_from_specifics(specifics: dict) -> Optional[str]:
+    """
+    Extract treatment from eBay item specifics.
+
+    Looks for the "Finish" field first, then falls back to other fields
+    that might contain treatment information.
+
+    Returns treatment string or None if not found.
+    """
+    # Look for Finish field first (most reliable)
+    finish = specifics.get("finish", "").lower()
+    if finish:
+        for key, treatment in EBAY_FINISH_TO_TREATMENT.items():
+            if key in finish:
+                return treatment
+
+    # Check other potential fields
+    for field in ["card treatment", "variant", "parallel", "type"]:
+        value = specifics.get(field, "").lower()
+        if value:
+            for key, treatment in EBAY_FINISH_TO_TREATMENT.items():
+                if key in value:
+                    return treatment
+
+    # Check features field for foil mentions
+    features = specifics.get("features", "").lower()
+    if "foil" in features:
+        if "formless" in features:
+            return "Formless Foil"
+        elif "stone" in features:
+            return "Stonefoil"
+        else:
+            return "Classic Foil"
+
+    return None
 
 
 def score_sealed_match(title: str, card_name: str, product_type: str) -> int:
