@@ -14,6 +14,7 @@ import { Tooltip } from '../ui/tooltip'
 import { SimpleDropdown } from '../ui/dropdown'
 import { Button } from '../ui/button'
 import { TreatmentBadge, getTreatmentTextColor } from '../TreatmentBadge'
+import { PlatformIcon } from '../ui/platform-badge'
 import {
   ChevronDown,
   ExternalLink,
@@ -29,16 +30,6 @@ import {
   Bell
 } from 'lucide-react'
 
-// Platform icons as simple colored badges
-const PlatformIcon = ({ platform }: { platform: 'ebay' | 'blokpax' }) => (
-  <div className={cn(
-    "w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold",
-    platform === 'ebay' && "bg-[#e53238]/10 text-[#e53238]",
-    platform === 'blokpax' && "bg-cyan-500/10 text-cyan-400"
-  )}>
-    {platform === 'ebay' ? 'e' : 'B'}
-  </div>
-)
 
 /** Treatment option for the dropdown selector */
 export type TreatmentOption = {
@@ -86,6 +77,8 @@ export type PriceBoxProps = {
     seller_count?: number
     floor_by_variant?: Record<string, number>
     lowest_ask_by_variant?: Record<string, number>
+    /** Product type - Single, Box, Pack, Bundle, etc. */
+    product_type?: string
   }
   /** Currently selected treatment filter */
   treatmentFilter: string
@@ -99,6 +92,8 @@ export type PriceBoxProps = {
   isLoggedIn: boolean
   /** Callback for opening portfolio modal */
   onAddToPortfolio: () => void
+  /** Persistent added state: 'owned' | 'wanted' | null */
+  addedToPortfolio?: 'owned' | 'wanted' | null
   /** Callback for viewing listings */
   onViewListings?: () => void
   /** Slot for MetaVote component (only for singles) */
@@ -153,6 +148,7 @@ export function PriceBox({
   pricingFMP,
   isLoggedIn,
   onAddToPortfolio,
+  addedToPortfolio,
   onViewListings,
   metaVoteSlot,
   isLoading = false,
@@ -278,6 +274,12 @@ export function PriceBox({
     ? filteredMarketPrice
     : (pricingFMP || card.vwap)
 
+  // Detect sealed/non-single products for conditional UI
+  const isSealed = card.product_type && card.product_type !== 'Single'
+
+  // For sealed products with no 30D sales but has max_price, they have historical sales
+  const hasHistoricalSales = volume30d === 0 && maxPrice && maxPrice > 0
+
   return (
     <div className={cn(
       "border border-border rounded-lg bg-card",
@@ -350,20 +352,23 @@ export function PriceBox({
         {/* Secondary Metrics - Horizontal on tablet+, 2x2 grid on mobile */}
         <div className="pt-3 border-t border-border/50">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-            {/* Market Price or Price Range (prefers sales range for NFT items) */}
+            {/* Market Price or Price Range - contextual for sealed products */}
             <div>
               <div className="flex items-center gap-1 mb-1">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
                   {marketPrice ? 'Market Price'
                     : salesPriceRange ? 'Sales Range'
                     : salesCount === 1 ? 'Last Sale'
-                    : priceRange ? 'Price Range'
+                    : priceRange ? 'Listing Range'
+                    : isSealed ? 'Listing Price'
                     : 'Market Price'}
                 </span>
                 <Tooltip content={
                   marketPrice ? "Weighted algorithm based on recent sales"
                     : salesPriceRange ? `Price range from ${salesCount} sales`
                     : salesCount === 1 ? "Price from single recorded sale"
+                    : priceRange ? "Price range from active listings"
+                    : isSealed ? "Based on current listings (no sales data yet)"
                     : "Price range from active listings"
                 }>
                   <Info className="w-3 h-3 text-muted-foreground cursor-help" aria-hidden="true" />
@@ -372,7 +377,11 @@ export function PriceBox({
               {isLoading ? (
                 <div className="h-5 w-16 bg-muted animate-pulse rounded" />
               ) : isLoggedIn ? (
-                <span className="font-mono font-bold text-brand-300">
+                <span className={cn(
+                  "font-mono font-bold",
+                  // Use muted color when showing listing-based price (no sales data)
+                  !marketPrice && !salesPriceRange && salesCount === 0 ? "text-muted-foreground" : "text-brand-300"
+                )}>
                   {marketPrice ? (
                     `$${marketPrice.toFixed(2)}`
                   ) : salesPriceRange ? (
@@ -381,6 +390,8 @@ export function PriceBox({
                     `$${card.latest_price.toFixed(2)}`
                   ) : priceRange ? (
                     `$${priceRange[0].toFixed(0)}-${priceRange[1].toFixed(0)}`
+                  ) : isSealed && listingsCount > 0 ? (
+                    'See listings'
                   ) : '---'}
                 </span>
               ) : (
@@ -390,11 +401,17 @@ export function PriceBox({
               )}
             </div>
 
-            {/* 30D Volume */}
+            {/* 30D Volume - Shows contextual messaging for sealed products */}
             <div>
               <div className="flex items-center gap-1 mb-1">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">30D Volume</span>
-                <Tooltip content="Number of sales in the last 30 days">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  {volume30d === 0 && isSealed ? 'Sales' : '30D Volume'}
+                </span>
+                <Tooltip content={
+                  volume30d === 0 && isSealed
+                    ? "Sealed products often have sparse sales data"
+                    : "Number of sales in the last 30 days"
+                }>
                   <Info className="w-3 h-3 text-muted-foreground cursor-help" aria-hidden="true" />
                 </Tooltip>
               </div>
@@ -402,26 +419,48 @@ export function PriceBox({
                 <div className="h-5 w-10 bg-muted animate-pulse rounded" />
               ) : (
                 <span className={cn("font-mono font-bold", volume30d === 0 && "text-muted-foreground")}>
-                  {volume30d > 0 ? volume30d.toLocaleString() : 'No sales'}
+                  {volume30d > 0 ? (
+                    volume30d.toLocaleString()
+                  ) : hasHistoricalSales ? (
+                    'Low volume'
+                  ) : isSealed ? (
+                    'No recorded sales'
+                  ) : (
+                    'No sales'
+                  )}
                 </span>
               )}
             </div>
 
-            {/* Highest Sale or Highest Ask */}
+            {/* Highest Sale or Highest Ask - contextual for sealed products */}
             <div>
               <div className="flex items-center gap-1 mb-1">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  {maxPrice ? 'Highest Sale' : highestAsk ? 'Highest Ask' : 'Highest Sale'}
+                  {maxPrice ? 'Highest Sale'
+                    : highestAsk ? 'Highest Ask'
+                    : isSealed && listingsCount > 0 ? 'Top Listing'
+                    : 'Highest Sale'}
                 </span>
-                <Tooltip content={maxPrice ? "Highest recorded sale price" : "Highest current asking price"}>
+                <Tooltip content={
+                  maxPrice ? "Highest recorded sale price"
+                    : highestAsk ? "Highest current asking price"
+                    : isSealed ? "No recorded sales for this product yet"
+                    : "Highest recorded sale price"
+                }>
                   <Info className="w-3 h-3 text-muted-foreground cursor-help" aria-hidden="true" />
                 </Tooltip>
               </div>
               {isLoading ? (
                 <div className="h-5 w-16 bg-muted animate-pulse rounded" />
               ) : (
-                <span className="font-mono font-bold">
-                  {maxPrice ? `$${maxPrice.toFixed(2)}` : highestAsk ? `$${highestAsk.toFixed(2)}` : '---'}
+                <span className={cn(
+                  "font-mono font-bold",
+                  !maxPrice && !highestAsk && "text-muted-foreground"
+                )}>
+                  {maxPrice ? `$${maxPrice.toFixed(2)}`
+                    : highestAsk ? `$${highestAsk.toFixed(2)}`
+                    : isSealed ? 'N/A'
+                    : '---'}
                 </span>
               )}
             </div>
@@ -565,18 +604,32 @@ export function PriceBox({
       {/* Actions - mt-auto to push to bottom */}
       <div className="p-4 border-t border-border space-y-2 mt-auto">
         {/* Portfolio Button */}
-        <Button
-          variant="primary"
-          size="lg"
-          className={cn(
-            "w-full uppercase tracking-wide transition-all",
-            showAddedFeedback && "bg-green-600 hover:bg-green-600"
-          )}
-          onClick={handleAddToPortfolio}
-          leftIcon={showAddedFeedback ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-        >
-          {showAddedFeedback ? 'Added!' : 'Add to Portfolio'}
-        </Button>
+        {addedToPortfolio ? (
+          <div
+            className={cn(
+              "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold text-sm uppercase tracking-wide",
+              addedToPortfolio === 'wanted'
+                ? "bg-pink-500/20 text-pink-500 border border-pink-500/30"
+                : "bg-green-500/20 text-green-500 border border-green-500/30"
+            )}
+          >
+            {addedToPortfolio === 'wanted' ? <Heart className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+            {addedToPortfolio === 'wanted' ? 'Added to Watchlist' : 'Added to Portfolio'}
+          </div>
+        ) : (
+          <Button
+            variant="primary"
+            size="lg"
+            className={cn(
+              "w-full uppercase tracking-wide transition-all",
+              showAddedFeedback && "bg-green-600 hover:bg-green-600"
+            )}
+            onClick={handleAddToPortfolio}
+            leftIcon={showAddedFeedback ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          >
+            {showAddedFeedback ? 'Added!' : 'Add to Portfolio'}
+          </Button>
+        )}
 
         {/* Buy Now CTA */}
         {buyNowUrl ? (

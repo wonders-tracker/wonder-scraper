@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Calendar, RefreshCw } from 'lucide-react'
 import { siteConfig } from '~/config/site'
+import { slugify } from '@/lib/formatters'
 import { MarketStatsRow } from '~/components/blog/MarketStatsRow'
 import { MoversTable } from '~/components/blog/MoversTable'
 import { VolumeLeadersTable } from '~/components/blog/VolumeLeadersTable'
@@ -180,7 +181,7 @@ function MarketInsightsPage() {
                   <Link
                     key={card.card_id}
                     to="/cards/$cardId"
-                    params={{ cardId: String(card.card_id) }}
+                    params={{ cardId: slugify(card.name) }}
                     className="flex items-center justify-between hover:opacity-80"
                   >
                     <span>{card.name}</span>
@@ -198,7 +199,7 @@ function MarketInsightsPage() {
                   <Link
                     key={card.card_id}
                     to="/cards/$cardId"
-                    params={{ cardId: String(card.card_id) }}
+                    params={{ cardId: slugify(card.name) }}
                     className="flex items-center justify-between hover:opacity-80"
                   >
                     <span>{card.name}</span>

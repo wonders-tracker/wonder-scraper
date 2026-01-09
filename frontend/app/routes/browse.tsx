@@ -559,6 +559,7 @@ function BrowsePage() {
               <ProductCard
                 key={card.id}
                 id={card.id}
+                slug={card.slug}
                 name={card.name}
                 setName={card.set_name}
                 price={card.floor_price ?? card.latest_price}

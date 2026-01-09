@@ -14,6 +14,9 @@ import { DollarSignIcon, type DollarSignIconHandle } from '~/components/ui/dolla
 import clsx from 'clsx'
 import { Tooltip } from '../components/ui/tooltip'
 import { SimpleDropdown } from '../components/ui/dropdown'
+import { Button, IconButton, CloseButton } from '../components/ui/button'
+import { RarityBadge } from '../components/ui/rarity-badge'
+import { PlatformBadge } from '../components/ui/platform-badge'
 import { useTimePeriod } from '../context/TimePeriodContext'
 import { useCurrentUser } from '../context/UserContext'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
@@ -21,6 +24,7 @@ import { TreatmentBadge } from '../components/TreatmentBadge'
 import { MobileCardList, type MobileCardItem } from '../components/ui/mobile-card-list'
 import { ProductListItem, ProductListItemSkeleton } from '../components/ui/product-list-item'
 import { ProductsGallery, Hero, CategoryCards } from '../components/home'
+import { HomeTableSkeleton, MobileCardListSkeleton, ProductGallerySkeleton } from '../components/ui/skeleton'
 
 // Reduced from 200 to 50 for faster initial load - users can paginate for more
 // Balance between completeness and speed - 200 cards loads in ~3s
@@ -410,17 +414,7 @@ function Home() {
                     </Tooltip>
                     {isSingle && rarity && (
                       <Tooltip content={rarity}>
-                          <span className={clsx(
-                            "shrink-0 text-[8px] lg:text-[10px] font-bold uppercase px-1 py-0.5 rounded",
-                            rarity === 'Mythic' ? 'text-amber-900 bg-amber-400' :
-                            rarity === 'Legendary' ? 'text-orange-900 bg-orange-400' :
-                            rarity === 'Epic' ? 'text-purple-900 bg-purple-400' :
-                            rarity === 'Rare' ? 'text-blue-900 bg-blue-400' :
-                            rarity === 'Uncommon' ? 'text-brand-800 bg-brand-300' :
-                            'text-zinc-900 bg-zinc-400'
-                          )}>
-                            {rarity}
-                          </span>
+                          <RarityBadge rarity={rarity} variant="solid" size="xs" className="shrink-0" />
                       </Tooltip>
                     )}
                     {isSingle && row.original.orbital && (
@@ -856,10 +850,12 @@ function Home() {
         {/* Category Cards - always visible */}
         <CategoryCards />
 
-        {/* Products Gallery - always visible above the table */}
-        {cards && cards.length > 0 && (
-          <ProductsGallery cards={cards} isLoading={isLoading} />
-        )}
+        {/* Products Gallery - show skeleton when loading, data when ready */}
+        {isLoading ? (
+          <ProductGallerySkeleton />
+        ) : cards && cards.length > 0 ? (
+          <ProductsGallery cards={cards} isLoading={false} />
+        ) : null}
 
         {/* Main Data Table */}
         <div className="border border-border rounded-lg bg-card overflow-hidden flex-1 flex flex-col min-h-[400px]">
@@ -1200,10 +1196,16 @@ function Home() {
                 {/* Tab Content - Products */}
                 <div className={activeTab === 'products' ? 'flex-1 flex flex-col' : 'hidden'}>
                   {isLoading ? (
-                      <div className="p-12 text-center">
-                          <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-                          <div className="text-xs uppercase text-muted-foreground animate-pulse">Loading market stream...</div>
-                      </div>
+                      <>
+                          {/* Mobile skeleton */}
+                          <div className="md:hidden">
+                              <MobileCardListSkeleton count={8} />
+                          </div>
+                          {/* Desktop skeleton */}
+                          <div className="hidden md:block">
+                              <HomeTableSkeleton rows={10} />
+                          </div>
+                      </>
                   ) : (
                       <>
                           {/* Mobile: Card list view */}
@@ -1307,17 +1309,8 @@ function Home() {
                                                   </div>
                                                   {/* Rarity */}
                                                   {card.rarity_name && (
-                                                      <div className="text-sm text-muted-foreground mt-0.5">
-                                                          <span className={clsx(
-                                                              card.rarity_name === 'Mythic' && 'text-amber-400',
-                                                              card.rarity_name === 'Legendary' && 'text-orange-400',
-                                                              card.rarity_name === 'Epic' && 'text-purple-400',
-                                                              card.rarity_name === 'Rare' && 'text-blue-400',
-                                                              card.rarity_name === 'Uncommon' && 'text-brand-300',
-                                                              card.rarity_name === 'Common' && 'text-muted-foreground'
-                                                          )}>
-                                                              {card.rarity_name}
-                                                          </span>
+                                                      <div className="mt-0.5">
+                                                          <RarityBadge rarity={card.rarity_name} size="sm" />
                                                       </div>
                                                   )}
                                                   {/* Listings count */}
@@ -1351,23 +1344,25 @@ function Home() {
                                   Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, table.getFilteredRowModel().rows.length)} of {table.getFilteredRowModel().rows.length} assets
                               </div>
                               <div className="flex items-center gap-2">
-                                  <button
+                                  <IconButton
+                                      icon={<ChevronLeft />}
+                                      aria-label="Previous page"
+                                      variant="outline-subtle"
+                                      size="icon-sm"
                                       onClick={() => table.previousPage()}
                                       disabled={!table.getCanPreviousPage()}
-                                      className="px-3 py-1.5 text-xs font-bold uppercase border border-border rounded hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                      <ChevronLeft className="w-3.5 h-3.5" />
-                                  </button>
+                                  />
                                   <div className="text-xs font-mono">
                                       Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
                                   </div>
-                                  <button
+                                  <IconButton
+                                      icon={<ChevronRight />}
+                                      aria-label="Next page"
+                                      variant="outline-subtle"
+                                      size="icon-sm"
                                       onClick={() => table.nextPage()}
                                       disabled={!table.getCanNextPage()}
-                                      className="px-3 py-1.5 text-xs font-bold uppercase border border-border rounded hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                      <ChevronRight className="w-3.5 h-3.5" />
-                                  </button>
+                                  />
                               </div>
                           </div>
                       </>
@@ -1413,15 +1408,7 @@ function Home() {
                                                   </h3>
                                                   {/* Platform badge */}
                                                   <div className="flex items-center gap-2 mt-1">
-                                                      <span className={clsx(
-                                                          "text-[10px] font-bold uppercase px-1.5 py-0.5 rounded",
-                                                          listing.platform === 'ebay' ? 'bg-blue-500/20 text-blue-400' :
-                                                          listing.platform === 'blokpax' ? 'bg-purple-500/20 text-purple-400' :
-                                                          listing.platform === 'opensea' ? 'bg-cyan-500/20 text-cyan-400' :
-                                                          'bg-muted text-muted-foreground'
-                                                      )}>
-                                                          {listing.platform}
-                                                      </span>
+                                                      <PlatformBadge platform={listing.platform} size="sm" />
                                                       <span className="text-xs text-muted-foreground">{listing.product_type}</span>
                                                   </div>
                                                   {/* Treatment */}
@@ -1705,23 +1692,25 @@ function Home() {
                                   )}
                               </div>
                               <div className="flex items-center gap-2">
-                                  <button
+                                  <IconButton
+                                      icon={<ChevronLeft />}
+                                      aria-label="Previous page"
+                                      variant="ghost"
+                                      size="icon-sm"
                                       onClick={() => setListingPage(p => Math.max(0, p - 1))}
                                       disabled={listingPage === 0}
-                                      className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
-                                  >
-                                      <ChevronLeft className="w-4 h-4" />
-                                  </button>
+                                  />
                                   <span className="text-xs text-muted-foreground">
                                       Page {listingPage + 1} of {Math.ceil((listingsData?.total || 0) / LISTINGS_PER_PAGE)}
                                   </span>
-                                  <button
+                                  <IconButton
+                                      icon={<ChevronRight />}
+                                      aria-label="Next page"
+                                      variant="ghost"
+                                      size="icon-sm"
                                       onClick={() => setListingPage(p => p + 1)}
                                       disabled={!listingsData?.hasMore}
-                                      className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
-                                  >
-                                      <ChevronRight className="w-4 h-4" />
-                                  </button>
+                                  />
                               </div>
                           </div>
                       </>

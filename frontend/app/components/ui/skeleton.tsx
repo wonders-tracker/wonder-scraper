@@ -191,6 +191,114 @@ export function SkeletonCard({
 }
 
 /**
+ * Home page table skeleton - matches market table structure
+ */
+export function HomeTableSkeleton({
+  rows = 10,
+  showHeader = true,
+  className
+}: SkeletonProps & { rows?: number; showHeader?: boolean }) {
+  return (
+    <div className={cn('animate-pulse', className)}>
+      {/* Table header */}
+      {showHeader && (
+        <div className="flex items-center gap-4 px-4 py-2 border-b border-border bg-muted/30">
+          <Skeleton className="h-4 w-8" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-16 ml-auto" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+      )}
+      {/* Table rows */}
+      <div className="divide-y divide-border/50">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 px-4 py-3">
+            {/* Rank */}
+            <Skeleton className="h-4 w-6" />
+            {/* Name */}
+            <div className="flex items-center gap-3 flex-1">
+              <Skeleton className="h-10 w-10 rounded" />
+              <div className="space-y-1">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </div>
+            {/* Price */}
+            <Skeleton className="h-5 w-16" />
+            {/* Change */}
+            <Skeleton className="h-4 w-14" />
+            {/* Volume */}
+            <Skeleton className="h-4 w-12" />
+            {/* Listings */}
+            <Skeleton className="h-4 w-10" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Mobile card list skeleton
+ */
+export function MobileCardListSkeleton({
+  count = 8,
+  className
+}: SkeletonProps & { count?: number }) {
+  return (
+    <div className={cn('space-y-3 p-3', className)}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 p-3 border border-border rounded-lg animate-pulse">
+          {/* Card image */}
+          <Skeleton className="h-16 w-12 rounded shrink-0" />
+          {/* Card info */}
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-12" />
+            </div>
+          </div>
+          {/* Price */}
+          <div className="text-right space-y-1">
+            <Skeleton className="h-5 w-16 ml-auto" />
+            <Skeleton className="h-3 w-12 ml-auto" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Product gallery skeleton - horizontal scroll of cards
+ */
+export function ProductGallerySkeleton({ className }: SkeletonProps) {
+  return (
+    <div className={cn('mb-6', className)}>
+      {/* Tab buttons */}
+      <div className="flex items-center gap-2 mb-3">
+        <Skeleton className="h-8 w-28 rounded" />
+        <Skeleton className="h-8 w-24 rounded" />
+        <Skeleton className="h-8 w-20 rounded" />
+      </div>
+      {/* Horizontal card scroll */}
+      <div className="flex gap-3 overflow-hidden">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="w-[140px] shrink-0 animate-pulse">
+            <Skeleton className="aspect-[2.5/3.5] w-full rounded-lg mb-2" />
+            <Skeleton className="h-4 w-3/4 mb-1" />
+            <Skeleton className="h-5 w-1/2" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
  * Page-level skeleton for card detail page
  * Matches the CardDetailLayout structure
  */

@@ -16,10 +16,13 @@ import {
   TrendingDown,
   TrendingUp,
   Check,
-  AlertCircle
+  AlertCircle,
+  ShoppingCart,
+  Receipt
 } from 'lucide-react'
 
 export type PriceAlertType = 'below' | 'above'
+export type ListingType = 'active' | 'sold'
 
 export type PriceAlertModalProps = {
   isOpen: boolean
@@ -31,6 +34,7 @@ export type PriceAlertModalProps = {
     cardId: number
     targetPrice: number
     alertType: PriceAlertType
+    listingType: ListingType
   }) => Promise<void>
   /** Whether the create action is in progress */
   isCreating?: boolean
@@ -46,6 +50,7 @@ export function PriceAlertModal({
   isCreating = false
 }: PriceAlertModalProps) {
   const [alertType, setAlertType] = useState<PriceAlertType>('below')
+  const [listingType, setListingType] = useState<ListingType>('active')
   const [targetPrice, setTargetPrice] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -141,7 +146,8 @@ export function PriceAlertModal({
       await onCreateAlert({
         cardId,
         targetPrice: price,
-        alertType
+        alertType,
+        listingType
       })
       setSuccess(true)
       setTimeout(() => {
@@ -150,7 +156,7 @@ export function PriceAlertModal({
     } catch (err) {
       setError('Failed to create alert. Please try again.')
     }
-  }, [targetPrice, alertType, currentPrice, cardId, onCreateAlert, onClose])
+  }, [targetPrice, alertType, listingType, currentPrice, cardId, onCreateAlert, onClose])
 
   if (!isOpen) return null
 
@@ -199,6 +205,41 @@ export function PriceAlertModal({
                 (Current: ${currentPrice.toFixed(2)})
               </span>
             )}
+          </div>
+
+          {/* Listing Type Toggle */}
+          <div>
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-2 block">
+              Monitor listings
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setListingType('active')}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded border transition-all text-sm",
+                  listingType === 'active'
+                    ? "bg-blue-500/10 border-blue-500/50 text-blue-400"
+                    : "border-border hover:border-muted-foreground/50"
+                )}
+              >
+                <ShoppingCart className="w-4 h-4" />
+                Active
+              </button>
+              <button
+                type="button"
+                onClick={() => setListingType('sold')}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded border transition-all text-sm",
+                  listingType === 'sold'
+                    ? "bg-purple-500/10 border-purple-500/50 text-purple-400"
+                    : "border-border hover:border-muted-foreground/50"
+                )}
+              >
+                <Receipt className="w-4 h-4" />
+                Sold
+              </button>
+            </div>
           </div>
 
           {/* Alert Type Toggle */}
@@ -304,7 +345,7 @@ export function PriceAlertModal({
           {success && (
             <div className="flex items-center gap-2 text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded p-3">
               <Check className="w-4 h-4 flex-shrink-0" />
-              Alert created! You'll be notified when the price {alertType === 'below' ? 'drops below' : 'rises above'} ${targetPrice}
+              Alert created! You'll be notified when {listingType} listings {alertType === 'below' ? 'drop below' : 'rise above'} ${targetPrice}
             </div>
           )}
         </div>

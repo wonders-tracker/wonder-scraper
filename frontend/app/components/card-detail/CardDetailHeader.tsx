@@ -2,8 +2,8 @@
  * CardDetailHeader - Top navigation bar for card detail page
  *
  * Layout:
- * - Left: Back to Dashboard button
- * - Center: Breadcrumbs (Dashboard > Set > Card)
+ * - Left: Back button
+ * - Center: Breadcrumbs (Home > Browse > Set > Card)
  * - Right: Watchlist and Price Alert buttons with text
  *
  * @see tasks.json E7-U5
@@ -11,7 +11,7 @@
 
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
-import { ArrowLeft, Heart, Bell, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Heart, Bell, ChevronRight, Home } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Tooltip } from '../ui/tooltip'
 
@@ -20,6 +20,10 @@ export type CardDetailHeaderProps = {
   cardName: string
   /** Set name for breadcrumb */
   setName?: string
+  /** Product type for browse filter */
+  productType?: string
+  /** Rarity name for browse filter */
+  rarityName?: string
   /** Whether user is logged in */
   isLoggedIn: boolean
   /** Whether card is in user's watchlist */
@@ -37,6 +41,8 @@ export type CardDetailHeaderProps = {
 export function CardDetailHeader({
   cardName,
   setName,
+  productType,
+  rarityName,
   isLoggedIn,
   isInWatchlist = false,
   onToggleWatchlist,
@@ -49,9 +55,9 @@ export function CardDetailHeader({
       "flex items-center justify-between gap-2 py-3 overflow-hidden",
       className
     )}>
-      {/* Left: Back to Dashboard */}
+      {/* Left: Back to Browse */}
       <Link
-        to="/"
+        to="/browse"
         className={cn(
           "flex items-center gap-1.5 px-2 py-1.5",
           "text-xs font-semibold uppercase tracking-wider",
@@ -62,7 +68,7 @@ export function CardDetailHeader({
         )}
       >
         <ArrowLeft className="w-3.5 h-3.5" />
-        <span className="hidden md:inline">Dashboard</span>
+        <span className="hidden md:inline">Browse</span>
       </Link>
 
       {/* Center: Breadcrumbs - hidden on small screens */}
@@ -70,14 +76,39 @@ export function CardDetailHeader({
         className="hidden md:flex items-center gap-1 text-xs overflow-hidden min-w-0 flex-1 justify-center"
         aria-label="Breadcrumb"
       >
+        {/* Home */}
+        <Link
+          to="/"
+          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+        >
+          <Home className="w-3.5 h-3.5" />
+        </Link>
+        <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+
+        {/* Browse */}
+        <Link
+          to="/browse"
+          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+        >
+          Browse
+        </Link>
+
+        {/* Set Name (links to browse with set filter) */}
         {setName && (
           <>
-            <span className="text-muted-foreground truncate max-w-[100px] lg:max-w-[150px]">
-              {setName}
-            </span>
             <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+            <Link
+              to="/browse"
+              search={{ set: setName }}
+              className="text-muted-foreground hover:text-foreground transition-colors truncate max-w-[100px] lg:max-w-[150px]"
+            >
+              {setName}
+            </Link>
           </>
         )}
+
+        {/* Card Name (current page - not a link) */}
+        <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
         <span className="font-semibold text-foreground truncate max-w-[120px] lg:max-w-[200px]">
           {cardName}
         </span>

@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { BarChart3 } from 'lucide-react'
+import { slugify } from '@/lib/formatters'
 
 interface VolumeLeader {
   card_id: number
@@ -27,7 +28,7 @@ export function VolumeLeadersTable({ leaders }: VolumeLeadersTableProps) {
           <Link
             key={leader.card_id}
             to="/cards/$cardId"
-            params={{ cardId: String(leader.card_id) }}
+            params={{ cardId: slugify(leader.name) }}
             className="block px-4 py-3 hover:bg-muted/30 transition-colors"
           >
             <div className="flex items-center justify-between mb-2">

@@ -165,3 +165,15 @@ export function getPriceChangeDirection(value: number | null | undefined): "up" 
   if (value === null || value === undefined || value === 0) return "neutral"
   return value > 0 ? "up" : "down"
 }
+
+/**
+ * Convert a card name to a URL-friendly slug
+ * e.g., "Dragonmaster Cai" -> "dragonmaster-cai"
+ */
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')  // Replace non-alphanumeric with hyphens
+    .replace(/^-+|-+$/g, '')       // Trim leading/trailing hyphens
+    .replace(/-+/g, '-')           // Collapse multiple hyphens
+}

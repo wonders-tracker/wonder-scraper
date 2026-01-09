@@ -15,7 +15,7 @@
 
 import { Link, useNavigate } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
-import { formatPrice } from '@/lib/formatters'
+import { formatPrice, slugify } from '@/lib/formatters'
 import { Package } from 'lucide-react'
 import { useState } from 'react'
 
@@ -132,7 +132,7 @@ export function ProductCard({
   return (
     <Link
       to="/cards/$cardId"
-      params={{ cardId: slug || String(id) }}
+      params={{ cardId: slug || slugify(name) }}
       className={cn(
         // Fixed width based on size
         sizeClasses[size],

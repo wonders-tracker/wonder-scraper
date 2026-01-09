@@ -1,5 +1,6 @@
 import { Outlet, createRootRoute, Link, useNavigate, useLocation } from '@tanstack/react-router'
 import { LayoutDashboard, LineChart, Wallet, Server, LogOut, Shield, Newspaper } from 'lucide-react'
+import { Toaster } from 'sonner'
 // Animated icons for micro-interactions
 import { MenuIcon, type MenuIconHandle } from '~/components/ui/menu'
 import { XIcon, type XIconHandle } from '~/components/ui/x'
@@ -366,6 +367,18 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
       <>
       {/* Vercel Analytics */}
       <Analytics />
+      {/* Toast notifications */}
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          className: 'font-mono text-sm',
+          style: {
+            background: 'hsl(var(--card))',
+            border: '1px solid hsl(var(--border))',
+            color: 'hsl(var(--foreground))',
+          },
+        }}
+      />
 
       <div className="min-h-screen bg-background text-foreground antialiased font-mono flex flex-col">
         {/* Upgrade Banner for non-pro users */}

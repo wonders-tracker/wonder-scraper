@@ -14,7 +14,7 @@
  */
 
 import { cn } from '@/lib/utils'
-import { Plus, ExternalLink, Check } from 'lucide-react'
+import { Plus, ExternalLink, Check, Heart } from 'lucide-react'
 import { Button } from '../ui/button'
 
 export type MobileStickyActionsProps = {
@@ -22,8 +22,10 @@ export type MobileStickyActionsProps = {
   isVisible?: boolean
   /** Callback for Add to Portfolio */
   onAddToPortfolio: () => void
-  /** Whether showing "Added!" feedback */
+  /** Whether showing temporary "Added!" feedback */
   showAddedFeedback?: boolean
+  /** Persistent added state: 'owned' | 'wanted' | null */
+  addedToPortfolio?: 'owned' | 'wanted' | null
   /** Buy now URL (eBay, Blokpax, etc.) */
   buyNowUrl?: string
   /** Lowest buy now price */
@@ -40,12 +42,16 @@ export function MobileStickyActions({
   isVisible = false,
   onAddToPortfolio,
   showAddedFeedback = false,
+  addedToPortfolio = null,
   buyNowUrl,
   lowestBuyNowPrice,
   listingsCount = 0,
   onViewListings,
   className,
 }: MobileStickyActionsProps) {
+  // Determine button state: persistent added > temporary feedback > default
+  const isAdded = addedToPortfolio !== null
+  const isWanted = addedToPortfolio === 'wanted'
   return (
     <div
       className={cn(
@@ -65,18 +71,32 @@ export function MobileStickyActions({
     >
       <div className="flex items-center gap-2 px-4 py-3 max-w-[1400px] mx-auto">
         {/* Add to Portfolio Button */}
-        <Button
-          variant="outline"
-          size="md"
-          className={cn(
-            "flex-1 uppercase tracking-wide text-xs font-bold transition-all min-h-[44px]",
-            showAddedFeedback && "bg-green-600 hover:bg-green-600 text-white border-green-600"
-          )}
-          onClick={onAddToPortfolio}
-          leftIcon={showAddedFeedback ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-        >
-          {showAddedFeedback ? 'Added!' : 'Add to Portfolio'}
-        </Button>
+        {isAdded ? (
+          <div
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold text-xs uppercase tracking-wide min-h-[44px]",
+              isWanted
+                ? "bg-pink-500/20 text-pink-500 border border-pink-500/30"
+                : "bg-green-500/20 text-green-500 border border-green-500/30"
+            )}
+          >
+            {isWanted ? <Heart className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+            {isWanted ? 'Watchlisted' : 'Added to Portfolio'}
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="md"
+            className={cn(
+              "flex-1 uppercase tracking-wide text-xs font-bold transition-all min-h-[44px]",
+              showAddedFeedback && "bg-green-600 hover:bg-green-600 text-white border-green-600"
+            )}
+            onClick={onAddToPortfolio}
+            leftIcon={showAddedFeedback ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          >
+            {showAddedFeedback ? 'Added!' : 'Add to Portfolio'}
+          </Button>
+        )}
 
         {/* Buy Now CTA */}
         {buyNowUrl ? (

@@ -2,7 +2,7 @@ import { createFileRoute, useParams, useNavigate, Link, useSearch } from '@tanst
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../utils/auth'
 import { analytics } from '~/services/analytics'
-import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink, Calendar, Flag, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, TrendingUp, Wallet, Filter, ChevronLeft, ChevronRight, X, ExternalLink, Calendar, Flag, AlertTriangle, Check, Heart } from 'lucide-react'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getPaginationRowModel, getFilteredRowModel } from '@tanstack/react-table'
 import { useMemo, useState, useEffect, lazy, Suspense, useRef } from 'react'
 import { Tooltip } from '../components/ui/tooltip'
@@ -49,6 +49,7 @@ type CardDetail = {
   orbital_color?: string // Hex color e.g., #a07836
   card_number?: string // e.g., "143"
   cardeio_image_url?: string // Official high-res card image
+  image_url?: string // Blob storage image (fallback for sealed products)
   // Calculated fields for display
   market_cap?: number
 }
@@ -315,6 +316,7 @@ function CardDetail() {
   const [reportSubmitted, setReportSubmitted] = useState(false)
   const [showSoldListings, setShowSoldListings] = useState(false)
   const [mobileAddedFeedback, setMobileAddedFeedback] = useState(false)
+  const [addedToPortfolio, setAddedToPortfolio] = useState<'owned' | 'wanted' | null>(null)
 
   const { user: currentUser } = useCurrentUser()
   const isLoggedIn = !!currentUser
@@ -1188,6 +1190,7 @@ function CardDetail() {
               setTimeout(() => setMobileAddedFeedback(false), 2000)
             }}
             showAddedFeedback={mobileAddedFeedback}
+            addedToPortfolio={addedToPortfolio}
             buyNowUrl={lowestActiveListing?.url ?? undefined}
             lowestBuyNowPrice={lowestActiveListing?.price ?? null}
             listingsCount={card.inventory || 0}
@@ -1226,6 +1229,7 @@ function CardDetail() {
                   pricingFMP={pricingData?.fair_market_price ?? undefined}
                   isLoggedIn={isLoggedIn}
                   onAddToPortfolio={() => setShowAddModal(true)}
+                  addedToPortfolio={addedToPortfolio}
                   metaVoteSlot={!isSealed ? <MetaVote cardId={card.id} /> : undefined}
                   productDetails={{
                     cardNumber: card.card_number,
@@ -1848,6 +1852,7 @@ function CardDetail() {
                     }}
                     isOpen={showAddModal}
                     onClose={() => setShowAddModal(false)}
+                    onSuccess={(mode) => setAddedToPortfolio(mode)}
                 />
             )}
 
@@ -1865,6 +1870,7 @@ function CardDetail() {
                                 card_id: alert.cardId,
                                 target_price: alert.targetPrice,
                                 alert_type: alert.alertType,
+                                listing_type: alert.listingType,
                             }
                         }).json()
                     }}
@@ -2039,13 +2045,22 @@ function CardDetail() {
                       ${card.floor_price?.toFixed(2) || card.lowest_ask?.toFixed(2) || '---'}
                   </div>
               </div>
-              <button
-                  onClick={() => setShowAddModal(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded font-bold text-sm uppercase hover:bg-primary/90 transition-colors"
-              >
-                  <Wallet className="w-4 h-4" />
-                  Track
-              </button>
+              {addedToPortfolio ? (
+                  <div className={`flex items-center gap-2 px-4 py-2.5 rounded font-bold text-sm uppercase ${
+                      addedToPortfolio === 'wanted' ? 'bg-pink-500/20 text-pink-500' : 'bg-green-500/20 text-green-500'
+                  }`}>
+                      {addedToPortfolio === 'wanted' ? <Heart className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                      {addedToPortfolio === 'wanted' ? 'Watchlisted' : 'Added'}
+                  </div>
+              ) : (
+                  <button
+                      onClick={() => setShowAddModal(true)}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded font-bold text-sm uppercase hover:bg-primary/90 transition-colors"
+                  >
+                      <Wallet className="w-4 h-4" />
+                      Track
+                  </button>
+              )}
           </div>
       </div>
   )
