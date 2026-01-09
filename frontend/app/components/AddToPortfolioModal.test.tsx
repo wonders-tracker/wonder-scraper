@@ -541,7 +541,9 @@ describe('AddToPortfolioModal Component', () => {
         </TestWrapper>
       )
 
-      const priceInput = screen.getByRole('spinbutton')
+      // Price input is the first number input (step="0.01")
+      const priceInput = document.querySelector('input[type="number"][step="0.01"]') as HTMLInputElement
+      expect(priceInput).toBeTruthy()
       // Clear and type new value - need to triple click to select all
       await user.tripleClick(priceInput)
       await user.keyboard('150.50')
@@ -625,7 +627,9 @@ describe('AddToPortfolioModal Component', () => {
         </TestWrapper>
       )
 
-      const closeButton = screen.getByRole('button', { name: '' }) // X button has no text
+      // X button is a button with text-muted-foreground class in header
+      const closeButton = document.querySelector('button.text-muted-foreground') as HTMLButtonElement
+      expect(closeButton).toBeTruthy()
       await user.click(closeButton)
 
       expect(onClose).toHaveBeenCalled()
