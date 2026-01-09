@@ -29,6 +29,7 @@ from app.scraper.blokpax import (
 from app.scraper.opensea import (
     OPENSEA_WOTF_COLLECTIONS,
     scrape_opensea_listings_to_db,
+    scrape_opensea_sales_to_db,
 )
 from app.discord_bot.logger import (
     log_scrape_start,
@@ -43,6 +44,7 @@ from app.core.circuit_breaker import CircuitBreakerRegistry
 from app.services.meta_sync import sync_all_meta_status
 from app.services.task_queue import enqueue_task_sync, get_queue_stats_sync, cleanup_old_tasks_sync
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 scheduler = AsyncIOScheduler()
 
@@ -502,13 +504,14 @@ async def _job_update_blokpax_data_impl():
         log_scrape_error("Blokpax Scheduled", str(e))
         errors += 1
 
-    # ===== OpenSea Active Listings =====
+    # ===== OpenSea Listings + Sales =====
     opensea_listings = 0
+    opensea_sales = 0
     if not opensea_circuit.allow_request():
         print("[OpenSea] Circuit breaker OPEN, skipping")
     else:
         try:
-            print(f"[{datetime.now(timezone.utc)}] Scraping OpenSea Active Listings...")
+            print(f"[{datetime.now(timezone.utc)}] Scraping OpenSea Listings + Sales...")
 
             # Ensure browser is in clean state before OpenSea (may have stale state from eBay)
             try:
@@ -528,10 +531,20 @@ async def _job_update_blokpax_data_impl():
                             print(f"[OpenSea] Card '{card_name}' not found in DB, skipping")
                             continue
 
+                        card_id = ensure_int(card.id)
+
+                        # Scrape active listings
                         scraped, saved = await scrape_opensea_listings_to_db(
-                            session, collection_slug, ensure_int(card.id), card_name
+                            session, collection_slug, card_id, card_name
                         )
                         opensea_listings += saved
+
+                        # Scrape sales history (price history for NFTs)
+                        sales_scraped, sales_saved = await scrape_opensea_sales_to_db(
+                            session, collection_slug, card_id, card_name
+                        )
+                        opensea_sales += sales_saved
+
                         opensea_circuit.record_success()
 
                     except Exception as e:
@@ -540,7 +553,7 @@ async def _job_update_blokpax_data_impl():
                         errors += 1
                         continue
 
-            print(f"[OpenSea] Active listings: {opensea_listings} synced to marketprice")
+            print(f"[OpenSea] Active listings: {opensea_listings}, Sales: {opensea_sales} synced to marketprice")
 
         except Exception as e:
             print(f"[OpenSea] Fatal error: {e}")
@@ -555,6 +568,7 @@ async def _job_update_blokpax_data_impl():
                 pass
 
     total_listings += opensea_listings
+    total_sales += opensea_sales
 
     duration = time.time() - start_time
     total_processed = len(WOTF_STOREFRONTS) + len(OPENSEA_WOTF_COLLECTIONS)
@@ -845,7 +859,76 @@ async def job_check_price_alerts():
                         session.add(alert)
 
             session.commit()
-            print(f"[Alerts] Sent {sent_count} price alerts")
+            print(f"[Alerts] Sent {sent_count} watchlist price alerts")
+
+        # Also check PriceAlert model alerts
+        from app.models.price_alert import PriceAlert, AlertStatus, AlertType
+        from app.services.floor_price import get_floor_price_service
+
+        with Session(engine) as session:
+            # Get all active PriceAlert alerts
+            price_alerts = (
+                session.execute(
+                    select(PriceAlert).where(
+                        PriceAlert.status == AlertStatus.ACTIVE,
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+            if not price_alerts:
+                print("[Alerts] No active PriceAlert alerts")
+                return
+
+            floor_service = get_floor_price_service(session)
+            price_alert_sent = 0
+
+            for alert in price_alerts:
+                card = session.get(Card, alert.card_id)
+                user = session.get(User, alert.user_id)
+
+                if not card or not user:
+                    continue
+
+                # Get current floor price
+                floor_result = floor_service.get_floor_price(alert.card_id, treatment=alert.treatment, days=30)
+                current_price = floor_result.price
+
+                if current_price is None:
+                    continue
+
+                # Check if alert should trigger
+                should_trigger = False
+                if alert.alert_type == AlertType.BELOW and current_price <= alert.target_price:
+                    should_trigger = True
+                elif alert.alert_type == AlertType.ABOVE and current_price >= alert.target_price:
+                    should_trigger = True
+
+                if should_trigger:
+                    name = user.username or user.email.split("@")[0]
+                    alert_data = {
+                        "card_name": card.name,
+                        "card_slug": card.slug,
+                        "alert_type": alert.alert_type.value,
+                        "target_price": alert.target_price,
+                        "current_price": current_price,
+                        "treatment": alert.treatment or "Any Treatment",
+                    }
+
+                    success = send_price_alert(user.email, name, alert_data)
+                    if success:
+                        price_alert_sent += 1
+                        # Mark alert as triggered
+                        alert.status = AlertStatus.TRIGGERED
+                        alert.triggered_at = datetime.now(timezone.utc)
+                        alert.triggered_price = current_price
+                        alert.notification_sent = True
+                        alert.notification_sent_at = datetime.now(timezone.utc)
+                        session.add(alert)
+
+            session.commit()
+            print(f"[Alerts] Sent {price_alert_sent} PriceAlert notifications")
 
     except Exception as e:
         print(f"[Alerts] Error checking price alerts: {e}")
@@ -1397,6 +1480,110 @@ async def job_cleanup_task_queue():
         log_scrape_error("Task Queue Cleanup", str(e))
 
 
+async def job_generate_weekly_blog_post():
+    """
+    Generate and save weekly movers blog post to database.
+    Runs every Monday at 10:00 AM UTC (after weekly report emails).
+
+    Saves to the blog_post table with:
+    - Market summary and volume trends
+    - Top gainers and losers with sparklines
+    - Daily activity breakdown
+    - Rarity and treatment analysis
+    - AI-generated market analysis (if OPENROUTER_API_KEY is set)
+
+    The frontend fetches posts via /api/v1/blog/posts endpoint.
+    """
+    print(f"[{datetime.now(timezone.utc)}] Generating Weekly Blog Post...")
+
+    try:
+        # Import the generation function from the script
+        import sys
+        import re
+        import yaml
+        script_dir = Path(__file__).parent.parent.parent / "scripts"
+        if str(script_dir) not in sys.path:
+            sys.path.insert(0, str(script_dir))
+
+        from generate_weekly_movers_post import generate_mdx_post
+        from app.models.blog_post import BlogPost
+
+        # Generate for the current week (ending yesterday)
+        content, date_string = generate_mdx_post(date_str=None, use_ai=True)
+
+        # Parse frontmatter from the MDX content
+        frontmatter_match = re.match(r'^---\n(.*?)\n---\n', content, re.DOTALL)
+        if frontmatter_match:
+            frontmatter = yaml.safe_load(frontmatter_match.group(1))
+            mdx_content = content[frontmatter_match.end():]
+        else:
+            frontmatter = {}
+            mdx_content = content
+
+        slug = frontmatter.get("slug", f"weekly-movers-{date_string}")
+        title = frontmatter.get("title", f"Weekly Market Report: {date_string}")
+        description = frontmatter.get("description", "")
+        category = frontmatter.get("category", "analysis")
+        tags = frontmatter.get("tags", ["market-report", "weekly-movers"])
+        author = frontmatter.get("author", "system")
+        read_time = frontmatter.get("readTime", 3)
+
+        # Save to database (upsert - update if exists)
+        with Session(engine) as session:
+            existing = session.exec(
+                select(BlogPost).where(BlogPost.slug == slug)
+            ).first()
+
+            if existing:
+                # Update existing post
+                existing.title = title
+                existing.description = description
+                existing.content = mdx_content
+                existing.category = category
+                existing.tags = tags
+                existing.author = author
+                existing.read_time = read_time
+                existing.updated_at = datetime.now(timezone.utc)
+                session.add(existing)
+                action = "Updated"
+            else:
+                # Create new post
+                post = BlogPost(
+                    slug=slug,
+                    title=title,
+                    description=description,
+                    content=mdx_content,
+                    category=category,
+                    tags=tags,
+                    author=author,
+                    read_time=read_time,
+                    is_published=True,
+                )
+                session.add(post)
+                action = "Created"
+
+            session.commit()
+
+        print(f"[Blog] {action} weekly movers post: {slug}")
+
+        # Log success to Discord
+        from app.discord_bot.logger import log_info
+        log_info(
+            "📝 Weekly Blog Post Generated",
+            f"Weekly movers report for {date_string} has been saved to database.\n\n"
+            f"**Slug:** `{slug}`\n"
+            f"**Action:** {action}\n"
+            "Available via `/api/v1/blog/posts/{slug}`"
+        )
+
+    except ImportError as e:
+        print(f"[Blog] Import error (missing dependencies?): {e}")
+        log_scrape_error("Weekly Blog Post", f"Import error: {e}")
+    except Exception as e:
+        print(f"[Blog] Error generating weekly blog post: {e}")
+        log_scrape_error("Weekly Blog Post", str(e))
+
+
 def start_scheduler():
     # Job configuration for durability:
     # - max_instances=1: Prevent overlapping runs
@@ -1477,6 +1664,18 @@ def start_scheduler():
         job_send_weekly_reports,
         CronTrigger(day_of_week="mon", hour=9, minute=30),
         id="job_send_weekly_reports",
+        max_instances=1,
+        misfire_grace_time=7200,  # 2 hours
+        coalesce=True,
+        replace_existing=True,
+    )
+
+    # Weekly blog post generation on Monday at 10:00 AM UTC (after weekly reports)
+    # Creates MDX file with full market report for the week
+    scheduler.add_job(
+        job_generate_weekly_blog_post,
+        CronTrigger(day_of_week="mon", hour=10, minute=0),
+        id="job_generate_weekly_blog_post",
         max_instances=1,
         misfire_grace_time=7200,  # 2 hours
         coalesce=True,
@@ -1582,6 +1781,7 @@ def start_scheduler():
     print("  - job_send_daily_digests (Email): 9:15 UTC daily, 1h grace")
     print("  - job_send_personal_welcome_emails (Email): 10:00 UTC daily, 1h grace")
     print("  - job_send_weekly_reports (Email): Mon 9:30 UTC, 2h grace")
+    print("  - job_generate_weekly_blog_post (Blog): Mon 10:00 UTC, 2h grace")
     print("  - job_check_price_alerts (Email): 30m interval, 15m grace")
     print("  - job_seller_priority_queue (Seller): 1h interval, 30m grace")
     print("  - job_backfill_seller_data (Seller): 4h interval, 1h grace")

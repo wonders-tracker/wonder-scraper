@@ -6,6 +6,8 @@ from .analytics import PageView
 from .meta_vote import CardMetaVote, CardMetaVoteReaction
 from .scrape_task import ScrapeTask, TaskStatus
 from .circuit_breaker_state import CircuitBreakerState
+from .price_alert import PriceAlert, AlertType, AlertStatus
+from .blog_post import BlogPost
 
 __all__ = [
     "Card",
@@ -23,4 +25,8 @@ __all__ = [
     "ScrapeTask",
     "TaskStatus",
     "CircuitBreakerState",
+    "PriceAlert",
+    "AlertType",
+    "AlertStatus",
+    "BlogPost",
 ]
