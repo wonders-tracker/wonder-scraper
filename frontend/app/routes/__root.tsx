@@ -1,5 +1,5 @@
 import { Outlet, createRootRoute, Link, useNavigate, useLocation } from '@tanstack/react-router'
-import { LayoutDashboard, LineChart, Wallet, Server, LogOut, Shield, Newspaper } from 'lucide-react'
+import { LayoutDashboard, LineChart, Wallet, Server, LogOut, Shield, Newspaper, Grid3X3 } from 'lucide-react'
 import { Toaster } from 'sonner'
 // Animated icons for micro-interactions
 import { MenuIcon, type MenuIconHandle } from '~/components/ui/menu'
@@ -432,6 +432,13 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
           {/* Desktop Nav Links */}
           <nav className="hidden md:flex items-center gap-1 shrink-0">
             <Link
+              to="/browse"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors [&.active]:text-primary [&.active]:bg-primary/5"
+            >
+              <Grid3X3 className="w-4 h-4" />
+              <span className="hidden lg:inline">Browse</span>
+            </Link>
+            <Link
               to="/portfolio"
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors [&.active]:text-primary [&.active]:bg-primary/5"
             >
@@ -487,6 +494,14 @@ function RootLayout({ navigate, mobileMenuOpen, setMobileMenuOpen }: { navigate:
               >
                 <LayoutDashboard className="w-4 h-4" />
                 <span>Dashboard</span>
+              </Link>
+              <Link
+                to="/browse"
+                className="flex items-center gap-3 px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors text-sm font-bold uppercase [&.active]:text-primary [&.active]:bg-primary/5"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Grid3X3 className="w-4 h-4" />
+                <span>Browse</span>
               </Link>
               <Link
                 to="/portfolio"
