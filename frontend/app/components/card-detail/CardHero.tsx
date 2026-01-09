@@ -144,6 +144,8 @@ export type CardHeroProps = {
     orbital_color?: string
     card_number?: string
     cardeio_image_url?: string
+    /** Blob storage image URL (fallback for sealed products that don't have cardeio_image_url) */
+    image_url?: string
     /** Card text/description (flavor text or rules text) */
     card_text?: string
     /** Artist credit */
@@ -175,6 +177,10 @@ export function CardHero({
 
   const treatmentTier = getTreatmentTier(selectedTreatment)
   const rarityEffects = getRarityEffects(card.rarity_name, isNFT)
+
+  // Use cardeio_image_url (official high-res) first, fallback to image_url (blob storage)
+  // Sealed products don't have cardeio_image_url but do have image_url from scraping
+  const imageUrl = card.cardeio_image_url || card.image_url
 
   // Render rarity-based overlay effects (base layer - always visible)
   const renderRarityOverlay = () => {
@@ -369,14 +375,14 @@ export function CardHero({
           aria-label={`Card image for ${card.name}`}
         >
         {/* Loading skeleton */}
-        {!imageLoaded && !imageError && card.cardeio_image_url && (
+        {!imageLoaded && !imageError && imageUrl && (
           <div className="absolute inset-0 bg-muted animate-pulse" />
         )}
 
-        {/* Main image */}
-        {card.cardeio_image_url && !imageError ? (
+        {/* Main image - uses cardeio_image_url (official) or image_url (blob storage fallback) */}
+        {imageUrl && !imageError ? (
           <img
-            src={card.cardeio_image_url}
+            src={imageUrl}
             alt={card.name}
             className={cn(
               "w-full h-full object-contain transition-all duration-300",
@@ -402,7 +408,7 @@ export function CardHero({
         {renderShaderOverlay()}
 
         {/* Zoom indicator */}
-        {isZoomed && card.cardeio_image_url && !imageError && (
+        {isZoomed && imageUrl && !imageError && (
           <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-[10px] text-white/80 uppercase tracking-wider z-30">
             Zoomed
           </div>

@@ -43,8 +43,10 @@ USING_NEON_POOLER = settings.NEON_POOLER or _is_neon_pooler(DATABASE_URL)
 # - Zero overflow (prevent over-connection to pooler's limited slots)
 # - Shorter recycle time (pooler manages long-lived connections)
 if USING_NEON_POOLER:
-    _pool_size = 2  # Minimal local pool - Neon pooler handles scaling
-    _max_overflow = 0  # No overflow - prevents QueuePool exhaustion
+    # Increased from 2 to handle concurrent requests better
+    # Card detail page alone makes 8+ concurrent API calls
+    _pool_size = 5  # Local pool - external pooler still handles scaling
+    _max_overflow = 3  # Allow some overflow for burst traffic
     _pool_recycle = 180  # 3 min - pooler handles persistence
     logger.info(f"Using Neon Pooler - pool_size={_pool_size}, max_overflow={_max_overflow}")
 else:

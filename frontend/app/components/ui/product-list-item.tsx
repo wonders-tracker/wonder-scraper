@@ -7,6 +7,7 @@
 
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
+import { RarityBadge } from './rarity-badge'
 
 export type ProductListItemProps = {
   id: number
@@ -79,17 +80,7 @@ export function ProductListItem({
           {cardNumber && <span>, #{cardNumber}</span>}
         </div>
         {rarity && (
-          <span className={cn(
-            "inline-block text-[10px] font-bold uppercase mt-1",
-            rarity === 'Mythic' && 'text-amber-400',
-            rarity === 'Legendary' && 'text-orange-400',
-            rarity === 'Epic' && 'text-purple-400',
-            rarity === 'Rare' && 'text-blue-400',
-            rarity === 'Uncommon' && 'text-brand-300',
-            rarity === 'Common' && 'text-muted-foreground'
-          )}>
-            {rarity}
-          </span>
+          <RarityBadge rarity={rarity} size="sm" className="mt-1" />
         )}
         {productType && productType !== 'Single' && (
           <span className="inline-block ml-2 text-[10px] font-bold uppercase text-cyan-400">

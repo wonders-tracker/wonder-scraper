@@ -23,6 +23,7 @@ from app.api import (
     market,
     meta,
     portfolio,
+    price_alerts,
     users,
     watchlist,
     webhooks,
@@ -228,6 +229,7 @@ app.include_router(billing.router, prefix=settings.API_V1_STR, tags=["billing"])
 app.include_router(webhooks.router, prefix=settings.API_V1_STR, tags=["webhooks"])
 app.include_router(watchlist.router, prefix=f"{settings.API_V1_STR}/watchlist", tags=["watchlist"])
 app.include_router(blog.router, prefix=f"{settings.API_V1_STR}/blog", tags=["blog"])
+app.include_router(price_alerts.router, prefix=f"{settings.API_V1_STR}/price-alerts", tags=["price-alerts"])
 
 
 @app.get("/")
