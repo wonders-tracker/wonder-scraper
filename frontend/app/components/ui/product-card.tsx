@@ -99,6 +99,7 @@ export type ProductCardProps = {
 export function ProductCard({
   id,
   name,
+  slug,
   setName,
   price,
   listingsCount,
@@ -131,7 +132,7 @@ export function ProductCard({
   return (
     <Link
       to="/cards/$cardId"
-      params={{ cardId: String(id) }}
+      params={{ cardId: slug || String(id) }}
       className={cn(
         // Fixed width based on size
         sizeClasses[size],

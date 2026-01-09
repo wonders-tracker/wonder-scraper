@@ -130,15 +130,14 @@ export function CategoryCards({ categories = DEFAULT_CATEGORIES, className }: Ca
 function CategoryCardItem({ category }: { category: CategoryCard }) {
   const Icon = category.icon
 
-  // Build the link with search params
-  const searchString = category.searchParams
-    ? '?' + new URLSearchParams(category.searchParams).toString()
-    : ''
+  // Build the full URL with search params
+  const fullHref = category.searchParams
+    ? `${category.href}?${new URLSearchParams(category.searchParams).toString()}`
+    : category.href
 
   return (
     <Link
-      to={category.href}
-      search={category.searchParams}
+      to={fullHref}
       className={cn(
         'snap-start flex-shrink-0',
         'w-[120px] sm:w-[140px]',

@@ -270,6 +270,7 @@ export function ProductsGallery({ cards, isLoading = false, className }: Product
               <div key={card.id} className="snap-start">
                 <ProductCard
                   id={card.id}
+                  slug={card.slug}
                   name={card.name}
                   setName={card.set_name}
                   price={

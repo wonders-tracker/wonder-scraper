@@ -181,6 +181,7 @@ export function SimilarCards({
                 <ProductCard
                   id={card.id}
                   name={card.name}
+                  slug={card.slug}
                   treatment={showTreatment ? card.treatment : undefined}
                   price={card.floor_price ?? card.lowest_ask}
                   listingsCount={card.inventory}
