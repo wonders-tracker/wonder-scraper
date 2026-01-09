@@ -23,6 +23,63 @@ from app.core.config import settings
 resend.api_key = settings.RESEND_API_KEY
 
 
+# =============================================================================
+# REUSABLE EMAIL COMPONENTS - Mobile-First, Data Visualization
+# =============================================================================
+
+
+def _email_wrapper(content: str, title: str = "WONDERSTRACKER") -> str:
+    """Wrap email content in table-based layout that works in all email clients."""
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: 'Courier New', Courier, monospace; background-color: #111; margin: 0; padding: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #111;">
+        <tr>
+            <td align="center" style="padding: 32px 16px;">
+                <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #1a1a1a; border: 1px solid #333;">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 24px 28px; border-bottom: 1px solid #333;">
+                            <table cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="width: 36px; height: 36px; background-color: #fff; text-align: center; vertical-align: middle; font-size: 18px; font-weight: bold; color: #111;">W</td>
+                                    <td style="padding-left: 14px; font-size: 11px; font-weight: bold; letter-spacing: 3px; color: #888; vertical-align: middle;">{title}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 28px;">
+                            {content}
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 20px 28px; border-top: 1px solid #333; background-color: #151515;">
+                            <p style="margin: 0; font-size: 10px; letter-spacing: 1px; color: #666;">WONDERSTRACKER</p>
+                            <p style="margin: 8px 0 0 0;">
+                                <a href="{settings.FRONTEND_URL}/profile" style="color: #7dd3a8; font-size: 11px; text-decoration: none;">Manage preferences</a>
+                                <span style="color: #444; margin: 0 8px;">|</span>
+                                <a href="{settings.FRONTEND_URL}/unsubscribe" style="color: #666; font-size: 11px; text-decoration: none;">Unsubscribe</a>
+                            </p>
+                            <p style="margin: 12px 0 0 0; font-size: 9px; color: #444; line-height: 1.5;">
+                                WondersTracker · Los Angeles, CA · You're receiving this because you signed up for market updates.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+
+
 def _send_email(params: Dict[str, Any]) -> Any:
     """Wrapper for resend.Emails.send with proper typing."""
     return resend.Emails.send(cast(Any, params))
@@ -567,169 +624,111 @@ def send_api_key_approved_email(to_email: str, user_name: str, api_key: str) -> 
 
 
 def send_daily_market_digest(to_email: str, user_name: str, market_data: Dict[str, Any]) -> bool:
-    """
-    Send daily market digest email with key market stats.
-
-    market_data should include:
-    - total_sales: int
-    - total_volume: float
-    - top_gainers: List[Dict] with name, price, change_percent
-    - top_losers: List[Dict] with name, price, change_percent
-    - hot_deals: List[Dict] with name, price, floor_price
-    - market_sentiment: str ('bullish', 'bearish', 'neutral')
-    """
+    """Send daily market digest email. Table-based layout for email client compatibility."""
     if not settings.RESEND_API_KEY:
         print("[Email] Skipping daily digest - RESEND_API_KEY not configured")
         return False
 
-    # Build gainers/losers rows
-    gainers_html = ""
-    for card in market_data.get("top_gainers", [])[:5]:
-        change = card.get("change_percent", 0)
-        gainers_html += f"""
-        <tr>
-            <td style="padding: 8px 0; color: #fafafa; font-size: 14px;">{card.get('name', 'Unknown')}</td>
-            <td style="padding: 8px 0; color: #fafafa; font-size: 14px; text-align: right;">${card.get('price', 0):.2f}</td>
-            <td style="padding: 8px 0; color: #4ade80; font-size: 14px; text-align: right;">+{change:.1f}%</td>
-        </tr>
-        """
-
-    losers_html = ""
-    for card in market_data.get("top_losers", [])[:5]:
-        change = card.get("change_percent", 0)
-        losers_html += f"""
-        <tr>
-            <td style="padding: 8px 0; color: #fafafa; font-size: 14px;">{card.get('name', 'Unknown')}</td>
-            <td style="padding: 8px 0; color: #fafafa; font-size: 14px; text-align: right;">${card.get('price', 0):.2f}</td>
-            <td style="padding: 8px 0; color: #f87171; font-size: 14px; text-align: right;">{change:.1f}%</td>
-        </tr>
-        """
-
-    # Hot deals section
-    deals_html = ""
-    for deal in market_data.get("hot_deals", [])[:3]:
-        discount = (
-            ((deal.get("floor_price", 0) - deal.get("price", 0)) / deal.get("floor_price", 1)) * 100
-            if deal.get("floor_price")
-            else 0
-        )
-        deals_html += f"""
-        <div style="background-color: #1e3a1e; border: 1px solid #166534; border-radius: 4px; padding: 12px; margin-bottom: 8px;">
-            <div style="color: #fafafa; font-size: 14px; font-weight: 500;">{deal.get('name', 'Unknown')}</div>
-            <div style="color: #4ade80; font-size: 13px; margin-top: 4px;">
-                ${deal.get('price', 0):.2f} <span style="color: #71717a;">(Floor: ${deal.get('floor_price', 0):.2f})</span>
-                <span style="color: #4ade80; font-weight: bold;"> -{discount:.0f}%</span>
-            </div>
-        </div>
-        """
-
+    total_sales = market_data.get("total_sales", 0)
+    total_volume = market_data.get("total_volume", 0)
     sentiment = market_data.get("market_sentiment", "neutral")
-    sentiment_color = "#4ade80" if sentiment == "bullish" else "#f87171" if sentiment == "bearish" else "#fbbf24"
-    sentiment_icon = "📈" if sentiment == "bullish" else "📉" if sentiment == "bearish" else "➡️"
+
+    # Build gainers rows
+    gainers = market_data.get("top_gainers", [])[:5]
+    gainers_rows = ""
+    for card in gainers:
+        change = card.get("change_percent", 0)
+        price = card.get("price", 0)
+        gainers_rows += f"""<tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #fff; font-size: 13px;">{card.get("name", "Unknown")}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #888; font-size: 12px; text-align: right; width: 70px;">${price:.2f}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #7dd3a8; font-size: 13px; font-weight: bold; text-align: right; width: 60px;">+{change:.1f}%</td>
+        </tr>"""
+
+    # Build losers rows
+    losers = market_data.get("top_losers", [])[:5]
+    losers_rows = ""
+    for card in losers:
+        change = card.get("change_percent", 0)
+        price = card.get("price", 0)
+        losers_rows += f"""<tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #fff; font-size: 13px;">{card.get("name", "Unknown")}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #888; font-size: 12px; text-align: right; width: 70px;">${price:.2f}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #ef4444; font-size: 13px; font-weight: bold; text-align: right; width: 60px;">{change:.1f}%</td>
+        </tr>"""
+
+    # Build deals rows
+    deals = market_data.get("hot_deals", [])[:3]
+    deals_rows = ""
+    for deal in deals:
+        floor = deal.get("floor_price", 0)
+        price = deal.get("price", 0)
+        deals_rows += f"""<tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #fff; font-size: 13px;">{deal.get("name", "Unknown")}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #7dd3a8; font-size: 13px; font-weight: bold; text-align: right; width: 70px;">${price:.2f}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #888; font-size: 12px; text-align: right; width: 80px;">floor ${floor:.2f}</td>
+        </tr>"""
+
+    content = f"""
+        <!-- Hero Stats -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            <tr>
+                <td style="padding: 20px; background: #222; border: 1px solid #333;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="text-align: center; padding: 0 10px; border-right: 1px solid #444;">
+                                <p style="margin: 0; color: #888; font-size: 10px; letter-spacing: 2px;">VOLUME</p>
+                                <p style="margin: 8px 0 0 0; color: #fff; font-size: 28px; font-weight: bold;">${total_volume:,.0f}</p>
+                            </td>
+                            <td style="text-align: center; padding: 0 10px; border-right: 1px solid #444;">
+                                <p style="margin: 0; color: #888; font-size: 10px; letter-spacing: 2px;">SALES</p>
+                                <p style="margin: 8px 0 0 0; color: #fff; font-size: 28px; font-weight: bold;">{total_sales}</p>
+                            </td>
+                            <td style="text-align: center; padding: 0 10px;">
+                                <p style="margin: 0; color: #888; font-size: 10px; letter-spacing: 2px;">SENTIMENT</p>
+                                <p style="margin: 8px 0 0 0; color: #7dd3a8; font-size: 14px; font-weight: bold;">{sentiment.upper()}</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <!-- Gainers -->
+        <p style="margin: 0 0 12px 0; color: #888; font-size: 10px; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 8px;">TOP GAINERS</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            {gainers_rows if gainers_rows else '<tr><td style="color: #666; font-size: 12px; padding: 12px 0;">No significant gainers today</td></tr>'}
+        </table>
+
+        <!-- Losers -->
+        <p style="margin: 0 0 12px 0; color: #888; font-size: 10px; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 8px;">TOP LOSERS</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            {losers_rows if losers_rows else '<tr><td style="color: #666; font-size: 12px; padding: 12px 0;">No significant losers today</td></tr>'}
+        </table>
+
+        <!-- Deals -->
+        {f'''<p style="margin: 0 0 12px 0; color: #888; font-size: 10px; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 8px;">BELOW FLOOR</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            {deals_rows}
+        </table>''' if deals_rows else ''}
+
+        <!-- CTA -->
+        <table cellpadding="0" cellspacing="0">
+            <tr>
+                <td style="background: #fff; padding: 12px 24px;">
+                    <a href="{settings.FRONTEND_URL}/market" style="color: #111; font-size: 11px; font-weight: bold; letter-spacing: 2px; text-decoration: none;">VIEW MARKET →</a>
+                </td>
+            </tr>
+        </table>
+    """
 
     try:
         _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
-                "subject": f"Daily Market Digest - {market_data.get('total_sales', 0)} Sales Today",
-                "html": f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0a0a0a; color: #fafafa; margin: 0; padding: 40px 20px;">
-    <div style="max-width: 600px; margin: 0 auto; background-color: #18181b; border-radius: 8px; border: 1px solid #27272a; overflow: hidden;">
-        <!-- Header -->
-        <div style="background-color: #000; padding: 30px; text-align: center; border-bottom: 1px solid #27272a;">
-            <div style="display: inline-block; width: 50px; height: 50px; background-color: #fff; line-height: 50px; font-size: 28px; font-weight: bold; color: #000;">W</div>
-            <h1 style="margin: 15px 0 0 0; font-size: 24px; font-weight: bold; letter-spacing: 2px;">DAILY DIGEST</h1>
-        </div>
-
-        <!-- Content -->
-        <div style="padding: 40px 30px;">
-            <p style="color: #a1a1aa; line-height: 1.6; margin: 0 0 25px 0;">
-                Hey {user_name}, here's your daily market summary for Wonders of the First.
-            </p>
-
-            <!-- Market Overview -->
-            <div style="display: flex; gap: 15px; margin-bottom: 30px;">
-                <div style="flex: 1; background-color: #27272a; border-radius: 6px; padding: 20px; text-align: center;">
-                    <div style="color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Sales</div>
-                    <div style="color: #fafafa; font-size: 28px; font-weight: bold; margin-top: 8px;">{market_data.get('total_sales', 0)}</div>
-                </div>
-                <div style="flex: 1; background-color: #27272a; border-radius: 6px; padding: 20px; text-align: center;">
-                    <div style="color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Volume</div>
-                    <div style="color: #fafafa; font-size: 28px; font-weight: bold; margin-top: 8px;">${market_data.get('total_volume', 0):,.0f}</div>
-                </div>
-                <div style="flex: 1; background-color: #27272a; border-radius: 6px; padding: 20px; text-align: center;">
-                    <div style="color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Sentiment</div>
-                    <div style="color: {sentiment_color}; font-size: 20px; font-weight: bold; margin-top: 8px;">{sentiment_icon} {sentiment.upper()}</div>
-                </div>
-            </div>
-
-            <!-- Top Gainers -->
-            <h3 style="margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #4ade80;">📈 Top Gainers</h3>
-            <div style="background-color: #27272a; border-radius: 6px; padding: 15px 20px; margin-bottom: 25px;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr>
-                            <th style="padding: 8px 0; color: #71717a; font-size: 11px; text-transform: uppercase; text-align: left;">Card</th>
-                            <th style="padding: 8px 0; color: #71717a; font-size: 11px; text-transform: uppercase; text-align: right;">Price</th>
-                            <th style="padding: 8px 0; color: #71717a; font-size: 11px; text-transform: uppercase; text-align: right;">Change</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {gainers_html if gainers_html else '<tr><td colspan="3" style="padding: 15px 0; color: #71717a; text-align: center;">No significant gainers today</td></tr>'}
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Top Losers -->
-            <h3 style="margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #f87171;">📉 Top Losers</h3>
-            <div style="background-color: #27272a; border-radius: 6px; padding: 15px 20px; margin-bottom: 25px;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr>
-                            <th style="padding: 8px 0; color: #71717a; font-size: 11px; text-transform: uppercase; text-align: left;">Card</th>
-                            <th style="padding: 8px 0; color: #71717a; font-size: 11px; text-transform: uppercase; text-align: right;">Price</th>
-                            <th style="padding: 8px 0; color: #71717a; font-size: 11px; text-transform: uppercase; text-align: right;">Change</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {losers_html if losers_html else '<tr><td colspan="3" style="padding: 15px 0; color: #71717a; text-align: center;">No significant losers today</td></tr>'}
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Hot Deals -->
-            {f'''
-            <h3 style="margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #fbbf24;">🔥 Hot Deals (Below Floor)</h3>
-            <div style="margin-bottom: 25px;">
-                {deals_html}
-            </div>
-            ''' if deals_html else ''}
-
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{settings.FRONTEND_URL}/market" style="display: inline-block; background-color: #fafafa; color: #000; padding: 14px 32px; text-decoration: none; font-weight: bold; font-size: 14px; letter-spacing: 1px; border-radius: 4px;">VIEW FULL MARKET</a>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <div style="background-color: #000; padding: 20px 30px; text-align: center; border-top: 1px solid #27272a;">
-            <p style="margin: 0 0 10px 0; color: #52525b; font-size: 12px;">
-                WondersTracker - Market Intelligence for Wonders of the First
-            </p>
-            <p style="margin: 0; color: #3f3f46; font-size: 11px;">
-                <a href="{settings.FRONTEND_URL}/profile" style="color: #52525b;">Manage email preferences</a>
-            </p>
-        </div>
-    </div>
-</body>
-</html>
-            """,
+                "subject": f"Daily Digest: {total_sales} sales · ${total_volume:,.0f}",
+                "html": _email_wrapper(content, "DAILY DIGEST"),
             }
         )
         print(f"[Email] Daily digest sent to {to_email}")
@@ -740,181 +739,112 @@ def send_daily_market_digest(to_email: str, user_name: str, market_data: Dict[st
 
 
 def send_weekly_market_report(to_email: str, user_name: str, report_data: Dict[str, Any]) -> bool:
-    """
-    Send weekly market report email with comprehensive stats.
-
-    report_data should include:
-    - week_start: str (date)
-    - week_end: str (date)
-    - total_sales: int
-    - total_volume: float
-    - volume_change: float (% vs previous week)
-    - avg_sale_price: float
-    - daily_breakdown: List[Dict] with date, sales, volume
-    - top_cards_by_volume: List[Dict] with name, sales, volume
-    - price_movers: List[Dict] with name, old_price, new_price, change_percent
-    - market_health: Dict with unique_buyers, unique_sellers, liquidity_score
-    """
+    """Send weekly market report email. Table-based layout for email client compatibility."""
     if not settings.RESEND_API_KEY:
         print("[Email] Skipping weekly report - RESEND_API_KEY not configured")
         return False
 
-    # Daily breakdown chart (ASCII bars in email)
-    daily_html = ""
-    max_sales = max([d.get("sales", 0) for d in report_data.get("daily_breakdown", [])] or [1])
-    for day in report_data.get("daily_breakdown", []):
-        bar_width = int((day.get("sales", 0) / max_sales) * 100)
-        daily_html += f"""
-        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <div style="width: 60px; color: #71717a; font-size: 12px;">{day.get('date', '')}</div>
-            <div style="flex: 1; background-color: #27272a; height: 20px; border-radius: 3px; overflow: hidden;">
-                <div style="width: {bar_width}%; background-color: #3b82f6; height: 100%;"></div>
-            </div>
-            <div style="width: 50px; text-align: right; color: #a1a1aa; font-size: 12px;">{day.get('sales', 0)}</div>
-        </div>
-        """
-
-    # Top cards by volume
-    top_cards_html = ""
-    for i, card in enumerate(report_data.get("top_cards_by_volume", [])[:10], 1):
-        top_cards_html += f"""
-        <tr>
-            <td style="padding: 10px 0; color: #71717a; font-size: 14px; border-bottom: 1px solid #27272a;">{i}</td>
-            <td style="padding: 10px 0; color: #fafafa; font-size: 14px; border-bottom: 1px solid #27272a;">{card.get('name', 'Unknown')}</td>
-            <td style="padding: 10px 0; color: #a1a1aa; font-size: 14px; text-align: right; border-bottom: 1px solid #27272a;">{card.get('sales', 0)}</td>
-            <td style="padding: 10px 0; color: #fafafa; font-size: 14px; text-align: right; border-bottom: 1px solid #27272a;">${card.get('volume', 0):,.0f}</td>
-        </tr>
-        """
-
-    # Price movers
-    movers_html = ""
-    for card in report_data.get("price_movers", [])[:5]:
-        change = card.get("change_percent", 0)
-        color = "#4ade80" if change > 0 else "#f87171"
-        arrow = "↑" if change > 0 else "↓"
-        movers_html += f"""
-        <tr>
-            <td style="padding: 10px 0; color: #fafafa; font-size: 14px; border-bottom: 1px solid #27272a;">{card.get('name', 'Unknown')}</td>
-            <td style="padding: 10px 0; color: #71717a; font-size: 14px; text-align: right; border-bottom: 1px solid #27272a;">${card.get('old_price', 0):.2f}</td>
-            <td style="padding: 10px 0; color: #fafafa; font-size: 14px; text-align: right; border-bottom: 1px solid #27272a;">${card.get('new_price', 0):.2f}</td>
-            <td style="padding: 10px 0; color: {color}; font-size: 14px; text-align: right; border-bottom: 1px solid #27272a;">{arrow} {abs(change):.1f}%</td>
-        </tr>
-        """
-
+    total_sales = report_data.get("total_sales", 0)
+    total_volume = report_data.get("total_volume", 0)
     volume_change = report_data.get("volume_change", 0)
-    vol_color = "#4ade80" if volume_change > 0 else "#f87171" if volume_change < 0 else "#a1a1aa"
-    vol_arrow = "↑" if volume_change > 0 else "↓" if volume_change < 0 else ""
+    avg_price = report_data.get("avg_sale_price", 0)
+    week_start = report_data.get("week_start", "")
+    week_end = report_data.get("week_end", "")
+    change_color = "#7dd3a8" if volume_change >= 0 else "#ef4444"
+    change_sign = "+" if volume_change >= 0 else ""
+
+    # Daily breakdown rows
+    daily_data = report_data.get("daily_breakdown", [])
+    max_vol = max([d.get("volume", 0) for d in daily_data]) if daily_data else 1
+    daily_rows = ""
+    for day in daily_data:
+        vol = day.get("volume", 0)
+        sales = day.get("sales", 0)
+        date_str = day.get("date", "")[-5:] if len(day.get("date", "")) > 5 else day.get("date", "")
+        bar_width = int((vol / max_vol) * 100) if max_vol > 0 else 0
+        daily_rows += f"""<tr>
+            <td style="padding: 8px 0; color: #888; font-size: 12px; width: 50px;">{date_str}</td>
+            <td style="padding: 8px 12px;">
+                <div style="background: #333; height: 6px; width: 100%;">
+                    <div style="background: #7dd3a8; height: 6px; width: {bar_width}%;"></div>
+                </div>
+            </td>
+            <td style="padding: 8px 0; color: #fff; font-size: 12px; text-align: right; width: 70px;">${vol:,.0f}</td>
+            <td style="padding: 8px 0; color: #666; font-size: 11px; text-align: right; width: 50px;">{sales} sales</td>
+        </tr>"""
+
+    # Top sellers rows
+    top_cards = report_data.get("top_cards_by_volume", [])[:5]
+    max_card_vol = max([c.get("volume", 0) for c in top_cards]) if top_cards else 1
+    seller_rows = ""
+    for i, card in enumerate(top_cards, 1):
+        vol = card.get("volume", 0)
+        sales = card.get("sales", 0)
+        bar_width = int((vol / max_card_vol) * 100) if max_card_vol > 0 else 0
+        seller_rows += f"""<tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #fff; font-size: 13px;">{i}. {card.get("name", "Unknown")}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #888; font-size: 12px; width: 60px;">{sales} sales</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #7dd3a8; font-size: 13px; font-weight: bold; text-align: right; width: 70px;">${vol:,.0f}</td>
+        </tr>"""
+
+    content = f"""
+        <!-- Period -->
+        <p style="margin: 0 0 24px 0; color: #666; font-size: 12px;">{week_start} – {week_end}</p>
+
+        <!-- Hero Stats -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            <tr>
+                <td style="padding: 20px; background: #222; border: 1px solid #333;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="text-align: center; padding: 0 10px; border-right: 1px solid #444;">
+                                <p style="margin: 0; color: #888; font-size: 10px; letter-spacing: 2px;">VOLUME</p>
+                                <p style="margin: 8px 0 4px 0; color: #fff; font-size: 24px; font-weight: bold;">${total_volume:,.0f}</p>
+                                <p style="margin: 0; color: {change_color}; font-size: 12px;">{change_sign}{volume_change:.1f}%</p>
+                            </td>
+                            <td style="text-align: center; padding: 0 10px; border-right: 1px solid #444;">
+                                <p style="margin: 0; color: #888; font-size: 10px; letter-spacing: 2px;">SALES</p>
+                                <p style="margin: 8px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">{total_sales}</p>
+                            </td>
+                            <td style="text-align: center; padding: 0 10px;">
+                                <p style="margin: 0; color: #888; font-size: 10px; letter-spacing: 2px;">AVG PRICE</p>
+                                <p style="margin: 8px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">${avg_price:.0f}</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <!-- Daily Breakdown -->
+        <p style="margin: 0 0 12px 0; color: #888; font-size: 10px; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 8px;">DAILY BREAKDOWN</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            {daily_rows if daily_rows else '<tr><td style="color: #666; font-size: 12px; padding: 12px 0;">No activity this week</td></tr>'}
+        </table>
+
+        <!-- Top Sellers -->
+        <p style="margin: 0 0 12px 0; color: #888; font-size: 10px; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 8px;">TOP SELLERS</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            {seller_rows if seller_rows else '<tr><td style="color: #666; font-size: 12px; padding: 12px 0;">No sales this week</td></tr>'}
+        </table>
+
+        <!-- CTA -->
+        <table cellpadding="0" cellspacing="0">
+            <tr>
+                <td style="background: #fff; padding: 12px 24px;">
+                    <a href="{settings.FRONTEND_URL}/market" style="color: #111; font-size: 11px; font-weight: bold; letter-spacing: 2px; text-decoration: none;">VIEW MARKET →</a>
+                </td>
+            </tr>
+        </table>
+    """
 
     try:
         _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
-                "subject": f"Weekly Market Report - ${report_data.get('total_volume', 0):,.0f} Volume",
-                "html": f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0a0a0a; color: #fafafa; margin: 0; padding: 40px 20px;">
-    <div style="max-width: 600px; margin: 0 auto; background-color: #18181b; border-radius: 8px; border: 1px solid #27272a; overflow: hidden;">
-        <!-- Header -->
-        <div style="background-color: #000; padding: 30px; text-align: center; border-bottom: 1px solid #27272a;">
-            <div style="display: inline-block; width: 50px; height: 50px; background-color: #fff; line-height: 50px; font-size: 28px; font-weight: bold; color: #000;">W</div>
-            <h1 style="margin: 15px 0 0 0; font-size: 24px; font-weight: bold; letter-spacing: 2px;">WEEKLY REPORT</h1>
-            <p style="margin: 10px 0 0 0; color: #71717a; font-size: 14px;">{report_data.get('week_start', '')} - {report_data.get('week_end', '')}</p>
-        </div>
-
-        <!-- Content -->
-        <div style="padding: 40px 30px;">
-            <p style="color: #a1a1aa; line-height: 1.6; margin: 0 0 25px 0;">
-                Hey {user_name}, here's your comprehensive weekly market analysis.
-            </p>
-
-            <!-- Key Metrics -->
-            <h3 style="margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #71717a;">Key Metrics</h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px;">
-                <div style="background-color: #27272a; border-radius: 6px; padding: 20px;">
-                    <div style="color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Total Sales</div>
-                    <div style="color: #fafafa; font-size: 24px; font-weight: bold; margin-top: 8px;">{report_data.get('total_sales', 0):,}</div>
-                </div>
-                <div style="background-color: #27272a; border-radius: 6px; padding: 20px;">
-                    <div style="color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Total Volume</div>
-                    <div style="color: #fafafa; font-size: 24px; font-weight: bold; margin-top: 8px;">${report_data.get('total_volume', 0):,.0f}</div>
-                    <div style="color: {vol_color}; font-size: 13px; margin-top: 4px;">{vol_arrow} {abs(volume_change):.1f}% vs last week</div>
-                </div>
-                <div style="background-color: #27272a; border-radius: 6px; padding: 20px;">
-                    <div style="color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Avg Sale Price</div>
-                    <div style="color: #fafafa; font-size: 24px; font-weight: bold; margin-top: 8px;">${report_data.get('avg_sale_price', 0):.2f}</div>
-                </div>
-                <div style="background-color: #27272a; border-radius: 6px; padding: 20px;">
-                    <div style="color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Unique Buyers</div>
-                    <div style="color: #fafafa; font-size: 24px; font-weight: bold; margin-top: 8px;">{report_data.get('market_health', {}).get('unique_buyers', 0)}</div>
-                </div>
-            </div>
-
-            <!-- Daily Breakdown -->
-            <h3 style="margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #71717a;">Daily Sales</h3>
-            <div style="background-color: #27272a; border-radius: 6px; padding: 20px; margin-bottom: 30px;">
-                {daily_html if daily_html else '<p style="color: #71717a; text-align: center;">No data available</p>'}
-            </div>
-
-            <!-- Top Cards -->
-            <h3 style="margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #71717a;">Top Cards by Volume</h3>
-            <div style="background-color: #27272a; border-radius: 6px; padding: 15px 20px; margin-bottom: 30px; overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; min-width: 400px;">
-                    <thead>
-                        <tr>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: left; border-bottom: 1px solid #3f3f46;">#</th>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: left; border-bottom: 1px solid #3f3f46;">Card</th>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: right; border-bottom: 1px solid #3f3f46;">Sales</th>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: right; border-bottom: 1px solid #3f3f46;">Volume</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {top_cards_html if top_cards_html else '<tr><td colspan="4" style="padding: 20px 0; color: #71717a; text-align: center;">No data available</td></tr>'}
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Price Movers -->
-            <h3 style="margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #71717a;">Biggest Price Movers</h3>
-            <div style="background-color: #27272a; border-radius: 6px; padding: 15px 20px; margin-bottom: 30px; overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; min-width: 400px;">
-                    <thead>
-                        <tr>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: left; border-bottom: 1px solid #3f3f46;">Card</th>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: right; border-bottom: 1px solid #3f3f46;">Was</th>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: right; border-bottom: 1px solid #3f3f46;">Now</th>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: right; border-bottom: 1px solid #3f3f46;">Change</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {movers_html if movers_html else '<tr><td colspan="4" style="padding: 20px 0; color: #71717a; text-align: center;">No significant price changes</td></tr>'}
-                    </tbody>
-                </table>
-            </div>
-
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{settings.FRONTEND_URL}/market" style="display: inline-block; background-color: #fafafa; color: #000; padding: 14px 32px; text-decoration: none; font-weight: bold; font-size: 14px; letter-spacing: 1px; border-radius: 4px;">VIEW FULL MARKET</a>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <div style="background-color: #000; padding: 20px 30px; text-align: center; border-top: 1px solid #27272a;">
-            <p style="margin: 0 0 10px 0; color: #52525b; font-size: 12px;">
-                WondersTracker - Market Intelligence for Wonders of the First
-            </p>
-            <p style="margin: 0; color: #3f3f46; font-size: 11px;">
-                <a href="{settings.FRONTEND_URL}/profile" style="color: #52525b;">Manage email preferences</a>
-            </p>
-        </div>
-    </div>
-</body>
-</html>
-            """,
+                "subject": f"Weekly Report: ${total_volume:,.0f} volume · {total_sales} sales",
+                "html": _email_wrapper(content, "WEEKLY REPORT"),
             }
         )
         print(f"[Email] Weekly report sent to {to_email}")
@@ -1027,151 +957,369 @@ def send_price_alert(to_email: str, user_name: str, alert_data: Dict[str, Any]) 
 
 
 def send_portfolio_summary(to_email: str, user_name: str, portfolio_data: Dict[str, Any]) -> bool:
-    """
-    Send portfolio summary email with P&L and holdings.
-
-    portfolio_data should include:
-    - total_cards: int
-    - total_cost_basis: float
-    - total_market_value: float
-    - total_profit_loss: float
-    - total_profit_loss_percent: float
-    - top_performers: List[Dict] with name, profit_loss, profit_loss_percent
-    - worst_performers: List[Dict] with name, profit_loss, profit_loss_percent
-    - recent_changes: List[Dict] with name, change_type, amount
-    """
+    """Send portfolio summary email. Table-based layout for email client compatibility."""
     if not settings.RESEND_API_KEY:
         print("[Email] Skipping portfolio summary - RESEND_API_KEY not configured")
         return False
 
     pnl = portfolio_data.get("total_profit_loss", 0)
     pnl_percent = portfolio_data.get("total_profit_loss_percent", 0)
-    pnl_color = "#4ade80" if pnl >= 0 else "#f87171"
-    pnl_icon = "📈" if pnl >= 0 else "📉"
+    market_value = portfolio_data.get("total_market_value", 0)
+    cost_basis = portfolio_data.get("total_cost_basis", 0)
+    total_cards = portfolio_data.get("total_cards", 0)
+    is_profit = pnl >= 0
+    pnl_color = "#7dd3a8" if is_profit else "#ef4444"
+    pnl_sign = "+" if is_profit else ""
 
-    # Top performers
-    top_html = ""
-    for card in portfolio_data.get("top_performers", [])[:5]:
+    # Build top performers rows
+    top_performers = portfolio_data.get("top_performers", [])[:5]
+    top_rows = ""
+    for card in top_performers:
         card_pnl = card.get("profit_loss", 0)
-        card_pnl_pct = card.get("profit_loss_percent", 0)
-        top_html += f"""
-        <tr>
-            <td style="padding: 10px 0; color: #fafafa; font-size: 14px; border-bottom: 1px solid #27272a;">{card.get('name', 'Unknown')}</td>
-            <td style="padding: 10px 0; color: #4ade80; font-size: 14px; text-align: right; border-bottom: 1px solid #27272a;">+${card_pnl:.2f}</td>
-            <td style="padding: 10px 0; color: #4ade80; font-size: 14px; text-align: right; border-bottom: 1px solid #27272a;">+{card_pnl_pct:.1f}%</td>
-        </tr>
-        """
+        card_pct = card.get("profit_loss_percent", 0)
+        top_rows += f"""<tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #fff; font-size: 13px;">{card.get("name", "Unknown")}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #7dd3a8; font-size: 13px; font-weight: bold; text-align: right; width: 80px;">+${card_pnl:.2f}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #888; font-size: 12px; text-align: right; width: 60px;">+{card_pct:.0f}%</td>
+        </tr>"""
 
-    # Worst performers
-    worst_html = ""
-    for card in portfolio_data.get("worst_performers", [])[:5]:
+    # Build worst performers rows
+    worst_performers = portfolio_data.get("worst_performers", [])[:5]
+    worst_rows = ""
+    for card in worst_performers:
         card_pnl = card.get("profit_loss", 0)
-        card_pnl_pct = card.get("profit_loss_percent", 0)
-        worst_html += f"""
-        <tr>
-            <td style="padding: 10px 0; color: #fafafa; font-size: 14px; border-bottom: 1px solid #27272a;">{card.get('name', 'Unknown')}</td>
-            <td style="padding: 10px 0; color: #f87171; font-size: 14px; text-align: right; border-bottom: 1px solid #27272a;">${card_pnl:.2f}</td>
-            <td style="padding: 10px 0; color: #f87171; font-size: 14px; text-align: right; border-bottom: 1px solid #27272a;">{card_pnl_pct:.1f}%</td>
-        </tr>
-        """
+        card_pct = card.get("profit_loss_percent", 0)
+        worst_rows += f"""<tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #fff; font-size: 13px;">{card.get("name", "Unknown")}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #ef4444; font-size: 13px; font-weight: bold; text-align: right; width: 80px;">-${abs(card_pnl):.2f}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #333; color: #888; font-size: 12px; text-align: right; width: 60px;">{card_pct:.0f}%</td>
+        </tr>"""
+
+    content = f"""
+        <!-- Hero Stats -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            <tr>
+                <td style="padding: 20px; background: #222; border: 1px solid #333;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="text-align: center; padding: 0 10px; border-right: 1px solid #444;">
+                                <p style="margin: 0; color: #888; font-size: 10px; letter-spacing: 2px;">VALUE</p>
+                                <p style="margin: 8px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">${market_value:,.0f}</p>
+                            </td>
+                            <td style="text-align: center; padding: 0 10px; border-right: 1px solid #444;">
+                                <p style="margin: 0; color: #888; font-size: 10px; letter-spacing: 2px;">P&L</p>
+                                <p style="margin: 8px 0 4px 0; color: {pnl_color}; font-size: 24px; font-weight: bold;">{pnl_sign}${abs(pnl):,.0f}</p>
+                                <p style="margin: 0; color: {pnl_color}; font-size: 12px;">{pnl_sign}{pnl_percent:.1f}%</p>
+                            </td>
+                            <td style="text-align: center; padding: 0 10px;">
+                                <p style="margin: 0; color: #888; font-size: 10px; letter-spacing: 2px;">HOLDINGS</p>
+                                <p style="margin: 8px 0 0 0; color: #fff; font-size: 24px; font-weight: bold;">{total_cards}</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <!-- Cost Basis -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            <tr>
+                <td style="color: #888; font-size: 12px;">Cost Basis</td>
+                <td style="color: #fff; font-size: 12px; text-align: right;">${cost_basis:,.2f}</td>
+            </tr>
+        </table>
+
+        <!-- Top Performers -->
+        <p style="margin: 0 0 12px 0; color: #888; font-size: 10px; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 8px;">TOP PERFORMERS</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            {top_rows if top_rows else '<tr><td style="color: #666; font-size: 12px; padding: 12px 0;">No data yet</td></tr>'}
+        </table>
+
+        <!-- Worst Performers -->
+        <p style="margin: 0 0 12px 0; color: #888; font-size: 10px; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 8px;">NEEDS ATTENTION</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            {worst_rows if worst_rows else '<tr><td style="color: #666; font-size: 12px; padding: 12px 0;">All holdings performing well</td></tr>'}
+        </table>
+
+        <!-- CTA -->
+        <table cellpadding="0" cellspacing="0">
+            <tr>
+                <td style="background: #fff; padding: 12px 24px;">
+                    <a href="{settings.FRONTEND_URL}/portfolio" style="color: #111; font-size: 11px; font-weight: bold; letter-spacing: 2px; text-decoration: none;">VIEW PORTFOLIO →</a>
+                </td>
+            </tr>
+        </table>
+    """
 
     try:
         _send_email(
             {
                 "from": settings.FROM_EMAIL,
                 "to": [to_email],
-                "subject": f"Portfolio Update: {'📈' if pnl >= 0 else '📉'} {'+' if pnl >= 0 else ''}${pnl:.2f} ({'+' if pnl_percent >= 0 else ''}{pnl_percent:.1f}%)",
-                "html": f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0a0a0a; color: #fafafa; margin: 0; padding: 40px 20px;">
-    <div style="max-width: 600px; margin: 0 auto; background-color: #18181b; border-radius: 8px; border: 1px solid #27272a; overflow: hidden;">
-        <!-- Header -->
-        <div style="background-color: #000; padding: 30px; text-align: center; border-bottom: 1px solid #27272a;">
-            <div style="display: inline-block; width: 50px; height: 50px; background-color: #fff; line-height: 50px; font-size: 28px; font-weight: bold; color: #000;">W</div>
-            <h1 style="margin: 15px 0 0 0; font-size: 24px; font-weight: bold; letter-spacing: 2px;">PORTFOLIO UPDATE</h1>
-        </div>
-
-        <!-- Content -->
-        <div style="padding: 40px 30px;">
-            <p style="color: #a1a1aa; line-height: 1.6; margin: 0 0 25px 0;">
-                Hey {user_name}, here's your portfolio performance summary.
-            </p>
-
-            <!-- Portfolio Value -->
-            <div style="background-color: #27272a; border-radius: 8px; padding: 30px; margin-bottom: 25px; text-align: center;">
-                <div style="color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Total Portfolio Value</div>
-                <div style="font-size: 36px; font-weight: bold; color: #fafafa; margin: 15px 0;">
-                    ${portfolio_data.get('total_market_value', 0):,.2f}
-                </div>
-                <div style="font-size: 20px; color: {pnl_color};">
-                    {pnl_icon} {'+' if pnl >= 0 else ''}${pnl:,.2f} ({'+' if pnl_percent >= 0 else ''}{pnl_percent:.1f}%)
-                </div>
-                <div style="color: #71717a; font-size: 13px; margin-top: 15px;">
-                    Cost Basis: ${portfolio_data.get('total_cost_basis', 0):,.2f} • {portfolio_data.get('total_cards', 0)} cards
-                </div>
-            </div>
-
-            <!-- Top Performers -->
-            <h3 style="margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #4ade80;">🏆 Top Performers</h3>
-            <div style="background-color: #27272a; border-radius: 6px; padding: 15px 20px; margin-bottom: 25px;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: left; border-bottom: 1px solid #3f3f46;">Card</th>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: right; border-bottom: 1px solid #3f3f46;">P&L</th>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: right; border-bottom: 1px solid #3f3f46;">%</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {top_html if top_html else '<tr><td colspan="3" style="padding: 20px 0; color: #71717a; text-align: center;">No data yet</td></tr>'}
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Worst Performers -->
-            <h3 style="margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #f87171;">📉 Needs Attention</h3>
-            <div style="background-color: #27272a; border-radius: 6px; padding: 15px 20px; margin-bottom: 25px;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: left; border-bottom: 1px solid #3f3f46;">Card</th>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: right; border-bottom: 1px solid #3f3f46;">P&L</th>
-                            <th style="padding: 10px 0; color: #52525b; font-size: 11px; text-transform: uppercase; text-align: right; border-bottom: 1px solid #3f3f46;">%</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {worst_html if worst_html else '<tr><td colspan="3" style="padding: 20px 0; color: #71717a; text-align: center;">No underperformers!</td></tr>'}
-                    </tbody>
-                </table>
-            </div>
-
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{settings.FRONTEND_URL}/portfolio" style="display: inline-block; background-color: #fafafa; color: #000; padding: 14px 32px; text-decoration: none; font-weight: bold; font-size: 14px; letter-spacing: 1px; border-radius: 4px;">VIEW FULL PORTFOLIO</a>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <div style="background-color: #000; padding: 20px 30px; text-align: center; border-top: 1px solid #27272a;">
-            <p style="margin: 0 0 10px 0; color: #52525b; font-size: 12px;">
-                WondersTracker - Market Intelligence for Wonders of the First
-            </p>
-            <p style="margin: 0; color: #3f3f46; font-size: 11px;">
-                <a href="{settings.FRONTEND_URL}/profile" style="color: #52525b;">Manage email preferences</a>
-            </p>
-        </div>
-    </div>
-</body>
-</html>
-            """,
+                "subject": f"Portfolio: {pnl_sign}${abs(pnl):.2f} ({pnl_sign}{pnl_percent:.1f}%)",
+                "html": _email_wrapper(content, "PORTFOLIO"),
             }
         )
         print(f"[Email] Portfolio summary sent to {to_email}")
         return True
     except Exception as e:
         print(f"[Email] Failed to send portfolio summary to {to_email}: {e}")
+        return False
+
+
+def send_product_update(
+    to_email: str,
+    user_name: str,
+    update_data: Dict[str, Any],
+) -> bool:
+    """
+    Send product update/changelog email.
+
+    update_data should include:
+    - version: str (e.g., "January 2025" or "v2.1")
+    - headline: str (main update title)
+    - intro: str (brief intro paragraph)
+    - features: list of dicts with:
+        - title: str
+        - description: str
+        - icon: str (emoji)
+    - cta_text: str (optional, defaults to "EXPLORE UPDATES")
+    - cta_url: str (optional, defaults to frontend URL)
+    """
+    if not settings.RESEND_API_KEY:
+        print("[Email] Skipping product update - RESEND_API_KEY not configured")
+        return False
+
+    version = update_data.get("version", "Update")
+    headline = update_data.get("headline", "What's New")
+    intro = update_data.get("intro", "")
+    features = update_data.get("features", [])
+    cta_text = update_data.get("cta_text", "EXPLORE UPDATES")
+    cta_url = update_data.get("cta_url", settings.FRONTEND_URL)
+
+    # Build feature rows
+    feature_rows = ""
+    for feature in features:
+        icon = feature.get("icon", "→")
+        title = feature.get("title", "")
+        description = feature.get("description", "")
+        feature_rows += f"""
+        <tr>
+            <td style="padding: 16px 0; border-bottom: 1px solid #333;">
+                <table cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                        <td style="width: 40px; vertical-align: top; font-size: 20px; padding-top: 2px;">{icon}</td>
+                        <td style="vertical-align: top;">
+                            <p style="margin: 0 0 6px 0; color: #fff; font-size: 14px; font-weight: bold;">{title}</p>
+                            <p style="margin: 0; color: #888; font-size: 13px; line-height: 1.5;">{description}</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>"""
+
+    content = f"""
+        <!-- Version Badge -->
+        <table cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+            <tr>
+                <td style="background: #333; padding: 6px 12px; font-size: 10px; letter-spacing: 2px; color: #888;">
+                    {version.upper()}
+                </td>
+            </tr>
+        </table>
+
+        <!-- Headline -->
+        <h1 style="margin: 0 0 16px 0; color: #fff; font-size: 24px; font-weight: bold; line-height: 1.3;">
+            {headline}
+        </h1>
+
+        <!-- Intro -->
+        <p style="margin: 0 0 28px 0; color: #888; font-size: 14px; line-height: 1.6;">
+            {intro}
+        </p>
+
+        <!-- Features -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            {feature_rows}
+        </table>
+
+        <!-- CTA -->
+        <table cellpadding="0" cellspacing="0">
+            <tr>
+                <td style="background: #7dd3a8; padding: 14px 28px;">
+                    <a href="{cta_url}" style="color: #111; font-size: 11px; font-weight: bold; letter-spacing: 2px; text-decoration: none;">{cta_text} →</a>
+                </td>
+            </tr>
+        </table>
+
+        <!-- Sign off -->
+        <p style="margin: 32px 0 0 0; color: #666; font-size: 12px; line-height: 1.6;">
+            Thanks for being part of WondersTracker.<br>
+            — Cody
+        </p>
+    """
+
+    try:
+        _send_email(
+            {
+                "from": "Cody from WondersTracker <cody@wonderstracker.com>",
+                "to": [to_email],
+                "subject": f"{headline} — {version}",
+                "html": _email_wrapper(content, "PRODUCT UPDATE"),
+            }
+        )
+        print(f"[Email] Product update sent to {to_email}")
+        return True
+    except Exception as e:
+        print(f"[Email] Failed to send product update to {to_email}: {e}")
+        return False
+
+
+def send_detailed_product_update(
+    to_email: str,
+    user_name: str,
+    update_data: Dict[str, Any],
+) -> bool:
+    """
+    Send detailed product update email with sections, bullet points, and optional images.
+
+    update_data should include:
+    - version: str (e.g., "January 2025")
+    - headline: str (main update title)
+    - intro: str (brief intro paragraph)
+    - sections: list of dicts with:
+        - title: str
+        - description: str
+        - bullets: list[str] (optional details)
+        - image_url: str (optional screenshot URL)
+    - cta_text: str (optional)
+    - cta_url: str (optional)
+    """
+    if not settings.RESEND_API_KEY:
+        print("[Email] Skipping detailed product update - RESEND_API_KEY not configured")
+        return False
+
+    version = update_data.get("version", "Update")
+    headline = update_data.get("headline", "What's New")
+    intro = update_data.get("intro", "")
+    sections = update_data.get("sections", [])
+    cta_text = update_data.get("cta_text", "SEE FULL CHANGELOG")
+    cta_url = update_data.get("cta_url", f"{settings.FRONTEND_URL}/changelog")
+
+    # Build section rows
+    section_html = ""
+    for i, section in enumerate(sections):
+        title = section.get("title", "")
+        description = section.get("description", "")
+        bullets = section.get("bullets", [])
+        image_url = section.get("image_url")
+
+        # Build bullet list if provided
+        bullet_html = ""
+        if bullets:
+            bullet_items = "".join(
+                f'<tr><td style="color: #7dd3a8; padding-right: 8px; vertical-align: top;">→</td>'
+                f'<td style="color: #888; font-size: 12px; line-height: 1.5; padding-bottom: 6px;">{b}</td></tr>'
+                for b in bullets
+            )
+            bullet_html = f"""
+                <table cellpadding="0" cellspacing="0" style="margin-top: 12px;">
+                    {bullet_items}
+                </table>
+            """
+
+        # Build image if provided
+        image_html = ""
+        if image_url:
+            image_html = f"""
+                <table cellpadding="0" cellspacing="0" style="margin-top: 16px;">
+                    <tr>
+                        <td style="background: #222; border: 1px solid #333; padding: 8px;">
+                            <img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; display: block;" />
+                        </td>
+                    </tr>
+                </table>
+            """
+
+        # Section number
+        num = i + 1
+
+        section_html += f"""
+        <tr>
+            <td style="padding: 24px 0; border-bottom: 1px solid #333;">
+                <!-- Section header -->
+                <table cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                        <td style="width: 32px; height: 32px; background: #333; text-align: center; vertical-align: middle; font-size: 14px; font-weight: bold; color: #7dd3a8;">{num}</td>
+                        <td style="padding-left: 14px; vertical-align: middle;">
+                            <p style="margin: 0; color: #fff; font-size: 16px; font-weight: bold;">{title}</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Description -->
+                <p style="margin: 14px 0 0 0; color: #888; font-size: 13px; line-height: 1.6;">
+                    {description}
+                </p>
+
+                {bullet_html}
+                {image_html}
+            </td>
+        </tr>
+        """
+
+    content = f"""
+        <!-- Version Badge -->
+        <table cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+            <tr>
+                <td style="background: #7dd3a8; padding: 6px 12px; font-size: 10px; letter-spacing: 2px; color: #111; font-weight: bold;">
+                    {version.upper()}
+                </td>
+            </tr>
+        </table>
+
+        <!-- Headline -->
+        <h1 style="margin: 0 0 16px 0; color: #fff; font-size: 26px; font-weight: bold; line-height: 1.3;">
+            {headline}
+        </h1>
+
+        <!-- Intro -->
+        <p style="margin: 0 0 32px 0; color: #888; font-size: 14px; line-height: 1.7;">
+            {intro}
+        </p>
+
+        <!-- Sections -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 32px;">
+            {section_html}
+        </table>
+
+        <!-- CTA -->
+        <table cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+            <tr>
+                <td style="background: #7dd3a8; padding: 14px 28px;">
+                    <a href="{cta_url}" style="color: #111; font-size: 11px; font-weight: bold; letter-spacing: 2px; text-decoration: none;">{cta_text} →</a>
+                </td>
+            </tr>
+        </table>
+
+        <!-- Sign off -->
+        <p style="margin: 0; color: #666; font-size: 12px; line-height: 1.6;">
+            Thanks for being part of WondersTracker.<br><br>
+            — Cody
+        </p>
+    """
+
+    try:
+        _send_email(
+            {
+                "from": "Cody from WondersTracker <cody@wonderstracker.com>",
+                "to": [to_email],
+                "subject": f"{headline} — {version}",
+                "html": _email_wrapper(content, "PRODUCT UPDATE"),
+            }
+        )
+        print(f"[Email] Detailed product update sent to {to_email}")
+        return True
+    except Exception as e:
+        print(f"[Email] Failed to send detailed product update to {to_email}: {e}")
         return False

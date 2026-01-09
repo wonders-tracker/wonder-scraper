@@ -193,9 +193,21 @@ class TestDetectTreatment:
     # Single Card Treatments
     # =========================================================================
 
-    def test_classic_paper_default(self):
-        """Default treatment for singles should be Classic Paper."""
-        assert _detect_treatment("Wonders of the First Progo", "Single") == "Classic Paper"
+    def test_unknown_treatment_returns_none(self):
+        """Unknown treatment for singles should return None (not Classic Paper).
+
+        This distinguishes 'unknown treatment' from 'detected Classic Paper'.
+        Changed in commit 4da57fd to fix floor price calculations that were
+        being corrupted by mixing actually detected Classic Paper with unknown treatment.
+        """
+        assert _detect_treatment("Wonders of the First Progo", "Single") is None
+
+    def test_explicit_classic_paper_detection(self):
+        """Should detect Classic Paper when explicitly mentioned."""
+        assert _detect_treatment("Progo Classic Paper", "Single") == "Classic Paper"
+        assert _detect_treatment("Progo non-foil", "Single") == "Classic Paper"
+        assert _detect_treatment("Progo Non Foil card", "Single") == "Classic Paper"
+        assert _detect_treatment("Wonders Paper Edition", "Single") == "Classic Paper"
 
     def test_classic_foil(self):
         """Should detect Classic Foil."""

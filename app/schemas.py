@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime, date
 
 
@@ -64,6 +64,8 @@ class CardOut(CardBase):
 
     # === PRICES (clear hierarchy) ===
     floor_price: Optional[float] = None  # Avg of 4 lowest sales - THE standard price (cheapest variant)
+    floor_price_source: Optional[str] = None  # "sales", "order_book", or None
+    floor_price_confidence: Optional[float] = None  # 0.0-1.0 confidence score
     floor_by_variant: Optional[dict] = None  # Floor price per variant {variant_name: price}
     vwap: Optional[float] = None  # Volume Weighted Avg Price = SUM(price)/COUNT
     latest_price: Optional[float] = None  # Most recent sale price
@@ -113,6 +115,8 @@ class CardListItem(BaseModel):
     product_type: Optional[str] = None
     # Core prices
     floor_price: Optional[float] = None
+    floor_price_source: Optional[str] = None  # "sales", "order_book", or None
+    floor_price_confidence: Optional[float] = None  # 0.0-1.0 confidence score
     latest_price: Optional[float] = None
     lowest_ask: Optional[float] = None
     max_price: Optional[float] = None  # Highest sale (HIGH column)
@@ -204,14 +208,45 @@ class PortfolioItemOut(PortfolioItemBase):
 
 
 # Portfolio Card Schemas (New - individual card tracking)
+
+# Valid purchase sources - validated on input
+VALID_SOURCES = {"eBay", "Blokpax", "TCGPlayer", "LGS", "Trade", "Pack Pull", "Other"}
+
+# Common treatments - validated loosely (other treatments allowed from market data)
+COMMON_TREATMENTS = {
+    "Classic Paper",
+    "Classic Foil",
+    "Stonefoil",
+    "Full Art Paper",
+    "Full Art Foil",
+    "Serialized",
+    "Paper",
+    "Foil",
+}
+
+
 class PortfolioCardBase(BaseModel):
     card_id: int
     treatment: str = "Classic Paper"
-    source: str = "Other"  # eBay, Blokpax, TCGPlayer, LGS, Trade, Pack Pull, Other
+    source: str = "Other"
     purchase_price: float
     purchase_date: Optional[date] = None
     grading: Optional[str] = None  # e.g., "PSA 10", "BGS 9.5", null for raw
     notes: Optional[str] = None
+
+    @field_validator("source")
+    @classmethod
+    def validate_source(cls, v: str) -> str:
+        if v not in VALID_SOURCES:
+            raise ValueError(f"Invalid source. Must be one of: {', '.join(sorted(VALID_SOURCES))}")
+        return v
+
+    @field_validator("purchase_price")
+    @classmethod
+    def validate_price(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Purchase price cannot be negative")
+        return v
 
 
 class PortfolioCardCreate(PortfolioCardBase):
@@ -244,6 +279,20 @@ class PortfolioCardUpdate(BaseModel):
     purchase_date: Optional[date] = None
     grading: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator("source")
+    @classmethod
+    def validate_source(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in VALID_SOURCES:
+            raise ValueError(f"Invalid source. Must be one of: {', '.join(sorted(VALID_SOURCES))}")
+        return v
+
+    @field_validator("purchase_price")
+    @classmethod
+    def validate_price(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v < 0:
+            raise ValueError("Purchase price cannot be negative")
+        return v
 
 
 class PortfolioCardOut(PortfolioCardBase):

@@ -44,6 +44,7 @@ structlog = "^24.0.0"
 pytest = "^9.0.1"
 pytest-asyncio = "^1.3.0"
 pytest-cov = "^7.0.0"
+pytest-rerunfailures = "^14.0"  # Retry flaky tests
 argon2-cffi = "^25.1.0"
 ruff = "^0.8.0"
 ty = "^0.0.4"

@@ -58,17 +58,17 @@ function BlogIndexPage() {
               params={{ slug: featuredPost.slug }}
               className="block group"
             >
-              <article className="relative p-8 bg-gradient-to-br from-brand-400/10 to-brand-400/5 border border-brand-400/20 rounded-2xl hover:border-brand-400/40 transition-colors">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+              <article className="relative p-4 sm:p-6 md:p-8 bg-gradient-to-br from-brand-400/10 to-brand-400/5 border border-brand-400/20 rounded-2xl hover:border-brand-400/40 transition-colors">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-4">
                   <span className="px-2 py-0.5 bg-brand-400/20 text-brand-400 rounded-full text-xs font-medium uppercase tracking-wide">
                     Featured
                   </span>
-                  <span>·</span>
+                  <span className="hidden sm:inline">·</span>
                   <span className="capitalize">{featuredPost.category}</span>
-                  <span>·</span>
-                  <time dateTime={featuredPost.publishedAt}>
+                  <span className="hidden sm:inline">·</span>
+                  <time dateTime={featuredPost.publishedAt} className="text-xs sm:text-sm">
                     {new Date(featuredPost.publishedAt).toLocaleDateString('en-US', {
-                      month: 'long',
+                      month: 'short',
                       day: 'numeric',
                       year: 'numeric',
                     })}
@@ -97,7 +97,7 @@ function BlogIndexPage() {
                     key={post.slug}
                     to="/blog/$slug"
                     params={{ slug: post.slug }}
-                    className="group block p-6 bg-card border border-border rounded-xl hover:border-brand-400/50 transition-colors"
+                    className="group block p-4 sm:p-6 bg-card border border-border rounded-xl hover:border-brand-400/50 transition-colors"
                   >
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
                       <span className="px-2 py-0.5 bg-muted rounded-full capitalize">{post.category}</span>

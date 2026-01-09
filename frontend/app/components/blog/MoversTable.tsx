@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { TrendingUp, TrendingDown } from 'lucide-react'
+import { slugify } from '@/lib/formatters'
 
 interface Mover {
   card_id: number
@@ -32,7 +33,7 @@ export function MoversTable({ title, movers, type }: MoversTableProps) {
           <Link
             key={mover.card_id}
             to="/cards/$cardId"
-            params={{ cardId: String(mover.card_id) }}
+            params={{ cardId: slugify(mover.name) }}
             className="flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors"
           >
             <span className="text-muted-foreground text-sm w-6">{idx + 1}</span>

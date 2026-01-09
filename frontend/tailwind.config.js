@@ -7,6 +7,16 @@ export default {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
         serif: ['"Noto Serif"', 'Georgia', 'Cambria', '"Times New Roman"', 'Times', 'serif'],
       },
+      // Typography scale - replaces arbitrary text-[Xpx] values
+      fontSize: {
+        'micro': ['0.625rem', { lineHeight: '0.875rem' }],  // 10px - badges, timestamps
+        'tiny': ['0.6875rem', { lineHeight: '1rem' }],      // 11px - secondary labels
+        'caption': ['0.75rem', { lineHeight: '1rem' }],     // 12px - table headers, captions
+        'body': ['0.875rem', { lineHeight: '1.25rem' }],    // 14px - body text (same as text-sm)
+        'title': ['1rem', { lineHeight: '1.5rem' }],        // 16px - section titles
+        'heading': ['1.25rem', { lineHeight: '1.75rem' }],  // 20px - page headings
+        'display': ['1.5rem', { lineHeight: '2rem' }],      // 24px - hero text
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -55,6 +65,19 @@ export default {
           900: '#124232',
           950: '#09251c',
         },
+        // Semantic colors for price changes
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
+      },
+      // Animation for reduced motion support
+      animation: {
+        'spin-slow': 'spin 2s linear infinite',
       },
     },
   },

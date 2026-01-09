@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 _floor_cache: dict[tuple, tuple[Any, datetime]] = {}
 _cache_lock = threading.Lock()
 _CACHE_TTL = timedelta(minutes=5)
+# Set of keys currently being computed (prevents duplicate work)
+_computing_keys: set[tuple] = set()
 
 
 def _get_cached_floor(key: tuple) -> Optional[Any]:
@@ -43,10 +45,26 @@ def _get_cached_floor(key: tuple) -> Optional[Any]:
     return None
 
 
+def _try_acquire_compute_lock(key: tuple) -> bool:
+    """Try to acquire computation lock for a key. Returns True if acquired."""
+    with _cache_lock:
+        if key in _computing_keys:
+            return False
+        _computing_keys.add(key)
+        return True
+
+
+def _release_compute_lock(key: tuple) -> None:
+    """Release computation lock for a key."""
+    with _cache_lock:
+        _computing_keys.discard(key)
+
+
 def _set_cached_floor(key: tuple, result: Any) -> None:
-    """Cache a floor price result."""
+    """Cache a floor price result and release compute lock."""
     with _cache_lock:
         _floor_cache[key] = (result, datetime.now(timezone.utc))
+        _computing_keys.discard(key)  # Release lock when caching
         # Simple cache eviction: remove old entries if cache grows too large
         if len(_floor_cache) > 1000:
             now = datetime.now(timezone.utc)
@@ -59,6 +77,7 @@ def clear_floor_cache() -> None:
     """Clear the floor price cache. Useful for testing."""
     with _cache_lock:
         _floor_cache.clear()
+        _computing_keys.clear()
 
 
 class FloorPriceSource(str, Enum):
@@ -176,9 +195,14 @@ class FloorPriceService:
             logger.debug(f"Floor price cache HIT for card_id={card_id}, treatment={treatment}")
             return cached
 
-        # Step 1: Try sales floor (primary source)
-        sales_result = self._get_sales_floor(card_id, treatment, days, include_blokpax)
+        # Get both 30d and 90d sales data in ONE query (optimized)
+        sales_data = self._get_sales_floor_with_fallback(
+            card_id, treatment, days, include_blokpax, self.config.EXPANDED_LOOKBACK_DAYS
+        )
+        sales_result = sales_data.get(days)
+        expanded_sales_result = sales_data.get(self.config.EXPANDED_LOOKBACK_DAYS)
 
+        # Step 1: Try sales floor (primary source) with high confidence
         if sales_result and sales_result["count"] >= self.config.MIN_SALES_HIGH_CONFIDENCE:
             result = FloorPriceResult(
                 price=sales_result["price"],
@@ -219,7 +243,7 @@ class FloorPriceService:
             _set_cached_floor(cache_key, result)
             return result
 
-        # Step 3: Try sales floor with fewer sales
+        # Step 3: Try sales floor with fewer sales (primary period)
         if sales_result and sales_result["count"] >= self.config.MIN_SALES_LOW_CONFIDENCE:
             confidence_score = sales_result["count"] / self.config.MIN_SALES_HIGH_CONFIDENCE
             confidence = (
@@ -242,14 +266,37 @@ class FloorPriceService:
             _set_cached_floor(cache_key, result)
             return result
 
-        # Step 4: Try expanded time window (90 days)
-        # Note: Recursive call will cache its own result
-        if days < self.config.EXPANDED_LOOKBACK_DAYS:
-            return self.get_floor_price(card_id, treatment, self.config.EXPANDED_LOOKBACK_DAYS, include_blokpax)
+        # Step 4: Try expanded time window (90 days) - already fetched in single query!
+        if expanded_sales_result and expanded_sales_result["count"] >= self.config.MIN_SALES_LOW_CONFIDENCE:
+            confidence_score = expanded_sales_result["count"] / self.config.MIN_SALES_HIGH_CONFIDENCE
+            confidence = (
+                ConfidenceLevel.HIGH
+                if expanded_sales_result["count"] >= self.config.MIN_SALES_HIGH_CONFIDENCE
+                else ConfidenceLevel.MEDIUM
+                if expanded_sales_result["count"] >= self.config.MIN_SALES_MEDIUM_CONFIDENCE
+                else ConfidenceLevel.LOW
+            )
+            result = FloorPriceResult(
+                price=expanded_sales_result["price"],
+                source=FloorPriceSource.SALES,
+                confidence=confidence,
+                confidence_score=min(confidence_score, 1.0),
+                metadata={
+                    "sales_count": expanded_sales_result["count"],
+                    "treatment": treatment,
+                    "days": self.config.EXPANDED_LOOKBACK_DAYS,
+                    "platforms": expanded_sales_result.get("platforms", []),
+                    "expanded_window": True,
+                },
+            )
+            _set_cached_floor(cache_key, result)
+            return result
 
         # Step 5: Treatment multiplier fallback (when specific treatment has no data)
         if treatment:
-            multiplier_result = self._estimate_from_treatment_multiplier(card_id, treatment, days)
+            multiplier_result = self._estimate_from_treatment_multiplier(
+                card_id, treatment, self.config.EXPANDED_LOOKBACK_DAYS
+            )
             if multiplier_result:
                 _set_cached_floor(cache_key, multiplier_result)
                 return multiplier_result
@@ -260,7 +307,7 @@ class FloorPriceService:
             source=FloorPriceSource.NONE,
             confidence=ConfidenceLevel.LOW,
             confidence_score=0.0,
-            metadata={"reason": "insufficient_data", "days_searched": days},
+            metadata={"reason": "insufficient_data", "days_searched": self.config.EXPANDED_LOOKBACK_DAYS},
         )
         _set_cached_floor(cache_key, result)
         return result
@@ -279,30 +326,75 @@ class FloorPriceService:
 
         Returns: {"price": float, "count": int, "platforms": list} or None
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        all_prices: list[tuple[float, str]] = []  # (price, platform)
+        # Use optimized method that gets both 30d and 90d in one query
+        result = self._get_sales_floor_with_fallback(card_id, treatment, days, include_blokpax)
+        return result.get(days) if result else None
 
-        # Query marketprice (eBay, OpenSea)
+    def _get_sales_floor_with_fallback(
+        self,
+        card_id: int,
+        treatment: Optional[str],
+        primary_days: int = 30,
+        include_blokpax: bool = True,
+        fallback_days: int = 90,
+    ) -> dict[int, dict[str, Any]]:
+        """
+        Calculate sales floor for both primary and fallback time windows in ONE query.
+
+        Uses a single CTE with CASE expressions to bucket sales by time period,
+        reducing database round-trips from 2 to 1.
+
+        Returns: {days: {"price": float, "count": int, "platforms": list}, ...}
+        """
+        now = datetime.now(timezone.utc)
+        primary_cutoff = now - timedelta(days=primary_days)
+        fallback_cutoff = now - timedelta(days=fallback_days)
+
+        # Query marketprice with both time windows in one query
         treatment_clause = "AND treatment = :treatment" if treatment else ""
         query = text(f"""
-            SELECT price, platform
-            FROM marketprice
-            WHERE card_id = :card_id
-              AND listing_type = 'sold'
-              AND COALESCE(sold_date, scraped_at) >= :cutoff
-              AND is_bulk_lot = FALSE
-              {treatment_clause}
-            ORDER BY price ASC
-            LIMIT :num_sales
+            WITH sales AS (
+                SELECT
+                    price,
+                    platform,
+                    COALESCE(sold_date, scraped_at) as sale_date,
+                    CASE
+                        WHEN COALESCE(sold_date, scraped_at) >= :primary_cutoff THEN 'primary'
+                        ELSE 'fallback'
+                    END as period
+                FROM marketprice
+                WHERE card_id = :card_id
+                  AND listing_type = 'sold'
+                  AND COALESCE(sold_date, scraped_at) >= :fallback_cutoff
+                  AND is_bulk_lot = FALSE
+                  {treatment_clause}
+            ),
+            ranked AS (
+                SELECT
+                    price,
+                    platform,
+                    period,
+                    ROW_NUMBER() OVER (PARTITION BY period ORDER BY price ASC) as rn
+                FROM sales
+            )
+            SELECT period, price, platform
+            FROM ranked
+            WHERE rn <= :num_sales
+            ORDER BY period, price ASC
         """)
 
         params: dict[str, Any] = {
             "card_id": card_id,
-            "cutoff": cutoff,
+            "primary_cutoff": primary_cutoff,
+            "fallback_cutoff": fallback_cutoff,
             "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE,
         }
         if treatment:
             params["treatment"] = treatment
+
+        # Collect prices by period
+        primary_prices: list[tuple[float, str]] = []
+        all_prices: list[tuple[float, str]] = []  # fallback includes primary
 
         try:
             if self.session:
@@ -312,54 +404,95 @@ class FloorPriceService:
                     result = conn.execute(query, params)
 
             for row in result.fetchall():
-                all_prices.append((float(row[0]), row[1]))
+                period, price, platform = row[0], float(row[1]), row[2]
+                all_prices.append((price, platform))
+                if period == "primary":
+                    primary_prices.append((price, platform))
         except Exception as e:
             logger.error(f"[FloorPrice] Failed to query marketprice for card {card_id}: {e}")
 
-        # Query blokpaxsale if enabled
+        # Query blokpaxsale if enabled (same optimization)
         if include_blokpax:
             bpx_query = text("""
-                SELECT price_usd
-                FROM blokpaxsale
-                WHERE card_id = :card_id
-                  AND filled_at >= :cutoff
-                ORDER BY price_usd ASC
-                LIMIT :num_sales
+                WITH sales AS (
+                    SELECT
+                        price_usd as price,
+                        filled_at as sale_date,
+                        CASE
+                            WHEN filled_at >= :primary_cutoff THEN 'primary'
+                            ELSE 'fallback'
+                        END as period
+                    FROM blokpaxsale
+                    WHERE card_id = :card_id
+                      AND filled_at >= :fallback_cutoff
+                ),
+                ranked AS (
+                    SELECT
+                        price,
+                        period,
+                        ROW_NUMBER() OVER (PARTITION BY period ORDER BY price ASC) as rn
+                    FROM sales
+                )
+                SELECT period, price
+                FROM ranked
+                WHERE rn <= :num_sales
+                ORDER BY period, price ASC
             """)
 
             try:
                 if self.session:
-                    result = self.session.execute(
+                    bpx_result = self.session.execute(
                         bpx_query,
-                        {"card_id": card_id, "cutoff": cutoff, "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE},
+                        {
+                            "card_id": card_id,
+                            "primary_cutoff": primary_cutoff,
+                            "fallback_cutoff": fallback_cutoff,
+                            "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE,
+                        },
                     )
                 else:
                     with engine.connect() as conn:
-                        result = conn.execute(
+                        bpx_result = conn.execute(
                             bpx_query,
-                            {"card_id": card_id, "cutoff": cutoff, "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE},
+                            {
+                                "card_id": card_id,
+                                "primary_cutoff": primary_cutoff,
+                                "fallback_cutoff": fallback_cutoff,
+                                "num_sales": self.config.MIN_SALES_HIGH_CONFIDENCE,
+                            },
                         )
 
-                for row in result.fetchall():
-                    all_prices.append((float(row[0]), "blokpax"))
+                for row in bpx_result.fetchall():
+                    period, price = row[0], float(row[1])
+                    all_prices.append((price, "blokpax"))
+                    if period == "primary":
+                        primary_prices.append((price, "blokpax"))
             except Exception as e:
                 logger.error(f"[FloorPrice] Failed to query blokpaxsale for card {card_id}: {e}")
 
-        if not all_prices:
-            return None
+        results: dict[int, dict[str, Any]] = {}
 
-        # Sort all prices and take lowest N
-        all_prices.sort(key=lambda x: x[0])
-        lowest = all_prices[: self.config.MIN_SALES_HIGH_CONFIDENCE]
+        # Calculate primary period result
+        if primary_prices:
+            primary_prices.sort(key=lambda x: x[0])
+            lowest = primary_prices[: self.config.MIN_SALES_HIGH_CONFIDENCE]
+            results[primary_days] = {
+                "price": round(sum(p[0] for p in lowest) / len(lowest), 2),
+                "count": len(lowest),
+                "platforms": list(set(p[1] for p in lowest)),
+            }
 
-        avg_price = sum(p[0] for p in lowest) / len(lowest)
-        platforms = list(set(p[1] for p in lowest))
+        # Calculate fallback period result (includes all sales in window)
+        if all_prices:
+            all_prices.sort(key=lambda x: x[0])
+            lowest = all_prices[: self.config.MIN_SALES_HIGH_CONFIDENCE]
+            results[fallback_days] = {
+                "price": round(sum(p[0] for p in lowest) / len(lowest), 2),
+                "count": len(lowest),
+                "platforms": list(set(p[1] for p in lowest)),
+            }
 
-        return {
-            "price": round(avg_price, 2),
-            "count": len(lowest),
-            "platforms": platforms,
-        }
+        return results
 
     def _map_confidence(self, score: float) -> ConfidenceLevel:
         """Map raw confidence score to ConfidenceLevel enum."""

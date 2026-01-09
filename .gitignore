@@ -76,6 +76,7 @@ frontend/app.config.timestamp_*.js
 
 # Vercel build output
 public/
+!frontend/public/emails/
 .coverage
 
 # SaaS Module (Private Submodule)

@@ -1,15 +1,17 @@
 """Blog API endpoints for weekly movers and content."""
 
-from typing import Any
+from typing import Any, Optional, List
 from datetime import datetime, timedelta, timezone
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
-from sqlmodel import Session
+from sqlmodel import Session, select, col
 from sqlalchemy import text
+from pydantic import BaseModel
 
 from app.db import get_session
 from app.discord_bot.stats import calculate_market_stats
+from app.models.blog_post import BlogPost
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -215,3 +217,143 @@ def get_weekly_movers_by_date(
         "new_highs": new_highs,
         "new_lows": new_lows,
     }
+
+
+# =============================================================================
+# BLOG POSTS (Database-stored MDX content)
+# =============================================================================
+
+
+class BlogPostSummary(BaseModel):
+    """Summary view for blog post listings."""
+
+    slug: str
+    title: str
+    description: Optional[str]
+    category: str
+    tags: List[str]
+    author: str
+    read_time: int
+    published_at: datetime
+
+
+class BlogPostDetail(BaseModel):
+    """Full blog post with content."""
+
+    slug: str
+    title: str
+    description: Optional[str]
+    content: str
+    category: str
+    tags: List[str]
+    author: str
+    read_time: int
+    published_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
+@router.get("/posts", response_model=List[BlogPostSummary])
+def list_blog_posts(
+    session: Session = Depends(get_session),
+    category: Optional[str] = Query(default=None, description="Filter by category"),
+    limit: int = Query(default=20, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> Any:
+    """
+    List published blog posts (without content for efficiency).
+
+    Returns posts ordered by published_at descending.
+    """
+    query = (
+        select(BlogPost)
+        .where(BlogPost.is_published == True)  # noqa: E712
+        .order_by(col(BlogPost.published_at).desc())
+    )
+
+    if category:
+        query = query.where(BlogPost.category == category)
+
+    query = query.offset(offset).limit(limit)
+    posts = session.exec(query).all()
+
+    return [
+        BlogPostSummary(
+            slug=post.slug,
+            title=post.title,
+            description=post.description,
+            category=post.category,
+            tags=post.tags or [],
+            author=post.author,
+            read_time=post.read_time,
+            published_at=post.published_at,
+        )
+        for post in posts
+    ]
+
+
+@router.get("/posts/latest", response_model=BlogPostDetail)
+def get_latest_blog_post(
+    session: Session = Depends(get_session),
+    category: Optional[str] = Query(default=None, description="Filter by category"),
+) -> Any:
+    """
+    Get the most recently published blog post.
+    """
+    query = (
+        select(BlogPost)
+        .where(BlogPost.is_published == True)  # noqa: E712
+        .order_by(col(BlogPost.published_at).desc())
+    )
+
+    if category:
+        query = query.where(BlogPost.category == category)
+
+    post = session.exec(query).first()
+
+    if not post:
+        raise HTTPException(status_code=404, detail="No blog posts found")
+
+    return BlogPostDetail(
+        slug=post.slug,
+        title=post.title,
+        description=post.description,
+        content=post.content,
+        category=post.category,
+        tags=post.tags or [],
+        author=post.author,
+        read_time=post.read_time,
+        published_at=post.published_at,
+        created_at=post.created_at,
+        updated_at=post.updated_at,
+    )
+
+
+@router.get("/posts/{slug}", response_model=BlogPostDetail)
+def get_blog_post_by_slug(
+    slug: str,
+    session: Session = Depends(get_session),
+) -> Any:
+    """
+    Get a single blog post by its slug.
+    """
+    post = session.exec(
+        select(BlogPost).where(BlogPost.slug == slug, BlogPost.is_published == True)  # noqa: E712
+    ).first()
+
+    if not post:
+        raise HTTPException(status_code=404, detail="Blog post not found")
+
+    return BlogPostDetail(
+        slug=post.slug,
+        title=post.title,
+        description=post.description,
+        content=post.content,
+        category=post.category,
+        tags=post.tags or [],
+        author=post.author,
+        read_time=post.read_time,
+        published_at=post.published_at,
+        created_at=post.created_at,
+        updated_at=post.updated_at,
+    )

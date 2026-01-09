@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { api } from '../utils/auth'
-import { Minus, Wallet, Link as LinkIcon, Loader2 } from 'lucide-react'
+import { Minus, Wallet, Link as LinkIcon, Loader2, Heart, Package } from 'lucide-react'
+import { toast } from 'sonner'
 // Animated icons
 import { XIcon } from '~/components/ui/x'
 import { PlusIcon } from '~/components/ui/plus'
 import { CheckIcon } from '~/components/ui/check'
 import clsx from 'clsx'
 import { SimpleDropdown } from './ui/dropdown'
+import { useModalAccessibility } from '~/hooks/useFocusTrap'
 
 type CardInfo = {
     id: number
@@ -19,10 +21,16 @@ type CardInfo = {
     image_url?: string  // Card thumbnail URL
 }
 
+type PortfolioMode = 'owned' | 'wanted'
+
 type AddToPortfolioDrawerProps = {
     card: CardInfo
     isOpen: boolean
     onClose: () => void
+    /** Initial mode - 'owned' for portfolio, 'wanted' for watchlist */
+    initialMode?: PortfolioMode
+    /** Callback after successful add */
+    onSuccess?: (mode: PortfolioMode) => void
 }
 
 type PortfolioCardCreate = {
@@ -34,6 +42,7 @@ type PortfolioCardCreate = {
     grading: string | null
     notes: string | null
     quantity?: number
+    is_wanted?: boolean
 }
 
 type TreatmentPricing = {
@@ -107,10 +116,19 @@ const parseOpenSeaUrl = (url: string): { chain?: string; contract?: string; toke
     }
 }
 
-export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDrawerProps) {
+export function AddToPortfolioModal({ card, isOpen, onClose, initialMode = 'owned', onSuccess }: AddToPortfolioDrawerProps) {
+    // Accessibility: focus trap, scroll lock, escape to close
+    const { containerRef, modalProps } = useModalAccessibility(isOpen, {
+        onClose,
+        initialFocus: 'input[name="purchase_price"]', // Focus price input on open
+    })
+
     const queryClient = useQueryClient()
     const productType = card.product_type || 'Single'
     const isNFT = productType === 'NFT' || productType === 'Proof'
+
+    // Portfolio mode: owned (portfolio) vs wanted (watchlist)
+    const [portfolioMode, setPortfolioMode] = useState<PortfolioMode>(initialMode)
 
     // Get treatment and source options based on product type
     const treatmentOptions = TREATMENTS_BY_TYPE[productType] || TREATMENTS_BY_TYPE['default']
@@ -217,6 +235,14 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['portfolio-cards'] })
             queryClient.invalidateQueries({ queryKey: ['portfolio-summary'] })
+            const isWanted = portfolioMode === 'wanted'
+            toast.success(
+                isWanted ? 'Added to Watchlist!' : 'Added to Portfolio!',
+                {
+                    description: `${card.name} has been added to your ${isWanted ? 'watchlist' : 'portfolio'}.`,
+                }
+            )
+            onSuccess?.(portfolioMode)
             onClose()
             resetForm()
         }
@@ -230,6 +256,12 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['portfolio-cards'] })
             queryClient.invalidateQueries({ queryKey: ['portfolio-summary'] })
+            const totalCards = splitCards.reduce((acc, sc) => acc + (sc.quantity || 1), 0)
+            const isWanted = portfolioMode === 'wanted'
+            toast.success(
+                `Added ${totalCards} card${totalCards !== 1 ? 's' : ''} to ${isWanted ? 'Watchlist' : 'Portfolio'}!`
+            )
+            onSuccess?.(portfolioMode)
             onClose()
             resetForm()
         }
@@ -260,7 +292,8 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
             purchase_date: form.purchase_date || null,
             grading: form.grading || null,
             notes: form.notes || null,
-            quantity: form.quantity
+            quantity: form.quantity,
+            is_wanted: portfolioMode === 'wanted'
         })
     }
 
@@ -278,7 +311,8 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
             purchase_date: form.purchase_date || null,
             grading: form.grading || null,
             notes: form.notes || null,
-            quantity: form.quantity
+            quantity: form.quantity,
+            is_wanted: portfolioMode === 'wanted'
         }])
         // Reset only price and quantity for next entry (keep treatment/source)
         setForm({ ...form, purchase_price: getSuggestedPrice(form.treatment), grading: '', notes: '', quantity: 1 })
@@ -300,6 +334,9 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
 
             {/* Drawer - z-[70] to be above backdrop */}
             <div
+                ref={containerRef}
+                {...modalProps}
+                aria-labelledby="portfolio-modal-title"
                 className={clsx(
                     "fixed inset-y-0 right-0 w-full md:w-[420px] bg-card border-l border-border shadow-2xl transform transition-transform duration-300 ease-in-out z-[70] flex flex-col",
                     isOpen ? "translate-x-0" : "translate-x-full"
@@ -332,7 +369,7 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                                 <Wallet className="w-5 h-5 text-primary" />
                             )}
                             <div>
-                                <h2 className="text-lg font-bold uppercase tracking-tight">Add to Portfolio</h2>
+                                <h2 id="portfolio-modal-title" className="text-lg font-bold uppercase tracking-tight">Add to Portfolio</h2>
                                 <p className="text-xs text-muted-foreground">{card.name}</p>
                                 <p className="text-[10px] text-muted-foreground">{card.set_name}</p>
                             </div>
@@ -346,14 +383,40 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                     </div>
                 </div>
 
-                {/* Mode Toggle */}
+                {/* Portfolio Mode Toggle (Owned vs Wanted) */}
                 <div className="px-6 pt-4 flex gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setPortfolioMode('owned')}
+                        className={clsx(
+                            "flex-1 flex items-center justify-center gap-2 text-xs uppercase font-bold py-2.5 rounded transition-colors",
+                            portfolioMode === 'owned' ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"
+                        )}
+                    >
+                        <Package className="w-3.5 h-3.5" />
+                        I Own This
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setPortfolioMode('wanted')}
+                        className={clsx(
+                            "flex-1 flex items-center justify-center gap-2 text-xs uppercase font-bold py-2.5 rounded transition-colors",
+                            portfolioMode === 'wanted' ? "bg-pink-500 text-white" : "bg-muted hover:bg-muted/80"
+                        )}
+                    >
+                        <Heart className="w-3.5 h-3.5" />
+                        Watchlist
+                    </button>
+                </div>
+
+                {/* Entry Mode Toggle (Single vs Multi) */}
+                <div className="px-6 pt-2 flex gap-2">
                     <button
                         type="button"
                         onClick={() => setSplitMode(false)}
                         className={clsx(
                             "flex-1 text-xs uppercase font-bold py-2 rounded transition-colors",
-                            !splitMode ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"
+                            !splitMode ? "bg-muted/80 text-foreground" : "bg-muted/30 hover:bg-muted/50 text-muted-foreground"
                         )}
                     >
                         Single Card
@@ -363,7 +426,7 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                         onClick={() => setSplitMode(true)}
                         className={clsx(
                             "flex-1 text-xs uppercase font-bold py-2 rounded transition-colors",
-                            splitMode ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"
+                            splitMode ? "bg-muted/80 text-foreground" : "bg-muted/30 hover:bg-muted/50 text-muted-foreground"
                         )}
                     >
                         Multi Entry ({splitCards.length})
@@ -655,9 +718,18 @@ export function AddToPortfolioModal({ card, isOpen, onClose }: AddToPortfolioDra
                                     type="button"
                                     onClick={handleSubmitSingle}
                                     disabled={addSingleMutation.isPending}
-                                    className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded text-sm uppercase font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                    className={clsx(
+                                        "flex-1 px-4 py-2 rounded text-sm uppercase font-bold transition-colors disabled:opacity-50",
+                                        portfolioMode === 'wanted'
+                                            ? "bg-pink-500 text-white hover:bg-pink-600"
+                                            : "bg-primary text-primary-foreground hover:bg-primary/90"
+                                    )}
                                 >
-                                    {addSingleMutation.isPending ? 'Adding...' : form.quantity > 1 ? `Add ${form.quantity} Cards` : 'Add to Portfolio'}
+                                    {addSingleMutation.isPending
+                                        ? 'Adding...'
+                                        : portfolioMode === 'wanted'
+                                            ? (form.quantity > 1 ? `Add ${form.quantity} to Watchlist` : 'Add to Watchlist')
+                                            : (form.quantity > 1 ? `Add ${form.quantity} Cards` : 'Add to Portfolio')}
                                 </button>
                             </>
                         )}

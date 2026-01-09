@@ -3,11 +3,13 @@ Blokpax API endpoints for frontend integration.
 Provides access to WOTF storefront data, floor prices, and sales history.
 """
 
+import threading
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, desc
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
+from cachetools import TTLCache
 
 from app.core.typing import col
 from app.db import get_session
@@ -20,6 +22,19 @@ from app.models.blokpax import (
 )
 
 router = APIRouter()
+
+# Module-level caches with TTL
+# Summary endpoint cache (5 min) - expensive aggregation
+_summary_cache: TTLCache = TTLCache(maxsize=10, ttl=300)
+_summary_cache_lock = threading.Lock()
+
+# Storefronts list cache (5 min) - rarely changes
+_storefronts_cache: TTLCache = TTLCache(maxsize=10, ttl=300)
+_storefronts_cache_lock = threading.Lock()
+
+# Sales endpoints cache (2 min) - more frequent updates
+_sales_cache: TTLCache = TTLCache(maxsize=50, ttl=120)
+_sales_cache_lock = threading.Lock()
 
 
 # Pydantic schemas for API responses
@@ -62,6 +77,7 @@ class BlokpaxSaleOut(BaseModel):
     quantity: int
     seller_address: str
     buyer_address: str
+    treatment: Optional[str] = None
     filled_at: datetime
     card_id: Optional[int] = None
 
@@ -106,9 +122,24 @@ def list_storefronts(
 ) -> Any:
     """
     List all WOTF storefronts with current floor prices.
+    Cached for 5 minutes.
     """
+    cache_key = "storefronts_list"
+
+    # Check cache first
+    with _storefronts_cache_lock:
+        cached = _storefronts_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     storefronts = session.exec(select(BlokpaxStorefront).order_by(col(BlokpaxStorefront.name))).all()
-    return [BlokpaxStorefrontOut.model_validate(s) for s in storefronts]
+    result = [BlokpaxStorefrontOut.model_validate(s) for s in storefronts]
+
+    # Cache the result
+    with _storefronts_cache_lock:
+        _storefronts_cache[cache_key] = result
+
+    return result
 
 
 @router.get("/storefronts/{slug}", response_model=BlokpaxStorefrontOut)
@@ -165,7 +196,16 @@ def get_storefront_sales(
 ) -> Any:
     """
     Get recent sales for a specific storefront.
+    Cached for 2 minutes.
     """
+    cache_key = f"storefront_sales_{slug}_{days}_{limit}"
+
+    # Check cache first
+    with _sales_cache_lock:
+        cached = _sales_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     # For reward-room, we filter WOTF assets in the scraper
     # For dedicated storefronts, all sales are WOTF
 
@@ -181,7 +221,13 @@ def get_storefront_sales(
         select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff).order_by(desc(BlokpaxSale.filled_at)).limit(limit)
     ).all()
 
-    return [BlokpaxSaleOut.model_validate(s) for s in sales]
+    result = [BlokpaxSaleOut.model_validate(s) for s in sales]
+
+    # Cache the result
+    with _sales_cache_lock:
+        _sales_cache[cache_key] = result
+
+    return result
 
 
 @router.get("/sales", response_model=List[BlokpaxSaleOut])
@@ -192,14 +238,29 @@ def list_all_sales(
 ) -> Any:
     """
     Get recent sales across all WOTF storefronts.
+    Cached for 2 minutes.
     """
+    cache_key = f"all_sales_{days}_{limit}"
+
+    # Check cache first
+    with _sales_cache_lock:
+        cached = _sales_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     sales = session.exec(
         select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff).order_by(desc(BlokpaxSale.filled_at)).limit(limit)
     ).all()
 
-    return [BlokpaxSaleOut.model_validate(s) for s in sales]
+    result = [BlokpaxSaleOut.model_validate(s) for s in sales]
+
+    # Cache the result
+    with _sales_cache_lock:
+        _sales_cache[cache_key] = result
+
+    return result
 
 
 @router.get("/assets", response_model=List[BlokpaxAssetOut])
@@ -228,7 +289,16 @@ def get_blokpax_summary(
 ) -> Any:
     """
     Get a summary of all WOTF Blokpax data for dashboard display.
+    Cached for 5 minutes to avoid repeated expensive aggregations.
     """
+    cache_key = "blokpax_summary"
+
+    # Check cache first
+    with _summary_cache_lock:
+        cached = _summary_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     storefronts = session.exec(select(BlokpaxStorefront)).all()
 
     # Calculate totals
@@ -239,16 +309,28 @@ def get_blokpax_summary(
     floors = [sf.floor_price_usd for sf in storefronts if sf.floor_price_usd]
     lowest_floor = min(floors) if floors else None
 
-    # Get recent sales count (last 24h)
+    # Get recent sales count (last 24h) and volume (last 7d) in single efficient query
+    from sqlalchemy import text
+
     cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
-    recent_sales = len(session.exec(select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_24h)).all())
-
-    # Get total sales volume (last 7d)
     cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
-    week_sales = session.exec(select(BlokpaxSale).where(BlokpaxSale.filled_at >= cutoff_7d)).all()
-    volume_7d_usd = sum(s.price_usd * s.quantity for s in week_sales)
 
-    return {
+    # Single aggregate query instead of loading all records into memory
+    sales_stats = session.execute(
+        text("""
+            SELECT
+                COUNT(*) FILTER (WHERE filled_at >= :cutoff_24h) as sales_24h,
+                COALESCE(SUM(price_usd * quantity) FILTER (WHERE filled_at >= :cutoff_7d), 0) as volume_7d
+            FROM blokpaxsale
+            WHERE filled_at >= :cutoff_7d
+        """),
+        {"cutoff_24h": cutoff_24h, "cutoff_7d": cutoff_7d},
+    ).first()
+
+    recent_sales = int(sales_stats[0]) if sales_stats else 0
+    volume_7d_usd = float(sales_stats[1]) if sales_stats else 0.0
+
+    result = {
         "storefronts": [
             {
                 "slug": sf.slug,
@@ -268,6 +350,12 @@ def get_blokpax_summary(
             "volume_7d_usd": volume_7d_usd,
         },
     }
+
+    # Cache the result
+    with _summary_cache_lock:
+        _summary_cache[cache_key] = result
+
+    return result
 
 
 @router.get("/offers", response_model=List[BlokpaxOfferOut])

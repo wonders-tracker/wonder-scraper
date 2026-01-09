@@ -4,19 +4,16 @@
  * This component is code-split to avoid loading recharts (378KB) on initial page load.
  * It only loads when the user visits a card detail page.
  */
-import { useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import {
   ComposedChart,
-  Area,
   Line,
-  ScatterChart,
-  Scatter,
+  Bar,
   XAxis,
   YAxis,
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   CartesianGrid,
-  ReferenceLine,
 } from 'recharts'
 
 // Note: AreaChart removed - now using ComposedChart for combined price + floor trend
@@ -28,6 +25,7 @@ type ChartDataPoint = {
   treatment?: string
   treatmentColor?: string
   isActive?: boolean
+  dailyVolume?: number
 }
 
 type FloorHistoryPoint = {
@@ -41,50 +39,77 @@ type FloorHistoryPoint = {
 
 type Props = {
   data: ChartDataPoint[]
-  chartType: 'scatter' | 'line'
-  floorPrice?: number
-  lowestAsk?: number
   floorHistory?: FloorHistoryPoint[]
 }
 
-// Generate well-spaced log scale ticks
+// Generate well-spaced log scale ticks - max 4-5 ticks for cleaner display
 function generateLogTicks(min: number, max: number): number[] {
+  const logMin = Math.log10(min)
+  const logMax = Math.log10(max)
+  const logRange = logMax - logMin
+
+  // Target 3-4 ticks for clean display
+  const targetTicks = 4
+
+  // Calculate step in log space
+  const logStep = logRange / targetTicks
+
+  // Round step to nice values (0.5, 1, 2 in log space)
+  let niceLogStep: number
+  if (logStep < 0.3) niceLogStep = 0.25
+  else if (logStep < 0.7) niceLogStep = 0.5
+  else if (logStep < 1.5) niceLogStep = 1
+  else niceLogStep = 2
+
+  // Generate ticks at nice intervals
   const ticks: number[] = []
-  const logMin = Math.floor(Math.log10(min))
-  const logMax = Math.ceil(Math.log10(max))
+  const startLog = Math.ceil(logMin / niceLogStep) * niceLogStep
 
-  // Standard "nice" multipliers for log scale
-  const multipliers = [1, 2, 5]
+  for (let log = startLog; log <= logMax + 0.01; log += niceLogStep) {
+    const val = Math.pow(10, log)
+    if (val >= min * 0.9 && val <= max * 1.1) {
+      // Round to nice number
+      const magnitude = Math.pow(10, Math.floor(Math.log10(val)))
+      const normalized = val / magnitude
+      let niceVal: number
+      if (normalized < 1.5) niceVal = magnitude
+      else if (normalized < 3.5) niceVal = 2 * magnitude
+      else if (normalized < 7.5) niceVal = 5 * magnitude
+      else niceVal = 10 * magnitude
 
-  for (let power = logMin; power <= logMax; power++) {
-    for (const mult of multipliers) {
-      const val = mult * Math.pow(10, power)
-      if (val >= min * 0.9 && val <= max * 1.1) {
-        ticks.push(val)
+      // Avoid duplicates
+      if (ticks.length === 0 || Math.abs(niceVal - ticks[ticks.length - 1]) / niceVal > 0.1) {
+        ticks.push(niceVal)
       }
     }
   }
 
-  // If we have too many ticks (>7), reduce to just powers of 10 and maybe 5s
-  if (ticks.length > 7) {
-    const filtered = ticks.filter(t => {
-      const mantissa = t / Math.pow(10, Math.floor(Math.log10(t)))
-      return mantissa === 1 || mantissa === 5
-    })
-    // If still too many, just use powers of 10
-    if (filtered.length > 6) {
-      return ticks.filter(t => {
-        const mantissa = t / Math.pow(10, Math.floor(Math.log10(t)))
-        return mantissa === 1
-      })
-    }
-    return filtered
+  // Limit to max 5 ticks
+  if (ticks.length > 5) {
+    const step = Math.ceil(ticks.length / 4)
+    return ticks.filter((_, i) => i % step === 0 || i === ticks.length - 1)
   }
 
   return ticks
 }
 
-export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floorHistory }: Props) {
+export function PriceHistoryChart({ data, floorHistory }: Props) {
+  // Fix for ResponsiveContainer not measuring correctly on initial render
+  // when lazy-loaded with Suspense. Forces a resize event after mount AND
+  // when data changes (e.g., navigating between cards).
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    // Reset mounted to show placeholder while remeasuring
+    setMounted(false)
+    // Small delay to ensure container has been painted
+    const timer = setTimeout(() => {
+      setMounted(true)
+      // Dispatch resize event to force ResponsiveContainer to recalculate
+      window.dispatchEvent(new Event('resize'))
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [data.length]) // Re-run when data changes (new card navigation)
+
   // Transform floor history to chart format
   const floorHistoryData = useMemo(() => {
     if (!floorHistory || floorHistory.length === 0) return []
@@ -145,20 +170,35 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
   // Calculate Y-axis domain for log scale (include floor history prices)
   const prices = data.map(d => d.price).filter(p => p > 0)
   const floorPrices = floorHistoryData.map(h => h.floorPrice).filter((p): p is number => p !== null && p > 0)
-  const refPrices = [floorPrice, lowestAsk].filter((p): p is number => p !== undefined && p > 0)
-  const allPrices = [...prices, ...floorPrices, ...refPrices]
+  const allPrices = [...prices, ...floorPrices]
 
   // For log scale, find min/max and add padding in log space
   const minPrice = Math.min(...allPrices)
   const maxPrice = Math.max(...allPrices)
 
-  // Pad in log space for even visual padding
+  // Calculate log values
   const logMin = Math.log10(minPrice)
   const logMax = Math.log10(maxPrice)
-  const logPadding = (logMax - logMin) * 0.1
+  const logRange = logMax - logMin
 
-  const yMin = Math.pow(10, logMin - logPadding)
-  const yMax = Math.pow(10, logMax + logPadding)
+  // Add more padding when there's little variation or few data points
+  // Minimum spread of 0.5 log units (about 3x range) for readability
+  const minLogSpread = 0.5
+  const effectiveLogRange = Math.max(logRange, minLogSpread)
+
+  // More padding (20%) for better visual spacing
+  const logPadding = effectiveLogRange * 0.2
+
+  // If prices are very close (< 0.1 log spread), center and expand equally
+  let yMin: number, yMax: number
+  if (logRange < 0.1) {
+    const center = (logMin + logMax) / 2
+    yMin = Math.pow(10, center - minLogSpread / 2 - logPadding)
+    yMax = Math.pow(10, center + minLogSpread / 2 + logPadding)
+  } else {
+    yMin = Math.pow(10, logMin - logPadding)
+    yMax = Math.pow(10, logMax + logPadding)
+  }
 
   // Generate clean log scale ticks
   const yTicks = generateLogTicks(yMin, yMax)
@@ -166,116 +206,18 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
   // Check if we have floor history to show
   const hasFloorHistory = floorHistoryData.length > 1
 
+  // Show placeholder until mounted to ensure proper ResponsiveContainer measurement
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground animate-pulse">
+        <div className="h-full w-full bg-muted/20 rounded" />
+      </div>
+    )
+  }
+
   return (
     <ResponsiveContainer width="100%" height="100%">
-      {chartType === 'scatter' ? (
-        <ScatterChart margin={{ top: 20, right: 50, bottom: 30, left: 20 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.3} vertical={false} />
-          <XAxis
-            dataKey="timestamp"
-            type="number"
-            domain={['dataMin', 'dataMax']}
-            tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            tick={{ fill: '#71717a', fontSize: 10 }}
-            axisLine={{ stroke: '#27272a' }}
-            tickLine={{ stroke: '#27272a' }}
-          />
-          <YAxis
-            dataKey="price"
-            orientation="right"
-            scale="log"
-            domain={[yMin, yMax]}
-            ticks={yTicks}
-            tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val < 10 ? val.toFixed(2) : val.toFixed(0)}`}
-            tick={{ fill: '#71717a', fontSize: 10 }}
-            axisLine={{ stroke: '#27272a' }}
-            tickLine={{ stroke: '#27272a' }}
-            allowDataOverflow
-          />
-          {floorPrice && floorPrice > 0 && (
-            <ReferenceLine
-              y={floorPrice}
-              stroke="#7dd3a8"
-              strokeDasharray="3 3"
-              strokeWidth={1.5}
-              label={{ value: `Floor $${floorPrice >= 1000 ? `${(floorPrice/1000).toFixed(1)}k` : floorPrice.toFixed(0)}`, fill: '#7dd3a8', fontSize: 9, position: 'insideBottomRight' }}
-            />
-          )}
-          {lowestAsk && lowestAsk > 0 && (
-            <ReferenceLine
-              y={lowestAsk}
-              stroke="#3b82f6"
-              strokeDasharray="5 5"
-              strokeWidth={1.5}
-              label={{ value: `Ask $${lowestAsk >= 1000 ? `${(lowestAsk/1000).toFixed(1)}k` : lowestAsk.toFixed(0)}`, fill: '#3b82f6', fontSize: 9, position: 'insideTopRight' }}
-            />
-          )}
-          <RechartsTooltip
-            cursor={{ strokeDasharray: '3 3', stroke: '#71717a' }}
-            content={({ active, payload }) => {
-              if (active && payload && payload.length) {
-                const d = payload[0].payload as ChartDataPoint
-                return (
-                  <div className="bg-black/90 border border-border rounded p-3 shadow-lg">
-                    <div className="text-brand-300 font-bold font-mono text-lg">${d.price.toFixed(2)}</div>
-                    <div className="text-muted-foreground text-xs mt-1">{d.date}</div>
-                    {d.treatment && (
-                      <div className="mt-2">
-                        <span
-                          className="px-2 py-0.5 rounded text-[9px] uppercase font-bold"
-                          style={{
-                            backgroundColor: `${d.treatmentColor}30`,
-                            color: d.treatmentColor
-                          }}
-                        >
-                          {d.treatment}
-                        </span>
-                      </div>
-                    )}
-                    <div className="text-[10px] text-muted-foreground mt-1">
-                      {d.isActive ? '◆ Active Listing' : '● Sold'}
-                    </div>
-                  </div>
-                )
-              }
-              return null
-            }}
-          />
-          <Scatter
-            data={data}
-            shape={(props: any) => {
-              const { cx, cy, payload } = props
-              if (!cx || !cy || !payload) return <g />
-
-              if (payload.isActive) {
-                const size = 7
-                return (
-                  <polygon
-                    points={`${cx},${cy-size} ${cx+size},${cy} ${cx},${cy+size} ${cx-size},${cy}`}
-                    fill={payload.treatmentColor || '#3b82f6'}
-                    stroke="#0a0a0a"
-                    strokeWidth={2}
-                    style={{ filter: 'drop-shadow(0 0 4px rgba(59,130,246,0.5))' }}
-                  />
-                )
-              }
-
-              return (
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={6}
-                  fill={payload.treatmentColor || '#7dd3a8'}
-                  stroke="#0a0a0a"
-                  strokeWidth={2}
-                  style={{ filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.5))' }}
-                />
-              )
-            }}
-          />
-        </ScatterChart>
-      ) : (
-        <ComposedChart data={hasFloorHistory ? combinedData : data} margin={{ top: 20, right: 50, bottom: 30, left: 20 }}>
+        <ComposedChart data={hasFloorHistory ? combinedData : data} margin={{ top: 10, right: 0, bottom: 20, left: 0 }}>
           <defs>
             <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#7dd3a8" stopOpacity={0.15}/>
@@ -292,36 +234,28 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
             axisLine={{ stroke: '#27272a' }}
             tickLine={{ stroke: '#27272a' }}
           />
+          {/* Left Y-axis for volume bars - hidden, just for scaling */}
           <YAxis
+            yAxisId="volume"
+            orientation="left"
+            domain={[0, 'auto']}
+            hide
+            width={1}
+          />
+          {/* Right Y-axis for price (log scale) */}
+          <YAxis
+            yAxisId="price"
             orientation="right"
             scale="log"
             domain={[yMin, yMax]}
             ticks={yTicks}
-            tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val < 10 ? val.toFixed(2) : val.toFixed(0)}`}
-            tick={{ fill: '#71717a', fontSize: 10 }}
-            axisLine={{ stroke: '#27272a' }}
-            tickLine={{ stroke: '#27272a' }}
+            tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val < 10 ? val.toFixed(0) : val.toFixed(0)}`}
+            tick={{ fill: '#71717a', fontSize: 9 }}
+            axisLine={false}
+            tickLine={false}
+            width={28}
             allowDataOverflow
           />
-          {/* Only show current floor reference line if no historical floor data */}
-          {!hasFloorHistory && floorPrice && floorPrice > 0 && (
-            <ReferenceLine
-              y={floorPrice}
-              stroke="#7dd3a8"
-              strokeDasharray="3 3"
-              strokeWidth={1.5}
-              label={{ value: `Floor $${floorPrice >= 1000 ? `${(floorPrice/1000).toFixed(1)}k` : floorPrice.toFixed(0)}`, fill: '#7dd3a8', fontSize: 9, position: 'insideBottomRight' }}
-            />
-          )}
-          {lowestAsk && lowestAsk > 0 && (
-            <ReferenceLine
-              y={lowestAsk}
-              stroke="#3b82f6"
-              strokeDasharray="5 5"
-              strokeWidth={1.5}
-              label={{ value: `Ask $${lowestAsk >= 1000 ? `${(lowestAsk/1000).toFixed(1)}k` : lowestAsk.toFixed(0)}`, fill: '#3b82f6', fontSize: 9, position: 'insideTopRight' }}
-            />
-          )}
           <RechartsTooltip
             cursor={{ strokeDasharray: '3 3', stroke: '#71717a' }}
             content={({ active, payload }) => {
@@ -336,6 +270,11 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
                       </div>
                     )}
                     <div className="text-muted-foreground text-xs mt-1">{d.date}</div>
+                    {d.dailyVolume > 0 && (
+                      <div className="text-blue-400 text-xs mt-1">
+                        {d.dailyVolume} sale{d.dailyVolume > 1 ? 's' : ''} this day
+                      </div>
+                    )}
                     {d.treatment && (
                       <div className="mt-2">
                         <span
@@ -355,9 +294,20 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
               return null
             }}
           />
-          {/* Historical floor price trend line - rendered first so it's behind price line */}
+          {/* Volume bars - rendered first so they're behind the price line */}
+          <Bar
+            yAxisId="volume"
+            dataKey="dailyVolume"
+            fill="#3b82f6"
+            fillOpacity={0.2}
+            stroke="none"
+            barSize={8}
+            name="Daily Volume"
+          />
+          {/* Historical floor price trend line - rendered second so it's behind price line */}
           {hasFloorHistory && (
             <Line
+              yAxisId="price"
               type="monotone"
               dataKey="historicalFloor"
               stroke="#6b7280"
@@ -368,12 +318,13 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
               name="Floor Trend"
             />
           )}
-          <Area
+          {/* Main price line with smooth curve */}
+          <Line
+            yAxisId="price"
             type="monotone"
             dataKey="price"
             stroke="#7dd3a8"
-            strokeWidth={2}
-            fill="url(#priceGradient)"
+            strokeWidth={2.5}
             connectNulls={false}
             dot={(props: any) => {
               const { cx, cy, payload } = props
@@ -407,7 +358,6 @@ export function PriceHistoryChart({ data, chartType, floorPrice, lowestAsk, floo
             activeDot={{ r: 6, fill: '#7dd3a8', stroke: '#0a0a0a', strokeWidth: 2 }}
           />
         </ComposedChart>
-      )}
     </ResponsiveContainer>
   )
 }

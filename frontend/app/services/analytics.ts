@@ -111,12 +111,13 @@ function sendToBackend(eventName: string, properties?: Record<string, any>) {
 
   try {
     // Try sendBeacon first (better for page unloads)
+    // Note: API_BASE already includes /api/v1
     if (navigator.sendBeacon) {
       const blob = new Blob([payload], { type: 'application/json' })
-      navigator.sendBeacon(`${API_BASE}/api/v1/analytics/event`, blob)
+      navigator.sendBeacon(`${API_BASE}/analytics/event`, blob)
     } else {
       // Fallback to fetch
-      fetch(`${API_BASE}/api/v1/analytics/event`, {
+      fetch(`${API_BASE}/analytics/event`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: payload,

@@ -109,41 +109,53 @@ def read_market_overview(
     floor_cutoff = datetime.now(timezone.utc) - timedelta(days=floor_days)
 
     # SINGLE CONSOLIDATED CTE QUERY - replaces 6+ separate queries
+    # NOTE: Floor price calculation now includes Blokpax sales to match FloorPriceService
     consolidated_query = text("""
         WITH card_sales AS (
-            -- All sold listings with effective date
+            -- All sold listings with effective date (eBay, OpenSea)
             SELECT
                 card_id,
                 price,
                 COALESCE(sold_date, scraped_at) as sale_date,
-                ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY COALESCE(sold_date, scraped_at) DESC) as rn_desc,
-                ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn_price
+                ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY COALESCE(sold_date, scraped_at) DESC) as rn_desc
             FROM marketprice
             WHERE listing_type = 'sold' AND is_bulk_lot = FALSE
         ),
+        blokpax_sales AS (
+            -- Blokpax sales (merged with marketprice for floor calculation)
+            SELECT card_id, price_usd as price, filled_at as sale_date
+            FROM blokpaxsale
+        ),
+        all_sales AS (
+            -- Combined sales from all platforms
+            SELECT card_id, price, sale_date FROM card_sales
+            UNION ALL
+            SELECT card_id, price, sale_date FROM blokpax_sales
+        ),
         last_sale AS (
-            -- Most recent sale per card (any time)
+            -- Most recent sale per card (any time, eBay/OpenSea only for consistency)
             SELECT card_id, price as last_price
             FROM card_sales WHERE rn_desc = 1
         ),
         period_stats AS (
-            -- Stats for the selected time period
+            -- Stats for the selected time period (all platforms)
             SELECT
                 card_id,
                 COUNT(*) as sale_count,
                 SUM(price) as total_value,
                 AVG(price) as vwap
-            FROM card_sales
+            FROM all_sales
             WHERE sale_date >= :cutoff_time
             GROUP BY card_id
         ),
         floor_prices AS (
-            -- Floor = avg of 4 lowest prices in floor window
+            -- Floor = avg of 4 lowest prices in floor window (all platforms)
+            -- This matches FloorPriceService logic
             SELECT card_id, ROUND(AVG(price)::numeric, 2) as floor_price
             FROM (
                 SELECT card_id, price,
                        ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn
-                FROM card_sales
+                FROM all_sales
                 WHERE sale_date >= :floor_cutoff
             ) ranked
             WHERE rn <= 4
@@ -230,6 +242,150 @@ def read_market_overview(
     return overview_data
 
 
+@router.get("/marquee")
+def read_marquee_data(
+    session: Session = Depends(get_session),
+    time_period: Optional[str] = Query(default="7d", pattern="^(24h|7d|30d)$"),
+) -> Any:
+    """
+    Get lightweight data for the marquee ticker.
+    Returns top gainers, losers, and volume cards (35 items total).
+    OPTIMIZED: Replaces fetching 500 cards - reduces payload from ~100KB to ~8KB.
+    Cached for 5 minutes.
+    """
+    cache_key = f"marquee_{time_period}"
+    cached = get_market_cache(cache_key)
+    if cached:
+        return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
+
+    from sqlalchemy import text
+
+    # Calculate time cutoff
+    time_cutoffs = {
+        "24h": timedelta(days=1),
+        "7d": timedelta(days=7),
+        "30d": timedelta(days=30),
+    }
+    cutoff_delta = time_cutoffs.get(time_period, timedelta(days=7))
+    cutoff_time = datetime.now(timezone.utc) - cutoff_delta
+    floor_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+
+    # OPTIMIZED: Simple query for marquee - prioritize speed over complexity
+    # Returns cards with floor prices, sorted by price (highest first)
+    # Frontend will dedupe and categorize based on price_delta
+    marquee_query = text("""
+        WITH floor_prices AS (
+            -- Get floor price per card (avg of 4 lowest recent sales)
+            SELECT card_id, ROUND(AVG(price)::numeric, 2) as floor_price
+            FROM (
+                SELECT card_id, price,
+                       ROW_NUMBER() OVER (PARTITION BY card_id ORDER BY price ASC) as rn
+                FROM marketprice
+                WHERE listing_type = 'sold' AND is_bulk_lot = FALSE
+                  AND COALESCE(sold_date, scraped_at) >= :floor_cutoff
+            ) ranked
+            WHERE rn <= 4
+            GROUP BY card_id
+        ),
+        recent_volume AS (
+            -- Count sales in time period
+            SELECT card_id,
+                   COUNT(*) as volume,
+                   SUM(price) as dollar_volume
+            FROM marketprice
+            WHERE listing_type = 'sold' AND is_bulk_lot = FALSE
+              AND COALESCE(sold_date, scraped_at) >= :cutoff_time
+            GROUP BY card_id
+        ),
+        latest_sale AS (
+            -- Most recent sale per card
+            SELECT DISTINCT ON (card_id) card_id, price as latest_price
+            FROM marketprice
+            WHERE listing_type = 'sold' AND is_bulk_lot = FALSE
+            ORDER BY card_id, COALESCE(sold_date, scraped_at) DESC
+        )
+        SELECT
+            c.id,
+            c.slug,
+            c.name,
+            c.set_name,
+            COALESCE(rv.volume, 0) as volume,
+            COALESCE(rv.dollar_volume, 0) as dollar_volume,
+            fp.floor_price,
+            ls.latest_price,
+            CASE
+                WHEN ls.latest_price IS NOT NULL AND fp.floor_price IS NOT NULL AND fp.floor_price > 0
+                THEN ROUND(((ls.latest_price - fp.floor_price) / fp.floor_price * 100)::numeric, 1)
+                ELSE 0
+            END as price_delta
+        FROM card c
+        LEFT JOIN floor_prices fp ON c.id = fp.card_id
+        LEFT JOIN recent_volume rv ON c.id = rv.card_id
+        LEFT JOIN latest_sale ls ON c.id = ls.card_id
+        WHERE fp.floor_price IS NOT NULL
+        ORDER BY fp.floor_price DESC
+        LIMIT 50
+    """)
+
+    results = session.execute(
+        marquee_query,
+        {
+            "cutoff_time": cutoff_time,
+            "floor_cutoff": floor_cutoff,
+        },
+    ).all()
+
+    # Categorize results based on price_delta and volume
+    gainers = []
+    losers = []
+    volume = []
+    recent = []
+    total_volume = 0
+    total_dollar_volume = 0.0
+
+    for row in results:
+        item = {
+            "id": row.id,
+            "slug": row.slug,
+            "name": row.name,
+            "set_name": row.set_name,
+            "floor_price": float(row.floor_price) if row.floor_price else None,
+            "latest_price": float(row.latest_price) if row.latest_price else None,
+            "price_delta": float(row.price_delta) if row.price_delta else 0,
+            "volume": int(row.volume) if row.volume else 0,
+            "dollar_volume": float(row.dollar_volume) if row.dollar_volume else 0,
+        }
+
+        # Categorize by price movement
+        price_delta = item["price_delta"] or 0
+        item_volume = item["volume"] or 0
+        if price_delta > 5 and len(gainers) < 15:
+            gainers.append(item)
+        elif price_delta < -5 and len(losers) < 10:
+            losers.append(item)
+        elif item_volume > 0 and len(volume) < 10:
+            volume.append(item)
+            total_volume += item_volume
+            total_dollar_volume += item["dollar_volume"] or 0
+        elif len(recent) < 20:
+            recent.append(item)
+
+    response = {
+        "gainers": gainers,
+        "losers": losers,
+        "volume": volume,
+        "recent": recent,
+        "metrics": {
+            "total_volume": total_volume,
+            "total_dollar_volume": round(total_dollar_volume, 2),
+        },
+        "time_period": time_period,
+    }
+
+    set_market_cache(cache_key, response)
+    return JSONResponse(content=response, headers={"X-Cache": "MISS"})
+
+
 @router.get("/activity")
 def read_market_activity(
     session: Session = Depends(get_session),
@@ -302,6 +458,9 @@ def read_market_listings(
 
     # Calculate time cutoff for time_period filter
     time_cutoffs = {
+        "1h": timedelta(hours=1),
+        "6h": timedelta(hours=6),
+        "24h": timedelta(hours=24),
         "7d": timedelta(days=7),
         "30d": timedelta(days=30),
         "90d": timedelta(days=90),

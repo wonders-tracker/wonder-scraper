@@ -700,6 +700,219 @@ class TestMarketEndpointsIntegration:
                 integration_session.commit()
 
 
+class TestMarketMarqueeEndpoint:
+    """Tests for GET /market/marquee endpoint."""
+
+    def test_marquee_basic(self, client, sample_cards, sample_market_prices):
+        """Test that marquee returns basic structure."""
+        response = client.get("/api/v1/market/marquee")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "gainers" in data
+        assert "losers" in data
+        assert "volume" in data
+        assert "recent" in data
+        assert "metrics" in data
+        assert "time_period" in data
+
+        # Check metrics structure
+        metrics = data["metrics"]
+        assert "total_volume" in metrics
+        assert "total_dollar_volume" in metrics
+
+    def test_marquee_time_periods(self, client, sample_cards, sample_market_prices):
+        """Test different time period filters."""
+        valid_periods = ["24h", "7d", "30d"]
+
+        for period in valid_periods:
+            response = client.get(f"/api/v1/market/marquee?time_period={period}")
+            assert response.status_code == 200, f"Failed for period {period}"
+
+            data = response.json()
+            assert data["time_period"] == period
+
+    def test_marquee_invalid_time_period(self, client):
+        """Test that invalid time period returns error."""
+        response = client.get("/api/v1/market/marquee?time_period=invalid")
+        assert response.status_code == 422  # Validation error
+
+    def test_marquee_includes_cache_header(self, client, sample_cards, sample_market_prices):
+        """Test that response includes cache header."""
+        response = client.get("/api/v1/market/marquee")
+        assert response.status_code == 200
+
+        assert "X-Cache" in response.headers
+        assert response.headers["X-Cache"] in ["HIT", "MISS"]
+
+    def test_marquee_gainers_structure(self, client, sample_cards, sample_market_prices):
+        """Test gainers data structure."""
+        response = client.get("/api/v1/market/marquee")
+        assert response.status_code == 200
+
+        data = response.json()
+        for item in data["gainers"]:
+            assert "id" in item
+            assert "slug" in item
+            assert "name" in item
+            assert "floor_price" in item
+            assert "price_delta" in item
+            # Gainers should have positive delta
+            assert item["price_delta"] > 0
+
+    def test_marquee_losers_structure(self, client, sample_cards, sample_market_prices):
+        """Test losers data structure."""
+        response = client.get("/api/v1/market/marquee")
+        assert response.status_code == 200
+
+        data = response.json()
+        for item in data["losers"]:
+            assert "id" in item
+            assert "name" in item
+            # Losers should have negative delta
+            assert item["price_delta"] < 0
+
+
+class TestMarketListingsEndpoint:
+    """Tests for GET /market/listings endpoint."""
+
+    def test_listings_basic(self, client, sample_cards, sample_market_prices):
+        """Test that listings returns basic structure."""
+        response = client.get("/api/v1/market/listings")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "items" in data
+        assert "offset" in data
+        assert "limit" in data
+        assert "hasMore" in data
+
+    def test_listings_listing_type_filter(self, client, sample_cards, sample_market_prices):
+        """Test filtering by listing type."""
+        for listing_type in ["active", "sold", "all"]:
+            response = client.get(f"/api/v1/market/listings?listing_type={listing_type}")
+            assert response.status_code == 200, f"Failed for type {listing_type}"
+
+            data = response.json()
+            assert isinstance(data["items"], list)
+
+    def test_listings_platform_filter(self, client, sample_cards, sample_market_prices):
+        """Test filtering by platform."""
+        response = client.get("/api/v1/market/listings?platform=ebay")
+        assert response.status_code == 200
+
+        data = response.json()
+        for item in data["items"]:
+            assert item["platform"] == "ebay"
+
+    def test_listings_time_period_filter(self, client, sample_cards, sample_market_prices):
+        """Test filtering by time period."""
+        valid_periods = ["7d", "30d", "90d", "all"]
+
+        for period in valid_periods:
+            response = client.get(f"/api/v1/market/listings?time_period={period}")
+            assert response.status_code == 200, f"Failed for period {period}"
+
+    def test_listings_price_range_filter(self, client, sample_cards, sample_market_prices):
+        """Test filtering by price range."""
+        response = client.get("/api/v1/market/listings?min_price=10&max_price=100")
+        assert response.status_code == 200
+
+        data = response.json()
+        for item in data["items"]:
+            assert 10 <= item["price"] <= 100
+
+    def test_listings_search_filter(self, client, sample_cards, sample_market_prices):
+        """Test search filter."""
+        # Search requires at least 3 characters
+        response = client.get("/api/v1/market/listings?search=test")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert isinstance(data["items"], list)
+
+    def test_listings_sorting(self, client, sample_cards, sample_market_prices):
+        """Test sorting options."""
+        sort_options = ["price", "scraped_at", "sold_date"]
+
+        for sort_by in sort_options:
+            for sort_order in ["asc", "desc"]:
+                response = client.get(f"/api/v1/market/listings?sort_by={sort_by}&sort_order={sort_order}")
+                assert response.status_code == 200, f"Failed for {sort_by} {sort_order}"
+
+    def test_listings_pagination(self, client, sample_cards, sample_market_prices):
+        """Test pagination parameters."""
+        # First page
+        response1 = client.get("/api/v1/market/listings?limit=5&offset=0")
+        assert response1.status_code == 200
+        data1 = response1.json()
+
+        # Second page
+        response2 = client.get("/api/v1/market/listings?limit=5&offset=5")
+        assert response2.status_code == 200
+        data2 = response2.json()
+
+        # If we have enough data, pages should be different
+        if len(data1["items"]) == 5 and len(data2["items"]) > 0:
+            ids1 = {item["id"] for item in data1["items"]}
+            ids2 = {item["id"] for item in data2["items"]}
+            assert ids1.isdisjoint(ids2), "Pagination returned overlapping results"
+
+    def test_listings_limit_bounds(self, client):
+        """Test limit parameter bounds."""
+        # Valid limit
+        response = client.get("/api/v1/market/listings?limit=100")
+        assert response.status_code == 200
+
+        # Exceeds max
+        response = client.get("/api/v1/market/listings?limit=600")
+        assert response.status_code == 422  # Validation error
+
+    def test_listings_includes_cache_header(self, client, sample_cards, sample_market_prices):
+        """Test that response includes cache header."""
+        response = client.get("/api/v1/market/listings")
+        assert response.status_code == 200
+
+        assert "X-Cache" in response.headers
+        assert response.headers["X-Cache"] in ["HIT", "MISS"]
+
+    def test_listings_item_structure(self, client, sample_cards, sample_market_prices):
+        """Test listing item structure."""
+        response = client.get("/api/v1/market/listings?listing_type=sold&limit=5")
+        assert response.status_code == 200
+
+        data = response.json()
+        if len(data["items"]) > 0:
+            item = data["items"][0]
+            # Required fields
+            assert "id" in item
+            assert "card_id" in item
+            assert "card_name" in item
+            assert "card_slug" in item
+            assert "price" in item
+            assert "platform" in item
+            assert "listing_type" in item
+
+    def test_listings_treatment_filter(self, client, sample_cards, sample_market_prices):
+        """Test filtering by treatment."""
+        response = client.get("/api/v1/market/listings?treatment=Foil")
+        assert response.status_code == 200
+
+        data = response.json()
+        for item in data["items"]:
+            if item["treatment"]:
+                assert "foil" in item["treatment"].lower()
+
+    def test_listings_has_more_flag(self, client, sample_cards, sample_market_prices):
+        """Test hasMore pagination flag."""
+        response = client.get("/api/v1/market/listings?limit=2")
+        assert response.status_code == 200
+
+        data = response.json()
+        # hasMore should be a boolean
+        assert isinstance(data["hasMore"], bool)
+
+
 class TestMarketEndpointErrorHandling:
     """Test error handling and edge cases."""
 

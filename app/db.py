@@ -35,20 +35,22 @@ def _is_neon_pooler(url: str) -> bool:
 
 
 # Detect if using Neon pooler for optimized settings
-USING_NEON_POOLER = _is_neon_pooler(DATABASE_URL)
+# Can be auto-detected from hostname or forced via NEON_POOLER env var
+USING_NEON_POOLER = settings.NEON_POOLER or _is_neon_pooler(DATABASE_URL)
 
 # When using Neon pooler (pgBouncer), we need different settings:
-# - Smaller local pool (pooler handles connection reuse)
+# - Minimal local pool (external pooler handles connection reuse)
+# - Zero overflow (prevent over-connection to pooler's limited slots)
 # - Shorter recycle time (pooler manages long-lived connections)
-# - Can use more aggressive keepalives
 if USING_NEON_POOLER:
-    # With SCHEDULER_CARD_BATCH_SIZE=4 and BROWSER_SEMAPHORE_LIMIT=2,
-    # we can have up to 4*2*2=16 concurrent DB operations, plus overhead.
-    # Pool size of 10 with overflow of 6 = 16 max connections.
-    _pool_size = min(settings.DB_POOL_SIZE, 10)  # Sized for concurrent scrape ops
-    _max_overflow = min(settings.DB_MAX_OVERFLOW, 6)
+    # Pool sized for concurrent operations:
+    # - Card detail page makes 8+ concurrent API calls
+    # - Scraper can have batch_size * browser_limit concurrent DB ops
+    # Use settings with reasonable caps to prevent over-connection
+    _pool_size = min(settings.DB_POOL_SIZE, 10)
+    _max_overflow = min(settings.DB_MAX_OVERFLOW, 5)
     _pool_recycle = 180  # 3 min - pooler handles persistence
-    logger.info("Using Neon Pooler - optimized connection settings")
+    logger.info(f"Using Neon Pooler - pool_size={_pool_size}, max_overflow={_max_overflow}")
 else:
     _pool_size = settings.DB_POOL_SIZE
     _max_overflow = settings.DB_MAX_OVERFLOW

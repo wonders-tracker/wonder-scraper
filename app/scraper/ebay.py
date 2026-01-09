@@ -12,6 +12,23 @@ from app.db import engine
 from app.scraper.blocklist import load_blocklist
 from app.scraper.utils import is_bulk_lot
 
+# Map eBay "Finish" item specific values to our treatment values
+EBAY_FINISH_TO_TREATMENT = {
+    "formless foil": "Formless Foil",
+    "classic foil": "Classic Foil",
+    "stonefoil": "Stonefoil",
+    "stone foil": "Stonefoil",
+    "ocm serialized": "OCM Serialized",
+    "serialized": "OCM Serialized",
+    "classic paper": "Classic Paper",
+    "paper": "Classic Paper",
+    "prerelease": "Prerelease",
+    "pre-release": "Prerelease",
+    "promo": "Promo",
+    "proof": "Proof/Sample",
+    "sample": "Proof/Sample",
+}
+
 STOPWORDS = {
     "the",
     "of",
@@ -30,6 +47,103 @@ STOPWORDS = {
     "first",
     "existence",
 }
+
+
+def parse_item_specifics(html_content: str) -> dict[str, str]:
+    """
+    Parse eBay item specifics from a listing detail page HTML.
+
+    eBay item specifics contain structured data like:
+    - Finish: "Formless Foil", "Classic Foil", etc.
+    - Card Number: "AI-361"
+    - Rarity: "Rare", "Mythic"
+    - Condition: "Ungraded - Near mint or better"
+
+    Returns a dict of lowercase field names to values.
+    """
+    soup = BeautifulSoup(html_content, "lxml")
+    specifics = {}
+
+    # Format 1: Modern eBay layout with ux-labels-values
+    for row in soup.select(".ux-labels-values__labels-content, .ux-labels-values"):
+        label_elem = row.select_one(".ux-labels-values__labels")
+        value_elem = row.select_one(".ux-labels-values__values")
+        if label_elem and value_elem:
+            label = label_elem.get_text(strip=True).rstrip(":")
+            value = value_elem.get_text(strip=True)
+            specifics[label.lower()] = value
+
+    # Format 2: dl/dt/dd style
+    for dt in soup.select("dt"):
+        dd = dt.find_next_sibling("dd")
+        if dd:
+            label = dt.get_text(strip=True).rstrip(":")
+            value = dd.get_text(strip=True)
+            specifics[label.lower()] = value
+
+    # Format 3: Table-based specifics (older format)
+    for row in soup.select(".itemAttr tr, .item-specifics tr"):
+        cells = row.select("td, th")
+        if len(cells) >= 2:
+            label = cells[0].get_text(strip=True).rstrip(":")
+            value = cells[1].get_text(strip=True)
+            specifics[label.lower()] = value
+
+    return specifics
+
+
+def parse_seller_from_listing_page(html_content: str) -> Tuple[Optional[str], Optional[int], Optional[float]]:
+    """
+    Parse seller info from an eBay listing detail page HTML.
+
+    Returns: (seller_name, feedback_score, feedback_percent)
+
+    This is a thin wrapper around the centralized extract_seller_from_html()
+    function in app/scraper/seller.py. Use this for backward compatibility
+    with scripts that import from ebay.py.
+
+    For new code, prefer importing directly from app.scraper.seller.
+    """
+    from app.scraper.seller import extract_seller_from_html
+
+    return extract_seller_from_html(html_content)
+
+
+def extract_treatment_from_specifics(specifics: dict) -> Optional[str]:
+    """
+    Extract treatment from eBay item specifics.
+
+    Looks for the "Finish" field first, then falls back to other fields
+    that might contain treatment information.
+
+    Returns treatment string or None if not found.
+    """
+    # Look for Finish field first (most reliable)
+    finish = specifics.get("finish", "").lower()
+    if finish:
+        for key, treatment in EBAY_FINISH_TO_TREATMENT.items():
+            if key in finish:
+                return treatment
+
+    # Check other potential fields
+    for field in ["card treatment", "variant", "parallel", "type"]:
+        value = specifics.get(field, "").lower()
+        if value:
+            for key, treatment in EBAY_FINISH_TO_TREATMENT.items():
+                if key in value:
+                    return treatment
+
+    # Check features field for foil mentions
+    features = specifics.get("features", "").lower()
+    if "foil" in features:
+        if "formless" in features:
+            return "Formless Foil"
+        elif "stone" in features:
+            return "Stonefoil"
+        else:
+            return "Classic Foil"
+
+    return None
 
 
 def score_sealed_match(title: str, card_name: str, product_type: str) -> int:
@@ -393,11 +507,14 @@ def _is_alt_art(title: str) -> bool:
     return False
 
 
-def _detect_treatment(title: str, product_type: str = "Single") -> str:
+def _detect_treatment(title: str, product_type: str = "Single") -> str | None:
     """
     Detects treatment based on title keywords.
-    For singles: card treatments (Foil, Serialized, etc.)
-    For boxes/packs/lots: simplified condition (Sealed, Open Box, Unknown)
+    For singles: card treatments (Foil, Serialized, etc.) or None if unknown
+    For boxes/packs/lots: simplified condition (Sealed, Open Box)
+
+    Returns None for singles when treatment cannot be determined from title keywords.
+    This distinguishes "unknown treatment" from "definitely Classic Paper".
     """
     title_lower = title.lower()
 
@@ -449,17 +566,32 @@ def _detect_treatment(title: str, product_type: str = "Single") -> str:
     elif "errata" in title_lower or "error" in title_lower:
         base_treatment = "Error/Errata"
 
-    # 4. Classic Foil
+    # 4. Explicit Classic Paper detection - MUST come before foil check
+    # because "non-foil" contains "foil" which would incorrectly match
+    elif (
+        "classic paper" in title_lower
+        or "non-foil" in title_lower
+        or "non foil" in title_lower
+        or ("paper" in title_lower and "foil" not in title_lower)
+    ):
+        base_treatment = "Classic Paper"
+
+    # 5. Classic Foil - after non-foil check to avoid false positives
     elif "foil" in title_lower or "holo" in title_lower or "refractor" in title_lower:
         base_treatment = "Classic Foil"
 
-    # 5. Default for singles
+    # 6. Unknown treatment - return None instead of assuming Classic Paper
+    # This allows downstream systems to distinguish "unknown" from "detected Classic Paper"
     else:
-        base_treatment = "Classic Paper"
+        base_treatment = None
 
     # Append Alt Art suffix if applicable
     if is_alt_art:
-        return f"{base_treatment} Alt Art"
+        if base_treatment:
+            return f"{base_treatment} Alt Art"
+        else:
+            # Alt art detected but base treatment unknown - just return "Alt Art"
+            return "Alt Art"
 
     return base_treatment
 
@@ -711,8 +843,10 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
 
     # Now look for actual quantity being sold
     quantity_patterns = [
-        r"^(\d+)\s*x\s*(wonders|existence|booster|play|collector|bundle|box|pack)",  # "2x Bundle" (requires x)
-        r"^(\d{1,2})\s+(wonders|existence|booster|play|collector|bundle|box|pack)",  # "2 Wonders..." (max 2 digits to exclude years)
+        # "2x Bundle" (requires x)
+        r"^(\d+)\s*x\s*(wonders|existence|booster|play|collector|bundle|box|pack)",
+        # "2 Wonders..." (max 2 digits to exclude years)
+        r"^(\d{1,2})\s+(wonders|existence|booster|play|collector|bundle|box|pack)",
         r"(\d+)\s*(?:ct|count)\b",  # "5ct" or "5 count"
         r"lot\s+of\s+(\d+)",  # "lot of 3"
         r"set\s+of\s+(\d+)",  # "set of 2"

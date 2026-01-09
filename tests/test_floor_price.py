@@ -71,7 +71,9 @@ class TestSalesFloorHighConfidence(TestFloorPriceService):
 
     def test_returns_sales_floor_with_4_plus_sales(self, service, mock_sales_result):
         """Should return SALES source with HIGH confidence when >=4 sales."""
-        with patch.object(service, "_get_sales_floor", return_value=mock_sales_result):
+        # Mock returns dict keyed by days
+        mock_fallback_result = {30: mock_sales_result, 90: mock_sales_result}
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value=mock_fallback_result):
             result = service.get_floor_price(card_id=123)
 
         assert result.price == 25.00
@@ -82,7 +84,8 @@ class TestSalesFloorHighConfidence(TestFloorPriceService):
 
     def test_does_not_check_order_book_when_sales_sufficient(self, service, mock_sales_result):
         """Should not query order book when sales are sufficient."""
-        with patch.object(service, "_get_sales_floor", return_value=mock_sales_result):
+        mock_fallback_result = {30: mock_sales_result, 90: mock_sales_result}
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value=mock_fallback_result):
             with patch.object(OrderBookAnalyzer, "estimate_floor") as mock_estimate:
                 result = service.get_floor_price(card_id=123)
                 mock_estimate.assert_not_called()
@@ -95,7 +98,7 @@ class TestOrderBookFallback(TestFloorPriceService):
 
     def test_falls_back_to_order_book_when_no_sales(self, service, mock_order_book_result):
         """Should use order book when no sales data available."""
-        with patch.object(service, "_get_sales_floor", return_value=None):
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value={30: None, 90: None}):
             with patch.object(
                 service.order_book_analyzer,
                 "estimate_floor",
@@ -112,7 +115,7 @@ class TestOrderBookFallback(TestFloorPriceService):
         """Should use order book when only 1 sale (below threshold)."""
         sparse_sales = {"price": 20.00, "count": 1, "platforms": ["ebay"]}
 
-        with patch.object(service, "_get_sales_floor", return_value=sparse_sales):
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value={30: sparse_sales, 90: sparse_sales}):
             with patch.object(
                 service.order_book_analyzer,
                 "estimate_floor",
@@ -135,7 +138,7 @@ class TestOrderBookFallback(TestFloorPriceService):
             buckets=[],
         )
 
-        with patch.object(service, "_get_sales_floor", return_value=None):
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value={30: None, 90: None}):
             with patch.object(service.order_book_analyzer, "estimate_floor", return_value=ob_result):
                 result = service.get_floor_price(card_id=123)
 
@@ -153,7 +156,7 @@ class TestOrderBookFallback(TestFloorPriceService):
             buckets=[],
         )
 
-        with patch.object(service, "_get_sales_floor", return_value=None):
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value={30: None, 90: None}):
             with patch.object(service.order_book_analyzer, "estimate_floor", return_value=ob_result):
                 result = service.get_floor_price(card_id=123)
 
@@ -171,7 +174,7 @@ class TestOrderBookFallback(TestFloorPriceService):
             buckets=[],
         )
 
-        with patch.object(service, "_get_sales_floor", return_value=None):
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value={30: None, 90: None}):
             with patch.object(service.order_book_analyzer, "estimate_floor", return_value=ob_result):
                 result = service.get_floor_price(card_id=123)
 
@@ -194,7 +197,7 @@ class TestLowConfidenceSales(TestFloorPriceService):
             buckets=[],
         )
 
-        with patch.object(service, "_get_sales_floor", return_value=sparse_sales):
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value={30: sparse_sales, 90: sparse_sales}):
             with patch.object(service.order_book_analyzer, "estimate_floor", return_value=low_ob_result):
                 result = service.get_floor_price(card_id=123)
 
@@ -207,7 +210,7 @@ class TestLowConfidenceSales(TestFloorPriceService):
         """Should use SALES with MEDIUM confidence when 3 sales and OB fails."""
         sparse_sales = {"price": 23.00, "count": 3, "platforms": ["opensea"]}
 
-        with patch.object(service, "_get_sales_floor", return_value=sparse_sales):
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value={30: sparse_sales, 90: sparse_sales}):
             with patch.object(service.order_book_analyzer, "estimate_floor", return_value=None):
                 result = service.get_floor_price(card_id=123)
 
@@ -222,28 +225,22 @@ class TestTimeWindowExpansion(TestFloorPriceService):
 
     def test_expands_to_90_days_when_no_data(self, service):
         """Should expand to 90 days when no data in 30 days."""
-        call_count = 0
+        # Mock returns None for 30d but has data for 90d
+        mock_result = {
+            30: None,  # No data in 30 days
+            90: {"price": 30.00, "count": 5, "platforms": ["ebay"]},
+        }
 
-        def mock_get_sales(card_id, treatment, days, include_blokpax):
-            nonlocal call_count
-            call_count += 1
-            if days == 30:
-                return None  # No data in 30 days
-            elif days == 90:
-                return {"price": 30.00, "count": 5, "platforms": ["ebay"]}
-            return None
-
-        with patch.object(service, "_get_sales_floor", side_effect=mock_get_sales):
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value=mock_result):
             with patch.object(service.order_book_analyzer, "estimate_floor", return_value=None):
                 result = service.get_floor_price(card_id=123)
 
         assert result.price == 30.00
         assert result.source == FloorPriceSource.SALES
-        assert call_count == 2  # Called twice (30d, then 90d)
 
     def test_returns_none_when_no_data_in_90_days(self, service):
         """Should return NONE source when no data even in 90 days."""
-        with patch.object(service, "_get_sales_floor", return_value=None):
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value={30: None, 90: None}):
             with patch.object(service.order_book_analyzer, "estimate_floor", return_value=None):
                 result = service.get_floor_price(card_id=123)
 
@@ -264,7 +261,7 @@ class TestMultiPlatformAggregation(TestFloorPriceService):
             "platforms": ["ebay", "opensea", "blokpax"],
         }
 
-        with patch.object(service, "_get_sales_floor", return_value=combined_sales):
+        with patch.object(service, "_get_sales_floor_with_fallback", return_value={30: combined_sales, 90: combined_sales}):
             result = service.get_floor_price(card_id=123)
 
         assert result.price == 24.50
@@ -275,8 +272,8 @@ class TestMultiPlatformAggregation(TestFloorPriceService):
     def test_exclude_blokpax_when_disabled(self, service):
         """Should exclude Blokpax when include_blokpax=False."""
         # This tests the parameter is passed through
-        with patch.object(service, "_get_sales_floor") as mock_sales:
-            mock_sales.return_value = {"price": 25.0, "count": 4, "platforms": ["ebay"]}
+        with patch.object(service, "_get_sales_floor_with_fallback") as mock_sales:
+            mock_sales.return_value = {30: {"price": 25.0, "count": 4, "platforms": ["ebay"]}, 90: None}
             service.get_floor_price(card_id=123, include_blokpax=False)
 
             # Check include_blokpax was passed as False
@@ -290,8 +287,8 @@ class TestTreatmentFilter(TestFloorPriceService):
 
     def test_passes_treatment_to_queries(self, service):
         """Should pass treatment filter to sales query."""
-        with patch.object(service, "_get_sales_floor") as mock_sales:
-            mock_sales.return_value = {"price": 50.0, "count": 4, "platforms": ["ebay"]}
+        with patch.object(service, "_get_sales_floor_with_fallback") as mock_sales:
+            mock_sales.return_value = {30: {"price": 50.0, "count": 4, "platforms": ["ebay"]}, 90: None}
             result = service.get_floor_price(card_id=123, treatment="Classic Foil")
 
             # Check treatment was passed

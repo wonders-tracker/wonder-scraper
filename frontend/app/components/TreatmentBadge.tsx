@@ -1,4 +1,5 @@
 import { clsx } from 'clsx'
+import { Link } from '@tanstack/react-router'
 
 export type Treatment =
   // Single card treatments
@@ -44,6 +45,8 @@ interface TreatmentBadgeProps {
   treatment: string
   size?: 'xs' | 'sm' | 'md'
   className?: string
+  /** If true, badge links to /browse?treatment=X */
+  linkToBrowse?: boolean
 }
 
 // Treatment tiers for rarity (affects animation)
@@ -252,30 +255,44 @@ const SIZE_CLASSES = {
   md: 'text-sm px-2.5 py-1',
 }
 
-export function TreatmentBadge({ treatment, size = 'sm', className }: TreatmentBadgeProps) {
+export function TreatmentBadge({ treatment, size = 'sm', className, linkToBrowse = false }: TreatmentBadgeProps) {
   const style = TREATMENT_STYLES[treatment] || TREATMENT_STYLES['Other']
   const isUltraRare = ULTRA_RARE_TREATMENTS.includes(treatment)
   const isRare = RARE_TREATMENTS.includes(treatment)
 
+  const badgeClasses = clsx(
+    'inline-block rounded font-semibold uppercase tracking-wide border',
+    SIZE_CLASSES[size],
+    style.bg,
+    style.border,
+    style.text,
+    // Apply shimmer animation for rare treatments
+    (isUltraRare || isRare) && style.gradient && 'animate-shimmer',
+    isRare && !isUltraRare && 'animate-shimmer-slow',
+    linkToBrowse && 'hover:opacity-80 transition-opacity cursor-pointer',
+    className
+  )
+
+  const badgeStyle = (isUltraRare || isRare) && style.gradient
+    ? { backgroundImage: style.gradient }
+    : undefined
+
+  if (linkToBrowse) {
+    return (
+      <Link
+        to="/browse"
+        search={{ treatment }}
+        className={badgeClasses}
+        style={badgeStyle}
+        title={`Browse all ${treatment} cards`}
+      >
+        {treatment}
+      </Link>
+    )
+  }
+
   return (
-    <span
-      className={clsx(
-        'inline-block rounded font-semibold uppercase tracking-wide border',
-        SIZE_CLASSES[size],
-        style.bg,
-        style.border,
-        style.text,
-        // Apply shimmer animation for rare treatments
-        (isUltraRare || isRare) && style.gradient && 'animate-shimmer',
-        isRare && !isUltraRare && 'animate-shimmer-slow',
-        className
-      )}
-      style={
-        (isUltraRare || isRare) && style.gradient
-          ? { backgroundImage: style.gradient }
-          : undefined
-      }
-    >
+    <span className={badgeClasses} style={badgeStyle}>
       {treatment}
     </span>
   )
@@ -308,6 +325,12 @@ export function getTreatmentStyle(treatment: string): { gradient?: string } | un
     return { gradient: style.gradient }
   }
   return undefined
+}
+
+// Get just the text color class for a treatment
+export function getTreatmentTextColor(treatment: string): string {
+  const style = TREATMENT_STYLES[treatment] || TREATMENT_STYLES['Other']
+  return style.text
 }
 
 export default TreatmentBadge

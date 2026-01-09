@@ -1,4 +1,5 @@
 from typing import Optional, Tuple
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
 
@@ -174,6 +175,15 @@ def validate_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key has expired",
         )
+
+    # Auto-reset daily counter at midnight UTC
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    if db_key.last_reset_date is None or db_key.last_reset_date.date() < today:
+        db_key.requests_today = 0
+        db_key.last_reset_date = now
+        session.add(db_key)
+        session.flush()  # Persist reset before rate limit check
 
     # Check rate limits
     allowed, reason = api_key_limiter.check_limit(

@@ -70,9 +70,8 @@ async def scrape_opensea_collection(collection_slug_or_url: str) -> Dict[str, An
             html = await get_page_content(collection_url, extra_wait=5)
             break
         except Exception as browser_error:
-            print(
-                f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}"
-            )
+            err_type = type(browser_error).__name__
+            print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {err_type}: {browser_error}")
             if attempt < max_browser_retries - 1:
                 wait_time = 5 * (2**attempt)
                 print(f"[OpenSea] Waiting {wait_time}s before retry...")
@@ -398,9 +397,8 @@ async def _scrape_opensea_sales_web(collection_slug: str, eth_price_usd: float, 
             html = await get_page_content(activity_url, extra_wait=5)
             break
         except Exception as browser_error:
-            print(
-                f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}"
-            )
+            err_type = type(browser_error).__name__
+            print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {err_type}: {browser_error}")
             if attempt < max_browser_retries - 1:
                 # Exponential backoff: 5s, 10s, 20s
                 wait_time = 5 * (2**attempt)
@@ -702,9 +700,8 @@ async def _scrape_opensea_listings_web(
             html = await get_page_content(collection_url, extra_wait=5)
             break
         except Exception as browser_error:
-            print(
-                f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}"
-            )
+            err_type = type(browser_error).__name__
+            print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {err_type}: {browser_error}")
             if attempt < max_browser_retries - 1:
                 # Exponential backoff: 5s, 10s, 20s
                 wait_time = 5 * (2**attempt)
@@ -896,7 +893,7 @@ async def scrape_opensea_listings_to_db(
                 external_id=external_id,
                 platform="opensea",
                 traits=listing.traits,
-                seller_name=listing.seller[:20] if listing.seller else None,
+                seller_name=listing.seller[:42] if listing.seller else None,  # ETH addresses are 42 chars
                 url=listing.listing_url,
                 image_url=listing.image_url,
                 listed_at=listing.listed_at,
@@ -921,3 +918,100 @@ async def scrape_opensea_listings_to_db(
 
     print(f"[OpenSea] {card_name}: {listings_scraped} scraped, {listings_saved} saved")
     return listings_scraped, listings_saved
+
+
+async def scrape_opensea_sales_to_db(
+    session, collection_slug: str, card_id: int, card_name: str, save_to_db: bool = True
+) -> tuple[int, int]:
+    """
+    Scrape OpenSea sales history and save to MarketPrice table.
+
+    Args:
+        session: SQLModel database session
+        collection_slug: OpenSea collection slug
+        card_id: Card ID to associate sales with
+        card_name: Card name for logging
+        save_to_db: If True, save to database
+
+    Returns:
+        Tuple of (sales_scraped, sales_saved)
+    """
+    from app.models.market import MarketPrice
+
+    print(f"[OpenSea] Scraping sales for {card_name} ({collection_slug})")
+
+    sales = await scrape_opensea_sales(collection_slug, limit=50)
+    sales_scraped = len(sales)
+    sales_saved = 0
+
+    if not sales:
+        print(f"[OpenSea] No sales found for {collection_slug}")
+        return 0, 0
+
+    for sale in sales:
+        try:
+            if not save_to_db:
+                continue
+
+            # Use tx_hash as external_id for deduplication (unique per sale)
+            external_id = f"opensea_sale_{sale.tx_hash}" if sale.tx_hash else f"opensea_sale_{collection_slug}_{sale.token_id}_{sale.sold_at.isoformat()}"
+
+            # Check if we already have this sale
+            from sqlmodel import select
+
+            existing = session.exec(
+                select(MarketPrice).where(
+                    MarketPrice.external_id == external_id,
+                    MarketPrice.platform == "opensea",
+                    MarketPrice.listing_type == "sold",
+                )
+            ).first()
+
+            if existing:
+                # Already have this sale
+                continue
+
+            # Extract treatment from traits if available
+            treatment = None
+            if sale.traits:
+                for trait in sale.traits:
+                    trait_lower = trait.lower() if trait else ""
+                    if any(t in trait_lower for t in ["foil", "serial", "proof", "rare", "animated"]):
+                        treatment = trait
+                        break
+
+            # Create MarketPrice record for the sale
+            mp = MarketPrice(
+                card_id=card_id,
+                title=sale.token_name,
+                price=round(sale.price_usd, 2),
+                listing_type="sold",
+                sold_date=sale.sold_at,
+                treatment=treatment,
+                grading=None,
+                external_id=external_id,
+                platform="opensea",
+                seller_name=sale.seller[:42] if sale.seller else None,  # ETH addresses are 42 chars
+                url=f"https://opensea.io/assets/ethereum/{collection_slug}/{sale.token_id}",
+                image_url=sale.image_url,
+                scraped_at=datetime.now(timezone.utc),
+            )
+
+            session.add(mp)
+            sales_saved += 1
+
+        except Exception as e:
+            print(f"[OpenSea] Error saving sale {sale.token_id}: {e}")
+            # Rollback failed transaction to allow subsequent operations
+            try:
+                session.rollback()
+            except (RuntimeError, AttributeError):
+                # Rollback can fail if session is in bad state - safe to ignore
+                pass
+            continue
+
+    if save_to_db:
+        session.commit()
+
+    print(f"[OpenSea] {card_name} sales: {sales_scraped} scraped, {sales_saved} new saved")
+    return sales_scraped, sales_saved

@@ -175,6 +175,7 @@ class BlokpaxSale:
     seller_address: str
     buyer_address: str
     filled_at: datetime
+    treatment: Optional[str] = None  # Extracted from asset traits
 
 
 @dataclass
@@ -400,6 +401,7 @@ def parse_asset(data: Dict[str, Any], slug: str, bpx_price_usd: float) -> Blokpa
 def parse_sale(activity: Dict[str, Any], bpx_price_usd: float) -> Optional[BlokpaxSale]:
     """
     Parses activity item into BlokpaxSale if it's a completed sale.
+    Extracts treatment from asset attributes if available.
     """
     listing = activity.get("listing", {})
 
@@ -410,6 +412,21 @@ def parse_sale(activity: Dict[str, Any], bpx_price_usd: float) -> Optional[Blokp
     asset = activity.get("asset", {})
     raw_price = listing.get("price", 0)
 
+    # Extract treatment from asset attributes
+    # Look for trait_type "Treatment" or "Finish" or "Foil Type"
+    treatment = None
+    for attr in asset.get("attributes", []):
+        trait_type = attr.get("trait_type", "").lower()
+        if trait_type in ("treatment", "finish", "foil type", "card finish"):
+            treatment = attr.get("value")
+            break
+
+    # Extract seller/buyer addresses - API uses "username" for seller, check both for buyer
+    seller = listing.get("seller", {})
+    buyer = listing.get("buyer", {})
+    seller_addr = seller.get("username", "") or seller.get("address", "")
+    buyer_addr = buyer.get("username", "") or buyer.get("address", "")
+
     return BlokpaxSale(
         listing_id=str(listing.get("id", "")),
         asset_id=str(asset.get("id", "")),
@@ -417,9 +434,10 @@ def parse_sale(activity: Dict[str, Any], bpx_price_usd: float) -> Optional[Blokp
         price_bpx=bpx_to_float(raw_price),
         price_usd=bpx_to_usd(raw_price, bpx_price_usd),
         quantity=listing.get("quantity", 1),
-        seller_address=listing.get("seller", {}).get("address", ""),
-        buyer_address=listing.get("buyer", {}).get("address", ""),
+        seller_address=seller_addr,
+        buyer_address=buyer_addr,
         filled_at=_parse_datetime(listing.get("filled_at")) or datetime.now(timezone.utc),
+        treatment=treatment,
     )
 
 
@@ -552,7 +570,6 @@ async def scrape_all_listings(
                                 listing_id = str(floor_listing.get("id", ""))
                                 if listing_id and listing_id not in seen_listing_ids:
                                     seen_listing_ids.add(listing_id)
-                                    a.get("name", "Unknown")
                                     all_listings.append(
                                         BlokpaxListing(
                                             listing_id=listing_id,
@@ -1161,6 +1178,8 @@ async def scrape_preslab_sales(session: Session, max_pages: int = 10, save_to_db
                     traits.append({"trait_type": attr.get("trait_type", ""), "value": attr.get("value", "")})
 
                 # Create MarketPrice record
+                seller_data = listing.get("seller", {})
+                seller_name = seller_data.get("address", "") or seller_data.get("username", "")
                 mp = MarketPrice(
                     card_id=card_match["id"],
                     title=asset_name,
@@ -1172,7 +1191,7 @@ async def scrape_preslab_sales(session: Session, max_pages: int = 10, save_to_db
                     external_id=listing_id,
                     platform="blokpax",
                     traits=traits if traits else None,
-                    seller_name=listing.get("seller", {}).get("username", "")[:20] if listing.get("seller") else None,
+                    seller_name=seller_name,
                     scraped_at=datetime.now(timezone.utc),
                 )
 
@@ -1294,7 +1313,7 @@ async def scrape_preslab_listings(session: Session, save_to_db: bool = True) -> 
                     external_id=listing.listing_id,
                     platform="blokpax",
                     traits=traits if traits else None,
-                    seller_name=listing.seller_address[:20] if listing.seller_address else None,
+                    seller_name=listing.seller_address if listing.seller_address else None,
                     listed_at=listing.created_at,
                     scraped_at=datetime.now(timezone.utc),
                 )

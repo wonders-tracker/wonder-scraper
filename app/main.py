@@ -3,34 +3,38 @@ import logging
 import os
 import resource
 import sys
+from contextlib import asynccontextmanager, suppress
 from typing import Any, cast
+
 import anyio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from app.core.config import settings
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
 from app.api import (
-    auth,
-    cards,
-    portfolio,
-    users,
-    market,
     admin,
-    blokpax,
     analytics,
-    meta,
+    auth,
     billing,
-    webhooks,
-    watchlist,
     blog,
+    blokpax,
+    cards,
+    market,
+    meta,
+    portfolio,
+    price_alerts,
+    users,
+    watchlist,
+    webhooks,
 )
 from app.api.billing import BILLING_AVAILABLE
-from app.middleware.metering import APIMeteringMiddleware, METERING_AVAILABLE
-from app.core.saas import get_mode_info
-from contextlib import asynccontextmanager, suppress
-from app.core.scheduler import start_scheduler
 from app.core.anti_scraping import AntiScrapingMiddleware
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+from app.core.config import settings
+from app.core.saas import get_mode_info
+from app.core.scheduler import start_scheduler
+from app.middleware.metering import METERING_AVAILABLE, APIMeteringMiddleware
+from app.middleware.timing import TimingMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +90,23 @@ async def lifespan(app: FastAPI):
         )
     else:
         logger.info("Sentry disabled (SENTRY_DSN not set)")
+
+    # CRITICAL: Aggressive Chrome cleanup on startup
+    # Kills any orphan Chrome processes from previous crashes/restarts
+    # This prevents resource exhaustion from zombie processes
+    try:
+        from app.scraper.browser import startup_cleanup_sync
+
+        logger.info("Running startup Chrome cleanup...")
+        cleanup_stats = startup_cleanup_sync()
+        logger.info(
+            f"Startup cleanup complete: killed {cleanup_stats['chrome_killed']} Chrome instances, "
+            f"cleaned {cleanup_stats['profiles_cleaned']} profiles"
+        )
+        if cleanup_stats["errors"]:
+            logger.warning(f"Cleanup errors (non-fatal): {cleanup_stats['errors']}")
+    except Exception as e:
+        logger.warning(f"Startup Chrome cleanup failed (non-fatal): {e}")
 
     # Register circuit breaker Discord notifications
     from app.core.circuit_breaker import set_notification_callback
@@ -165,7 +186,11 @@ origins = list(set([o for o in origins if o]))
 
 # Middleware order matters! They execute in REVERSE order of addition.
 # So the LAST added middleware executes FIRST on the request.
-# Order: CORS -> Proxy -> GZip -> Context -> Metering -> AntiScraping
+# Order: CORS -> Proxy -> GZip -> Context -> Metering -> AntiScraping -> Timing
+
+# Timing middleware - measures request duration and records performance metrics
+# Added first (runs last on request, first on response) to capture total time
+app.add_middleware(cast(Any, TimingMiddleware))
 
 # Anti-scraping middleware - detects bots, headless browsers, rate limits
 # Protects /api/v1/cards, /api/v1/market, /api/v1/blokpax endpoints
@@ -193,8 +218,18 @@ app.add_middleware(
     cast(Any, CORSMiddleware),
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Explicitly list allowed methods instead of ["*"] for security
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    # Explicitly list allowed headers for security
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+        "X-API-Key",
+        "X-CSRF-Token",
+    ],
     expose_headers=["X-Bot-Warning", "X-Automation-Warning", "X-Request-ID", "X-Correlation-ID"],
 )
 
@@ -211,6 +246,7 @@ app.include_router(billing.router, prefix=settings.API_V1_STR, tags=["billing"])
 app.include_router(webhooks.router, prefix=settings.API_V1_STR, tags=["webhooks"])
 app.include_router(watchlist.router, prefix=f"{settings.API_V1_STR}/watchlist", tags=["watchlist"])
 app.include_router(blog.router, prefix=f"{settings.API_V1_STR}/blog", tags=["blog"])
+app.include_router(price_alerts.router, prefix=f"{settings.API_V1_STR}/price-alerts", tags=["price-alerts"])
 
 
 @app.get("/")
@@ -237,13 +273,15 @@ def health_detailed() -> dict:
 
     Returns 200 if core systems healthy, 503 if critical issues.
     """
-    from datetime import datetime, timezone, timedelta
-    from sqlmodel import Session, select
-    from sqlalchemy import func, text
-    from app.db import engine, USING_NEON_POOLER
-    from app.models.market import MarketPrice
-    from app.core.scheduler import scheduler
+    from datetime import datetime, timedelta, timezone
     from typing import Any
+
+    from sqlalchemy import func, text
+    from sqlmodel import Session, select
+
+    from app.core.scheduler import scheduler
+    from app.db import USING_NEON_POOLER, engine
+    from app.models.market import MarketPrice
 
     health_status: dict[str, Any] = {
         "status": "healthy",
@@ -349,6 +387,23 @@ def health_detailed() -> dict:
         # Memory measurement can fail on some platforms - safe to ignore
         pass
 
+    # Chrome process count - helps diagnose resource exhaustion
+    try:
+        from app.scraper.browser import get_chrome_process_count
+
+        chrome_count = get_chrome_process_count()
+        # Warn if too many Chrome processes (indicates leak or zombie accumulation)
+        chrome_status = "healthy" if chrome_count <= 2 else "warning" if chrome_count <= 5 else "critical"
+        health_status["checks"]["chrome"] = {
+            "status": chrome_status,
+            "process_count": chrome_count,
+        }
+        if chrome_status == "critical":
+            health_status["status"] = "degraded"
+    except Exception:
+        # Chrome monitoring is optional - safe to ignore failures
+        pass
+
     return health_status
 
 
@@ -443,3 +498,30 @@ def health_unified():
     status_code = 503 if health["status"] == "critical" else 200
 
     return JSONResponse(content=health, status_code=status_code)
+
+
+@app.get("/health/performance")
+def health_performance():
+    """
+    Get API performance metrics.
+
+    Returns:
+    - summary: Overall performance stats (total requests, slow %, uptime)
+    - slowest_endpoints: Top 10 slowest endpoints by p95 response time
+    - all_endpoints: Detailed metrics for every tracked endpoint
+
+    Metrics per endpoint include:
+    - request_count: Total requests to this endpoint
+    - slow_request_count: Requests exceeding 500ms threshold
+    - p50_ms, p95_ms, p99_ms: Response time percentiles
+    - avg_ms, min_ms, max_ms: Basic statistics
+
+    Note: Metrics reset on server restart.
+    """
+    from app.core.perf_metrics import perf_metrics
+
+    return {
+        "summary": perf_metrics.get_summary(),
+        "slowest_endpoints": perf_metrics.get_slowest_endpoints(n=10, by="p95"),
+        "all_endpoints": perf_metrics.get_all_metrics(),
+    }

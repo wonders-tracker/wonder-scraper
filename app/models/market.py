@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlmodel import Field, SQLModel
-from sqlalchemy import Index, Column
+from sqlalchemy import Index, Column, UniqueConstraint
 from sqlalchemy.types import JSON
 from datetime import datetime, timezone
 
@@ -43,7 +43,7 @@ class MarketPrice(SQLModel, table=True):
     title: str
     sold_date: Optional[datetime] = None
     listing_type: str = Field(default="sold")  # 'sold' or 'active'
-    treatment: str = Field(default="Classic Paper")  # Classic Paper, Foil, Serialized, etc.
+    treatment: Optional[str] = Field(default=None)  # Classic Paper, Foil, Serialized, etc. None = unknown
     bid_count: int = Field(default=0)  # Number of bids (for auctions)
     listing_format: Optional[str] = Field(default=None)  # 'auction', 'buy_it_now', 'best_offer', None if unknown
     external_id: Optional[str] = Field(default=None, index=True)  # Unique ID from source (e.g., eBay item ID)
@@ -100,6 +100,14 @@ class MarketPrice(SQLModel, table=True):
         Index("ix_marketprice_listing_scraped", "listing_type", "scraped_at"),
         # For platform filter on listings page
         Index("ix_marketprice_platform", "platform"),
+        # For platform-filtered floor prices
+        Index("ix_marketprice_card_platform", "card_id", "platform"),
+        # For time-filtered active listings (uses listed_at)
+        Index("ix_marketprice_card_listed_at", "card_id", "listed_at"),
+        # For time-filtered sold listings (uses sold_date)
+        Index("ix_marketprice_card_sold_date", "card_id", "sold_date"),
+        # Prevent duplicate listings from same platform (NULL external_ids allowed)
+        UniqueConstraint("external_id", "platform", name="uq_marketprice_external_platform"),
     )
 
 

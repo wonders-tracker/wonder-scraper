@@ -91,17 +91,18 @@ def get_platforms_for_card(card_id: int) -> list[str]:
         return [row[0] for row in result.fetchall()]
 
 
-def get_blokpax_asks(asset_id: str) -> list[dict]:
-    """Get Blokpax active listings (ASK side)."""
+def get_blokpax_asks(card_id: int) -> list[dict]:
+    """Get Blokpax active listings (ASK side) from marketprice table."""
     query = text("""
-        SELECT price_usd as price, seller_address, quantity, created_at
-        FROM blokpaxlisting
-        WHERE asset_id = :asset_id
-          AND status = 'active'
-        ORDER BY price_usd ASC
+        SELECT price as price_usd, seller_name as seller_address, 1 as quantity, listed_at as created_at
+        FROM marketprice
+        WHERE card_id = :card_id
+          AND platform = 'blokpax'
+          AND listing_type = 'active'
+        ORDER BY price ASC
     """)
     with engine.connect() as conn:
-        result = conn.execute(query, {"asset_id": asset_id})
+        result = conn.execute(query, {"card_id": card_id})
         return [dict(row._mapping) for row in result.fetchall()]
 
 

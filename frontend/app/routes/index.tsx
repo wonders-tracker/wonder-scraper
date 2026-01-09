@@ -4,7 +4,7 @@ import { analytics } from '~/services/analytics'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, getSortedRowModel, SortingState, getFilteredRowModel, getPaginationRowModel } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ArrowUpDown, ArrowUp, ArrowDown, Calendar, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Package, Layers, Gem, Archive, Store, ExternalLink, Info } from 'lucide-react'
+import { ArrowUpDown, ArrowUp, ArrowDown, Calendar, DollarSign, BarChart3, LayoutDashboard, ChevronLeft, ChevronRight, Package, Layers, Gem, Archive, Store, ExternalLink, Info, LayoutGrid, List } from 'lucide-react'
 // Animated icons for micro-interactions
 import { SearchIcon } from '~/components/ui/search'
 import { PlusIcon, type PlusIconHandle } from '~/components/ui/plus'
@@ -14,11 +14,20 @@ import { DollarSignIcon, type DollarSignIconHandle } from '~/components/ui/dolla
 import clsx from 'clsx'
 import { Tooltip } from '../components/ui/tooltip'
 import { SimpleDropdown } from '../components/ui/dropdown'
+import { Button, IconButton, CloseButton } from '../components/ui/button'
+import { RarityBadge } from '../components/ui/rarity-badge'
+import { PlatformBadge } from '../components/ui/platform-badge'
 import { useTimePeriod } from '../context/TimePeriodContext'
 import { useCurrentUser } from '../context/UserContext'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
+import { MobileCardList, type MobileCardItem } from '../components/ui/mobile-card-list'
+import { ProductListItem, ProductListItemSkeleton } from '../components/ui/product-list-item'
+import { ProductsGallery, Hero, CategoryCards } from '../components/home'
+import { HomeTableSkeleton, MobileCardListSkeleton, ProductGallerySkeleton } from '../components/ui/skeleton'
 
+// Reduced from 200 to 50 for faster initial load - users can paginate for more
+// Balance between completeness and speed - 200 cards loads in ~3s
 const CARDS_FETCH_LIMIT = Number(import.meta.env.VITE_CARDS_FETCH_LIMIT ?? '200')
 
 // Card thumbnail with placeholder fallback for missing/failed images
@@ -61,9 +70,10 @@ function TrackButton({ onClick, tooltip }: { onClick: () => void; tooltip: strin
         }}
         onMouseEnter={() => iconRef.current?.startAnimation()}
         onMouseLeave={() => iconRef.current?.stopAnimation()}
-        className="p-1.5 rounded border border-border hover:bg-primary hover:text-primary-foreground transition-colors group"
+        className="flex items-center gap-1.5 px-3 py-2 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium text-sm"
       >
         <PlusIcon ref={iconRef} size={14} />
+        <span className="hidden sm:inline">Track</span>
       </button>
     </Tooltip>
   )
@@ -126,6 +136,8 @@ type Card = {
 
   // === PRICES (clear hierarchy) ===
   floor_price?: number // Avg of 4 lowest sales - THE standard price (cheapest variant)
+  floor_price_source?: string // "sales" or "order_book"
+  floor_price_confidence?: number // 0.0-1.0 confidence score
   floor_by_variant?: Record<string, number> // Floor price per variant {treatment/subtype: price}
   vwap?: number // Volume Weighted Average Price = SUM(price)/COUNT
   latest_price?: number // Most recent sale price
@@ -205,11 +217,30 @@ type DashboardTab = 'products' | 'listings'
 function Home() {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'volume', desc: true }])
   const [globalFilter, setGlobalFilter] = useState('')
-  const { timePeriod, setTimePeriod } = useTimePeriod()
+  // Time period removed from UI - using 'all' for comprehensive data
+  // const { timePeriod, setTimePeriod } = useTimePeriod()
   const [productType, setProductType] = useState<string>('all')
   const [platform, setPlatform] = useState<string>('all')
+  const [treatment, setTreatment] = useState<string>('all')
+  const [rarity, setRarity] = useState<string>('all')
+  const [setFilter, setSetFilter] = useState<string>('all')
   const [trackingCard, setTrackingCard] = useState<Card | null>(null)
-  const [activeTab, setActiveTab] = useState<DashboardTab>('products')
+  const [activeTab, setActiveTabState] = useState<DashboardTab>('products')
+
+  // Preserve scroll position when switching tabs
+  const setActiveTab = (tab: DashboardTab) => {
+    const scrollY = window.scrollY
+    setActiveTabState(tab)
+    // Wait for React to re-render and browser to re-layout, then restore scroll
+    // Double requestAnimationFrame ensures the layout has settled
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, scrollY)
+      })
+    })
+  }
+  // Products tab view mode (table or list)
+  const [viewMode, setViewMode] = useState<'table' | 'list'>('list')
   // Listings tab state
   const [listingType, setListingType] = useState<string>('active')
   const [listingPlatform, setListingPlatform] = useState<string>('all')
@@ -221,9 +252,26 @@ function Home() {
   const [listingSortBy, setListingSortBy] = useState<string>('scraped_at')
   const [listingSortOrder, setListingSortOrder] = useState<'asc' | 'desc'>('desc')
   const [listingPage, setListingPage] = useState<number>(0)
+  const [listingViewMode, setListingViewMode] = useState<'table' | 'list'>('list')
   const LISTINGS_PER_PAGE = 100
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+
+  // Prefetch card detail data on hover for faster navigation
+  const prefetchCardDetail = (cardSlug: string) => {
+    // Prefetch card data
+    queryClient.prefetchQuery({
+      queryKey: ['card', cardSlug],
+      queryFn: async () => api.get(`cards/${cardSlug}`).json(),
+      staleTime: 2 * 60 * 1000,
+    })
+    // Prefetch listings data (most expensive query)
+    queryClient.prefetchQuery({
+      queryKey: ['card-listings', cardSlug],
+      queryFn: async () => api.get(`cards/${cardSlug}/listings?sold_limit=100&active_limit=100`).json(),
+      staleTime: 2 * 60 * 1000,
+    })
+  }
 
   // Debounced search tracking
   useEffect(() => {
@@ -251,13 +299,14 @@ function Home() {
   const { user } = useCurrentUser()
 
 
+  // Use 'all' time period for comprehensive data (no stale data filtering)
   const { data: cards, isLoading, isFetching } = useQuery({
-    queryKey: ['cards', timePeriod, platform],
+    queryKey: ['cards', 'all', platform],
     queryFn: async () => {
       const platformParam = platform !== 'all' ? `&platform=${platform}` : ''
       // Load all cards - important ones can be deep in the list
       // slim=true reduces payload by ~50% for faster loading
-      const data = await api.get(`cards?limit=${CARDS_FETCH_LIMIT}&time_period=${timePeriod}${platformParam}&slim=true`).json<Card[]>()
+      const data = await api.get(`cards?limit=${CARDS_FETCH_LIMIT}&time_period=all${platformParam}&slim=true`).json<Card[]>()
       return data.map(c => ({
           ...c,
           // Use new field names with fallback to deprecated for backwards compat
@@ -367,17 +416,7 @@ function Home() {
                     </Tooltip>
                     {isSingle && rarity && (
                       <Tooltip content={rarity}>
-                          <span className={clsx(
-                            "shrink-0 text-[8px] lg:text-[10px] font-bold uppercase px-1 py-0.5 rounded",
-                            rarity === 'Mythic' ? 'text-amber-900 bg-amber-400' :
-                            rarity === 'Legendary' ? 'text-orange-900 bg-orange-400' :
-                            rarity === 'Epic' ? 'text-purple-900 bg-purple-400' :
-                            rarity === 'Rare' ? 'text-blue-900 bg-blue-400' :
-                            rarity === 'Uncommon' ? 'text-brand-800 bg-brand-300' :
-                            'text-zinc-900 bg-zinc-400'
-                          )}>
-                            {rarity}
-                          </span>
+                          <RarityBadge rarity={rarity} variant="solid" size="xs" className="shrink-0" />
                       </Tooltip>
                     )}
                     {isSingle && row.original.orbital && (
@@ -428,6 +467,8 @@ function Home() {
           const floorPrice = row.original.floor_price || row.original.vwap
           const hasFloor = !!floorPrice && floorPrice > 0
           const delta = row.original.price_delta ?? row.original.price_delta_24h ?? 0
+          const source = row.original.floor_price_source
+          const confidence = row.original.floor_price_confidence ?? 1.0
 
           // Check for variant price range for sealed products
           const floorByVariant = row.original.floor_by_variant
@@ -451,18 +492,41 @@ function Home() {
               }
           }
 
+          // Determine price display based on source and confidence
+          const isEstimate = source === 'order_book'
+          const isLowConfidence = confidence < 0.5
+
+          // Format price display
+          let priceDisplay = 'No data'
+          let priceClass = 'font-mono text-base lg:text-lg font-semibold'
+          if (hasFloor) {
+              if (isEstimate && isLowConfidence) {
+                  // Show range for low confidence estimates (±20%)
+                  const low = Math.floor(floorPrice * 0.8)
+                  const high = Math.ceil(floorPrice * 1.2)
+                  priceDisplay = `$${low}-$${high}`
+                  priceClass = 'font-mono text-base lg:text-lg font-semibold text-muted-foreground'
+              } else if (isEstimate) {
+                  // Show estimate indicator for order book prices
+                  priceDisplay = `~$${floorPrice.toFixed(2)}`
+                  priceClass = 'font-mono text-base lg:text-lg font-semibold text-muted-foreground'
+              } else {
+                  priceDisplay = `$${floorPrice.toFixed(2)}`
+              }
+          }
+
           return (
             <div className="inline-flex flex-col items-center gap-0.5">
                 <div className="inline-flex items-center gap-1 md:gap-2">
-                    <span className="font-mono text-sm lg:text-base">
-                        {hasFloor ? `$${floorPrice.toFixed(2)}` : '---'}
+                    <span className={priceClass}>
+                        {priceDisplay}
                     </span>
                     {/* Hide delta badge on mobile to save space */}
                     {hasFloor && delta !== 0 && (
                         <span className={clsx(
                             "hidden sm:inline text-[10px] lg:text-xs font-mono px-1 py-0.5 rounded",
                             delta > 0 ? "text-brand-300 bg-brand-300/10" :
-                            "text-red-400 bg-red-500/10"
+                            "text-rose-500 bg-rose-500/10"
                         )}>
                             {delta > 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(1)}%
                         </span>
@@ -511,11 +575,11 @@ function Home() {
                 chevronTooltip = 'Good volume (10-29 sales)'
             } else if (vol > 0 && vol < 3) {
                 chevrons = '▼'
-                colorClass = 'text-red-400'
+                colorClass = 'text-rose-500'
                 chevronTooltip = 'Low volume (1-2 sales)'
             } else if (vol === 0) {
                 chevrons = '▼▼'
-                colorClass = 'text-red-500'
+                colorClass = 'text-rose-500'
                 chevronTooltip = 'No sales in period'
             }
 
@@ -553,7 +617,7 @@ function Home() {
             const treatment = simplifyTreatmentForDisplay(rawTreatment)
             return (
                 <div className="text-center">
-                    <div className="font-mono text-sm lg:text-base">{price > 0 ? `$${price.toFixed(2)}` : '---'}</div>
+                    <div className="font-mono text-sm lg:text-base">{price > 0 ? `$${price.toFixed(2)}` : '—'}</div>
                     {/* Hide treatment on mobile to save space */}
                     {treatment && (
                         <Tooltip content={rawTreatment}>
@@ -583,7 +647,7 @@ function Home() {
         ),
         cell: ({ row }) => {
             const high = row.original.max_price || 0
-            return <div className="hidden md:block text-center font-mono text-sm lg:text-base text-brand-300">{high > 0 ? `$${high.toFixed(2)}` : '---'}</div>
+            return <div className="hidden md:block text-center font-mono text-sm lg:text-base text-brand-300">{high > 0 ? `$${high.toFixed(2)}` : '—'}</div>
         }
     },
     {
@@ -603,7 +667,7 @@ function Home() {
         ),
         cell: ({ row }) => {
             const ask = row.original.lowest_ask || 0
-            return <div className="hidden md:block text-center font-mono text-sm lg:text-base">{ask > 0 ? `$${ask.toFixed(2)}` : '---'}</div>
+            return <div className="hidden md:block text-center font-mono text-sm lg:text-base">{ask > 0 ? `$${ask.toFixed(2)}` : '—'}</div>
         }
     },
     {
@@ -632,7 +696,7 @@ function Home() {
             // Color code: fast sell = green, slow = red
             const daysClass = daysToSell !== null
                 ? daysToSell < 3 ? 'text-brand-300'
-                : daysToSell > 14 ? 'text-red-400'
+                : daysToSell > 14 ? 'text-rose-500'
                 : 'text-muted-foreground'
                 : 'text-muted-foreground'
             return (
@@ -671,10 +735,45 @@ function Home() {
   // Cards data (no filtering)
   const filteredCards = useMemo(() => {
     if (!cards) return []
-    if (productType === 'all') return cards
-    const normalizedType = productType.toLowerCase()
-    return cards.filter(card => (card.product_type || 'single').toLowerCase() === normalizedType)
-  }, [cards, productType])
+    return cards.filter(card => {
+      // Product type filter
+      if (productType !== 'all') {
+        const normalizedType = productType.toLowerCase()
+        if ((card.product_type || 'single').toLowerCase() !== normalizedType) return false
+      }
+      // Treatment filter
+      if (treatment !== 'all') {
+        if ((card.last_treatment || '').toLowerCase() !== treatment.toLowerCase()) return false
+      }
+      // Rarity filter
+      if (rarity !== 'all') {
+        if ((card.rarity_name || '').toLowerCase() !== rarity.toLowerCase()) return false
+      }
+      // Set filter
+      if (setFilter !== 'all') {
+        if ((card.set_name || '').toLowerCase() !== setFilter.toLowerCase()) return false
+      }
+      return true
+    })
+  }, [cards, productType, treatment, rarity, setFilter])
+
+  // Extract unique filter options from cards data
+  const filterOptions = useMemo(() => {
+    if (!cards) return { treatments: [], rarities: [], sets: [] }
+
+    const treatments = [...new Set(cards.map(c => c.last_treatment).filter(Boolean))]
+      .sort((a, b) => a!.localeCompare(b!))
+    const rarities = [...new Set(cards.map(c => c.rarity_name).filter(Boolean))]
+      .sort((a, b) => {
+        // Custom rarity order
+        const order = ['Mythic', 'Legendary', 'Epic', 'Rare', 'Uncommon', 'Common']
+        return order.indexOf(a!) - order.indexOf(b!)
+      })
+    const sets = [...new Set(cards.map(c => c.set_name).filter(Boolean))]
+      .sort((a, b) => a!.localeCompare(b!))
+
+    return { treatments, rarities, sets }
+  }, [cards])
 
   const table = useReactTable({
     data: filteredCards,
@@ -695,6 +794,21 @@ function Home() {
       },
     },
   })
+
+  // Transform table data to mobile card format
+  const mobileItems: MobileCardItem[] = useMemo(() => {
+    return table.getRowModel().rows.map(row => ({
+      id: row.original.id,
+      name: row.original.name,
+      subtitle: row.original.set_name,
+      treatment: row.original.last_treatment,
+      price: row.original.floor_price || row.original.vwap,
+      priceChange: row.original.price_delta ?? row.original.price_delta_24h,
+      secondaryValue: row.original.volume ? `${row.original.volume} sales` : undefined,
+      imageUrl: row.original.image_url,
+      onClick: () => navigate({ to: '/cards/$cardId', params: { cardId: row.original.slug || String(row.original.id) } }),
+    }))
+  }, [table.getRowModel().rows, navigate])
 
   // Compute dynamic sidebars
   const topGainers = useMemo(() => {
@@ -735,227 +849,406 @@ function Home() {
 
       // Sale velocity = avg sales per card per day
       // Normalize to daily rate based on time period
-      const timePeriodDays = timePeriod === '7d' ? 7 : timePeriod === '30d' ? 30 : timePeriod === '90d' ? 90 : 30
+      // Use 30 days as default for velocity calculation
+      const timePeriodDays = 30
       const avgVelocity = cards.length > 0 ? (totalVolume / cards.length / timePeriodDays) : 0
 
       return { totalVolume, totalVolumeUSD, avgVelocity }
-  }, [cards, timePeriod])
+  }, [cards])
+
+  // Extract card images for hero background (28 for 4x7 grid)
+  const heroImages = useMemo(() => {
+    if (!cards) return []
+    return cards
+      .filter(c => c.image_url)
+      .map(c => c.image_url!)
+      .slice(0, 28)
+  }, [cards])
 
   return (
-    <div className="h-[calc(100vh-3.5rem-2rem)] flex flex-col bg-background text-foreground font-mono">
-      <div className="p-4 max-w-[1800px] mx-auto w-full flex-1 flex flex-col overflow-hidden">
+    <div className="min-h-[calc(100vh-3.5rem-2rem)] flex flex-col bg-background text-foreground font-mono">
+      <div className="p-4 max-w-[1800px] mx-auto w-full flex-1 flex flex-col">
+        {/* Hero Section - hidden instead of unmounted to prevent layout shift */}
+        <div className={activeTab === 'products' ? '' : 'hidden'}>
+          <Hero cardImages={heroImages} />
+        </div>
+
+        {/* Category Quick Links */}
+        {/* Category Cards - always visible */}
+        <CategoryCards />
+
+        {/* Products Gallery - show skeleton when loading, data when ready */}
+        {isLoading ? (
+          <ProductGallerySkeleton />
+        ) : cards && cards.length > 0 ? (
+          <ProductsGallery cards={cards} isLoading={false} />
+        ) : null}
+
         {/* Main Data Table */}
-        <div className="border border-border rounded bg-card overflow-hidden flex-1 flex flex-col">
-            <div className="p-3 md:p-4 border-b border-border flex flex-col xl:flex-row xl:items-center justify-between bg-muted/20 gap-4">
-                <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-8 w-full">
-                    {/* Dashboard Tabs */}
-                    <div className="flex items-center shrink-0">
-                        <ProductsTabButton
-                            isActive={activeTab === 'products'}
-                            onClick={() => setActiveTab('products')}
+        <div className="border border-border rounded-lg bg-card overflow-hidden flex-1 flex flex-col min-h-[400px]">
+            {/* Row 1: Tab Navigation */}
+            <div className="border-b border-border bg-muted/10">
+                <div className="flex items-center">
+                    <ProductsTabButton
+                        isActive={activeTab === 'products'}
+                        onClick={() => setActiveTab('products')}
+                    />
+                    <ListingsTabButton
+                        isActive={activeTab === 'listings'}
+                        onClick={() => setActiveTab('listings')}
+                    />
+                </div>
+            </div>
+
+            {/* Row 2: Filters - Products Tab */}
+            <div className={activeTab === 'products' ? '' : 'hidden'}>
+                <div className="p-3 border-b border-border bg-background/50">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Search */}
+                        <div className="relative">
+                            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                            <input
+                                type="text"
+                                placeholder="Search cards..."
+                                className="h-9 w-[180px] bg-background pl-9 pr-4 rounded-full border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary placeholder:text-muted-foreground/60"
+                                value={globalFilter}
+                                onChange={e => setGlobalFilter(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Filter Pills */}
+                        <SimpleDropdown
+                            value={productType}
+                            onChange={(value) => {
+                                setProductType(value)
+                                analytics.trackFilterApplied('product_type', value)
+                            }}
+                            options={[
+                                { value: 'all', label: 'Product Type' },
+                                { value: 'Single', label: 'Singles' },
+                                { value: 'Box', label: 'Boxes' },
+                                { value: 'Pack', label: 'Packs' },
+                                { value: 'Lot', label: 'Lots' },
+                                { value: 'Proof', label: 'Proofs' },
+                            ]}
                         />
-                        <ListingsTabButton
-                            isActive={activeTab === 'listings'}
-                            onClick={() => setActiveTab('listings')}
+
+                        <SimpleDropdown
+                            value={setFilter}
+                            onChange={(value) => {
+                                setSetFilter(value)
+                                analytics.trackFilterApplied('set', value)
+                            }}
+                            options={[
+                                { value: 'all', label: 'Set' },
+                                ...filterOptions.sets.map(s => ({ value: s!, label: s! }))
+                            ]}
+                        />
+
+                        <SimpleDropdown
+                            value={rarity}
+                            onChange={(value) => {
+                                setRarity(value)
+                                analytics.trackFilterApplied('rarity', value)
+                            }}
+                            options={[
+                                { value: 'all', label: 'Rarity' },
+                                ...filterOptions.rarities.map(r => ({ value: r!, label: r! }))
+                            ]}
+                        />
+
+                        <SimpleDropdown
+                            value={treatment}
+                            onChange={(value) => {
+                                setTreatment(value)
+                                analytics.trackFilterApplied('treatment', value)
+                            }}
+                            options={[
+                                { value: 'all', label: 'Treatment' },
+                                ...filterOptions.treatments.map(t => ({ value: t!, label: t! }))
+                            ]}
+                        />
+
+                        <SimpleDropdown
+                            value={platform}
+                            onChange={(value) => {
+                                setPlatform(value)
+                                analytics.trackFilterApplied('platform', value)
+                            }}
+                            options={[
+                                { value: 'all', label: 'Platform' },
+                                { value: 'ebay', label: 'eBay' },
+                                { value: 'blokpax', label: 'Blokpax' },
+                                { value: 'opensea', label: 'OpenSea' },
+                            ]}
+                        />
+
+                        {/* Clear Filters */}
+                        {(productType !== 'all' || platform !== 'all' || treatment !== 'all' || rarity !== 'all' || setFilter !== 'all' || globalFilter) && (
+                            <button
+                                onClick={() => {
+                                    setProductType('all')
+                                    setPlatform('all')
+                                    setTreatment('all')
+                                    setRarity('all')
+                                    setSetFilter('all')
+                                    setGlobalFilter('')
+                                }}
+                                className="text-sm text-primary hover:underline"
+                            >
+                                Clear Filters
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Row 3: Results Bar */}
+                <div className="px-4 py-2 border-b border-border bg-background/30 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                        <span className="font-medium text-foreground">{filteredCards.length}</span>
+                        <span>results</span>
+                        {productType !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
+                                {productType}
+                                <button onClick={() => setProductType('all')} className="hover:text-primary/70">×</button>
+                            </span>
+                        )}
+                        {setFilter !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
+                                {setFilter}
+                                <button onClick={() => setSetFilter('all')} className="hover:text-primary/70">×</button>
+                            </span>
+                        )}
+                        {rarity !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
+                                {rarity}
+                                <button onClick={() => setRarity('all')} className="hover:text-primary/70">×</button>
+                            </span>
+                        )}
+                        {treatment !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
+                                {treatment}
+                                <button onClick={() => setTreatment('all')} className="hover:text-primary/70">×</button>
+                            </span>
+                        )}
+                        {platform !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
+                                {platform}
+                                <button onClick={() => setPlatform('all')} className="hover:text-primary/70">×</button>
+                            </span>
+                        )}
+                        {isFetching && !isLoading && (
+                            <RefreshCWIcon size={14} className="animate-spin text-muted-foreground" />
+                        )}
+                    </div>
+
+                    {/* Sort & View Toggle */}
+                    <div className="flex items-center gap-3">
+                        <SimpleDropdown
+                            value={sorting[0]?.id || 'volume'}
+                            onChange={(value) => {
+                                setSorting([{ id: value, desc: value !== 'name' && value !== 'floor_price' }])
+                            }}
+                            options={[
+                                { value: 'volume', label: 'Best Sellers' },
+                                { value: 'floor_price', label: 'Price: Low to High' },
+                                { value: 'latest_price', label: 'Price: High to Low' },
+                                { value: 'name', label: 'Name' },
+                            ]}
+                        />
+
+                        {/* View Toggle */}
+                        <div className="flex items-center rounded-lg border border-border overflow-hidden">
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={clsx(
+                                    'p-2 transition-colors',
+                                    viewMode === 'list'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-background hover:bg-muted text-muted-foreground'
+                                )}
+                                title="Grid view"
+                            >
+                                <LayoutGrid className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('table')}
+                                className={clsx(
+                                    'p-2 transition-colors',
+                                    viewMode === 'table'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-background hover:bg-muted text-muted-foreground'
+                                )}
+                                title="List view"
+                            >
+                                <List className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Row 2: Filters - Listings Tab */}
+            <div className={activeTab === 'listings' ? '' : 'hidden'}>
+                <div className="p-3 border-b border-border bg-background/50">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Search */}
+                        <div className="relative">
+                            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                            <input
+                                type="text"
+                                placeholder="Search listings..."
+                                className="h-9 w-[200px] bg-background pl-9 pr-4 rounded-full border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary placeholder:text-muted-foreground/60"
+                                value={listingSearch}
+                                onChange={e => setListingSearch(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Filter Pills */}
+                        <SimpleDropdown
+                            value={listingType}
+                            onChange={(value) => {
+                                setListingType(value)
+                                analytics.trackFilterApplied('listing_type', value)
+                            }}
+                            options={[
+                                { value: 'active', label: 'Active' },
+                                { value: 'sold', label: 'Sold' },
+                                { value: 'all', label: 'All' },
+                            ]}
+                        />
+
+                        <SimpleDropdown
+                            value={listingPlatform}
+                            onChange={(value) => {
+                                setListingPlatform(value)
+                                analytics.trackFilterApplied('listing_platform', value)
+                            }}
+                            options={[
+                                { value: 'all', label: 'Platform' },
+                                { value: 'ebay', label: 'eBay' },
+                                { value: 'blokpax', label: 'Blokpax' },
+                                { value: 'opensea', label: 'OpenSea' },
+                            ]}
+                        />
+
+                        <SimpleDropdown
+                            value={listingProductType}
+                            onChange={(value) => {
+                                setListingProductType(value)
+                                analytics.trackFilterApplied('listing_product_type', value)
+                            }}
+                            options={[
+                                { value: 'all', label: 'Product Type' },
+                                { value: 'Single', label: 'Singles' },
+                                { value: 'Box', label: 'Boxes' },
+                                { value: 'Pack', label: 'Packs' },
+                            ]}
+                        />
+
+                        <SimpleDropdown
+                            value={listingTreatment}
+                            onChange={(value) => {
+                                setListingTreatment(value)
+                                analytics.trackFilterApplied('listing_treatment', value)
+                            }}
+                            options={[
+                                { value: 'all', label: 'Treatment' },
+                                { value: 'Classic Paper', label: 'Classic Paper' },
+                                { value: 'Classic Foil', label: 'Classic Foil' },
+                                { value: 'Foil', label: 'Foil' },
+                            ]}
                         />
                     </div>
-                    
-                    {/* Filters & Controls inside Header - conditional based on tab */}
-                    {activeTab === 'products' ? (
-                      <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2 md:gap-4 w-full">
-                          <div className="relative w-full flex-1">
-                               <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                              <input
-                                  type="text"
-                                  placeholder="SEARCH..."
-                                  className="w-full h-9 bg-background pl-9 pr-4 rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
-                                  value={globalFilter}
-                                  onChange={e => setGlobalFilter(e.target.value)}
-                              />
-                          </div>
-                          {isFetching && !isLoading && (
-                            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-                              <RefreshCWIcon size={12} className="animate-spin" />
-                              Refreshing…
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-                              <SimpleDropdown
-                                  value={productType}
-                                  onChange={(value) => {
-                                      setProductType(value)
-                                      analytics.trackFilterApplied('product_type', value)
-                                  }}
-                                  options={[
-                                      { value: 'all', label: 'All Types' },
-                                      { value: 'Single', label: 'Singles' },
-                                      { value: 'Box', label: 'Boxes' },
-                                      { value: 'Pack', label: 'Packs' },
-                                      { value: 'Lot', label: 'Lots' },
-                                      { value: 'Proof', label: 'Proofs' },
-                                  ]}
-                                  size="sm"
-                                  className="flex-1 sm:w-[110px]"
-                                  triggerClassName="uppercase font-mono text-xs"
-                              />
-
-                              <SimpleDropdown
-                                  value={platform}
-                                  onChange={(value) => {
-                                      setPlatform(value)
-                                      analytics.trackFilterApplied('platform', value)
-                                  }}
-                                  options={[
-                                      { value: 'all', label: 'All Platforms' },
-                                      { value: 'ebay', label: 'eBay' },
-                                      { value: 'blokpax', label: 'Blokpax' },
-                                      { value: 'opensea', label: 'OpenSea' },
-                                  ]}
-                                  size="sm"
-                                  className="flex-1 sm:w-[120px]"
-                                  triggerClassName="uppercase font-mono text-xs"
-                              />
-
-                              <SimpleDropdown
-                                  value={timePeriod}
-                                  onChange={(value) => {
-                                      setTimePeriod(value)
-                                      analytics.trackFilterApplied('time_period', value)
-                                  }}
-                                  options={[
-                                      { value: '7d', label: '7 Days' },
-                                      { value: '30d', label: '30 Days' },
-                                      { value: '90d', label: '90 Days' },
-                                      { value: 'all', label: 'All Time' },
-                                  ]}
-                                  size="sm"
-                                  className="flex-1 sm:w-[100px]"
-                                  triggerClassName="uppercase font-mono text-xs"
-                              />
-                          </div>
-                      </div>
-                    ) : (
-                      /* Listings tab filters */
-                      <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2 md:gap-4 w-full">
-                          <div className="relative w-full flex-1">
-                               <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                              <input
-                                  type="text"
-                                  placeholder="SEARCH LISTINGS..."
-                                  className="w-full h-9 bg-background pl-9 pr-4 rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
-                                  value={listingSearch}
-                                  onChange={e => setListingSearch(e.target.value)}
-                              />
-                          </div>
-
-                          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 flex-wrap">
-                              <SimpleDropdown
-                                  value={listingType}
-                                  onChange={(value) => {
-                                      setListingType(value)
-                                      analytics.trackFilterApplied('listing_type', value)
-                                  }}
-                                  options={[
-                                      { value: 'active', label: 'Active' },
-                                      { value: 'sold', label: 'Sold' },
-                                      { value: 'all', label: 'All' },
-                                  ]}
-                                  size="sm"
-                                  className="flex-1 sm:w-[90px]"
-                                  triggerClassName="uppercase font-mono text-xs"
-                              />
-
-                              <SimpleDropdown
-                                  value={listingPlatform}
-                                  onChange={(value) => {
-                                      setListingPlatform(value)
-                                      analytics.trackFilterApplied('listing_platform', value)
-                                  }}
-                                  options={[
-                                      { value: 'all', label: 'All Platforms' },
-                                      { value: 'ebay', label: 'eBay' },
-                                      { value: 'blokpax', label: 'Blokpax' },
-                                      { value: 'opensea', label: 'OpenSea' },
-                                  ]}
-                                  size="sm"
-                                  className="flex-1 sm:w-[120px]"
-                                  triggerClassName="uppercase font-mono text-xs"
-                              />
-
-                              <SimpleDropdown
-                                  value={listingProductType}
-                                  onChange={(value) => {
-                                      setListingProductType(value)
-                                      analytics.trackFilterApplied('listing_product_type', value)
-                                  }}
-                                  options={[
-                                      { value: 'all', label: 'All Types' },
-                                      { value: 'Single', label: 'Singles' },
-                                      { value: 'Box', label: 'Boxes' },
-                                      { value: 'Pack', label: 'Packs' },
-                                  ]}
-                                  size="sm"
-                                  className="flex-1 sm:w-[100px]"
-                                  triggerClassName="uppercase font-mono text-xs"
-                              />
-
-                              <SimpleDropdown
-                                  value={listingTreatment}
-                                  onChange={(value) => {
-                                      setListingTreatment(value)
-                                      analytics.trackFilterApplied('listing_treatment', value)
-                                  }}
-                                  options={[
-                                      { value: 'all', label: 'All Treatments' },
-                                      { value: 'Classic Paper', label: 'Classic Paper' },
-                                      { value: 'Classic Foil', label: 'Classic Foil' },
-                                      { value: 'Foil', label: 'Foil' },
-                                  ]}
-                                  size="sm"
-                                  className="flex-1 sm:w-[130px]"
-                                  triggerClassName="uppercase font-mono text-xs"
-                              />
-
-                              <SimpleDropdown
-                                  value={listingTimePeriod}
-                                  onChange={(value) => {
-                                      setListingTimePeriod(value)
-                                      analytics.trackFilterApplied('listing_time_period', value)
-                                  }}
-                                  options={[
-                                      { value: 'all', label: 'All Time' },
-                                      { value: '7d', label: '7 Days' },
-                                      { value: '30d', label: '30 Days' },
-                                      { value: '90d', label: '90 Days' },
-                                  ]}
-                                  size="sm"
-                                  className="flex-1 sm:w-[100px]"
-                                  triggerClassName="uppercase font-mono text-xs"
-                              />
-                          </div>
-                      </div>
-                    )}
-      </div>
-
-                <div className="text-xs text-muted-foreground font-mono hidden xl:block shrink-0">
-                    {activeTab === 'products'
-                      ? `Showing ${filteredCards.length} of ${cards?.length || 0} assets`
-                      : `Showing ${listingsData?.items.length || 0} of ${listingsData?.total || 0} listings`
-                    }
                 </div>
-        </div>
-                {/* Tab Content - Products or Listings */}
-                {activeTab === 'products' ? (
-                  /* Products Tab Content */
-                  isLoading ? (
-                      <div className="p-12 text-center">
-                          <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-                          <div className="text-xs uppercase text-muted-foreground animate-pulse">Loading market stream...</div>
-                      </div>
+
+                {/* Results Bar */}
+                <div className="px-4 py-2 border-b border-border bg-background/30 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        {listingsLoading ? (
+                            <>
+                                <RefreshCWIcon size={14} className="animate-spin text-muted-foreground" />
+                                <span>Loading listings...</span>
+                            </>
+                        ) : (
+                            <>
+                                <span className="font-medium text-foreground">{listingsData?.total || 0}</span>
+                                <span>listings</span>
+                                {listingsFetching && (
+                                    <RefreshCWIcon size={14} className="animate-spin text-muted-foreground" />
+                                )}
+                            </>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <SimpleDropdown
+                            value={listingSortBy}
+                            onChange={(value) => setListingSortBy(value)}
+                            options={[
+                                { value: 'date', label: 'Most Recent' },
+                                { value: 'price', label: 'Price' },
+                            ]}
+                        />
+                        {/* View Toggle */}
+                        <div className="flex items-center rounded-lg border border-border overflow-hidden">
+                            <button
+                                onClick={() => setListingViewMode('list')}
+                                className={clsx(
+                                    'p-2 transition-colors',
+                                    listingViewMode === 'list'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-background hover:bg-muted text-muted-foreground'
+                                )}
+                                title="Grid view"
+                            >
+                                <LayoutGrid className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => setListingViewMode('table')}
+                                className={clsx(
+                                    'p-2 transition-colors',
+                                    listingViewMode === 'table'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-background hover:bg-muted text-muted-foreground'
+                                )}
+                                title="List view"
+                            >
+                                <List className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+                {/* Tab Content - Products */}
+                <div className={activeTab === 'products' ? 'flex-1 flex flex-col' : 'hidden'}>
+                  {isLoading ? (
+                      <>
+                          {/* Mobile skeleton */}
+                          <div className="md:hidden">
+                              <MobileCardListSkeleton count={8} />
+                          </div>
+                          {/* Desktop skeleton */}
+                          <div className="hidden md:block">
+                              <HomeTableSkeleton rows={10} />
+                          </div>
+                      </>
                   ) : (
                       <>
-                          <div className="overflow-x-auto flex-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                          {/* Mobile: Card list view */}
+                          <div className="md:hidden p-3 flex-1 overflow-y-auto">
+                              <MobileCardList
+                                  items={mobileItems}
+                                  emptyState={
+                                      <div className="text-center text-muted-foreground text-xs uppercase py-12">
+                                          No market data found.
+                                      </div>
+                                  }
+                              />
+                          </div>
+                          {/* Desktop: Table or List view based on viewMode */}
+                          {viewMode === 'table' ? (
+                          <div className="hidden md:block flex-1 min-h-0 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
                               <table className="w-full text-sm text-left min-w-[480px]">
                                   <thead className="text-xs uppercase bg-muted/30 text-muted-foreground border-b border-border sticky top-0 z-10">
                                       {table.getHeaderGroups().map(headerGroup => (
@@ -982,6 +1275,7 @@ function Home() {
                                                   key={row.id}
                                                   className="hover:bg-muted/30 transition-colors cursor-pointer group"
                                                   onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: row.original.slug || String(row.original.id) } })}
+                                                  onMouseEnter={() => prefetchCardDetail(row.original.slug || String(row.original.id))}
                                               >
                                                   {row.getVisibleCells().map(cell => {
                                                       const align = (cell.column.columnDef.meta as { align?: string })?.align || 'left'
@@ -1007,42 +1301,205 @@ function Home() {
                                   </tbody>
                               </table>
                           </div>
-                          {/* Pagination */}
-                          <div className="border-t border-border px-3 py-2 flex items-center justify-between bg-muted/20">
+                          ) : (
+                          /* Grid view - TCGPlayer style 2-column cards */
+                          <div className="flex-1 overflow-y-auto p-4">
+                              {filteredCards.length > 0 ? (
+                                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+                                      {filteredCards.slice(0, table.getState().pagination.pageSize).map(card => (
+                                          <div
+                                              key={card.id}
+                                              onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: card.slug || String(card.id) } })}
+                                              className="flex gap-4 p-4 rounded-lg border border-border bg-card hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer"
+                                          >
+                                              {/* Card Image - Trading card aspect ratio */}
+                                              <div className="shrink-0 w-[120px] h-[168px] rounded-lg overflow-hidden bg-muted border border-border">
+                                                  {card.image_url ? (
+                                                      <img src={card.image_url} alt={card.name} className="w-full h-full object-cover" loading="lazy" />
+                                                  ) : (
+                                                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                                          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                          </svg>
+                                                      </div>
+                                                  )}
+                                              </div>
+                                              {/* Card Info */}
+                                              <div className="flex-1 min-w-0 flex flex-col">
+                                                  {/* Name */}
+                                                  <h3 className="font-bold text-base hover:underline truncate">
+                                                      {card.name}
+                                                  </h3>
+                                                  {/* Set name */}
+                                                  <div className="text-sm text-primary hover:underline mt-1">
+                                                      {card.set_name}
+                                                  </div>
+                                                  {/* Rarity */}
+                                                  {card.rarity_name && (
+                                                      <div className="mt-0.5">
+                                                          <RarityBadge rarity={card.rarity_name} size="sm" />
+                                                      </div>
+                                                  )}
+                                                  {/* Listings count */}
+                                                  <div className="text-sm text-muted-foreground mt-3 underline">
+                                                      {card.inventory || 0} listings from
+                                                  </div>
+                                                  {/* Price */}
+                                                  <div className={clsx(
+                                                      "text-2xl font-bold mt-1",
+                                                      card.floor_price_source === 'order_book' && "text-muted-foreground"
+                                                  )}>
+                                                      {(() => {
+                                                          const price = card.floor_price || card.vwap
+                                                          if (!price) return '—'
+                                                          const isEstimate = card.floor_price_source === 'order_book'
+                                                          const isLowConfidence = (card.floor_price_confidence ?? 1) < 0.5
+                                                          if (isEstimate && isLowConfidence) {
+                                                              const low = Math.floor(price * 0.8)
+                                                              const high = Math.ceil(price * 1.2)
+                                                              return `$${low}-$${high}`
+                                                          }
+                                                          return isEstimate ? `~$${price.toFixed(2)}` : `$${price.toFixed(2)}`
+                                                      })()}
+                                                  </div>
+                                                  {/* Market Price */}
+                                                  {card.latest_price && card.latest_price > 0 && (
+                                                      <div className="text-sm text-muted-foreground mt-1">
+                                                          Market Price: <span className="text-primary">${card.latest_price.toFixed(2)}</span>
+                                                      </div>
+                                                  )}
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              ) : (
+                                  <div className="h-32 flex items-center justify-center text-muted-foreground text-xs uppercase">
+                                      No market data found.
+                                  </div>
+                              )}
+                          </div>
+                          )}
+                          {/* Pagination - hidden on mobile */}
+                          <div className="border-t border-border px-3 py-2 hidden md:flex items-center justify-between bg-muted/20">
                               <div className="text-xs text-muted-foreground">
                                   Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, table.getFilteredRowModel().rows.length)} of {table.getFilteredRowModel().rows.length} assets
                               </div>
                               <div className="flex items-center gap-2">
-                                  <button
+                                  <IconButton
+                                      icon={<ChevronLeft />}
+                                      aria-label="Previous page"
+                                      variant="outline-subtle"
+                                      size="icon-sm"
                                       onClick={() => table.previousPage()}
                                       disabled={!table.getCanPreviousPage()}
-                                      className="px-3 py-1.5 text-xs font-bold uppercase border border-border rounded hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                      <ChevronLeft className="w-3.5 h-3.5" />
-                                  </button>
+                                  />
                                   <div className="text-xs font-mono">
                                       Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
                                   </div>
-                                  <button
+                                  <IconButton
+                                      icon={<ChevronRight />}
+                                      aria-label="Next page"
+                                      variant="outline-subtle"
+                                      size="icon-sm"
                                       onClick={() => table.nextPage()}
                                       disabled={!table.getCanNextPage()}
-                                      className="px-3 py-1.5 text-xs font-bold uppercase border border-border rounded hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                      <ChevronRight className="w-3.5 h-3.5" />
-                                  </button>
+                                  />
                               </div>
                           </div>
                       </>
-                  )
-                ) : (
-                  /* Listings Tab Content */
-                  listingsLoading ? (
+                  )}
+                </div>
+
+                {/* Tab Content - Listings */}
+                <div className={activeTab === 'listings' ? 'flex-1 flex flex-col' : 'hidden'}>
+                  {listingsLoading ? (
                       <div className="p-12 text-center">
                           <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
                           <div className="text-xs uppercase text-muted-foreground animate-pulse">Loading listings...</div>
                       </div>
                   ) : (
                       <>
+                          {listingViewMode === 'list' ? (
+                          /* Grid view - similar to Products */
+                          <div className="flex-1 overflow-y-auto p-4">
+                              {listingsData?.items.length ? (
+                                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+                                      {listingsData.items.map(listing => (
+                                          <div
+                                              key={listing.id}
+                                              className="flex gap-4 p-4 rounded-lg border border-border bg-card"
+                                          >
+                                              {/* Card Image */}
+                                              <div className="shrink-0 w-[100px] h-[140px] rounded-lg overflow-hidden bg-muted border border-border">
+                                                  {listing.card_image_url ? (
+                                                      <img src={listing.card_image_url} alt={listing.card_name} className="w-full h-full object-cover" loading="lazy" />
+                                                  ) : (
+                                                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                                          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                          </svg>
+                                                      </div>
+                                                  )}
+                                              </div>
+                                              {/* Listing Info */}
+                                              <div className="flex-1 min-w-0 flex flex-col">
+                                                  {/* Card name */}
+                                                  <h3 className="font-bold text-base truncate">
+                                                      {listing.card_name}
+                                                  </h3>
+                                                  {/* Platform badge */}
+                                                  <div className="flex items-center gap-2 mt-1">
+                                                      <PlatformBadge platform={listing.platform} size="sm" />
+                                                      <span className="text-xs text-muted-foreground">{listing.product_type}</span>
+                                                  </div>
+                                                  {/* Treatment */}
+                                                  {listing.treatment && (
+                                                      <div className="text-sm text-muted-foreground mt-1">
+                                                          {listing.treatment}
+                                                      </div>
+                                                  )}
+                                                  {/* Seller */}
+                                                  {listing.seller_name && (
+                                                      <div className="text-xs text-muted-foreground mt-auto">
+                                                          {listing.seller_name}
+                                                          {listing.seller_feedback_percent && ` (${listing.seller_feedback_percent}%)`}
+                                                      </div>
+                                                  )}
+                                                  {/* Price */}
+                                                  <div className="text-2xl font-bold mt-2">
+                                                      ${listing.price.toFixed(2)}
+                                                  </div>
+                                                  {/* Floor comparison */}
+                                                  {listing.floor_price && (
+                                                      <div className="text-sm text-muted-foreground">
+                                                          Floor: <span className="text-primary">${listing.floor_price.toFixed(2)}</span>
+                                                      </div>
+                                                  )}
+                                                  {/* View listing button */}
+                                                  {listing.url && (
+                                                      <a
+                                                          href={listing.url}
+                                                          target="_blank"
+                                                          rel="noopener noreferrer"
+                                                          onClick={(e) => e.stopPropagation()}
+                                                          className="mt-2 flex items-center justify-center gap-2 px-3 py-2 bg-brand-700 hover:bg-brand-800 text-white rounded-lg text-sm font-bold uppercase"
+                                                      >
+                                                          View Listing
+                                                          <ExternalLink className="w-4 h-4" />
+                                                      </a>
+                                                  )}
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              ) : (
+                                  <div className="h-32 flex items-center justify-center text-muted-foreground text-xs uppercase">
+                                      No listings found.
+                                  </div>
+                              )}
+                          </div>
+                          ) : (
+                          /* Table view */
                           <div className="overflow-x-auto flex-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
                               <table className="w-full text-sm text-left min-w-[400px]">
                                   <thead className="text-xs uppercase bg-muted/30 text-muted-foreground border-b border-border sticky top-0 z-10">
@@ -1098,8 +1555,7 @@ function Home() {
                                           listingsData.items.map(listing => (
                                               <tr
                                                   key={listing.id}
-                                                  className="hover:bg-muted/30 transition-colors cursor-pointer"
-                                                  onClick={() => navigate({ to: '/cards/$cardId', params: { cardId: listing.card_slug || String(listing.card_id) } })}
+                                                  className="hover:bg-muted/30 transition-colors"
                                               >
                                                   {/* Card with thumbnail */}
                                                   <td className="px-2 py-1.5">
@@ -1140,7 +1596,7 @@ function Home() {
                                                                 <div className={clsx(
                                                                   "text-[10px] lg:text-xs font-mono",
                                                                   priceDelta < -5 ? "text-brand-300" :
-                                                                  priceDelta > 20 ? "text-red-400" :
+                                                                  priceDelta > 20 ? "text-rose-500" :
                                                                   "text-muted-foreground"
                                                                 )}>
                                                                   {priceDelta > 0 ? '+' : ''}{priceDelta.toFixed(0)}%
@@ -1263,35 +1719,44 @@ function Home() {
                                   </tbody>
                               </table>
                           </div>
+                          )}
                           {/* Listings count footer */}
                           <div className="border-t border-border px-3 py-2 flex items-center justify-between bg-muted/20">
                               <div className="text-xs text-muted-foreground">
-                                  Showing {listingPage * LISTINGS_PER_PAGE + 1} to {Math.min((listingPage + 1) * LISTINGS_PER_PAGE, listingsData?.total || 0)} of {listingsData?.total || 0} listings
-                                  {listingsFetching && <span className="ml-2 text-primary">Loading...</span>}
+                                  {listingsData?.total ? (
+                                      <>
+                                          Showing {listingPage * LISTINGS_PER_PAGE + 1} to {Math.min((listingPage + 1) * LISTINGS_PER_PAGE, listingsData.total)} of {listingsData.total} listings
+                                          {listingsFetching && <span className="ml-2 text-primary">Loading...</span>}
+                                      </>
+                                  ) : (
+                                      <span>No listings found</span>
+                                  )}
                               </div>
                               <div className="flex items-center gap-2">
-                                  <button
+                                  <IconButton
+                                      icon={<ChevronLeft />}
+                                      aria-label="Previous page"
+                                      variant="ghost"
+                                      size="icon-sm"
                                       onClick={() => setListingPage(p => Math.max(0, p - 1))}
                                       disabled={listingPage === 0}
-                                      className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
-                                  >
-                                      <ChevronLeft className="w-4 h-4" />
-                                  </button>
+                                  />
                                   <span className="text-xs text-muted-foreground">
                                       Page {listingPage + 1} of {Math.ceil((listingsData?.total || 0) / LISTINGS_PER_PAGE)}
                                   </span>
-                                  <button
+                                  <IconButton
+                                      icon={<ChevronRight />}
+                                      aria-label="Next page"
+                                      variant="ghost"
+                                      size="icon-sm"
                                       onClick={() => setListingPage(p => p + 1)}
                                       disabled={!listingsData?.hasMore}
-                                      className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
-                                  >
-                                      <ChevronRight className="w-4 h-4" />
-                                  </button>
+                                  />
                               </div>
                           </div>
                       </>
-                  )
-                )}
+                  )}
+                </div>
         </div>
       </div>
 

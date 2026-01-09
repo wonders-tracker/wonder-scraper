@@ -2,6 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Calendar, RefreshCw } from 'lucide-react'
 import { siteConfig } from '~/config/site'
+import { slugify } from '@/lib/formatters'
 import { MarketStatsRow } from '~/components/blog/MarketStatsRow'
 import { MoversTable } from '~/components/blog/MoversTable'
 import { VolumeLeadersTable } from '~/components/blog/VolumeLeadersTable'
@@ -123,17 +124,17 @@ function MarketInsightsPage() {
           <ArrowLeft className="w-4 h-4" />
           Back to Blog
         </Link>
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">Market Insights</h1>
-            <p className="text-muted-foreground flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              {weekStart} — {weekEnd}
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2">Market Insights</h1>
+            <p className="text-sm sm:text-base text-muted-foreground flex items-center gap-2">
+              <Calendar className="w-4 h-4 flex-shrink-0" />
+              <span>{weekStart} — {weekEnd}</span>
             </p>
           </div>
           <button
             onClick={() => refetch()}
-            className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+            className="self-start p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
             title="Refresh data"
           >
             <RefreshCw className="w-5 h-5" />
@@ -180,7 +181,7 @@ function MarketInsightsPage() {
                   <Link
                     key={card.card_id}
                     to="/cards/$cardId"
-                    params={{ cardId: String(card.card_id) }}
+                    params={{ cardId: slugify(card.name) }}
                     className="flex items-center justify-between hover:opacity-80"
                   >
                     <span>{card.name}</span>
@@ -198,7 +199,7 @@ function MarketInsightsPage() {
                   <Link
                     key={card.card_id}
                     to="/cards/$cardId"
-                    params={{ cardId: String(card.card_id) }}
+                    params={{ cardId: slugify(card.name) }}
                     className="flex items-center justify-between hover:opacity-80"
                   >
                     <span>{card.name}</span>
