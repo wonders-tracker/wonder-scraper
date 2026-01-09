@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as UpgradeRouteImport } from './routes/upgrade'
 import { Route as UnsubscribeRouteImport } from './routes/unsubscribe'
-import { Route as ChangelogRouteImport } from './routes/changelog'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -22,6 +21,8 @@ import { Route as MarketRouteImport } from './routes/market'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DocsRouteImport } from './routes/docs'
+import { Route as ChangelogRouteImport } from './routes/changelog'
+import { Route as BrowseRouteImport } from './routes/browse'
 import { Route as BlogRouteImport } from './routes/blog'
 import { Route as ApiRouteImport } from './routes/api'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -76,11 +77,6 @@ const UnsubscribeRoute = UnsubscribeRouteImport.update({
   path: '/unsubscribe',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ChangelogRoute = ChangelogRouteImport.update({
-  id: '/changelog',
-  path: '/changelog',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -124,6 +120,16 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const DocsRoute = DocsRouteImport.update({
   id: '/docs',
   path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChangelogRoute = ChangelogRouteImport.update({
+  id: '/changelog',
+  path: '/changelog',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrowseRoute = BrowseRouteImport.update({
+  id: '/browse',
+  path: '/browse',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlogRoute = BlogRouteImport.update({
@@ -323,6 +329,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/api': typeof ApiRoute
   '/blog': typeof BlogRouteWithChildren
+  '/browse': typeof BrowseRoute
   '/changelog': typeof ChangelogRoute
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
@@ -374,6 +381,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api': typeof ApiRoute
+  '/browse': typeof BrowseRoute
   '/changelog': typeof ChangelogRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -426,6 +434,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/api': typeof ApiRoute
   '/blog': typeof BlogRouteWithChildren
+  '/browse': typeof BrowseRoute
   '/changelog': typeof ChangelogRoute
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
@@ -481,6 +490,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/api'
     | '/blog'
+    | '/browse'
     | '/changelog'
     | '/docs'
     | '/forgot-password'
@@ -532,6 +542,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/api'
+    | '/browse'
     | '/changelog'
     | '/forgot-password'
     | '/login'
@@ -583,6 +594,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/api'
     | '/blog'
+    | '/browse'
     | '/changelog'
     | '/docs'
     | '/forgot-password'
@@ -637,6 +649,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   ApiRoute: typeof ApiRoute
   BlogRoute: typeof BlogRouteWithChildren
+  BrowseRoute: typeof BrowseRoute
   ChangelogRoute: typeof ChangelogRoute
   DocsRoute: typeof DocsRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
@@ -676,13 +689,6 @@ declare module '@tanstack/react-router' {
       path: '/unsubscribe'
       fullPath: '/unsubscribe'
       preLoaderRoute: typeof UnsubscribeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/changelog': {
-      id: '/changelog'
-      path: '/changelog'
-      fullPath: '/changelog'
-      preLoaderRoute: typeof ChangelogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -746,6 +752,20 @@ declare module '@tanstack/react-router' {
       path: '/docs'
       fullPath: '/docs'
       preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/changelog': {
+      id: '/changelog'
+      path: '/changelog'
+      fullPath: '/changelog'
+      preLoaderRoute: typeof ChangelogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/browse': {
+      id: '/browse'
+      path: '/browse'
+      fullPath: '/browse'
+      preLoaderRoute: typeof BrowseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blog': {
@@ -1165,6 +1185,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   ApiRoute: ApiRoute,
   BlogRoute: BlogRouteWithChildren,
+  BrowseRoute: BrowseRoute,
   ChangelogRoute: ChangelogRoute,
   DocsRoute: DocsRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,

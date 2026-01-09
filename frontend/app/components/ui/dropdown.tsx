@@ -1,5 +1,4 @@
 import * as React from "react"
-import { createPortal } from "react-dom"
 import { Check, ChevronDown, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -26,6 +25,7 @@ interface DropdownContextValue {
   setHighlightedIndex: (index: number) => void
   options: DropdownOption[]
   filteredOptions: DropdownOption[]
+  triggerRef: React.RefObject<HTMLButtonElement>
 }
 
 const DropdownContext = React.createContext<DropdownContextValue | null>(null)
@@ -60,6 +60,7 @@ export function Dropdown({
   const [searchQuery, setSearchQuery] = React.useState("")
   const [highlightedIndex, setHighlightedIndex] = React.useState(0)
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const triggerRef = React.useRef<HTMLButtonElement>(null)
 
   // Filter options based on search query
   const filteredOptions = React.useMemo(() => {
@@ -121,6 +122,7 @@ export function Dropdown({
         setHighlightedIndex,
         options,
         filteredOptions,
+        triggerRef,
       }}
     >
       <div className={cn("relative inline-block", className)} ref={containerRef}>
@@ -145,7 +147,7 @@ export function DropdownTrigger({
   size = "md",
   ...props
 }: DropdownTriggerProps) {
-  const { value, onValueChange, open, setOpen, multiple, options } = useDropdownContext()
+  const { value, onValueChange, open, setOpen, multiple, options, triggerRef } = useDropdownContext()
 
   const displayValue = React.useMemo(() => {
     if (multiple && Array.isArray(value)) {
@@ -175,6 +177,7 @@ export function DropdownTrigger({
 
   return (
     <button
+      ref={triggerRef}
       type="button"
       className={cn(
         "flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background shadow-sm ring-offset-background transition-colors",
@@ -211,7 +214,7 @@ export function DropdownTrigger({
   )
 }
 
-// Content container (rendered in portal)
+// Content container (absolute positioned within parent - avoids portal positioning issues)
 interface DropdownContentProps {
   children?: React.ReactNode
   className?: string
@@ -229,34 +232,8 @@ export function DropdownContent({
 }: DropdownContentProps) {
   const { open, setOpen, searchable, searchQuery, setSearchQuery, filteredOptions, highlightedIndex, setHighlightedIndex, value, onValueChange, multiple } =
     useDropdownContext()
-  const [position, setPosition] = React.useState<{ top: number; left: number; width: number } | null>(null)
   const contentRef = React.useRef<HTMLDivElement>(null)
   const searchInputRef = React.useRef<HTMLInputElement>(null)
-
-  // Calculate position relative to trigger using useLayoutEffect for synchronous positioning
-  React.useLayoutEffect(() => {
-    if (!open) {
-      setPosition(null)
-      return
-    }
-
-    const trigger = document.querySelector("[aria-expanded='true']") as HTMLElement
-    if (!trigger) return
-
-    const rect = trigger.getBoundingClientRect()
-    const scrollY = window.scrollY
-    const scrollX = window.scrollX
-
-    let left = rect.left + scrollX
-    if (align === "center") left = rect.left + scrollX + rect.width / 2
-    if (align === "end") left = rect.right + scrollX
-
-    setPosition({
-      top: rect.bottom + scrollY + sideOffset,
-      left,
-      width: rect.width,
-    })
-  }, [open, align, sideOffset])
 
   // Focus search input when opened
   React.useEffect(() => {
@@ -312,28 +289,23 @@ export function DropdownContent({
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [open, filteredOptions, highlightedIndex, setHighlightedIndex, value, onValueChange, multiple, setOpen])
 
-  if (!open || !position || typeof document === "undefined") return null
+  if (!open) return null
 
-  const alignClasses = {
-    start: "",
-    center: "-translate-x-1/2",
-    end: "-translate-x-full",
-  }
+  // Alignment classes for absolute positioning
+  const alignClass = align === "end" ? "right-0" : align === "center" ? "left-1/2 -translate-x-1/2" : "left-0"
 
-  const content = (
+  return (
     <div
       ref={contentRef}
-      id="dropdown-portal"
       className={cn(
-        "fixed z-[9999] min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg",
-        "animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150",
-        alignClasses[align],
+        "absolute z-[9999] min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg",
+        "animate-in fade-in-0 zoom-in-95 duration-150 slide-in-from-top-2",
+        alignClass,
         className
       )}
       style={{
-        top: position.top,
-        left: position.left,
-        minWidth: position.width,
+        top: `calc(100% + ${sideOffset}px)`,
+        minWidth: "100%",
       }}
       role="listbox"
     >
@@ -373,8 +345,6 @@ export function DropdownContent({
       </div>
     </div>
   )
-
-  return createPortal(content, document.body)
 }
 
 // Auto-render items from options prop
@@ -542,7 +512,7 @@ export function DropdownLabel({
 interface SimpleDropdownProps {
   value: string
   onChange: (value: string) => void
-  options: Array<{ value: string; label: string; disabled?: boolean }>
+  options: Array<{ value: string; label: string; disabled?: boolean; count?: number }>
   placeholder?: string
   className?: string
   triggerClassName?: string
@@ -550,6 +520,8 @@ interface SimpleDropdownProps {
   searchable?: boolean
   showClear?: boolean
   disabled?: boolean
+  /** Accessible label for screen readers */
+  "aria-label"?: string
 }
 
 export function SimpleDropdown({
@@ -563,10 +535,12 @@ export function SimpleDropdown({
   searchable = false,
   showClear = false,
   disabled = false,
+  "aria-label": ariaLabel,
 }: SimpleDropdownProps) {
   const dropdownOptions: DropdownOption[] = options.map((o) => ({
     value: o.value,
-    label: o.label,
+    // Include count in label if provided
+    label: o.count !== undefined ? `${o.label} (${o.count})` : o.label,
     disabled: o.disabled,
   }))
 
@@ -584,6 +558,7 @@ export function SimpleDropdown({
         showClear={showClear}
         disabled={disabled}
         className={triggerClassName}
+        aria-label={ariaLabel}
       />
       <DropdownContent />
     </Dropdown>
