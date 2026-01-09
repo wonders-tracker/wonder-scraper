@@ -190,17 +190,19 @@ class TestSingleTreatmentDetection:
         result = _detect_treatment(title, product_type="Single")
         assert result == expected
 
-    # === CLASSIC PAPER (default) ===
+    # === UNKNOWN TREATMENT (no indicators) ===
     @pytest.mark.parametrize(
         "title,expected",
         [
-            ("Wonders of the First Gorrash Mythic", "Classic Paper"),
-            ("WOTF Existence Deep Black Goop", "Classic Paper"),
-            ("Wonders of the First Common Card", "Classic Paper"),
+            # No treatment keywords → None (unknown), not "Classic Paper"
+            # This distinguishes "unknown" from explicitly detected Classic Paper
+            ("Wonders of the First Gorrash Mythic", None),
+            ("WOTF Existence Deep Black Goop", None),
+            ("Wonders of the First Common Card", None),
         ],
     )
-    def test_classic_paper_default(self, title, expected):
-        """Test that cards without foil indicators default to Classic Paper."""
+    def test_unknown_treatment_default(self, title, expected):
+        """Test that cards without treatment indicators return None (unknown)."""
         result = _detect_treatment(title, product_type="Single")
         assert result == expected
 
@@ -208,14 +210,16 @@ class TestSingleTreatmentDetection:
     @pytest.mark.parametrize(
         "title,expected",
         [
-            # Explicit "Alt Art" keyword
+            # Explicit "Alt Art" keyword with base treatment
             ("Wonders of the First Pinkspore Dreamcap Alt Art Formless Foil", "Formless Foil Alt Art"),
-            ("WOTF Alternate Art Moonfire Crystal Mouse", "Classic Paper Alt Art"),
             ("Wonders Alt Art Promo Card", "Promo Alt Art"),
-            # A1-A8 numbering pattern
+            # Alt Art without base treatment → just "Alt Art" (treatment unknown)
+            ("WOTF Alternate Art Moonfire Crystal Mouse", "Alt Art"),
+            # A1-A8 numbering pattern with base treatment
             ("Wonders Of The First A2-361/401 PINKSPORE DREAMCAP Formless Foil", "Formless Foil Alt Art"),
             ("WOTF #A5-361/401 Pinkspore Dreamcap Formless", "Formless Foil Alt Art"),
-            ("Wonders of the First A1-354/401 Moonfire Crystal Mouse", "Classic Paper Alt Art"),
+            # A1-A8 without base treatment → just "Alt Art"
+            ("Wonders of the First A1-354/401 Moonfire Crystal Mouse", "Alt Art"),
             # Alt Art + OCM Serialized
             ("Wonders of the First ZipZip NugNug Alt Art Serialized /99", "OCM Serialized Alt Art"),
             # Alt Art + Classic Foil
@@ -246,9 +250,9 @@ class TestSingleTreatmentDetection:
         result = _detect_treatment("WOTF Formless Foil Alt Art", product_type="Single")
         assert result == "Formless Foil Alt Art"
 
-        # Alt Art + Classic Paper (default)
+        # Alt Art without base treatment → just "Alt Art" (treatment unknown)
         result = _detect_treatment("Wonders Alternate Art Card", product_type="Single")
-        assert result == "Classic Paper Alt Art"
+        assert result == "Alt Art"
 
         # Alt Art + Prerelease
         result = _detect_treatment("WOTF Prerelease Alt Art Card", product_type="Single")

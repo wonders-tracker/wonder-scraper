@@ -585,9 +585,13 @@ def _detect_treatment(title: str, product_type: str = "Single") -> str | None:
     else:
         base_treatment = None
 
-    # Append Alt Art suffix if applicable (only if base treatment was detected)
-    if is_alt_art and base_treatment:
-        return f"{base_treatment} Alt Art"
+    # Append Alt Art suffix if applicable
+    if is_alt_art:
+        if base_treatment:
+            return f"{base_treatment} Alt Art"
+        else:
+            # Alt art detected but base treatment unknown - just return "Alt Art"
+            return "Alt Art"
 
     return base_treatment
 
