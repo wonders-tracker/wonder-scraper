@@ -36,9 +36,9 @@ function BlogLayout() {
   const currentPath = location.pathname
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
-      {/* Mobile Navigation - horizontal scroll (below nav h-14 + ticker h-8 = 5.5rem) */}
-      <div className="md:hidden border-b border-border bg-card/50 sticky top-[5.5rem] z-30">
+    <div className="min-h-screen">
+      {/* Mobile Navigation - horizontal scroll */}
+      <div className="md:hidden border-b border-border bg-card/50">
         <div className="flex items-center gap-1 p-2 overflow-x-auto scrollbar-none">
           {MOBILE_NAV.map((item) => {
             const Icon = item.icon
@@ -63,61 +63,64 @@ function BlogLayout() {
         </div>
       </div>
 
-      {/* Desktop Sidebar (below nav h-14 + ticker h-8 = 5.5rem, above footer h-10 = 2.5rem) */}
-      <aside className="w-64 border-r border-border bg-card/50 hidden md:flex flex-col fixed top-[5.5rem] left-0 bottom-10 overflow-y-auto">
-        <div className="p-4 flex-1">
-          <nav className="space-y-6">
-            {BLOG_NAV.map((section) => (
-              <div key={section.title}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                  {section.title}
-                </h3>
-                <ul className="space-y-1">
-                  {section.items.map((item) => {
-                    const Icon = item.icon
-                    const isActive = currentPath === item.href ||
-                      (item.href === '/blog/weekly-movers' && currentPath.startsWith('/blog/weekly-movers')) ||
-                      (item.href === '/blog/market-insights' && currentPath.startsWith('/blog/market-insights'))
-                    return (
-                      <li key={item.href}>
-                        <Link
-                          to={item.href}
-                          className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
-                            isActive
-                              ? 'bg-primary/10 text-primary font-medium'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                          }`}
-                        >
-                          <Icon className="w-4 h-4" />
-                          {item.label}
-                        </Link>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
+      {/* Content wrapper */}
+      <div className="flex">
+        {/* Desktop Sidebar - in document flow, not fixed */}
+        <aside className="w-64 border-r border-border bg-card/50 hidden md:block flex-shrink-0">
+          <div className="sticky top-[5.5rem] p-4 max-h-[calc(100vh-5.5rem-2.5rem)] overflow-y-auto">
+            <nav className="space-y-6">
+              {BLOG_NAV.map((section) => (
+                <div key={section.title}>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                    {section.title}
+                  </h3>
+                  <ul className="space-y-1">
+                    {section.items.map((item) => {
+                      const Icon = item.icon
+                      const isActive = currentPath === item.href ||
+                        (item.href === '/blog/weekly-movers' && currentPath.startsWith('/blog/weekly-movers')) ||
+                        (item.href === '/blog/market-insights' && currentPath.startsWith('/blog/market-insights'))
+                      return (
+                        <li key={item.href}>
+                          <Link
+                            to={item.href}
+                            className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
+                              isActive
+                                ? 'bg-primary/10 text-primary font-medium'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {item.label}
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </nav>
 
-          {/* RSS Feed Link */}
-          <div className="mt-8 pt-4 border-t border-border">
-            <a
-              href="/feed.xml"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Rss className="w-4 h-4" />
-              RSS Feed
-            </a>
+            {/* RSS Feed Link */}
+            <div className="mt-8 pt-4 border-t border-border">
+              <a
+                href="/feed.xml"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Rss className="w-4 h-4" />
+                RSS Feed
+              </a>
+            </div>
           </div>
-        </div>
-      </aside>
+        </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 md:ml-64 p-4 sm:p-6 md:p-8 min-h-screen pb-20">
-        <Outlet />
-      </main>
+        {/* Main Content */}
+        <main className="flex-1 p-4 sm:p-6 md:p-8 min-h-screen pb-20">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }
