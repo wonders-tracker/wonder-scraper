@@ -203,7 +203,7 @@ export function ProductCard({
 
         {/* Price - right after name */}
         <span className="text-lg font-mono font-bold text-brand-300">
-          {price != null ? formatPrice(price) : '---'}
+          {price != null ? formatPrice(price) : 'No data'}
         </span>
 
         {/* Rarity · Set · Type - combined line (clickable to browse) */}

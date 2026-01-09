@@ -497,7 +497,7 @@ function Home() {
           const isLowConfidence = confidence < 0.5
 
           // Format price display
-          let priceDisplay = '---'
+          let priceDisplay = 'No data'
           let priceClass = 'font-mono text-base lg:text-lg font-semibold'
           if (hasFloor) {
               if (isEstimate && isLowConfidence) {
@@ -617,7 +617,7 @@ function Home() {
             const treatment = simplifyTreatmentForDisplay(rawTreatment)
             return (
                 <div className="text-center">
-                    <div className="font-mono text-sm lg:text-base">{price > 0 ? `$${price.toFixed(2)}` : '---'}</div>
+                    <div className="font-mono text-sm lg:text-base">{price > 0 ? `$${price.toFixed(2)}` : '—'}</div>
                     {/* Hide treatment on mobile to save space */}
                     {treatment && (
                         <Tooltip content={rawTreatment}>
@@ -647,7 +647,7 @@ function Home() {
         ),
         cell: ({ row }) => {
             const high = row.original.max_price || 0
-            return <div className="hidden md:block text-center font-mono text-sm lg:text-base text-brand-300">{high > 0 ? `$${high.toFixed(2)}` : '---'}</div>
+            return <div className="hidden md:block text-center font-mono text-sm lg:text-base text-brand-300">{high > 0 ? `$${high.toFixed(2)}` : '—'}</div>
         }
     },
     {
@@ -667,7 +667,7 @@ function Home() {
         ),
         cell: ({ row }) => {
             const ask = row.original.lowest_ask || 0
-            return <div className="hidden md:block text-center font-mono text-sm lg:text-base">{ask > 0 ? `$${ask.toFixed(2)}` : '---'}</div>
+            return <div className="hidden md:block text-center font-mono text-sm lg:text-base">{ask > 0 ? `$${ask.toFixed(2)}` : '—'}</div>
         }
     },
     {

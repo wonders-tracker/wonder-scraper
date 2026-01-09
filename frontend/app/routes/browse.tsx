@@ -194,7 +194,7 @@ function BrowsePage() {
     switch (searchParams.sortBy || 'volume') {
       case 'price':
         return sorted.sort(
-          (a, b) => direction * ((a.floor_price ?? a.latest_price ?? 0) - (b.floor_price ?? b.latest_price ?? 0))
+          (a, b) => direction * ((a.floor_price || a.latest_price || 0) - (b.floor_price || b.latest_price || 0))
         )
       case 'name':
         return sorted.sort((a, b) => direction * a.name.localeCompare(b.name))
@@ -562,7 +562,7 @@ function BrowsePage() {
                 slug={card.slug}
                 name={card.name}
                 setName={card.set_name}
-                price={card.floor_price ?? card.latest_price}
+                price={card.floor_price || card.latest_price || undefined}
                 listingsCount={card.inventory}
                 imageUrl={card.image_url}
                 rarity={card.rarity_name}
