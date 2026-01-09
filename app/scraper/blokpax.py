@@ -570,7 +570,6 @@ async def scrape_all_listings(
                                 listing_id = str(floor_listing.get("id", ""))
                                 if listing_id and listing_id not in seen_listing_ids:
                                     seen_listing_ids.add(listing_id)
-                                    a.get("name", "Unknown")
                                     all_listings.append(
                                         BlokpaxListing(
                                             listing_id=listing_id,
@@ -1179,6 +1178,8 @@ async def scrape_preslab_sales(session: Session, max_pages: int = 10, save_to_db
                     traits.append({"trait_type": attr.get("trait_type", ""), "value": attr.get("value", "")})
 
                 # Create MarketPrice record
+                seller_data = listing.get("seller", {})
+                seller_name = seller_data.get("address", "") or seller_data.get("username", "")
                 mp = MarketPrice(
                     card_id=card_match["id"],
                     title=asset_name,
@@ -1190,7 +1191,7 @@ async def scrape_preslab_sales(session: Session, max_pages: int = 10, save_to_db
                     external_id=listing_id,
                     platform="blokpax",
                     traits=traits if traits else None,
-                    seller_name=listing.get("seller", {}).get("address", "") or listing.get("seller", {}).get("username", ""),
+                    seller_name=seller_name,
                     scraped_at=datetime.now(timezone.utc),
                 )
 

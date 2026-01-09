@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple
 from datetime import datetime, timedelta, timezone
 from dateutil import parser
 import re
@@ -49,7 +49,7 @@ STOPWORDS = {
 }
 
 
-def parse_item_specifics(html_content: str) -> dict:
+def parse_item_specifics(html_content: str) -> dict[str, str]:
     """
     Parse eBay item specifics from a listing detail page HTML.
 
@@ -98,115 +98,15 @@ def parse_seller_from_listing_page(html_content: str) -> Tuple[Optional[str], Op
 
     Returns: (seller_name, feedback_score, feedback_percent)
 
-    eBay listing pages show seller info in several formats:
-    1. Seller info section with link to seller's store
-    2. Seller card with feedback stats
-    3. Various JSON-LD structured data
+    This is a thin wrapper around the centralized extract_seller_from_html()
+    function in app/scraper/seller.py. Use this for backward compatibility
+    with scripts that import from ebay.py.
+
+    For new code, prefer importing directly from app.scraper.seller.
     """
-    import json
+    from app.scraper.seller import extract_seller_from_html
 
-    soup = BeautifulSoup(html_content, "lxml")
-
-    seller_name = None
-    feedback_score = None
-    feedback_percent = None
-
-    # Method 1: Look for seller link in various locations
-    # Format: <a href="https://www.ebay.com/usr/seller_name">seller_name</a>
-    seller_patterns = [
-        'a[href*="/usr/"]',
-        'a[href*="/str/"]',  # Store links
-        '.x-sellercard-atf__info a',
-        '.seller-persona a',
-        '.mbg-l a',
-        'a.seller-link',
-    ]
-
-    for pattern in seller_patterns:
-        seller_link = soup.select_one(pattern)
-        if seller_link:
-            href = seller_link.get("href", "")
-            if isinstance(href, list):
-                href = href[0] if href else ""
-            # Extract from /usr/username or /str/storename
-            match = re.search(r"/(?:usr|str)/([^/?]+)", href)
-            if match:
-                seller_name = match.group(1).strip()
-                break
-            # Fallback: use link text if it looks like a username
-            text = seller_link.get_text(strip=True)
-            if text and re.match(r"^[a-zA-Z0-9_\-\.]+$", text):
-                seller_name = text
-                break
-
-    # Method 2: Look for seller info in structured data (JSON-LD)
-    if not seller_name:
-        for script in soup.select('script[type="application/ld+json"]'):
-            try:
-                data = json.loads(script.string or "")
-                if isinstance(data, dict):
-                    # Check for seller in offers
-                    offers = data.get("offers", {})
-                    if isinstance(offers, dict):
-                        seller = offers.get("seller", {})
-                        if isinstance(seller, dict):
-                            seller_name = seller.get("name")
-                            # Sometimes rating is included
-                            rating = seller.get("aggregateRating", {})
-                            if isinstance(rating, dict):
-                                feedback_percent = rating.get("ratingValue")
-                                feedback_score = rating.get("reviewCount")
-            except (json.JSONDecodeError, TypeError):
-                continue
-
-    # Method 3: Look for feedback info in the page
-    # Format: "99.5% positive feedback" or "(1234)" for score
-    if seller_name and not feedback_score:
-        # Look for feedback elements near seller info
-        feedback_patterns = [
-            '.x-sellercard-atf__data-item',
-            '.seller-feedback',
-            '.mbg-l .mbg-nw',
-            '[class*="feedback"]',
-            '.sl-feedback',
-        ]
-
-        for pattern in feedback_patterns:
-            for elem in soup.select(pattern):
-                text = elem.get_text(strip=True)
-
-                # Parse percentage: "99.5% positive" or "100%"
-                pct_match = re.search(r"([\d.]+)%\s*(?:positive)?", text, re.IGNORECASE)
-                if pct_match:
-                    feedback_percent = float(pct_match.group(1))
-
-                # Parse score: "(1234)" or "1.2K" or "3.8K feedback"
-                score_match = re.search(r"\((\d+(?:,\d+)?)\)", text)
-                if score_match:
-                    feedback_score = int(score_match.group(1).replace(",", ""))
-                else:
-                    k_match = re.search(r"([\d.]+)K", text, re.IGNORECASE)
-                    if k_match:
-                        feedback_score = int(float(k_match.group(1)) * 1000)
-
-    # Method 4: Fallback - search entire page for seller username pattern
-    if not seller_name:
-        # Look for common seller info containers
-        for elem in soup.select('.ux-seller-section, .x-sellercard-atf, [data-testid*="seller"]'):
-            text = elem.get_text(" ", strip=True)
-            # Extract first word that looks like a username
-            words = text.split()
-            for word in words[:5]:  # Check first 5 words
-                clean_word = re.sub(r"[^\w\-\.]", "", word)
-                if len(clean_word) >= 3 and re.match(r"^[a-zA-Z0-9_\-\.]+$", clean_word):
-                    # Avoid common false positives
-                    if clean_word.lower() not in {"seller", "feedback", "positive", "items", "sold", "new", "visit"}:
-                        seller_name = clean_word
-                        break
-            if seller_name:
-                break
-
-    return seller_name, feedback_score, feedback_percent
+    return extract_seller_from_html(html_content)
 
 
 def extract_treatment_from_specifics(specifics: dict) -> Optional[str]:
@@ -666,18 +566,19 @@ def _detect_treatment(title: str, product_type: str = "Single") -> str | None:
     elif "errata" in title_lower or "error" in title_lower:
         base_treatment = "Error/Errata"
 
-    # 4. Classic Foil
-    elif "foil" in title_lower or "holo" in title_lower or "refractor" in title_lower:
-        base_treatment = "Classic Foil"
-
-    # 5. Explicit Classic Paper detection (only when specifically mentioned)
+    # 4. Explicit Classic Paper detection - MUST come before foil check
+    # because "non-foil" contains "foil" which would incorrectly match
     elif (
         "classic paper" in title_lower
-        or "paper" in title_lower
         or "non-foil" in title_lower
         or "non foil" in title_lower
+        or ("paper" in title_lower and "foil" not in title_lower)
     ):
         base_treatment = "Classic Paper"
+
+    # 5. Classic Foil - after non-foil check to avoid false positives
+    elif "foil" in title_lower or "holo" in title_lower or "refractor" in title_lower:
+        base_treatment = "Classic Foil"
 
     # 6. Unknown treatment - return None instead of assuming Classic Paper
     # This allows downstream systems to distinguish "unknown" from "detected Classic Paper"
@@ -938,8 +839,10 @@ def _detect_quantity(title: str, product_type: str = "Single") -> int:
 
     # Now look for actual quantity being sold
     quantity_patterns = [
-        r"^(\d+)\s*x\s*(wonders|existence|booster|play|collector|bundle|box|pack)",  # "2x Bundle" (requires x)
-        r"^(\d{1,2})\s+(wonders|existence|booster|play|collector|bundle|box|pack)",  # "2 Wonders..." (max 2 digits to exclude years)
+        # "2x Bundle" (requires x)
+        r"^(\d+)\s*x\s*(wonders|existence|booster|play|collector|bundle|box|pack)",
+        # "2 Wonders..." (max 2 digits to exclude years)
+        r"^(\d{1,2})\s+(wonders|existence|booster|play|collector|bundle|box|pack)",
         r"(\d+)\s*(?:ct|count)\b",  # "5ct" or "5 count"
         r"lot\s+of\s+(\d+)",  # "lot of 3"
         r"set\s+of\s+(\d+)",  # "set of 2"

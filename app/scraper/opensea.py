@@ -70,9 +70,8 @@ async def scrape_opensea_collection(collection_slug_or_url: str) -> Dict[str, An
             html = await get_page_content(collection_url, extra_wait=5)
             break
         except Exception as browser_error:
-            print(
-                f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}"
-            )
+            err_type = type(browser_error).__name__
+            print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {err_type}: {browser_error}")
             if attempt < max_browser_retries - 1:
                 wait_time = 5 * (2**attempt)
                 print(f"[OpenSea] Waiting {wait_time}s before retry...")
@@ -398,9 +397,8 @@ async def _scrape_opensea_sales_web(collection_slug: str, eth_price_usd: float, 
             html = await get_page_content(activity_url, extra_wait=5)
             break
         except Exception as browser_error:
-            print(
-                f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}"
-            )
+            err_type = type(browser_error).__name__
+            print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {err_type}: {browser_error}")
             if attempt < max_browser_retries - 1:
                 # Exponential backoff: 5s, 10s, 20s
                 wait_time = 5 * (2**attempt)
@@ -702,9 +700,8 @@ async def _scrape_opensea_listings_web(
             html = await get_page_content(collection_url, extra_wait=5)
             break
         except Exception as browser_error:
-            print(
-                f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {type(browser_error).__name__}: {browser_error}"
-            )
+            err_type = type(browser_error).__name__
+            print(f"[OpenSea] Browser attempt {attempt + 1}/{max_browser_retries} failed: {err_type}: {browser_error}")
             if attempt < max_browser_retries - 1:
                 # Exponential backoff: 5s, 10s, 20s
                 wait_time = 5 * (2**attempt)
