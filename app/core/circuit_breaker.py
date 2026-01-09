@@ -114,13 +114,26 @@ class CircuitBreaker:
 
 class CircuitBreakerRegistry:
     _breakers: Dict[str, CircuitBreaker] = {}
+    _registry_lock: Lock = Lock()  # Thread-safe registry access
 
     @classmethod
     def get(cls, name: str, **kwargs) -> CircuitBreaker:
-        if name not in cls._breakers:
-            cls._breakers[name] = CircuitBreaker(name=name, **kwargs)
-        return cls._breakers[name]
+        """Get or create a circuit breaker by name (thread-safe)."""
+        # Fast path: check without lock (safe for reads)
+        breaker = cls._breakers.get(name)
+        if breaker is not None:
+            return breaker
+
+        # Slow path: acquire lock for creation
+        with cls._registry_lock:
+            # Double-check inside lock to prevent race condition
+            if name not in cls._breakers:
+                cls._breakers[name] = CircuitBreaker(name=name, **kwargs)
+            return cls._breakers[name]
 
     @classmethod
     def get_all_states(cls) -> Dict[str, str]:
-        return {name: cb.state.value for name, cb in cls._breakers.items()}
+        """Get all circuit breaker states (thread-safe snapshot)."""
+        with cls._registry_lock:
+            # Return a copy to prevent modification during iteration
+            return {name: cb.state.value for name, cb in cls._breakers.items()}

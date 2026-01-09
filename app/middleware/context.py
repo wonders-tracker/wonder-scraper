@@ -16,8 +16,9 @@ Headers:
 
 import asyncio
 import re
+import threading
 import time
-from typing import Optional
+from typing import Optional, Set
 
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -45,7 +46,12 @@ SLOW_REQUEST_THRESHOLD_MS = 500.0
 # Bounded semaphore for fire-and-forget trace writes
 # Prevents thread pool exhaustion under heavy load
 _trace_semaphore: Optional[asyncio.Semaphore] = None
+_trace_semaphore_lock = threading.Lock()  # Thread-safe initialization
 _trace_dropped_count: int = 0
+_trace_dropped_lock = threading.Lock()  # Thread-safe counter
+
+# Track background tasks to prevent garbage collection and enable clean shutdown
+_background_tasks: Set[asyncio.Task] = set()
 
 # Request ID validation to prevent log injection attacks
 MAX_ID_LENGTH = 64
@@ -122,11 +128,32 @@ def _sample_request_trace_sync(
 
 
 def _get_trace_semaphore() -> asyncio.Semaphore:
-    """Get or create the bounded semaphore for trace writes."""
+    """
+    Get or create the bounded semaphore for trace writes.
+
+    Thread-safe initialization using double-checked locking pattern.
+    """
     global _trace_semaphore
     if _trace_semaphore is None:
-        _trace_semaphore = asyncio.Semaphore(settings.TRACE_QUEUE_MAX_SIZE)
+        with _trace_semaphore_lock:
+            # Double-check inside lock to prevent race condition
+            if _trace_semaphore is None:
+                _trace_semaphore = asyncio.Semaphore(settings.TRACE_QUEUE_MAX_SIZE)
     return _trace_semaphore
+
+
+def _task_done_callback(task: asyncio.Task) -> None:
+    """Clean up completed task and log any exceptions."""
+    _background_tasks.discard(task)
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.warning(
+            "Background trace task failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
 
 
 async def _sample_request_trace(
@@ -154,19 +181,25 @@ async def _sample_request_trace(
     semaphore = _get_trace_semaphore()
 
     # Try to acquire semaphore without blocking
-    # If queue is full, drop this trace (backpressure)
-    if semaphore.locked():
-        _trace_dropped_count += 1
-        if _trace_dropped_count % 100 == 1:  # Log every 100th drop
+    # Using wait_for with timeout=0 for non-blocking acquire (atomic operation)
+    try:
+        await asyncio.wait_for(semaphore.acquire(), timeout=0)
+    except asyncio.TimeoutError:
+        # Queue is full - apply backpressure by dropping
+        with _trace_dropped_lock:
+            _trace_dropped_count += 1
+            dropped = _trace_dropped_count
+        if dropped % 100 == 1:  # Log every 100th drop
             logger.warning(
                 "Trace queue full, dropping request trace",
                 request_id=request_id,
-                dropped_total=_trace_dropped_count,
+                dropped_total=dropped,
             )
         return
 
-    async def _run_with_semaphore():
-        async with semaphore:
+    # We've acquired a slot - now run the trace in background
+    async def _run_trace():
+        try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None,  # Default executor
@@ -181,9 +214,14 @@ async def _sample_request_trace(
                 error_type,
                 error_message,
             )
+        finally:
+            # Always release the semaphore when done
+            semaphore.release()
 
-    # Fire-and-forget: schedule the task but don't await it
-    asyncio.create_task(_run_with_semaphore())
+    # Create task and track it to prevent garbage collection
+    task = asyncio.create_task(_run_trace())
+    _background_tasks.add(task)
+    task.add_done_callback(_task_done_callback)
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
