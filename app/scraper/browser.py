@@ -205,8 +205,10 @@ def cleanup_stale_profiles():
 class BrowserManager:
     _browser: Optional[Chrome] = None
     _lock = asyncio.Lock()
-    _restart_count: int = 0
+    _restart_count: int = 0  # Restarts within current cooldown cycle
     _max_restarts: int = settings.BROWSER_MAX_RESTARTS
+    _total_restarts: int = 0  # Absolute total restarts (prevents infinite loop)
+    _max_total_restarts: int = 20  # Give up after this many total restarts
     _startup_timeout: int = settings.BROWSER_STARTUP_TIMEOUT
     _page_count: int = 0
     _max_pages_before_restart: int = settings.BROWSER_MAX_PAGES_BEFORE_RESTART
@@ -272,16 +274,31 @@ class BrowserManager:
                 print("[Browser] Skipping restart - browser was just restarted")
                 return cls._browser
 
-            # Check if we've hit the restart limit
+            # Check absolute limit to prevent infinite restart loops
+            if cls._total_restarts >= cls._max_total_restarts:
+                raise RuntimeError(
+                    f"Browser restart limit exceeded ({cls._total_restarts} restarts). "
+                    "Chrome may be broken or system resources exhausted. Manual intervention required."
+                )
+
+            # Increment total counter
+            cls._total_restarts += 1
+
+            # Check if we've hit the per-cycle restart limit
             if cls._restart_count >= cls._max_restarts:
                 print(f"[Browser] Restarted {cls._restart_count} times. Applying extended cooldown...")
                 cls._restart_count = 0
                 # Release lock during cooldown so other operations don't deadlock
                 cls._restarting = True
 
-        # Extended cooldown outside the lock
+        # Extended cooldown outside the lock with exponential backoff
         if cls._restarting:
-            await asyncio.sleep(settings.BROWSER_EXTENDED_COOLDOWN)
+            # Exponential backoff: 10s, 20s, 40s, ... up to 5 min max
+            cooldown_multiplier = min(cls._total_restarts // cls._max_restarts, 5)
+            cooldown = settings.BROWSER_EXTENDED_COOLDOWN * (2 ** cooldown_multiplier)
+            cooldown = min(cooldown, 300)  # Cap at 5 minutes
+            print(f"[Browser] Extended cooldown: {cooldown}s (cycle {cooldown_multiplier + 1})")
+            await asyncio.sleep(cooldown)
 
         async with cls._lock:
             cls._restarting = False
@@ -368,14 +385,24 @@ class BrowserManager:
             raise
 
     @classmethod
-    async def increment_page_count(cls) -> bool:
+    async def increment_page_count(cls, success: bool = True) -> bool:
         """
         Increment page count and restart browser if threshold reached.
+
+        Args:
+            success: Whether the page load was successful. On success, resets
+                     total restart counter since browser is working.
+
         Returns True if browser was restarted.
         """
         async with cls._lock:
             cls._page_count += 1
-            cls._consecutive_timeouts = 0  # Reset timeout counter on success
+            if success:
+                cls._consecutive_timeouts = 0  # Reset timeout counter on success
+                # Browser is working - reset total restart counter to prevent
+                # eventual exhaustion during long-running healthy sessions
+                if cls._total_restarts > 0:
+                    cls._total_restarts = max(0, cls._total_restarts - 1)
             should_restart = cls._page_count >= cls._max_pages_before_restart
 
         if should_restart:
@@ -524,6 +551,10 @@ async def get_page_content(
 
                 # Timeout detection - pydoll CommandExecutionTimeout or asyncio.TimeoutError
                 is_timeout = isinstance(e, (CommandExecutionTimeout, asyncio.TimeoutError)) or ("timeout" in error_msg)
+
+                # Count failed page loads toward memory tracking threshold.
+                # Chrome allocates memory even for failed loads (DOM parsing, JS, network buffers).
+                await BrowserManager.increment_page_count(success=False)
 
                 if "blocking detected" in error_msg:
                     # eBay blocking - restart browser and apply longer cooldown
