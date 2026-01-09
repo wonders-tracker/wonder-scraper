@@ -71,3 +71,7 @@ export type { StickyPriceHeaderProps } from './StickyPriceHeader'
 // CardDetailHeader component (top navigation)
 export { CardDetailHeader } from './CardDetailHeader'
 export type { CardDetailHeaderProps } from './CardDetailHeader'
+
+// MobileStickyActions component (mobile action footer)
+export { MobileStickyActions } from './MobileStickyActions'
+export type { MobileStickyActionsProps } from './MobileStickyActions'

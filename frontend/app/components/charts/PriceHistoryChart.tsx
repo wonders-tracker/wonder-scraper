@@ -4,7 +4,7 @@
  * This component is code-split to avoid loading recharts (378KB) on initial page load.
  * It only loads when the user visits a card detail page.
  */
-import { useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import {
   ComposedChart,
   Line,
@@ -94,6 +94,22 @@ function generateLogTicks(min: number, max: number): number[] {
 }
 
 export function PriceHistoryChart({ data, floorHistory }: Props) {
+  // Fix for ResponsiveContainer not measuring correctly on initial render
+  // when lazy-loaded with Suspense. Forces a resize event after mount AND
+  // when data changes (e.g., navigating between cards).
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    // Reset mounted to show placeholder while remeasuring
+    setMounted(false)
+    // Small delay to ensure container has been painted
+    const timer = setTimeout(() => {
+      setMounted(true)
+      // Dispatch resize event to force ResponsiveContainer to recalculate
+      window.dispatchEvent(new Event('resize'))
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [data.length]) // Re-run when data changes (new card navigation)
+
   // Transform floor history to chart format
   const floorHistoryData = useMemo(() => {
     if (!floorHistory || floorHistory.length === 0) return []
@@ -189,6 +205,15 @@ export function PriceHistoryChart({ data, floorHistory }: Props) {
 
   // Check if we have floor history to show
   const hasFloorHistory = floorHistoryData.length > 1
+
+  // Show placeholder until mounted to ensure proper ResponsiveContainer measurement
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground animate-pulse">
+        <div className="h-full w-full bg-muted/20 rounded" />
+      </div>
+    )
+  }
 
   return (
     <ResponsiveContainer width="100%" height="100%">

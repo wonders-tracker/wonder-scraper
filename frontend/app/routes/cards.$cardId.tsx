@@ -10,6 +10,7 @@ import { Tooltip } from '../components/ui/tooltip'
 // Lazy load chart component (378KB recharts bundle) - only loads when needed
 const PriceHistoryChart = lazy(() => import('../components/charts/PriceHistoryChart'))
 import clsx from 'clsx'
+import { cn } from '@/lib/utils'
 import { AddToPortfolioModal } from '../components/AddToPortfolioModal'
 import { TreatmentBadge } from '../components/TreatmentBadge'
 import { ConfidenceIndicator } from '../components/ConfidenceIndicator'
@@ -19,7 +20,7 @@ import { ProductSubtypeBadge, getSubtypeColor } from '../components/ProductSubty
 import { LoginUpsellButton } from '../components/LoginUpsellOverlay'
 import { MetaVote } from '../components/MetaVote'
 import { useCurrentUser } from '../context/UserContext'
-import { CardDetailLayout, Section, CardHero, PriceBox, PriceAlertModal, TreatmentPricingTable, SimilarCards, StickyPriceHeader, useScrollPast, CardDetailHeader } from '../components/card-detail'
+import { CardDetailLayout, Section, CardHero, PriceBox, PriceAlertModal, TreatmentPricingTable, SimilarCards, StickyPriceHeader, useScrollPast, CardDetailHeader, MobileStickyActions } from '../components/card-detail'
 import type { SimilarCard } from '../components/card-detail'
 import { CardDetailPageSkeleton, SkeletonChart, SkeletonTableRows } from '../components/ui/skeleton'
 
@@ -63,6 +64,8 @@ type MarketPrice = {
     treatment?: string
     product_subtype?: string   // Collector Booster Box, Play Bundle, etc.
     quantity?: number          // Number of units in listing
+    grading?: string | null    // PSA 10, BGS 9.5, etc.
+    platform?: string          // ebay, opensea, blokpax
     bid_count?: number
     url?: string
     image_url?: string
@@ -249,68 +252,12 @@ export const Route = createFileRoute('/cards/$cardId')({
     dir: (['asc', 'desc'].includes(search.dir as string) ? search.dir : undefined) as CardSearchParams['dir'],
     page: typeof search.page === 'number' ? search.page : (typeof search.page === 'string' ? parseInt(search.page, 10) || undefined : undefined),
   }),
-  loader: async ({ params, context }) => {
+  // Loader handles SEO data only - component useQuery handles all data fetching
+  // This avoids cache misses from fetch() vs api.get() inconsistencies
+  loader: async ({ params }) => {
     const cardId = params.cardId
-    // Cast context to access queryClient (injected by router)
-    const queryClient = (context as any)?.queryClient
-
-    // Prefetch all critical data in parallel for instant loading
-    // Use Promise.allSettled to not block on failures
-    const prefetchPromises = [
-      // SEO data (for meta tags)
-      fetchCardForSEO(cardId),
-    ]
-
-    // Only prefetch React Query data if queryClient is available (client-side)
-    if (queryClient) {
-      prefetchPromises.push(
-        // Card detail data
-        queryClient.prefetchQuery({
-          queryKey: ['card', cardId],
-          queryFn: async () => {
-            const response = await fetch(`${API_URL}/cards/${cardId}`)
-            if (!response.ok) throw new Error('Failed to fetch card')
-            const data = await response.json()
-            return {
-              ...data,
-              market_cap: (data.floor_price || data.latest_price || 0) * (data.volume_30d || 0)
-            }
-          },
-          staleTime: 2 * 60 * 1000,
-        }),
-        // Listings data (for chart and sales table)
-        queryClient.prefetchQuery({
-          queryKey: ['card-listings', cardId],
-          queryFn: async () => {
-            const response = await fetch(`${API_URL}/cards/${cardId}/listings?sold_limit=100&active_limit=100`)
-            if (!response.ok) return { items: [], total: 0, hasMore: false, activeCount: 0 }
-            const data = await response.json()
-            return {
-              items: [...data.active.items, ...data.sold.items],
-              total: data.sold.total,
-              hasMore: data.sold.hasMore,
-              activeCount: data.active.items.length
-            }
-          },
-          staleTime: 2 * 60 * 1000,
-        }),
-        // Snapshots data
-        queryClient.prefetchQuery({
-          queryKey: ['card-snapshots', cardId],
-          queryFn: async () => {
-            const response = await fetch(`${API_URL}/cards/${cardId}/snapshots?days=365&limit=500`)
-            if (!response.ok) return []
-            return response.json()
-          },
-          staleTime: 5 * 60 * 1000,
-        }),
-      )
-    }
-
-    const [card] = await Promise.allSettled(prefetchPromises)
-    return {
-      card: card.status === 'fulfilled' ? card.value : null
-    }
+    const card = await fetchCardForSEO(cardId)
+    return { card }
   },
 })
 
@@ -367,6 +314,7 @@ function CardDetail() {
   const [reportSubmitting, setReportSubmitting] = useState(false)
   const [reportSubmitted, setReportSubmitted] = useState(false)
   const [showSoldListings, setShowSoldListings] = useState(false)
+  const [mobileAddedFeedback, setMobileAddedFeedback] = useState(false)
 
   const { user: currentUser } = useCurrentUser()
   const isLoggedIn = !!currentUser
@@ -403,7 +351,7 @@ function CardDetail() {
       }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes - card data updates infrequently
-    // Data is prefetched in route loader - only refetch if stale
+    enabled: !!cardId,
   })
 
   // Fetch Sales History (sold + active listings) - single combined endpoint
@@ -413,42 +361,50 @@ function CardDetail() {
     sold: { items: MarketPrice[], total: number, hasMore: boolean }
     active: { items: MarketPrice[], total: number }
   }
-  const { data: historyData, isLoading: isLoadingHistory } = useQuery({
+  const { data: historyData, isLoading: isLoadingHistory, error: historyError } = useQuery({
       queryKey: ['card-listings', cardId],
       queryFn: async () => {
-          try {
-            const response = await api.get(`cards/${cardId}/listings?sold_limit=100&active_limit=100`).json<ListingsResponse>()
-            // Combine: active listings first, then sold by date
-            return {
-              items: [...response.active.items, ...response.sold.items],
-              total: response.sold.total,
-              hasMore: response.sold.hasMore,
-              activeCount: response.active.items.length
-            }
-          } catch (e) {
-              return { items: [], total: 0, hasMore: false, activeCount: 0 }
+          const response = await api.get(`cards/${cardId}/listings?sold_limit=100&active_limit=100`).json<ListingsResponse>()
+          // Combine: active listings first, then sold by date
+          return {
+            items: [...response.active.items, ...response.sold.items],
+            total: response.sold.total,
+            hasMore: response.sold.hasMore,
+            activeCount: response.active.items.length
           }
       },
       staleTime: 2 * 60 * 1000, // 2 minutes
-      // Data is prefetched in route loader - only refetch if stale
+      enabled: !!cardId, // Only fetch when cardId is available
+      retry: 2, // Retry twice on failure
   })
 
   // Backwards compat: extract items array for existing code
   const history = historyData?.items ?? []
+
+  // Debug: Log query state and data
+  useEffect(() => {
+    if (historyError) {
+      console.error('[CardDetail] Listings query error:', historyError)
+    }
+    console.log('[CardDetail] Query state:', {
+      cardId,
+      isLoadingHistory,
+      historyLength: history.length,
+      activeCount: historyData?.activeCount,
+      hasError: !!historyError
+    })
+  }, [cardId, historyError, isLoadingHistory, history.length, historyData?.activeCount])
 
   // Fetch Snapshot History (for OpenSea/NFT items that don't have individual sales)
   // Runs in parallel with other queries - no longer waits for listings data
   const { data: snapshots } = useQuery({
       queryKey: ['card-snapshots', cardId],
       queryFn: async () => {
-          try {
-            return await api.get(`cards/${cardId}/snapshots?days=365&limit=500`).json<MarketSnapshot[]>()
-          } catch (e) {
-              return []
-          }
+          return await api.get(`cards/${cardId}/snapshots?days=365&limit=500`).json<MarketSnapshot[]>()
       },
       staleTime: 5 * 60 * 1000, // 5 minutes - snapshots change slowly
-      // Data is prefetched in route loader - only refetch if stale
+      enabled: !!cardId,
+      retry: 1,
   })
 
   // Fetch FMP by Treatment data
@@ -664,18 +620,52 @@ function CardDetail() {
           accessorKey: 'title',
           header: 'Listing Title',
           cell: ({ row }) => {
-              const grading = isPSAGraded(row.original.title)
+              // Use grading field if available, otherwise parse from title
+              const gradingField = row.original.grading
+              const parsedGrading = isPSAGraded(row.original.title)
+              const hasGrade = gradingField || parsedGrading.graded
+              const gradeDisplay = gradingField || (parsedGrading.graded ? `PSA ${parsedGrading.grade}` : null)
+              const isNFT = row.original.platform === 'opensea'
+
               return (
                   <div className="flex items-center gap-2">
-                      {grading.graded && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] uppercase font-bold border border-amber-700 bg-amber-900/30 text-amber-400 shrink-0">
-                              PSA {grading.grade}
+                      {hasGrade && gradeDisplay && (
+                          <span className={cn(
+                              "px-1.5 py-0.5 rounded text-[9px] uppercase font-bold border shrink-0",
+                              isNFT
+                                ? "border-cyan-700 bg-cyan-900/30 text-cyan-400"
+                                : "border-amber-700 bg-amber-900/30 text-amber-400"
+                          )}>
+                              {gradeDisplay}
+                          </span>
+                      )}
+                      {isNFT && !hasGrade && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] uppercase font-bold border border-cyan-700 bg-cyan-900/30 text-cyan-400 shrink-0">
+                              NFT
                           </span>
                       )}
                       <Tooltip content={row.original.title}>
                           <div className="truncate max-w-lg text-xs text-muted-foreground">{row.original.title}</div>
                       </Tooltip>
                   </div>
+              )
+          }
+      },
+      {
+          accessorKey: 'platform',
+          header: 'Source',
+          cell: ({ row }) => {
+              const platform = row.original.platform || 'ebay'
+              const platformConfig: Record<string, { label: string; color: string }> = {
+                  ebay: { label: 'eBay', color: 'border-red-800 bg-red-900/20 text-red-400' },
+                  opensea: { label: 'OpenSea', color: 'border-cyan-700 bg-cyan-900/30 text-cyan-400' },
+                  blokpax: { label: 'Blokpax', color: 'border-purple-700 bg-purple-900/30 text-purple-400' },
+              }
+              const config = platformConfig[platform] || platformConfig.ebay
+              return (
+                  <span className={cn("px-1.5 py-0.5 rounded text-[9px] uppercase font-bold border", config.color)}>
+                      {config.label}
+                  </span>
               )
           }
       },
@@ -719,6 +709,20 @@ function CardDetail() {
           return t === treatmentFilter
       })
   }, [history, treatmentFilter])
+
+  // Memoized listings for display
+  const activeListings = useMemo(() =>
+    filteredData.filter(d => d.listing_type === 'active'),
+    [filteredData]
+  )
+  const soldListings = useMemo(() =>
+    filteredData.filter(d => d.listing_type === 'sold'),
+    [filteredData]
+  )
+  const displayListings = useMemo(() =>
+    showSoldListings ? filteredData : activeListings,
+    [showSoldListings, filteredData, activeListings]
+  )
 
   const table = useReactTable({
       data: filteredData,
@@ -1033,6 +1037,17 @@ function CardDetail() {
           ? [lowestAsk!, highestAsk!]
           : null
 
+      // Sales Price Range: [min, max] from sold listings - useful for NFTs with no active listings
+      const salesPriceRange: [number, number] | null = filteredSold.length >= 2
+          ? [minPrice!, maxPrice!]
+          : null
+
+      // Sales Count: total number of sold items
+      const salesCount = filteredSold.length
+
+      // Check if this is NFT data (OpenSea/Blokpax platforms)
+      const hasNFTData = history.some(h => h.platform === 'opensea' || h.platform === 'blokpax')
+
       // Volatility: based on price spread
       const volatility = maxPrice && minPrice && minPrice > 0
           ? Math.min((maxPrice / minPrice - 1) / 10, 1) // Normalize to 0-1
@@ -1041,12 +1056,16 @@ function CardDetail() {
       return {
           volume30d,
           maxPrice,
+          minPrice,
           sellerCount,
           listingsCount,
           volatility,
           lowestAsk,
           highestAsk,
-          priceRange
+          priceRange,
+          salesPriceRange,
+          salesCount,
+          hasNFTData
       }
   }, [history, treatmentFilter])
 
@@ -1147,7 +1166,7 @@ function CardDetail() {
   }
 
   return (
-      <>
+      <div key={cardId}>
           {/* Mobile Sticky Header */}
           <StickyPriceHeader
             cardName={card.name}
@@ -1156,6 +1175,23 @@ function CardDetail() {
             isVisible={isScrolledPastPriceBox}
             onViewListings={() => {
               // Scroll to listings section
+              document.getElementById('sales-listings-section')?.scrollIntoView({ behavior: 'smooth' })
+            }}
+          />
+
+          {/* Mobile Sticky Action Footer */}
+          <MobileStickyActions
+            isVisible={isScrolledPastPriceBox}
+            onAddToPortfolio={() => {
+              setShowAddModal(true)
+              setMobileAddedFeedback(true)
+              setTimeout(() => setMobileAddedFeedback(false), 2000)
+            }}
+            showAddedFeedback={mobileAddedFeedback}
+            buyNowUrl={lowestActiveListing?.url ?? undefined}
+            lowestBuyNowPrice={lowestActiveListing?.price ?? null}
+            listingsCount={card.inventory || 0}
+            onViewListings={() => {
               document.getElementById('sales-listings-section')?.scrollIntoView({ behavior: 'smooth' })
             }}
           />
@@ -1170,10 +1206,13 @@ function CardDetail() {
               />
             }
             hero={
-              <CardHero card={card} />
+              <CardHero
+                card={card}
+                selectedTreatment={treatmentFilter !== 'all' ? treatmentFilter : undefined}
+              />
             }
             priceBox={
-              <div ref={priceBoxRef} className="h-full">
+              <div ref={priceBoxRef}>
                 <PriceBox
                   card={card}
                   treatmentFilter={treatmentFilter}
@@ -1214,6 +1253,8 @@ function CardDetail() {
                   }
                   highestAsk={treatmentFilter !== 'all' ? filteredMetrics?.highestAsk : undefined}
                   priceRange={treatmentFilter !== 'all' ? filteredMetrics?.priceRange : undefined}
+                  salesPriceRange={filteredMetrics?.salesPriceRange}
+                  salesCount={filteredMetrics?.salesCount}
                 />
               </div>
             }
@@ -1341,13 +1382,6 @@ function CardDetail() {
 
                         {/* Sales Table (Full Width) */}
                         <div id="sales-listings-section" className="border border-border rounded bg-card overflow-hidden scroll-mt-16">
-                            {(() => {
-                                const activeListings = filteredData.filter(d => d.listing_type === 'active')
-                                const soldListings = filteredData.filter(d => d.listing_type === 'sold')
-                                const displayListings = showSoldListings ? filteredData : activeListings
-
-                                return (
-                                    <>
                                         <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-4">
                                             <h3 className="text-base sm:text-lg font-bold flex items-center gap-2 flex-wrap">
                                                 <span>{activeListings.length} Listings</span>
@@ -1486,9 +1520,6 @@ function CardDetail() {
                                     </p>
                                 </div>
                             )}
-                        </>
-                    )
-                })()}
                         </div>
 
                         {/* Similar Cards - at bottom */}
@@ -1558,14 +1589,36 @@ function CardDetail() {
             >
                 {selectedListing && (
                     <>
-                        <div className="p-6 border-b border-border flex justify-between items-start">
-                            <div>
-                                <h2 className="text-lg font-bold uppercase tracking-tight">Listing Details</h2>
-                                <div className="text-xs text-muted-foreground uppercase">ID: {selectedListing.id}</div>
+                        <div className="p-4 border-b border-border">
+                            <div className="flex justify-between items-center mb-3">
+                                <h2 className="text-sm font-bold uppercase tracking-tight text-muted-foreground">Listing Details</h2>
+                                <button onClick={() => setSelectedListing(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+                                    <X className="w-5 h-5" />
+                                </button>
                             </div>
-                            <button onClick={() => setSelectedListing(null)} className="text-muted-foreground hover:text-foreground transition-colors">
-                                <X className="w-5 h-5" />
-                            </button>
+                            {/* Primary CTA - View on Platform */}
+                            <a
+                                href={selectedListing.url || `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(selectedListing.title)}&LH_Complete=1`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={clsx(
+                                    "flex items-center justify-center gap-2 w-full py-3 rounded font-bold text-sm uppercase tracking-wide transition-colors",
+                                    selectedListing.url?.includes('opensea') ? 'bg-cyan-600 hover:bg-cyan-700 text-white' :
+                                    selectedListing.url?.includes('blokpax') ? 'bg-purple-600 hover:bg-purple-700 text-white' :
+                                    'bg-blue-600 hover:bg-blue-700 text-white'
+                                )}
+                                onClick={() => {
+                                    const platform = selectedListing.url?.includes('opensea') ? 'opensea' :
+                                                    selectedListing.url?.includes('blokpax') ? 'blokpax' :
+                                                    selectedListing.url?.includes('ebay') ? 'ebay' : 'external'
+                                    analytics.trackExternalLinkClick(platform, cardId, selectedListing.title)
+                                }}
+                            >
+                                View on {selectedListing.url?.includes('opensea') ? 'OpenSea' :
+                                         selectedListing.url?.includes('blokpax') ? 'Blokpax' :
+                                         selectedListing.url?.includes('ebay') ? 'eBay' : 'Marketplace'}
+                                <ExternalLink className="w-4 h-4" />
+                            </a>
                         </div>
                         
                         <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -1643,148 +1696,61 @@ function CardDetail() {
                                 </div>
                             </div>
 
-                            <div>
-                                 <div className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-1">Bid Count</div>
-                                 <div className="text-sm font-mono font-bold">
-                                    {selectedListing.bid_count ?? '0'}
-                                 </div>
-                            </div>
-
-                            {/* Traits/Treatment Section */}
-                            {(selectedListing.traits || selectedListing.treatment) && (
-                                <div className="pt-6 border-t border-border">
-                                    <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                                        <div className={clsx("w-1 h-4 rounded-full", selectedListing.traits ? "bg-cyan-500" : "bg-purple-500")}></div>
-                                        {selectedListing.traits ? 'Traits' : 'Treatment'}
-                                        {selectedListing.traits && selectedListing.traits.length > 3 && (
-                                            <span className="text-[10px] text-muted-foreground font-normal ml-2">
-                                                ({selectedListing.traits.length} total)
-                                            </span>
-                                        )}
-                                    </h3>
-                                    <div className="bg-muted/10 rounded p-4 border border-border space-y-3">
-                                        {/* Show traits if available (max 3, then +N more) */}
-                                        {selectedListing.traits && selectedListing.traits.length > 0 ? (
-                                            <div className="space-y-2">
-                                                {selectedListing.traits.slice(0, 3).map((trait, idx) => (
-                                                    <div key={idx} className="flex justify-between items-center">
-                                                        <span className="text-[10px] text-muted-foreground uppercase">
-                                                            {trait.trait_type}
-                                                        </span>
-                                                        <span
-                                                            className="px-2 py-0.5 rounded text-[10px] font-bold border"
-                                                            style={{
-                                                                borderColor: trait.trait_type.toLowerCase() === 'hierarchy' ? '#06b6d450' :
-                                                                            trait.trait_type.toLowerCase() === 'legendary' && trait.value.toLowerCase() === 'yes' ? '#f59e0b50' :
-                                                                            trait.trait_type.toLowerCase() === 'artist' ? '#a855f750' :
-                                                                            '#71717a50',
-                                                                backgroundColor: trait.trait_type.toLowerCase() === 'hierarchy' ? '#06b6d415' :
-                                                                                trait.trait_type.toLowerCase() === 'legendary' && trait.value.toLowerCase() === 'yes' ? '#f59e0b15' :
-                                                                                trait.trait_type.toLowerCase() === 'artist' ? '#a855f715' :
-                                                                                '#71717a15',
-                                                                color: trait.trait_type.toLowerCase() === 'hierarchy' ? '#06b6d4' :
-                                                                       trait.trait_type.toLowerCase() === 'legendary' && trait.value.toLowerCase() === 'yes' ? '#f59e0b' :
-                                                                       trait.trait_type.toLowerCase() === 'artist' ? '#a855f7' :
-                                                                       '#a1a1aa'
-                                                            }}
-                                                        >
-                                                            {trait.value}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                                {selectedListing.traits.length > 3 && (
-                                                    <div className="text-[10px] text-muted-foreground text-center pt-1">
-                                                        + {selectedListing.traits.length - 3} more attributes
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            /* Fallback to treatment if no traits */
-                                            (<div className="flex flex-wrap gap-2">
-                                                <span
-                                                    className="px-2 py-1 rounded text-[10px] uppercase font-bold border"
-                                                    style={{
-                                                        borderColor: `${getTreatmentColor(selectedListing.treatment || ``)}50`,
-                                                        backgroundColor: `${getTreatmentColor(selectedListing.treatment || ``)}15`,
-                                                        color: getTreatmentColor(selectedListing.treatment || '')
-                                                    }}
-                                                >
-                                                    {selectedListing.treatment}
-                                                </span>
-                                            </div>)
-                                        )}
-                                        {/* Show PSA grade as trait if graded */}
-                                        {isPSAGraded(selectedListing.title).graded && (
-                                            <div className="flex justify-between items-center pt-2 border-t border-border/50">
-                                                <span className="text-[10px] text-muted-foreground uppercase">Grading</span>
-                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-amber-700 bg-amber-900/30 text-amber-400">
-                                                    PSA {isPSAGraded(selectedListing.title).grade}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {/* Note about viewing on OpenSea if no traits loaded yet */}
-                                        {!selectedListing.traits && selectedListing.url?.includes('opensea') && (
-                                            <p className="text-[10px] text-muted-foreground pt-2 border-t border-border/50">
-                                                View full traits on the OpenSea listing.
-                                            </p>
-                                        )}
+                            {/* Bid Count - only show for active auctions with bids */}
+                            {selectedListing.listing_type === 'active' && selectedListing.bid_count != null && selectedListing.bid_count > 0 && (
+                                <div>
+                                    <div className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest mb-1">Bids</div>
+                                    <div className="text-sm font-mono font-bold text-amber-400">
+                                        {selectedListing.bid_count}
                                     </div>
                                 </div>
                             )}
 
-                            {/* Card Metadata Context */}
-                            <div className="pt-6 border-t border-border">
-                                <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <Wallet className="w-3 h-3" /> Linked Card Info
-                                </h3>
-                                <div className="bg-muted/10 rounded p-4 border border-border space-y-3">
-                                    <div className="flex justify-between">
-                                        <span className="text-xs text-muted-foreground uppercase">Name</span>
-                                        <span className="text-xs font-bold">{card?.name}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-xs text-muted-foreground uppercase">Set</span>
-                                        <span className="text-xs font-bold">
-                                            {card?.set_name}
-                                            {selectedListing.url?.includes('opensea') && (
-                                                <span className="text-[10px] text-cyan-400 ml-1">* OpenSea</span>
-                                            )}
-                                            {selectedListing.url?.includes('ebay') && (
-                                                <span className="text-[10px] text-blue-400 ml-1">* eBay</span>
-                                            )}
-                                            {selectedListing.url?.includes('blokpax') && (
-                                                <span className="text-[10px] text-purple-400 ml-1">* Blokpax</span>
-                                            )}
+                            {/* NFT Traits Section - only for OpenSea items with traits */}
+                            {selectedListing.traits && selectedListing.traits.length > 0 && (
+                                <div className="pt-4 border-t border-border">
+                                    <h3 className="text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2">
+                                        <div className="w-1 h-4 rounded-full bg-cyan-500"></div>
+                                        NFT Traits
+                                        <span className="text-[10px] text-muted-foreground font-normal">
+                                            ({selectedListing.traits.length})
                                         </span>
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {selectedListing.traits.slice(0, 4).map((trait, idx) => (
+                                            <div key={idx} className="flex justify-between items-center text-xs">
+                                                <span className="text-muted-foreground uppercase text-[10px]">
+                                                    {trait.trait_type}
+                                                </span>
+                                                <span
+                                                    className="px-2 py-0.5 rounded text-[10px] font-bold border"
+                                                    style={{
+                                                        borderColor: trait.trait_type.toLowerCase() === 'hierarchy' ? '#06b6d450' :
+                                                                    trait.trait_type.toLowerCase() === 'legendary' && trait.value.toLowerCase() === 'yes' ? '#f59e0b50' :
+                                                                    trait.trait_type.toLowerCase() === 'artist' ? '#a855f750' :
+                                                                    '#71717a50',
+                                                        backgroundColor: trait.trait_type.toLowerCase() === 'hierarchy' ? '#06b6d415' :
+                                                                        trait.trait_type.toLowerCase() === 'legendary' && trait.value.toLowerCase() === 'yes' ? '#f59e0b15' :
+                                                                        trait.trait_type.toLowerCase() === 'artist' ? '#a855f715' :
+                                                                        '#71717a15',
+                                                        color: trait.trait_type.toLowerCase() === 'hierarchy' ? '#06b6d4' :
+                                                               trait.trait_type.toLowerCase() === 'legendary' && trait.value.toLowerCase() === 'yes' ? '#f59e0b' :
+                                                               trait.trait_type.toLowerCase() === 'artist' ? '#a855f7' :
+                                                               '#a1a1aa'
+                                                    }}
+                                                >
+                                                    {trait.value}
+                                                </span>
+                                            </div>
+                                        ))}
+                                        {selectedListing.traits.length > 4 && (
+                                            <div className="text-[10px] text-muted-foreground text-center pt-1">
+                                                + {selectedListing.traits.length - 4} more
+                                            </div>
+                                        )}
                                     </div>
-                                    {/* Show Collection Address for NFTs, Rarity for others */}
-                                    {selectedListing.url?.includes('opensea') ? (
-                                        <div className="flex justify-between">
-                                            <span className="text-xs text-muted-foreground uppercase">Collection</span>
-                                            <span className="text-xs font-bold font-mono">
-                                                {(() => {
-                                                    // Extract contract address from OpenSea URL
-                                                    const match = selectedListing.url?.match(/opensea\.io\/(?:item|assets)\/[^/]+\/([^/]+)/)
-                                                    if (match && match[1]) {
-                                                        const addr = match[1]
-                                                        // Truncate address: 0x1234...5678
-                                                        if (addr.startsWith('0x') && addr.length > 12) {
-                                                            return `${addr.slice(0, 6)}...${addr.slice(-4)}`
-                                                        }
-                                                        return addr.length > 15 ? `${addr.slice(0, 12)}...` : addr
-                                                    }
-                                                    return 'N/A'
-                                                })()}
-                                            </span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex justify-between">
-                                            <span className="text-xs text-muted-foreground uppercase">Rarity</span>
-                                            <span className="text-xs font-bold">{card?.rarity_name || card?.rarity_id}</span>
-                                        </div>
-                                    )}
                                 </div>
-                            </div>
+                            )}
 
                             {/* Seller Info */}
                             {(selectedListing.seller_name || selectedListing.condition || selectedListing.shipping_cost != null) && (
@@ -1828,8 +1794,22 @@ function CardDetail() {
                             </div>
                             )}
 
-                            {/* Report Listing Button */}
-                            <div className="pt-6 border-t border-border">
+                            {/* Description - only if available */}
+                            {selectedListing.description && (
+                                <div className="pt-4 border-t border-border">
+                                    <p className="text-xs text-muted-foreground italic leading-relaxed">
+                                        "{selectedListing.description}"
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Footer - Data timestamp and report link */}
+                            <div className="pt-4 mt-auto border-t border-border flex items-center justify-between text-[10px] text-muted-foreground">
+                                <span>
+                                    Updated {selectedListing.scraped_at
+                                        ? new Date(selectedListing.scraped_at).toLocaleDateString()
+                                        : 'N/A'}
+                                </span>
                                 <button
                                     onClick={() => {
                                         setReportReason('')
@@ -1837,80 +1817,10 @@ function CardDetail() {
                                         setReportSubmitted(false)
                                         setShowReportModal(true)
                                     }}
-                                    className="flex items-center justify-center gap-2 w-full border border-amber-700/50 hover:border-amber-600 bg-amber-900/10 hover:bg-amber-900/20 text-amber-500 text-xs uppercase font-bold py-3 rounded transition-colors"
+                                    className="flex items-center gap-1 hover:text-amber-500 transition-colors"
                                 >
-                                    <Flag className="w-3 h-3" /> Report Listing
+                                    <Flag className="w-3 h-3" /> Report
                                 </button>
-                                <p className="text-[10px] text-center text-muted-foreground mt-2">
-                                    Flag incorrect, fake, or duplicate listings
-                                </p>
-                            </div>
-
-                            {/* Listing Info */}
-                            <div className="pt-6 border-t border-border">
-                                <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
-                                    Listing Info
-                                </h3>
-                                <div className="bg-muted/10 rounded p-4 border border-border space-y-3 text-xs">
-                                    {selectedListing.description && (
-                                        <p className="text-muted-foreground italic">"{selectedListing.description}"</p>
-                                    )}
-                                    {/* Platform Info */}
-                                    <div className={selectedListing.description ? "pt-2 border-t border-border/50 mt-2" : ""}>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-muted-foreground">Platform</span>
-                                            <span className={clsx("font-bold",
-                                                selectedListing.url?.includes('opensea') ? 'text-cyan-400' :
-                                                selectedListing.url?.includes('ebay') ? 'text-blue-400' :
-                                                selectedListing.url?.includes('blokpax') ? 'text-purple-400' :
-                                                "text-muted-foreground"
-                                            )}>
-                                                {selectedListing.url?.includes('opensea') ? 'OpenSea' :
-                                                 selectedListing.url?.includes('ebay') ? 'eBay' :
-                                                 selectedListing.url?.includes('blokpax') ? 'Blokpax' :
-                                                 'External'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    {/* Scraped timestamp */}
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-muted-foreground">Data Updated</span>
-                                        <span className="font-mono text-muted-foreground">
-                                            {selectedListing.scraped_at
-                                                ? new Date(selectedListing.scraped_at).toLocaleDateString()
-                                                : 'N/A'}
-                                        </span>
-                                    </div>
-                                    {/* External ID if available */}
-                                    {selectedListing.url && (
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-muted-foreground">Listing ID</span>
-                                            <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[150px]">
-                                                {selectedListing.id}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* External Link */}
-                            <div className="pt-4">
-                                <a
-                                    href={selectedListing.url || `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(selectedListing.title)}&LH_Complete=1`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-center gap-2 w-full border border-border hover:bg-muted/50 text-xs uppercase font-bold py-3 rounded transition-colors"
-                                    onClick={() => {
-                                        const platform = selectedListing.url?.includes('ebay') ? 'ebay' : 'external'
-                                        analytics.trackExternalLinkClick(platform, cardId, selectedListing.title)
-                                    }}
-                                >
-                                    <ExternalLink className="w-3 h-3" /> View Original Listing
-                                </a>
-                                <div className="text-[10px] text-center text-muted-foreground mt-2">
-                                    *Redirects to the original marketplace listing.
-                                </div>
                             </div>
                         </div>
                     </>
@@ -2137,6 +2047,6 @@ function CardDetail() {
                   Track
               </button>
           </div>
-      </>
+      </div>
   )
 }

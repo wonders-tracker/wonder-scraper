@@ -43,15 +43,15 @@ export function CardDetailLayout({
         )}
 
         {/* Hero Section - Two Column */}
-        {/* Mobile (<768px): stack, Tablet+ (>=768px): side by side, bottoms aligned */}
-        <div className="grid grid-cols-1 md:grid-cols-[minmax(250px,320px)_1fr] lg:grid-cols-[minmax(300px,380px)_1fr] xl:grid-cols-[400px_1fr] gap-4 md:gap-6 lg:gap-8 mb-8 md:items-stretch">
+        {/* Mobile (<768px): stack, Tablet+ (>=768px): side by side */}
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(250px,320px)_1fr] lg:grid-cols-[minmax(300px,380px)_1fr] xl:grid-cols-[400px_1fr] gap-4 md:gap-6 lg:gap-8 mb-8 items-start md:items-stretch">
           {/* Left Column - Card Hero - constrained width */}
           <div className="w-full max-w-[320px] md:max-w-none mx-auto md:mx-0">
             {hero}
           </div>
 
-          {/* Right Column - Price Box - fills remaining space, aligns bottom with card */}
-          <div className="w-full h-full flex flex-col">
+          {/* Right Column - Price Box */}
+          <div className="w-full flex flex-col min-h-0">
             {priceBox}
           </div>
         </div>

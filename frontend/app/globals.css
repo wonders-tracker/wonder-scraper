@@ -65,6 +65,22 @@
     @apply bg-background text-foreground font-mono;
   }
 
+  /* Global focus indicator for accessibility - WCAG 2.4.7 Focus Visible */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Remove focus ring for mouse users, keep for keyboard */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Skip to main content link for screen readers */
+  .skip-link {
+    @apply absolute -top-10 left-4 z-[100] bg-background text-foreground px-4 py-2 rounded-md;
+    @apply focus:top-4 transition-[top];
+  }
+
   /* Brand color checkboxes */
   input[type="checkbox"] {
     accent-color: #7dd3a8;
@@ -142,4 +158,116 @@
   }
 }
 
+/* ===========================================
+   RARITY-BASED VISUAL EFFECTS FOR CARD IMAGES
+   =========================================== */
+
+/* Rarity glow intensities - use with CSS variable --glow-color */
+.rarity-glow-subtle {
+  box-shadow: 0 0 12px 2px var(--glow-color, transparent);
+}
+.rarity-glow-medium {
+  box-shadow: 0 0 20px 4px var(--glow-color, transparent);
+}
+.rarity-glow-strong {
+  box-shadow: 0 0 30px 8px var(--glow-color, transparent),
+              0 0 60px 16px var(--glow-color, transparent);
+}
+
+/* Corner accents for high-rarity cards */
+.rarity-corner-accent {
+  position: relative;
+}
+.rarity-corner-accent::before,
+.rarity-corner-accent::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  z-index: 10;
+}
+.rarity-corner-accent::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid var(--accent-color, #fbbf24);
+  border-left: 2px solid var(--accent-color, #fbbf24);
+  border-top-left-radius: 8px;
+}
+.rarity-corner-accent::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid var(--accent-color, #fbbf24);
+  border-right: 2px solid var(--accent-color, #fbbf24);
+  border-bottom-right-radius: 8px;
+}
+
+/* Holographic rainbow overlay - ambient effect for Mythic/Legendary */
+.rarity-holo-overlay {
+  background: linear-gradient(
+    135deg,
+    hsla(0, 80%, 65%, 0.12) 0%,
+    hsla(45, 80%, 65%, 0.12) 17%,
+    hsla(90, 80%, 65%, 0.12) 33%,
+    hsla(135, 80%, 65%, 0.12) 50%,
+    hsla(180, 80%, 65%, 0.12) 67%,
+    hsla(225, 80%, 65%, 0.12) 83%,
+    hsla(270, 80%, 65%, 0.12) 100%
+  );
+  background-size: 300% 300%;
+  animation: rarity-holo 8s ease-in-out infinite;
+  mix-blend-mode: color-dodge;
+}
+
+@keyframes rarity-holo {
+  0%, 100% {
+    background-position: 0% 50%;
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: hue-rotate(60deg);
+  }
+}
+
+/* Shimmer overlay - horizontal light sweep for rarity effects */
+.rarity-shimmer-overlay {
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.08) 45%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.08) 55%,
+    transparent 65%,
+    transparent 100%
+  );
+  background-size: 250% 100%;
+}
+.rarity-shimmer-overlay.shimmer-normal {
+  animation: rarity-shimmer 6s ease-in-out infinite;
+}
+.rarity-shimmer-overlay.shimmer-slow {
+  animation: rarity-shimmer 10s ease-in-out infinite;
+}
+
+@keyframes rarity-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Accessibility: Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .rarity-holo-overlay,
+  .rarity-shimmer-overlay,
+  .animate-shimmer,
+  .animate-shimmer-slow,
+  .animate-holo {
+    animation: none !important;
+  }
+}
 

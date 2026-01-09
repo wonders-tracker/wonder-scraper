@@ -39,6 +39,98 @@ function getTreatmentTier(treatment?: string): TreatmentTier {
   return 'common'
 }
 
+// =============================================
+// RARITY-BASED VISUAL EFFECTS (BASE LAYER)
+// =============================================
+
+type Rarity = 'Mythic' | 'Legendary' | 'Epic' | 'Rare' | 'Uncommon' | 'Common'
+
+type RarityEffectConfig = {
+  glowColor: string       // CSS color for glow
+  glowIntensity: 'none' | 'subtle' | 'medium' | 'strong'
+  shimmer: boolean
+  shimmerSpeed: 'normal' | 'slow'
+  holo: boolean           // Rainbow holo effect (Mythic/Legendary only)
+  cornerAccents: boolean
+  accentColor: string     // CSS color for corner accents
+}
+
+const RARITY_EFFECTS: Record<Rarity, RarityEffectConfig> = {
+  Mythic: {
+    glowColor: 'rgba(251, 191, 36, 0.35)',  // amber-400
+    glowIntensity: 'strong',
+    shimmer: true,
+    shimmerSpeed: 'normal',
+    holo: true,
+    cornerAccents: true,
+    accentColor: '#fbbf24',  // amber-400
+  },
+  Legendary: {
+    glowColor: 'rgba(251, 146, 60, 0.3)',   // orange-400
+    glowIntensity: 'strong',
+    shimmer: true,
+    shimmerSpeed: 'normal',
+    holo: true,
+    cornerAccents: true,
+    accentColor: '#fb923c',  // orange-400
+  },
+  Epic: {
+    glowColor: 'rgba(192, 132, 252, 0.25)', // purple-400
+    glowIntensity: 'medium',
+    shimmer: true,
+    shimmerSpeed: 'slow',
+    holo: false,
+    cornerAccents: true,
+    accentColor: '#c084fc',  // purple-400
+  },
+  Rare: {
+    glowColor: 'rgba(96, 165, 250, 0.2)',   // blue-400
+    glowIntensity: 'medium',
+    shimmer: true,
+    shimmerSpeed: 'slow',
+    holo: false,
+    cornerAccents: false,
+    accentColor: '',
+  },
+  Uncommon: {
+    glowColor: 'rgba(125, 211, 168, 0.15)', // brand-300
+    glowIntensity: 'subtle',
+    shimmer: false,
+    shimmerSpeed: 'slow',
+    holo: false,
+    cornerAccents: false,
+    accentColor: '',
+  },
+  Common: {
+    glowColor: '',
+    glowIntensity: 'none',
+    shimmer: false,
+    shimmerSpeed: 'slow',
+    holo: false,
+    cornerAccents: false,
+    accentColor: '',
+  },
+}
+
+// Special effects for NFT/Proof items (cyan theme to match OpenSea/blockchain aesthetic)
+const NFT_EFFECTS: RarityEffectConfig = {
+  glowColor: 'rgba(34, 211, 238, 0.3)',    // cyan-400
+  glowIntensity: 'strong',
+  shimmer: true,
+  shimmerSpeed: 'normal',
+  holo: true,
+  cornerAccents: true,
+  accentColor: '#22d3ee',  // cyan-400
+}
+
+function getRarityEffects(rarityName?: string, isNFT?: boolean): RarityEffectConfig {
+  // NFTs always get special effects
+  if (isNFT) return NFT_EFFECTS
+
+  const rarity = (rarityName as Rarity) || 'Common'
+  return RARITY_EFFECTS[rarity] || RARITY_EFFECTS.Common
+}
+
 export type CardHeroProps = {
   card: {
     id: number
@@ -79,9 +171,34 @@ export function CardHero({
 
   const isNFT = card.product_type === 'Proof' ||
     card.name?.toLowerCase().includes('proof') ||
-    card.name?.toLowerCase().includes('collector box')
+    card.name?.toLowerCase().includes('sample')
 
   const treatmentTier = getTreatmentTier(selectedTreatment)
+  const rarityEffects = getRarityEffects(card.rarity_name, isNFT)
+
+  // Render rarity-based overlay effects (base layer - always visible)
+  const renderRarityOverlay = () => {
+    if (rarityEffects.glowIntensity === 'none') return null
+
+    return (
+      <>
+        {/* Rarity shimmer overlay - z-10 to appear above image */}
+        {rarityEffects.shimmer && (
+          <div
+            className={cn(
+              "absolute inset-0 pointer-events-none z-10 rarity-shimmer-overlay",
+              rarityEffects.shimmerSpeed === 'normal' ? 'shimmer-normal' : 'shimmer-slow'
+            )}
+          />
+        )}
+
+        {/* Holographic rainbow for Mythic/Legendary - z-10 to appear above image */}
+        {rarityEffects.holo && (
+          <div className="absolute inset-0 pointer-events-none z-10 rarity-holo-overlay opacity-70" />
+        )}
+      </>
+    )
+  }
 
   // Handle mouse move for parallax/3D effect
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -179,10 +296,10 @@ export function CardHero({
 
     return (
       <>
-        {/* CSS Foil Shine Layer - always visible on hover */}
+        {/* CSS Foil Shine Layer - z-20 to appear above rarity effects */}
         <div
           className={cn(
-            "absolute inset-0 pointer-events-none transition-opacity duration-300",
+            "absolute inset-0 pointer-events-none z-20 transition-opacity duration-300",
             isZoomed ? "opacity-100" : "opacity-0"
           )}
           style={{
@@ -190,10 +307,10 @@ export function CardHero({
             mixBlendMode: 'overlay',
           }}
         />
-        {/* WebGL Shader Layer - subtle background effect */}
+        {/* WebGL Shader Layer - z-20 to appear above rarity effects */}
         <div
           className={cn(
-            "absolute inset-0 pointer-events-none transition-opacity duration-500 mix-blend-soft-light",
+            "absolute inset-0 pointer-events-none z-20 transition-opacity duration-500 mix-blend-soft-light",
             isZoomed ? "opacity-50" : "opacity-30"
           )}
         >
@@ -215,22 +332,42 @@ export function CardHero({
         </p>
       </div>
 
-      {/* Card Image with Shader Effects */}
+      {/* Card Image with Rarity + Treatment Effects */}
+      {/* Outer wrapper for corner accents (can't use overflow-hidden) */}
       <div
-        ref={imageContainerRef}
         className={cn(
-          "relative aspect-[3/4] rounded-lg overflow-hidden border bg-muted/20 cursor-zoom-in",
-          treatmentTier === 'ultra-rare' && "border-fuchsia-500/40 shadow-lg shadow-fuchsia-500/10",
-          treatmentTier === 'rare' && "border-stone-400/40 shadow-lg shadow-stone-400/10",
-          treatmentTier === 'uncommon' && "border-sky-500/40",
-          treatmentTier === 'common' && "border-border"
+          "relative",
+          rarityEffects.cornerAccents && "rarity-corner-accent",
         )}
-        onMouseMove={handleMouseMove}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        role="img"
-        aria-label={`Card image for ${card.name}`}
+        style={{
+          '--accent-color': rarityEffects.accentColor,
+        } as React.CSSProperties}
       >
+        {/* Inner container for image + effects */}
+        <div
+          ref={imageContainerRef}
+          className={cn(
+            "relative aspect-[3/4] rounded-lg overflow-hidden border bg-muted/20 cursor-zoom-in",
+            // RARITY-BASED GLOW (base layer - always visible based on card rarity)
+            rarityEffects.glowIntensity === 'subtle' && "rarity-glow-subtle",
+            rarityEffects.glowIntensity === 'medium' && "rarity-glow-medium",
+            rarityEffects.glowIntensity === 'strong' && "rarity-glow-strong",
+            // Default border for common (no glow)
+            rarityEffects.glowIntensity === 'none' && "border-border",
+            // TREATMENT-BASED EFFECTS (override layer - when treatment is selected)
+            treatmentTier === 'ultra-rare' && "border-fuchsia-500/40 shadow-lg shadow-fuchsia-500/10",
+            treatmentTier === 'rare' && "border-stone-400/40 shadow-lg shadow-stone-400/10",
+            treatmentTier === 'uncommon' && "border-sky-500/40",
+          )}
+          style={{
+            '--glow-color': rarityEffects.glowColor,
+          } as React.CSSProperties}
+          onMouseMove={handleMouseMove}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          role="img"
+          aria-label={`Card image for ${card.name}`}
+        >
         {/* Loading skeleton */}
         {!imageLoaded && !imageError && card.cardeio_image_url && (
           <div className="absolute inset-0 bg-muted animate-pulse" />
@@ -258,15 +395,19 @@ export function CardHero({
           </div>
         )}
 
-        {/* WebGL Shader overlay effect */}
+        {/* LAYER 1: Rarity effects (base layer - always visible based on card rarity) */}
+        {renderRarityOverlay()}
+
+        {/* LAYER 2: Treatment effects (override layer - on hover when treatment selected) */}
         {renderShaderOverlay()}
 
         {/* Zoom indicator */}
         {isZoomed && card.cardeio_image_url && !imageError && (
-          <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-[10px] text-white/80 uppercase tracking-wider">
+          <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-[10px] text-white/80 uppercase tracking-wider z-30">
             Zoomed
           </div>
         )}
+        </div>
       </div>
 
       {/* Card Text/Description */}

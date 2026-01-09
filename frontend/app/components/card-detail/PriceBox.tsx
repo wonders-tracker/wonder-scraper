@@ -139,6 +139,10 @@ export type PriceBoxProps = {
   highestAsk?: number | null
   /** Price range [min, max] from active listings (fallback for market price) */
   priceRange?: [number, number] | null
+  /** Sales price range [min, max] from sold listings - for NFT items */
+  salesPriceRange?: [number, number] | null
+  /** Number of sales - used to determine single price vs range display */
+  salesCount?: number
 }
 
 export function PriceBox({
@@ -168,7 +172,9 @@ export function PriceBox({
   buyNowUrl,
   filteredMarketPrice,
   highestAsk,
-  priceRange
+  priceRange,
+  salesPriceRange,
+  salesCount = 0
 }: PriceBoxProps) {
   // Track action feedback states
   const [showAddedFeedback, setShowAddedFeedback] = useState(false)
@@ -275,7 +281,7 @@ export function PriceBox({
   return (
     <div className={cn(
       "border border-border rounded-lg bg-card",
-      "h-full w-full flex flex-col",
+      "w-full flex flex-col",
       "min-w-[280px]",
       className
     )}>
@@ -344,13 +350,22 @@ export function PriceBox({
         {/* Secondary Metrics - Horizontal on tablet+, 2x2 grid on mobile */}
         <div className="pt-3 border-t border-border/50">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-            {/* Market Price or Price Range */}
+            {/* Market Price or Price Range (prefers sales range for NFT items) */}
             <div>
               <div className="flex items-center gap-1 mb-1">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  {marketPrice ? 'Market Price' : priceRange ? 'Price Range' : 'Market Price'}
+                  {marketPrice ? 'Market Price'
+                    : salesPriceRange ? 'Sales Range'
+                    : salesCount === 1 ? 'Last Sale'
+                    : priceRange ? 'Price Range'
+                    : 'Market Price'}
                 </span>
-                <Tooltip content={marketPrice ? "Weighted algorithm based on recent sales" : "Price range from active listings"}>
+                <Tooltip content={
+                  marketPrice ? "Weighted algorithm based on recent sales"
+                    : salesPriceRange ? `Price range from ${salesCount} sales`
+                    : salesCount === 1 ? "Price from single recorded sale"
+                    : "Price range from active listings"
+                }>
                   <Info className="w-3 h-3 text-muted-foreground cursor-help" aria-hidden="true" />
                 </Tooltip>
               </div>
@@ -360,6 +375,10 @@ export function PriceBox({
                 <span className="font-mono font-bold text-brand-300">
                   {marketPrice ? (
                     `$${marketPrice.toFixed(2)}`
+                  ) : salesPriceRange ? (
+                    `$${salesPriceRange[0].toFixed(0)}-${salesPriceRange[1].toFixed(0)}`
+                  ) : salesCount === 1 && card.latest_price ? (
+                    `$${card.latest_price.toFixed(2)}`
                   ) : priceRange ? (
                     `$${priceRange[0].toFixed(0)}-${priceRange[1].toFixed(0)}`
                   ) : '---'}
