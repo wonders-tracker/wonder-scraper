@@ -62,6 +62,32 @@ openssl rand -hex 32
 | `MAX_CONCURRENT_SCRAPES` | `3` | Parallel scrape workers |
 | `EBAY_RATE_LIMIT_DELAY` | `2` | Seconds between requests |
 
+### Browser Scraper
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BROWSER_SEMAPHORE_LIMIT` | `2` | Concurrent browser tabs |
+| `BROWSER_MAX_RESTARTS` | `3` | Restarts before extended cooldown |
+| `BROWSER_MAX_TOTAL_RESTARTS` | `20` | Hard limit - fails after this many |
+| `BROWSER_EXTENDED_COOLDOWN` | `10` | Seconds to wait after hitting restart limit |
+| `BROWSER_MAX_PAGES_BEFORE_RESTART` | `25` | Restart browser after N pages (memory leak prevention) |
+
+### Observability
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SENTRY_DSN` | `""` | Sentry DSN (empty = disabled) |
+| `SENTRY_ENVIRONMENT` | `production` | Environment tag for Sentry |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.1` | % of transactions traced (0.1 = 10%) |
+| `TRACE_QUEUE_MAX_SIZE` | `50` | Max concurrent fire-and-forget trace writes |
+
+### Database Pool
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_POOL_SIZE` | `20` | Max persistent connections |
+| `DB_MAX_OVERFLOW` | `15` | Extra connections under load |
+
 ### Frontend (Vite)
 
 | Variable | Description |

@@ -132,6 +132,39 @@ High-level architecture of the WondersTracker platform.
 5. Frontend renders with React Query cache
 ```
 
+## Observability
+
+### Request Tracing
+
+Every request is assigned a unique `request_id` for correlation:
+- Passed via `X-Request-ID` header (generated if not provided)
+- Included in all log messages automatically
+- Returned in response headers for client debugging
+- Slow/error requests sampled to `request_trace` table
+
+### Performance Metrics
+
+In-memory metrics collected per endpoint:
+- Request count, latency percentiles (p50, p95, p99)
+- Error rates by status code
+- Exposed via `/health/metrics` endpoint
+
+### Error Tracking (Sentry)
+
+Optional Sentry integration for error monitoring:
+- Automatic exception capture with context
+- Performance tracing (configurable sample rate)
+- User context attached to errors
+- Environment tagging (production/staging)
+
+### Circuit Breakers
+
+Scrapers protected by circuit breakers:
+- Auto-open after 5 consecutive failures
+- Half-open state tests recovery
+- Discord alerts on state changes
+- Status exposed via `/health/circuits`
+
 ## Security
 
 ### Authentication
