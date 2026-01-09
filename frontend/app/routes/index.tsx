@@ -136,6 +136,8 @@ type Card = {
 
   // === PRICES (clear hierarchy) ===
   floor_price?: number // Avg of 4 lowest sales - THE standard price (cheapest variant)
+  floor_price_source?: string // "sales" or "order_book"
+  floor_price_confidence?: number // 0.0-1.0 confidence score
   floor_by_variant?: Record<string, number> // Floor price per variant {treatment/subtype: price}
   vwap?: number // Volume Weighted Average Price = SUM(price)/COUNT
   latest_price?: number // Most recent sale price
@@ -465,6 +467,8 @@ function Home() {
           const floorPrice = row.original.floor_price || row.original.vwap
           const hasFloor = !!floorPrice && floorPrice > 0
           const delta = row.original.price_delta ?? row.original.price_delta_24h ?? 0
+          const source = row.original.floor_price_source
+          const confidence = row.original.floor_price_confidence ?? 1.0
 
           // Check for variant price range for sealed products
           const floorByVariant = row.original.floor_by_variant
@@ -488,11 +492,34 @@ function Home() {
               }
           }
 
+          // Determine price display based on source and confidence
+          const isEstimate = source === 'order_book'
+          const isLowConfidence = confidence < 0.5
+
+          // Format price display
+          let priceDisplay = '---'
+          let priceClass = 'font-mono text-base lg:text-lg font-semibold'
+          if (hasFloor) {
+              if (isEstimate && isLowConfidence) {
+                  // Show range for low confidence estimates (±20%)
+                  const low = Math.floor(floorPrice * 0.8)
+                  const high = Math.ceil(floorPrice * 1.2)
+                  priceDisplay = `$${low}-$${high}`
+                  priceClass = 'font-mono text-base lg:text-lg font-semibold text-muted-foreground'
+              } else if (isEstimate) {
+                  // Show estimate indicator for order book prices
+                  priceDisplay = `~$${floorPrice.toFixed(2)}`
+                  priceClass = 'font-mono text-base lg:text-lg font-semibold text-muted-foreground'
+              } else {
+                  priceDisplay = `$${floorPrice.toFixed(2)}`
+              }
+          }
+
           return (
             <div className="inline-flex flex-col items-center gap-0.5">
                 <div className="inline-flex items-center gap-1 md:gap-2">
-                    <span className="font-mono text-base lg:text-lg font-semibold">
-                        {hasFloor ? `$${floorPrice.toFixed(2)}` : '---'}
+                    <span className={priceClass}>
+                        {priceDisplay}
                     </span>
                     {/* Hide delta badge on mobile to save space */}
                     {hasFloor && delta !== 0 && (
@@ -1318,8 +1345,22 @@ function Home() {
                                                       {card.inventory || 0} listings from
                                                   </div>
                                                   {/* Price */}
-                                                  <div className="text-2xl font-bold mt-1">
-                                                      {(card.floor_price || card.vwap) ? `$${(card.floor_price || card.vwap)?.toFixed(2)}` : '—'}
+                                                  <div className={clsx(
+                                                      "text-2xl font-bold mt-1",
+                                                      card.floor_price_source === 'order_book' && "text-muted-foreground"
+                                                  )}>
+                                                      {(() => {
+                                                          const price = card.floor_price || card.vwap
+                                                          if (!price) return '—'
+                                                          const isEstimate = card.floor_price_source === 'order_book'
+                                                          const isLowConfidence = (card.floor_price_confidence ?? 1) < 0.5
+                                                          if (isEstimate && isLowConfidence) {
+                                                              const low = Math.floor(price * 0.8)
+                                                              const high = Math.ceil(price * 1.2)
+                                                              return `$${low}-$${high}`
+                                                          }
+                                                          return isEstimate ? `~$${price.toFixed(2)}` : `$${price.toFixed(2)}`
+                                                      })()}
                                                   </div>
                                                   {/* Market Price */}
                                                   {card.latest_price && card.latest_price > 0 && (

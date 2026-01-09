@@ -168,6 +168,8 @@ def read_cards(
     vwap_map = {}
     active_stats_map = {}  # Computed from MarketPrice for fresh lowest_ask/inventory
     floor_price_map = {}  # Floor price (avg of 4 lowest sales) - cheapest variant
+    floor_price_source_map = {}  # Source of floor price: "sales" or "order_book"
+    floor_price_confidence_map = {}  # Confidence score (0.0-1.0)
     floor_by_variant_map = {}  # Floor price per variant {card_id: {variant: price}}
     lowest_ask_by_variant_map = {}  # Lowest ask per variant {card_id: {variant: price}}
     volume_map = {}  # Volume filtered by time period
@@ -279,16 +281,17 @@ def read_cards(
                 if card_id not in floor_by_variant_map:
                     floor_by_variant_map[card_id] = {}
                 floor_by_variant_map[card_id][variant] = result.price
-                # floor_price_map stores the cheapest variant's floor
+                # floor_price_map stores the cheapest variant's floor + source/confidence
                 if card_id not in floor_price_map or result.price < floor_price_map[card_id]:
                     floor_price_map[card_id] = result.price
+                    floor_price_source_map[card_id] = result.source.value
+                    floor_price_confidence_map[card_id] = result.confidence_score
 
-            # Fallback: 90 days for cards still missing
-            # Note: Don't use order book fallback - floor should be based on sold data only
+            # Fallback: 90 days for cards still missing, with order book fallback
             missing_floor_ids = [cid for cid in card_ids if cid not in floor_price_map]
             if missing_floor_ids:
                 floor_results_90d = floor_service.get_floor_prices_batch(
-                    missing_floor_ids, days=90, by_variant=True
+                    missing_floor_ids, days=90, by_variant=True, include_order_book_fallback=True
                 )
                 for (card_id, variant), result in floor_results_90d.items():
                     if result.price is None:
@@ -298,6 +301,8 @@ def read_cards(
                     floor_by_variant_map[card_id][variant] = result.price
                     if card_id not in floor_price_map or result.price < floor_price_map[card_id]:
                         floor_price_map[card_id] = result.price
+                        floor_price_source_map[card_id] = result.source.value
+                        floor_price_confidence_map[card_id] = result.confidence_score
 
             # Fetch lowest ask by variant (active listings)
             lowest_ask_variant_results = session.execute(lowest_ask_by_variant_query, query_params_base).all()
@@ -419,6 +424,8 @@ def read_cards(
             product_type=card.product_type if hasattr(card, "product_type") else "Single",
             # Prices
             floor_price=card_floor_price,
+            floor_price_source=floor_price_source_map.get(card.id),
+            floor_price_confidence=floor_price_confidence_map.get(card.id),
             floor_by_variant=card_floor_by_variant,
             vwap=card_vwap,
             latest_price=last_price,
@@ -462,6 +469,8 @@ def read_cards(
                 rarity_name=r.rarity_name,
                 product_type=r.product_type,
                 floor_price=r.floor_price,
+                floor_price_source=r.floor_price_source,
+                floor_price_confidence=r.floor_price_confidence,
                 latest_price=r.latest_price,
                 lowest_ask=r.lowest_ask,
                 max_price=r.max_price,
@@ -469,7 +478,7 @@ def read_cards(
                 inventory=r.inventory,
                 price_delta=r.price_delta,
                 last_treatment=r.last_treatment,
-                image_url=r.image_url,
+                image_url=r.cardeio_image_url or r.image_url,
                 orbital=r.orbital,
                 orbital_color=r.orbital_color,
             ).model_dump(mode="json")
