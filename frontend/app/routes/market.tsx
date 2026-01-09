@@ -165,12 +165,13 @@ function MarketAnalysis() {
   }, [])
 
   // Fetch actual deal listings (active listings below floor price)
-  // Only show listings scraped in the last 24 hours to avoid showing ended listings
+  // Fetch listings from last 7d, then filter/sort by freshness on frontend
   const { data: dealData, isLoading: dealsLoading } = useQuery({
     queryKey: ['market-deals', timeFrame],
     queryFn: async () => {
-      // Get active listings sorted by price ascending, only from last 24h to ensure freshness
-      const data = await api.get(`market/listings?listing_type=active&time_period=24h&sort_by=price&sort_order=asc&limit=200`).json<{
+      // Get active listings sorted by price ascending
+      // Use 7d window and filter by scraped_at freshness on frontend
+      const data = await api.get(`market/listings?listing_type=active&time_period=7d&sort_by=price&sort_order=asc&limit=200`).json<{
         items: Array<{
           id: number
           card_id: number
@@ -1386,8 +1387,8 @@ function MarketAnalysis() {
                                             {/* BUY NOW DEALS SECTION */}
                                             <div>
                                                 <div className="flex items-center gap-2 mb-3">
-                                                    <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
-                                                    <h3 className="text-sm font-bold uppercase text-emerald-400">Buy Now Deals</h3>
+                                                    <div className="w-2 h-2 bg-brand-300 rounded-full"></div>
+                                                    <h3 className="text-sm font-bold uppercase">Buy Now Deals</h3>
                                                     <span className="text-xs text-muted-foreground">— Instant purchase at fixed price</span>
                                                 </div>
                                                 {dealData?.buyNowDeals && dealData.buyNowDeals.length > 0 ? (
@@ -1399,47 +1400,42 @@ function MarketAnalysis() {
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 onClick={() => analytics.trackExternalLinkClick(listing.platform, listing.card_id, listing.title)}
-                                                                className="border border-emerald-500/30 bg-emerald-500/5 rounded-lg p-3 hover:border-emerald-400 hover:bg-emerald-500/10 transition-all group"
+                                                                className="border border-border bg-card rounded-lg p-3 hover:border-brand-300/50 hover:bg-muted/30 transition-all group"
                                                             >
                                                                 {/* Deal Badge + Listing Type */}
                                                                 <div className="flex items-center justify-between mb-2">
-                                                                    <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded">
+                                                                    <span className="px-2 py-1 bg-brand-300/20 text-brand-300 text-xs font-bold rounded">
                                                                         {listing.dealPct.toFixed(0)}% OFF
                                                                     </span>
                                                                     <div className="flex items-center gap-1.5">
-                                                                        {listing.listingFormat === 'best_offer' ? (
-                                                                            <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] font-bold rounded uppercase">
-                                                                                Best Offer
-                                                                            </span>
-                                                                        ) : (
-                                                                            <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded uppercase">
-                                                                                Buy Now
-                                                                            </span>
-                                                                        )}
-                                                                        <span className="text-[10px] text-muted-foreground uppercase font-medium">{listing.platform}</span>
+                                                                        <span className="px-1.5 py-0.5 bg-muted text-muted-foreground text-[10px] font-bold rounded uppercase">
+                                                                            {listing.listingFormat === 'best_offer' ? 'Best Offer' : 'Buy Now'}
+                                                                        </span>
+                                                                        <span className="text-[10px] text-muted-foreground uppercase">{listing.platform}</span>
                                                                     </div>
                                                                 </div>
-                                                                {/* Freshness indicator */}
+                                                                {/* Freshness indicator - subtle */}
                                                                 {!listing.isFresh && listing.hoursSinceSeen != null && (
-                                                                    <div className="mb-2 px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-400">
-                                                                        ⚠️ Last seen {Math.round(listing.hoursSinceSeen)}h ago — may have ended
+                                                                    <div className="mb-2 text-[10px] text-muted-foreground flex items-center gap-1">
+                                                                        <Clock className="w-3 h-3" />
+                                                                        Last seen {Math.round(listing.hoursSinceSeen)}h ago
                                                                     </div>
                                                                 )}
                                                                 {/* Card Info */}
                                                                 <div className="flex gap-3">
                                                                     <DealCardImage src={listing.card_image_url} alt={listing.card_name} />
                                                                     <div className="flex-1 min-w-0">
-                                                                        <div className="font-bold text-sm truncate group-hover:text-emerald-400 transition-colors">
+                                                                        <div className="font-bold text-sm truncate group-hover:text-foreground transition-colors">
                                                                             {listing.card_name}
                                                                         </div>
                                                                         {listing.treatment && (
-                                                                            <div className="text-xs text-emerald-400/70 mb-1">{listing.treatment}</div>
+                                                                            <div className="text-xs text-muted-foreground mb-1">{listing.treatment}</div>
                                                                         )}
                                                                         <div className="mt-2">
-                                                                            <div className="text-xl font-bold font-mono text-emerald-400">${listing.price.toFixed(2)}</div>
+                                                                            <div className="text-xl font-bold font-mono">${listing.price.toFixed(2)}</div>
                                                                             <div className="flex items-center gap-2 text-xs">
                                                                                 <span className="font-mono text-muted-foreground line-through">${listing.floor_price?.toFixed(2)}</span>
-                                                                                <span className="font-mono text-emerald-400 font-medium">Save ${((listing.floor_price || 0) - listing.price).toFixed(2)}</span>
+                                                                                <span className="font-mono text-muted-foreground">Save ${((listing.floor_price || 0) - listing.price).toFixed(2)}</span>
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -1448,7 +1444,7 @@ function MarketAnalysis() {
                                                         ))}
                                                     </div>
                                                 ) : (
-                                                    <div className="border border-dashed border-emerald-500/30 rounded-lg p-6 text-center">
+                                                    <div className="border border-dashed border-border rounded-lg p-6 text-center">
                                                         <div className="text-sm text-muted-foreground">No Buy Now deals found below floor price</div>
                                                     </div>
                                                 )}
@@ -1458,9 +1454,9 @@ function MarketAnalysis() {
                                             {dealData?.auctionDeals && dealData.auctionDeals.length > 0 && (
                                                 <div>
                                                     <div className="flex items-center gap-2 mb-3">
-                                                        <div className="w-2 h-2 bg-amber-400 rounded-full"></div>
-                                                        <h3 className="text-sm font-bold uppercase text-amber-400">Auctions Below Floor</h3>
-                                                        <span className="text-xs text-muted-foreground">— Current bid is under floor, but price may increase</span>
+                                                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                                                        <h3 className="text-sm font-bold uppercase">Auctions</h3>
+                                                        <span className="text-xs text-muted-foreground">— Price may change</span>
                                                     </div>
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                                                         {dealData.auctionDeals.map((listing) => (
@@ -1470,42 +1466,43 @@ function MarketAnalysis() {
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 onClick={() => analytics.trackExternalLinkClick(listing.platform, listing.card_id, listing.title)}
-                                                                className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-3 hover:border-amber-400 hover:bg-amber-500/10 transition-all group"
+                                                                className="border border-border bg-card rounded-lg p-3 hover:border-amber-500/50 hover:bg-muted/30 transition-all group"
                                                             >
                                                                 {/* Deal Badge + Listing Type */}
                                                                 <div className="flex items-center justify-between mb-2">
-                                                                    <span className="px-2 py-1 bg-amber-500/20 text-amber-400 text-xs font-bold rounded">
+                                                                    <span className="px-2 py-1 bg-amber-500/20 text-amber-500 text-xs font-bold rounded">
                                                                         {listing.dealPct.toFixed(0)}% OFF
                                                                     </span>
                                                                     <div className="flex items-center gap-1.5">
-                                                                        <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] font-bold rounded uppercase">
+                                                                        <span className="px-1.5 py-0.5 bg-muted text-muted-foreground text-[10px] font-bold rounded uppercase">
                                                                             Auction{listing.bidCount > 0 && ` (${listing.bidCount})`}
                                                                         </span>
-                                                                        <span className="text-[10px] text-muted-foreground uppercase font-medium">{listing.platform}</span>
+                                                                        <span className="text-[10px] text-muted-foreground uppercase">{listing.platform}</span>
                                                                     </div>
                                                                 </div>
-                                                                {/* Freshness indicator */}
+                                                                {/* Freshness indicator - subtle */}
                                                                 {!listing.isFresh && listing.hoursSinceSeen != null && (
-                                                                    <div className="mb-2 px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-400">
-                                                                        ⚠️ Last seen {Math.round(listing.hoursSinceSeen)}h ago — may have ended
+                                                                    <div className="mb-2 text-[10px] text-muted-foreground flex items-center gap-1">
+                                                                        <Clock className="w-3 h-3" />
+                                                                        Last seen {Math.round(listing.hoursSinceSeen)}h ago
                                                                     </div>
                                                                 )}
                                                                 {/* Card Info */}
                                                                 <div className="flex gap-3">
                                                                     <DealCardImage src={listing.card_image_url} alt={listing.card_name} />
                                                                     <div className="flex-1 min-w-0">
-                                                                        <div className="font-bold text-sm truncate group-hover:text-amber-400 transition-colors">
+                                                                        <div className="font-bold text-sm truncate group-hover:text-foreground transition-colors">
                                                                             {listing.card_name}
                                                                         </div>
                                                                         {listing.treatment && (
-                                                                            <div className="text-xs text-amber-400/70 mb-1">{listing.treatment}</div>
+                                                                            <div className="text-xs text-muted-foreground mb-1">{listing.treatment}</div>
                                                                         )}
                                                                         <div className="mt-2">
-                                                                            <div className="text-xl font-bold font-mono text-amber-400">${listing.price.toFixed(2)}</div>
+                                                                            <div className="text-xl font-bold font-mono">${listing.price.toFixed(2)}</div>
                                                                             <div className="flex items-center gap-2 text-xs">
                                                                                 <span className="font-mono text-muted-foreground line-through">${listing.floor_price?.toFixed(2)}</span>
-                                                                                <span className="font-mono text-amber-400 font-medium">
-                                                                                    {listing.bidCount > 0 ? `${listing.bidCount} bids` : 'No bids yet'}
+                                                                                <span className="font-mono text-muted-foreground">
+                                                                                    {listing.bidCount > 0 ? `${listing.bidCount} bids` : 'No bids'}
                                                                                 </span>
                                                                             </div>
                                                                         </div>
