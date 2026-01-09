@@ -37,8 +37,8 @@ function BlogLayout() {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
-      {/* Mobile Navigation - horizontal scroll */}
-      <div className="md:hidden border-b border-border bg-card/50 sticky top-14 z-30">
+      {/* Mobile Navigation - horizontal scroll (below nav h-14 + ticker h-8 = 5.5rem) */}
+      <div className="md:hidden border-b border-border bg-card/50 sticky top-[5.5rem] z-30">
         <div className="flex items-center gap-1 p-2 overflow-x-auto scrollbar-none">
           {MOBILE_NAV.map((item) => {
             const Icon = item.icon
@@ -63,8 +63,8 @@ function BlogLayout() {
         </div>
       </div>
 
-      {/* Desktop Sidebar */}
-      <aside className="w-64 border-r border-border bg-card/50 hidden md:flex flex-col fixed top-14 left-0 bottom-10 overflow-y-auto">
+      {/* Desktop Sidebar (below nav h-14 + ticker h-8 = 5.5rem, above footer h-10 = 2.5rem) */}
+      <aside className="w-64 border-r border-border bg-card/50 hidden md:flex flex-col fixed top-[5.5rem] left-0 bottom-10 overflow-y-auto">
         <div className="p-4 flex-1">
           <nav className="space-y-6">
             {BLOG_NAV.map((section) => (
