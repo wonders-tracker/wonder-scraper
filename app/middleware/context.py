@@ -6,7 +6,8 @@ Injects request_id, correlation_id into every request for:
 - Error tracking (group errors by request)
 - Distributed tracing (follow requests across services)
 
-Also tracks performance metrics (latency, status codes).
+Also tracks performance metrics (latency, status codes) and samples
+slow/error requests to the request_trace table for debugging.
 
 Headers:
 - X-Request-ID: Unique ID for this request (generated if not provided)
@@ -27,12 +28,17 @@ from app.core.context import (
     get_request_id,
     set_correlation_id,
     get_correlation_id,
+    set_user_id,
+    get_user_id,
     generate_request_id,
     clear_context,
 )
 from app.core.perf_metrics import perf_metrics
 
 logger = structlog.get_logger(__name__)
+
+# Threshold for sampling slow requests (ms)
+SLOW_REQUEST_THRESHOLD_MS = 500.0
 
 # Request ID validation to prevent log injection attacks
 MAX_ID_LENGTH = 64
@@ -56,6 +62,57 @@ def _validate_id(value: Optional[str]) -> Optional[str]:
     if not SAFE_ID_PATTERN.match(value):
         return None
     return value
+
+
+def _sample_request_trace(
+    request_id: str,
+    correlation_id: Optional[str],
+    method: str,
+    path: str,
+    status_code: int,
+    duration_ms: float,
+    error_type: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> None:
+    """
+    Sample slow or error requests to the request_trace table.
+
+    This is fire-and-forget - failures are logged but don't affect the request.
+    Only samples requests that are slow (>500ms) or errors (5xx).
+    """
+    try:
+        from sqlmodel import Session
+        from app.db import engine
+        from app.models.observability import RequestTrace
+
+        with Session(engine) as session:
+            trace = RequestTrace(
+                request_id=request_id,
+                correlation_id=correlation_id,
+                method=method,
+                path=path[:500],  # Truncate long paths
+                status_code=status_code,
+                duration_ms=duration_ms,
+                user_id=get_user_id(),
+                error_type=error_type[:100] if error_type else None,
+                error_message=error_message[:1000] if error_message else None,
+            )
+            session.add(trace)
+            session.commit()
+
+        logger.debug(
+            "Request trace sampled",
+            request_id=request_id,
+            duration_ms=round(duration_ms, 1),
+            status_code=status_code,
+        )
+    except Exception as e:
+        # Fire-and-forget - log but don't fail the request
+        logger.warning(
+            "Failed to sample request trace",
+            request_id=request_id,
+            error=str(e),
+        )
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -117,6 +174,19 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 perf_metrics.record_request(
                     request.url.path, duration_ms, status_code
                 )
+
+                # Sample slow or error requests to request_trace table
+                is_slow = duration_ms >= SLOW_REQUEST_THRESHOLD_MS
+                is_error = status_code >= 500
+                if is_slow or is_error:
+                    _sample_request_trace(
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                        method=request.method,
+                        path=request.url.path,
+                        status_code=status_code,
+                        duration_ms=duration_ms,
+                    )
 
             # Clean up context to prevent leaking to next request
             clear_context()
