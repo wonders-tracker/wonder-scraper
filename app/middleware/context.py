@@ -14,6 +14,7 @@ Headers:
 - X-Correlation-ID: ID spanning multiple services (passed through)
 """
 
+import asyncio
 import re
 import time
 from typing import Optional
@@ -34,11 +35,17 @@ from app.core.context import (
     clear_context,
 )
 from app.core.perf_metrics import perf_metrics
+from app.core.config import settings
 
 logger = structlog.get_logger(__name__)
 
 # Threshold for sampling slow requests (ms)
 SLOW_REQUEST_THRESHOLD_MS = 500.0
+
+# Bounded semaphore for fire-and-forget trace writes
+# Prevents thread pool exhaustion under heavy load
+_trace_semaphore: Optional[asyncio.Semaphore] = None
+_trace_dropped_count: int = 0
 
 # Request ID validation to prevent log injection attacks
 MAX_ID_LENGTH = 64
@@ -114,6 +121,14 @@ def _sample_request_trace_sync(
         )
 
 
+def _get_trace_semaphore() -> asyncio.Semaphore:
+    """Get or create the bounded semaphore for trace writes."""
+    global _trace_semaphore
+    if _trace_semaphore is None:
+        _trace_semaphore = asyncio.Semaphore(settings.TRACE_QUEUE_MAX_SIZE)
+    return _trace_semaphore
+
+
 async def _sample_request_trace(
     request_id: str,
     correlation_id: Optional[str],
@@ -130,25 +145,45 @@ async def _sample_request_trace(
 
     Uses thread pool executor to avoid blocking the event loop.
     Fire-and-forget - failures are logged but don't affect the request.
-    """
-    import asyncio
 
-    # Use get_running_loop() instead of deprecated get_event_loop()
-    loop = asyncio.get_running_loop()
-    # Use default executor (thread pool) to run sync DB operation
-    loop.run_in_executor(
-        None,  # Default executor
-        _sample_request_trace_sync,
-        request_id,
-        correlation_id,
-        user_id,
-        method,
-        path,
-        status_code,
-        duration_ms,
-        error_type,
-        error_message,
-    )
+    Bounded queue: If more than TRACE_QUEUE_MAX_SIZE traces are pending,
+    new traces are dropped to prevent thread pool exhaustion under load.
+    """
+    global _trace_dropped_count
+
+    semaphore = _get_trace_semaphore()
+
+    # Try to acquire semaphore without blocking
+    # If queue is full, drop this trace (backpressure)
+    if semaphore.locked():
+        _trace_dropped_count += 1
+        if _trace_dropped_count % 100 == 1:  # Log every 100th drop
+            logger.warning(
+                "Trace queue full, dropping request trace",
+                request_id=request_id,
+                dropped_total=_trace_dropped_count,
+            )
+        return
+
+    async def _run_with_semaphore():
+        async with semaphore:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,  # Default executor
+                _sample_request_trace_sync,
+                request_id,
+                correlation_id,
+                user_id,
+                method,
+                path,
+                status_code,
+                duration_ms,
+                error_type,
+                error_message,
+            )
+
+    # Fire-and-forget: schedule the task but don't await it
+    asyncio.create_task(_run_with_semaphore())
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):

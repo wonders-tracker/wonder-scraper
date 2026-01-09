@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     SENTRY_ENVIRONMENT: str = "production"  # production, staging, development
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions traced
 
+    # Request Trace Sampling (fire-and-forget DB writes)
+    # Max concurrent trace writes - prevents thread pool exhaustion under load
+    TRACE_QUEUE_MAX_SIZE: int = 50
+
     # Anti-scraping
     ANTI_SCRAPING_STATE_TTL_SECONDS: int = 900
     ANTI_SCRAPING_MAX_TRACKED_IPS: int = 5000
@@ -81,6 +85,8 @@ class Settings(BaseSettings):
     BROWSER_SEMAPHORE_LIMIT: int = 2  # Reduced from 4 to avoid eBay rate limits
     # Maximum browser restart attempts before extended cooldown
     BROWSER_MAX_RESTARTS: int = 3
+    # Absolute maximum total restarts before giving up (hard safety limit)
+    BROWSER_MAX_TOTAL_RESTARTS: int = 20
     # Seconds between proactive health checks
     BROWSER_HEALTH_CHECK_INTERVAL: int = 30
     # Consecutive timeouts before forcing hard restart

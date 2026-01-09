@@ -208,7 +208,7 @@ class BrowserManager:
 
     Class Variables:
         _total_restarts: Absolute restart count (hard limit, never decremented)
-        _max_total_restarts: Give up after this many restarts (default: 20)
+        _max_total_restarts: Give up after this many restarts (from settings)
         _restart_count: Restarts within current cycle (resets after extended cooldown)
     """
 
@@ -217,7 +217,7 @@ class BrowserManager:
     _restart_count: int = 0  # Restarts within current cooldown cycle
     _max_restarts: int = settings.BROWSER_MAX_RESTARTS
     _total_restarts: int = 0  # Absolute total restarts (hard safety limit)
-    _max_total_restarts: int = 20  # Give up after this many total restarts
+    _max_total_restarts: int = settings.BROWSER_MAX_TOTAL_RESTARTS
     _startup_timeout: int = settings.BROWSER_STARTUP_TIMEOUT
     _page_count: int = 0
     _max_pages_before_restart: int = settings.BROWSER_MAX_PAGES_BEFORE_RESTART
