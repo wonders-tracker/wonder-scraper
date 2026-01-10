@@ -51,8 +51,7 @@ def create_price_alert(
 
     if existing:
         raise HTTPException(
-            status_code=400,
-            detail=f"You already have an active '{alert_in.alert_type.value}' alert for this card"
+            status_code=400, detail=f"You already have an active '{alert_in.alert_type.value}' alert for this card"
         )
 
     # Get current price for reference
@@ -183,10 +182,7 @@ def update_price_alert(
 
     # Only allow updates on active alerts
     if alert.status != AlertStatus.ACTIVE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot update alert with status '{alert.status.value}'"
-        )
+        raise HTTPException(status_code=400, detail=f"Cannot update alert with status '{alert.status.value}'")
 
     # Apply updates
     update_data = alert_in.model_dump(exclude_unset=True)

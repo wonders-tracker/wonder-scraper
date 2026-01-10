@@ -277,9 +277,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             # Record performance metrics (skip health checks to avoid noise)
             duration_ms = (time.perf_counter() - start_time) * 1000
             if not request.url.path.startswith("/health"):
-                perf_metrics.record_request(
-                    request.url.path, duration_ms, status_code
-                )
+                perf_metrics.record_request(request.url.path, duration_ms, status_code)
 
                 # Sample slow or error requests to request_trace table
                 is_slow = duration_ms >= SLOW_REQUEST_THRESHOLD_MS

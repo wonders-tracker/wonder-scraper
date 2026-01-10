@@ -380,11 +380,13 @@ class BrowserManager:
                 # cycle_number is 0-indexed: first cycle = 0, second = 1, etc.
                 cycle_number = (cls._total_restarts - 1) // cls._max_restarts
                 cooldown_multiplier = min(cycle_number, 5)
-                cooldown = settings.BROWSER_EXTENDED_COOLDOWN * (2 ** cooldown_multiplier)
+                cooldown = settings.BROWSER_EXTENDED_COOLDOWN * (2**cooldown_multiplier)
                 cooldown = min(cooldown, 300)  # Cap at 5 minutes
 
-                print(f"[Browser] Restarted {cls._restart_count} times. "
-                      f"Extended cooldown: {cooldown}s (cycle {cycle_number + 1})")
+                print(
+                    f"[Browser] Restarted {cls._restart_count} times. "
+                    f"Extended cooldown: {cooldown}s (cycle {cycle_number + 1})"
+                )
                 cls._restart_count = 1  # Reset for next cycle (this restart counts as 1)
 
                 # Cooldown under lock - this is safe because:
@@ -394,8 +396,10 @@ class BrowserManager:
                 await asyncio.sleep(cooldown)
 
             cls._page_count = 0
-            print(f"[Browser] Restarting browser (attempt {cls._restart_count}/{cls._max_restarts}, "
-                  f"total: {cls._total_restarts}/{cls._max_total_restarts})...")
+            print(
+                f"[Browser] Restarting browser (attempt {cls._restart_count}/{cls._max_restarts}, "
+                f"total: {cls._total_restarts}/{cls._max_total_restarts})..."
+            )
 
             # Close existing browser
             await cls._close_internal()

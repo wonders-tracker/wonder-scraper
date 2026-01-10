@@ -61,16 +61,12 @@ class HealthCheck:
 
                 # Check last scrape time for sold listings
                 last_sold = session.execute(
-                    select(func.max(MarketPrice.scraped_at)).where(
-                        MarketPrice.listing_type == "sold"
-                    )
+                    select(func.max(MarketPrice.scraped_at)).where(MarketPrice.listing_type == "sold")
                 ).scalar()
 
                 # Check last scrape time for active listings
                 last_active = session.execute(
-                    select(func.max(MarketPrice.scraped_at)).where(
-                        MarketPrice.listing_type == "active"
-                    )
+                    select(func.max(MarketPrice.scraped_at)).where(MarketPrice.listing_type == "active")
                 ).scalar()
 
                 if not last_sold:
@@ -82,9 +78,7 @@ class HealthCheck:
                     }
 
                 sold_hours_ago = (now - last_sold).total_seconds() / 3600
-                active_hours_ago = (
-                    (now - last_active).total_seconds() / 3600 if last_active else None
-                )
+                active_hours_ago = (now - last_active).total_seconds() / 3600 if last_active else None
 
                 # Check against thresholds
                 status = check_threshold(sold_hours_ago, HealthThresholds.SCRAPER_STALE_HOURS)
@@ -102,9 +96,7 @@ class HealthCheck:
                 return {
                     "status": status,
                     "last_sold_hours_ago": round(sold_hours_ago, 1),
-                    "last_active_hours_ago": round(active_hours_ago, 1)
-                    if active_hours_ago
-                    else None,
+                    "last_active_hours_ago": round(active_hours_ago, 1) if active_hours_ago else None,
                     "threshold_warn_hours": HealthThresholds.SCRAPER_STALE_HOURS.warning,
                     "threshold_crit_hours": HealthThresholds.SCRAPER_STALE_HOURS.critical,
                     **metrics_summary,
@@ -141,9 +133,7 @@ class HealthCheck:
                 "slow_request_pct": slow_pct,
                 "threshold_warn_pct": HealthThresholds.API_SLOW_REQUEST_RATE.warning * 100,
                 "threshold_crit_pct": HealthThresholds.API_SLOW_REQUEST_RATE.critical * 100,
-                "slowest_endpoints": [
-                    {"endpoint": e["endpoint"], "p95_ms": e["p95_ms"]} for e in slowest
-                ],
+                "slowest_endpoints": [{"endpoint": e["endpoint"], "p95_ms": e["p95_ms"]} for e in slowest],
             }
 
         except Exception as e:
@@ -165,12 +155,8 @@ class HealthCheck:
             states = CircuitBreakerRegistry.get_all_states()
 
             open_circuits = [name for name, state in states.items() if state == "open"]
-            half_open_circuits = [
-                name for name, state in states.items() if state == "half_open"
-            ]
-            closed_circuits = [
-                name for name, state in states.items() if state == "closed"
-            ]
+            half_open_circuits = [name for name, state in states.items() if state == "half_open"]
+            closed_circuits = [name for name, state in states.items() if state == "closed"]
 
             status: ThresholdStatus = "ok"
             if open_circuits:

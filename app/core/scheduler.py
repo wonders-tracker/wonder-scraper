@@ -1501,6 +1501,7 @@ async def job_generate_weekly_blog_post():
         import sys
         import re
         import yaml
+
         script_dir = Path(__file__).parent.parent.parent / "scripts"
         if str(script_dir) not in sys.path:
             sys.path.insert(0, str(script_dir))
@@ -1512,10 +1513,10 @@ async def job_generate_weekly_blog_post():
         content, date_string = generate_mdx_post(date_str=None, use_ai=True)
 
         # Parse frontmatter from the MDX content
-        frontmatter_match = re.match(r'^---\n(.*?)\n---\n', content, re.DOTALL)
+        frontmatter_match = re.match(r"^---\n(.*?)\n---\n", content, re.DOTALL)
         if frontmatter_match:
             frontmatter = yaml.safe_load(frontmatter_match.group(1))
-            mdx_content = content[frontmatter_match.end():]
+            mdx_content = content[frontmatter_match.end() :]
         else:
             frontmatter = {}
             mdx_content = content
@@ -1530,9 +1531,7 @@ async def job_generate_weekly_blog_post():
 
         # Save to database (upsert - update if exists)
         with Session(engine) as session:
-            existing = session.exec(
-                select(BlogPost).where(BlogPost.slug == slug)
-            ).first()
+            existing = session.exec(select(BlogPost).where(BlogPost.slug == slug)).first()
 
             if existing:
                 # Update existing post
@@ -1568,12 +1567,13 @@ async def job_generate_weekly_blog_post():
 
         # Log success to Discord
         from app.discord_bot.logger import log_info
+
         log_info(
             "📝 Weekly Blog Post Generated",
             f"Weekly movers report for {date_string} has been saved to database.\n\n"
             f"**Slug:** `{slug}`\n"
             f"**Action:** {action}\n"
-            "Available via `/api/v1/blog/posts/{slug}`"
+            "Available via `/api/v1/blog/posts/{slug}`",
         )
 
     except ImportError as e:

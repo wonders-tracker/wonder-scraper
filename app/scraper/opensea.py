@@ -954,7 +954,11 @@ async def scrape_opensea_sales_to_db(
                 continue
 
             # Use tx_hash as external_id for deduplication (unique per sale)
-            external_id = f"opensea_sale_{sale.tx_hash}" if sale.tx_hash else f"opensea_sale_{collection_slug}_{sale.token_id}_{sale.sold_at.isoformat()}"
+            external_id = (
+                f"opensea_sale_{sale.tx_hash}"
+                if sale.tx_hash
+                else f"opensea_sale_{collection_slug}_{sale.token_id}_{sale.sold_at.isoformat()}"
+            )
 
             # Check if we already have this sale
             from sqlmodel import select

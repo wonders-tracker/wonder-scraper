@@ -93,9 +93,7 @@ class PerformanceMetrics:
         self._endpoints: Dict[str, EndpointMetrics] = {}
         self._lock = Lock()
 
-    def record_request(
-        self, endpoint: str, latency_ms: float, status_code: int = 200
-    ) -> None:
+    def record_request(self, endpoint: str, latency_ms: float, status_code: int = 200) -> None:
         """
         Record a request.
 
@@ -186,9 +184,7 @@ class PerformanceMetrics:
                 else:  # p95
                     return metrics.p95 or 0.0
 
-            sorted_endpoints = sorted(
-                self._endpoints.values(), key=sort_key, reverse=True
-            )[:n]
+            sorted_endpoints = sorted(self._endpoints.values(), key=sort_key, reverse=True)[:n]
 
             return [
                 {
@@ -215,9 +211,7 @@ class PerformanceMetrics:
                 "p95_ms": round(metrics.p95 or 0, 1),
                 "p99_ms": round(metrics.p99 or 0, 1),
                 "status_codes": dict(metrics.status_codes),
-                "last_request_at": metrics.last_request_at.isoformat()
-                if metrics.last_request_at
-                else None,
+                "last_request_at": metrics.last_request_at.isoformat() if metrics.last_request_at else None,
             }
 
     def clear(self) -> None:

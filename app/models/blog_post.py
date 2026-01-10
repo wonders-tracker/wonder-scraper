@@ -21,8 +21,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 
 from sqlmodel import Field, SQLModel, Column
-from sqlalchemy import Text, Index
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Text, Index, JSON
 
 
 class BlogPost(SQLModel, table=True):
@@ -53,7 +52,7 @@ class BlogPost(SQLModel, table=True):
     description: Optional[str] = Field(default=None, max_length=1000)
     content: str = Field(sa_column=Column(Text, nullable=False))
     category: str = Field(default="analysis", max_length=50)
-    tags: List[str] = Field(default_factory=list, sa_column=Column(JSONB, default=[]))
+    tags: List[str] = Field(default_factory=list, sa_column=Column(JSON, default=[]))
     author: str = Field(default="system", max_length=100)
     read_time: int = Field(default=3)  # minutes
     published_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

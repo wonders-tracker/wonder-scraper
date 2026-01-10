@@ -725,9 +725,7 @@ def read_card(
         card_id_int = ensure_int(card.id)
 
         # First try 30 days (same as list endpoint)
-        floor_results = floor_service.get_floor_prices_batch(
-            [card_id_int], days=30, by_variant=True
-        )
+        floor_results = floor_service.get_floor_prices_batch([card_id_int], days=30, by_variant=True)
         if floor_results:
             floor_by_variant = {}
             for (cid, variant), result in floor_results.items():
@@ -739,9 +737,7 @@ def read_card(
         # Fallback: 90 days if no results from 30 days
         # Note: Don't use order book fallback - floor should be based on sold data only
         if not floor_by_variant:
-            floor_results = floor_service.get_floor_prices_batch(
-                [card_id_int], days=90, by_variant=True
-            )
+            floor_results = floor_service.get_floor_prices_batch([card_id_int], days=90, by_variant=True)
             if floor_results:
                 floor_by_variant = {}
                 for (cid, variant), result in floor_results.items():
@@ -1369,19 +1365,21 @@ def read_card_variants(
 
     variants = []
     for row in result:
-        variants.append({
-            "id": card.id,
-            "name": card.name,
-            "slug": card.slug,
-            "treatment": row[0],
-            "floor_price": float(row[1]) if row[1] else None,
-            "lowest_ask": float(row[2]) if row[2] else None,
-            "inventory": row[3] or 0,
-            "sales_count": row[4] or 0,
-            "image_url": card.cardeio_image_url or card.image_url,
-            "rarity_name": rarity_name,
-            "set_name": card.set_name,
-        })
+        variants.append(
+            {
+                "id": card.id,
+                "name": card.name,
+                "slug": card.slug,
+                "treatment": row[0],
+                "floor_price": float(row[1]) if row[1] else None,
+                "lowest_ask": float(row[2]) if row[2] else None,
+                "inventory": row[3] or 0,
+                "sales_count": row[4] or 0,
+                "image_url": card.cardeio_image_url or card.image_url,
+                "rarity_name": rarity_name,
+                "set_name": card.set_name,
+            }
+        )
 
     response = {
         "card_id": card.id,
@@ -1480,18 +1478,20 @@ def read_similar_cards(
 
     similar_cards = []
     for row in result:
-        similar_cards.append({
-            "id": row[0],
-            "name": row[1],
-            "slug": row[2],
-            "set_name": row[3],
-            "product_type": row[4],
-            "image_url": row[5],
-            "rarity_name": row[6],
-            "floor_price": float(row[7]) if row[7] else None,
-            "lowest_ask": float(row[8]) if row[8] else None,
-            "inventory": row[9] or 0,
-        })
+        similar_cards.append(
+            {
+                "id": row[0],
+                "name": row[1],
+                "slug": row[2],
+                "set_name": row[3],
+                "product_type": row[4],
+                "image_url": row[5],
+                "rarity_name": row[6],
+                "floor_price": float(row[7]) if row[7] else None,
+                "lowest_ask": float(row[8]) if row[8] else None,
+                "inventory": row[9] or 0,
+            }
+        )
 
     response = {
         "card_id": card.id,

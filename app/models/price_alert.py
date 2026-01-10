@@ -18,15 +18,17 @@ def _utc_now() -> datetime:
 
 class AlertType(str, Enum):
     """Type of price alert"""
+
     BELOW = "below"  # Alert when price drops below target
     ABOVE = "above"  # Alert when price rises above target
 
 
 class AlertStatus(str, Enum):
     """Status of a price alert"""
-    ACTIVE = "active"      # Actively monitoring
+
+    ACTIVE = "active"  # Actively monitoring
     TRIGGERED = "triggered"  # Alert was triggered
-    EXPIRED = "expired"    # Alert expired without triggering
+    EXPIRED = "expired"  # Alert expired without triggering
     CANCELLED = "cancelled"  # User cancelled the alert
 
 
@@ -74,6 +76,7 @@ class PriceAlert(SQLModel, table=True):
 
 class PriceAlertCreate(SQLModel):
     """Schema for creating a new price alert"""
+
     card_id: int
     target_price: float
     alert_type: AlertType = AlertType.BELOW
@@ -83,6 +86,7 @@ class PriceAlertCreate(SQLModel):
 
 class PriceAlertRead(SQLModel):
     """Schema for reading a price alert"""
+
     id: int
     user_id: int
     card_id: int
@@ -100,6 +104,7 @@ class PriceAlertRead(SQLModel):
 
 class PriceAlertUpdate(SQLModel):
     """Schema for updating a price alert"""
+
     target_price: Optional[float] = None
     alert_type: Optional[AlertType] = None
     treatment: Optional[str] = None

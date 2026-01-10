@@ -225,8 +225,4 @@ class HealthThresholds:
     @classmethod
     def get_all(cls) -> dict[str, Threshold]:
         """Get all thresholds as dict."""
-        return {
-            name: value
-            for name, value in vars(cls).items()
-            if isinstance(value, Threshold)
-        }
+        return {name: value for name, value in vars(cls).items() if isinstance(value, Threshold)}

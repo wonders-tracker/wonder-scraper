@@ -199,9 +199,7 @@ class PersistentMetricsStore(MetricsStore):
                 job_name=job_name,
                 error=str(e),
             )
-            capture_exception(
-                e, context={"job_name": job_name, "action": "record_complete"}
-            )
+            capture_exception(e, context={"job_name": job_name, "action": "record_complete"})
 
     def snapshot_all(self) -> int:
         """
@@ -277,9 +275,7 @@ class PersistentMetricsStore(MetricsStore):
                     {
                         "id": log.id,
                         "started_at": log.started_at.isoformat(),
-                        "completed_at": log.completed_at.isoformat()
-                        if log.completed_at
-                        else None,
+                        "completed_at": log.completed_at.isoformat() if log.completed_at else None,
                         "status": log.status,
                         "cards_processed": log.cards_processed,
                         "successful": log.successful,

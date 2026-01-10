@@ -58,14 +58,10 @@ async def check_worker_health() -> Dict[str, Any]:
                 hours_since_last = None
 
                 # Find the most recent job ever
-                last_job = session.exec(
-                    select(ScraperJobLog).order_by(ScraperJobLog.started_at.desc())
-                ).first()
+                last_job = session.exec(select(ScraperJobLog).order_by(ScraperJobLog.started_at.desc())).first()
 
                 if last_job:
-                    hours_since_last = (
-                        now - last_job.started_at
-                    ).total_seconds() / 3600
+                    hours_since_last = (now - last_job.started_at).total_seconds() / 3600
 
                 status = check_threshold(
                     hours_since_last or 999,
@@ -75,21 +71,15 @@ async def check_worker_health() -> Dict[str, Any]:
                 return {
                     "status": status,
                     "reason": "No jobs in last 2 hours",
-                    "last_job_at": last_job.started_at.isoformat()
-                    if last_job
-                    else None,
-                    "hours_since_last_job": round(hours_since_last, 1)
-                    if hours_since_last
-                    else None,
+                    "last_job_at": last_job.started_at.isoformat() if last_job else None,
+                    "hours_since_last_job": round(hours_since_last, 1) if hours_since_last else None,
                 }
 
             # Check for stuck jobs (running > 30 minutes)
             stuck_jobs = session.exec(
                 select(ScraperJobLog)
                 .where(ScraperJobLog.status == "running")
-                .where(
-                    ScraperJobLog.started_at < now - timedelta(minutes=30)
-                )
+                .where(ScraperJobLog.started_at < now - timedelta(minutes=30))
             ).all()
 
             if stuck_jobs:
@@ -100,26 +90,20 @@ async def check_worker_health() -> Dict[str, Any]:
                         {
                             "job_name": j.job_name,
                             "started_at": j.started_at.isoformat(),
-                            "minutes_running": int(
-                                (now - j.started_at).total_seconds() / 60
-                            ),
+                            "minutes_running": int((now - j.started_at).total_seconds() / 60),
                         }
                         for j in stuck_jobs
                     ],
                 }
 
             # Check failure rate
-            completed_jobs = [
-                j for j in recent_jobs if j.status in ["completed", "failed"]
-            ]
+            completed_jobs = [j for j in recent_jobs if j.status in ["completed", "failed"]]
 
             if completed_jobs:
                 failed_count = len([j for j in completed_jobs if j.status == "failed"])
                 failure_rate = failed_count / len(completed_jobs)
 
-                status = check_threshold(
-                    failure_rate, HealthThresholds.WORKER_JOB_FAILURE_RATE
-                )
+                status = check_threshold(failure_rate, HealthThresholds.WORKER_JOB_FAILURE_RATE)
 
                 if status != "ok":
                     return {

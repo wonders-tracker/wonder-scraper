@@ -9,29 +9,30 @@
       "id": "E1",
       "name": "Layout Foundation",
       "description": "Two-column responsive grid system and base structure",
-      "status": "pending",
+      "status": "completed",
       "sprint": 1,
       "units": [
         {
           "id": "E1-U1",
           "name": "Create two-column grid layout component",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
-          "files": ["frontend/app/routes/cards.$cardId.tsx", "frontend/app/components/CardDetailLayout.tsx"],
+          "files": ["frontend/app/routes/cards.$cardId.tsx", "frontend/app/components/card-detail/CardDetailLayout.tsx", "frontend/app/components/card-detail/index.ts"],
           "acceptance_criteria": [
             "Desktop: 40% left column (card), 60% right column (price box)",
             "Tablet: 50/50 split",
             "Mobile: Single column stack",
             "Smooth breakpoint transitions",
             "No horizontal scroll at any viewport"
-          ]
+          ],
+          "completed_at": "2026-01-08"
         },
         {
           "id": "E1-U2",
           "name": "Build CardHero component (left column)",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
-          "files": ["frontend/app/components/CardHero.tsx"],
+          "files": ["frontend/app/components/card-detail/CardHero.tsx"],
           "acceptance_criteria": [
             "Large card image with zoom on hover",
             "Card name as h1 with set name subtitle",
@@ -39,20 +40,24 @@
             "Card text/description if available",
             "Artist credit if available",
             "Proper image fallback for missing images"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "WebGL shaders via @paper-design/shaders-react (MeshGradient, NeuroNoise, GrainGradient) + CSS foil effects inspired by pokemon-cards-css"
         },
         {
           "id": "E1-U3",
           "name": "Create page section containers",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
-          "files": ["frontend/app/components/ui/Section.tsx"],
+          "files": ["frontend/app/components/card-detail/CardDetailLayout.tsx"],
           "acceptance_criteria": [
             "Consistent section spacing (32px desktop, 24px mobile)",
             "Section headers with optional 'View More' links",
             "Divider lines between major sections",
             "Max-width container (1400px) with padding"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "Enhanced Section component with collapsible support, loading states, badges, and accessibility fixes"
         }
       ]
     },
@@ -60,29 +65,31 @@
       "id": "E2",
       "name": "Price Box & Actions",
       "description": "Right-side pricing display with treatment selector and listing panel",
-      "status": "pending",
+      "status": "completed",
       "sprint": 1,
       "units": [
         {
           "id": "E2-U1",
           "name": "Build PriceBox component",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
-          "files": ["frontend/app/components/PriceBox.tsx"],
+          "files": ["frontend/app/components/card-detail/PriceBox.tsx"],
           "acceptance_criteria": [
             "Treatment/condition dropdown selector",
             "Large price display ($XX.XX format)",
             "Price source indicator (Floor/FMP/Lowest Ask)",
             "Shipping estimate or 'varies' indicator",
             "Seller count badge (e.g., '12 sellers')"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "Includes loading skeleton, FMP blurred state for non-logged-in users, and View Listings button"
         },
         {
           "id": "E2-U2",
           "name": "Build ListingsPanel (slide-out or modal)",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
-          "files": ["frontend/app/components/ListingsPanel.tsx"],
+          "files": ["frontend/app/components/card-detail/ListingsPanel.tsx"],
           "acceptance_criteria": [
             "Triggered by 'View X Listings' button",
             "Shows paginated list of external listings",
@@ -90,33 +97,39 @@
             "Click-through links to external sites",
             "Close button and click-outside-to-close",
             "Loading and empty states"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "Slide-in modal with compound component pattern, focus trap, pagination, and accessibility enhancements"
         },
         {
           "id": "E2-U3",
           "name": "Add portfolio/watchlist actions",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
-          "files": ["frontend/app/components/PriceBox.tsx"],
+          "files": ["frontend/app/components/card-detail/PriceBox.tsx"],
           "acceptance_criteria": [
             "Add to Portfolio button (opens existing modal)",
             "Add to Watchlist toggle button",
             "Visual feedback on action completion",
             "Login prompt for unauthenticated users"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "Heart toggle with fill animation, green feedback on portfolio add, disabled state for logged-out users"
         },
         {
           "id": "E2-U4",
           "name": "Price comparison summary",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
-          "files": ["frontend/app/components/PriceBox.tsx"],
+          "files": ["frontend/app/components/card-detail/PriceBox.tsx"],
           "acceptance_criteria": [
             "Show lowest price per platform (eBay, Blokpax)",
             "Platform logos/icons",
             "Direct links to platform search",
             "Last updated timestamp"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "Includes platform badges, direct search links, last updated timestamp, and compact product details section"
         }
       ]
     },
@@ -124,15 +137,15 @@
       "id": "E3",
       "name": "Market Data Section",
       "description": "Price Points, Price History chart, and snapshot metrics",
-      "status": "pending",
+      "status": "completed",
       "sprint": 2,
       "units": [
         {
           "id": "E3-U1",
           "name": "Build PricePoints component",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
-          "files": ["frontend/app/components/PricePoints.tsx"],
+          "files": ["frontend/app/components/card-detail/PricePoints.tsx"],
           "acceptance_criteria": [
             "Market Price (FMP) with tooltip explanation",
             "Most Recent Sale price and date",
@@ -141,12 +154,13 @@
             "Current Quantity (active listing count)",
             "Current Sellers (unique seller count)",
             "Info icons with tooltips for each metric"
-          ]
+          ],
+          "completed_at": "2026-01-08"
         },
         {
           "id": "E3-U2",
           "name": "Refactor PriceHistoryChart with time toggles",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
           "files": ["frontend/app/components/charts/PriceHistoryChart.tsx"],
           "acceptance_criteria": [
@@ -156,12 +170,13 @@
             "Y-axis scales appropriately to data range",
             "Tooltip shows date, price, treatment on hover",
             "Loading skeleton while fetching"
-          ]
+          ],
+          "completed_at": "2026-01-08"
         },
         {
           "id": "E3-U3",
           "name": "Build ThreeMonthSnapshot component",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
           "files": ["frontend/app/components/ThreeMonthSnapshot.tsx"],
           "acceptance_criteria": [
@@ -171,12 +186,13 @@
             "Avg Daily Sold calculation",
             "Visual card/box layout matching TCGPlayer",
             "Link to 'View More Data'"
-          ]
+          ],
+          "completed_at": "2026-01-08"
         },
         {
           "id": "E3-U4",
           "name": "Treatment Comparison Prices section",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
           "files": ["frontend/app/components/TreatmentComparison.tsx"],
           "acceptance_criteria": [
@@ -185,7 +201,8 @@
             "Clickable rows to filter page by treatment",
             "Highlight current selected treatment",
             "Sort by price or volume"
-          ]
+          ],
+          "completed_at": "2026-01-08"
         }
       ]
     },
@@ -193,62 +210,69 @@
       "id": "E4",
       "name": "Listings Table",
       "description": "Full paginated listings table with seller details",
-      "status": "pending",
+      "status": "completed",
       "sprint": 2,
       "units": [
         {
           "id": "E4-U1",
           "name": "Build ListingsTable component",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
-          "files": ["frontend/app/components/ListingsTable.tsx"],
+          "files": ["frontend/app/components/card-detail/ListingsTable.tsx"],
           "acceptance_criteria": [
             "Columns: Seller, Condition/Treatment, Price, Shipping, Platform, Action",
             "Sortable columns (price, date)",
             "Pagination (10/25/50 per page options)",
             "Row count header (e.g., '1,000+ Listings')",
             "Alternating row colors for readability"
-          ]
+          ],
+          "completed_at": "2026-01-08"
         },
         {
           "id": "E4-U2",
           "name": "Seller info display",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
-          "files": ["frontend/app/components/ListingsTable.tsx"],
+          "files": ["frontend/app/components/card-detail/ListingsTable.tsx"],
           "acceptance_criteria": [
             "Seller name as link to their store/profile",
             "Feedback score (e.g., '100% (1,234 Sales)')",
             "Platform badge (eBay/Blokpax icon)",
             "Truncate long seller names with tooltip"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "SellerBadge component integrated with feedback score display"
         },
         {
           "id": "E4-U3",
           "name": "Listing row actions",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
-          "files": ["frontend/app/components/ListingsTable.tsx"],
+          "files": ["frontend/app/components/card-detail/ListingsTable.tsx"],
           "acceptance_criteria": [
             "View on [Platform] button",
             "Opens in new tab",
             "Track click for analytics",
             "Disabled state for unavailable listings"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "View button opens in new tab with proper analytics tracking"
         },
         {
           "id": "E4-U4",
           "name": "Table filtering and sorting",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
-          "files": ["frontend/app/components/ListingsTable.tsx"],
+          "files": ["frontend/app/routes/cards.$cardId.tsx", "frontend/app/components/card-detail/ListingsTable.tsx"],
           "acceptance_criteria": [
             "Sort by dropdown (Price + Shipping, Price, Recently Listed)",
             "Filter by platform (All, eBay, Blokpax)",
             "Filter by treatment if multiple",
             "Persist filter state in URL params",
             "Clear filters button"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "URL params support via TanStack Router validateSearch - treatment, range, sort, dir, page all persisted to URL for shareable links"
         }
       ]
     },
@@ -256,27 +280,29 @@
       "id": "E5",
       "name": "Similar Cards Section",
       "description": "Related cards carousel/grid",
-      "status": "pending",
+      "status": "completed",
       "sprint": 3,
       "units": [
         {
           "id": "E5-U1",
           "name": "Build SimilarCards carousel component",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
-          "files": ["frontend/app/components/SimilarCards.tsx"],
+          "files": ["frontend/app/components/card-detail/SimilarCards.tsx"],
           "acceptance_criteria": [
             "Horizontal scrollable carousel",
             "Arrow navigation buttons",
             "Touch swipe support on mobile",
             "Card shows: image, name, price, listings count",
             "Click navigates to that card's detail page"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "CSS scroll-snap carousel with gradient fades, swipe hint on mobile"
         },
         {
           "id": "E5-U2",
           "name": "API: Get card variants endpoint",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
           "files": ["app/api/cards.py"],
           "acceptance_criteria": [
@@ -284,12 +310,14 @@
             "Includes floor price for each variant",
             "Includes listing count for each",
             "Ordered by price or popularity"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "GET /cards/{id}/variants - returns treatments with floor/ask/inventory"
         },
         {
           "id": "E5-U3",
           "name": "API: Get similar cards endpoint",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
           "files": ["app/api/cards.py"],
           "acceptance_criteria": [
@@ -297,12 +325,14 @@
             "Excludes current card",
             "Includes floor price and volume",
             "Limit to 10-12 cards"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "GET /cards/{id}/similar - same rarity/set, ordered by volume"
         },
         {
           "id": "E5-U4",
           "name": "Integrate variants and similar sections",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
           "files": ["frontend/app/routes/cards.$cardId.tsx"],
           "acceptance_criteria": [
@@ -310,7 +340,9 @@
             "Show 'Similar Cards' section with same-rarity cards",
             "Loading skeletons for both",
             "Empty state if no variants/similar cards"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "Integrated between TreatmentPricingTable and Sales Table"
         }
       ]
     },
@@ -318,40 +350,44 @@
       "id": "E6",
       "name": "Mobile Optimization",
       "description": "Responsive behavior and mobile-specific UX",
-      "status": "pending",
+      "status": "completed",
       "sprint": 3,
       "units": [
         {
           "id": "E6-U1",
           "name": "Implement vertical stack layout",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
-          "files": ["frontend/app/routes/cards.$cardId.tsx"],
+          "files": ["frontend/app/routes/cards.$cardId.tsx", "frontend/app/components/card-detail/CardDetailLayout.tsx"],
           "acceptance_criteria": [
             "Order: Image -> Price Box -> Chart -> Price Points -> Listings",
             "Proper spacing between stacked sections",
             "Full-width components on mobile",
             "No horizontal overflow"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "CardDetailLayout already handles responsive stack, improved chart header responsiveness"
         },
         {
           "id": "E6-U2",
           "name": "Build sticky price header",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
-          "files": ["frontend/app/components/StickyPriceHeader.tsx"],
+          "files": ["frontend/app/components/card-detail/StickyPriceHeader.tsx"],
           "acceptance_criteria": [
             "Appears when scrolling past price box",
             "Shows: Card name, price, 'View Listings' button",
             "Compact height (48-56px)",
             "Smooth show/hide animation",
             "Z-index above content, below modals"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "IntersectionObserver-based scroll detection, smooth transitions, scroll-to-listings"
         },
         {
           "id": "E6-U3",
           "name": "Mobile listings view",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
           "files": ["frontend/app/components/ui/mobile-card-list.tsx"],
           "acceptance_criteria": [
@@ -359,20 +395,24 @@
             "Each card shows key info without horizontal scroll",
             "Infinite scroll or 'Load More' button",
             "Touch-friendly tap targets (44px min)"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "MobileCardList component already exists with card-based layout and 44px tap targets"
         },
         {
           "id": "E6-U4",
           "name": "Mobile chart interactions",
-          "status": "pending",
+          "status": "completed",
           "priority": "P1",
-          "files": ["frontend/app/components/charts/PriceHistoryChart.tsx"],
+          "files": ["frontend/app/routes/cards.$cardId.tsx"],
           "acceptance_criteria": [
             "Time range buttons wrap or scroll horizontally",
             "Touch-friendly tooltip on tap",
             "Pinch-to-zoom disabled (use time range instead)",
             "Chart height adjusted for mobile viewport"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "Chart header now responsive with flex-wrap, 44px touch targets, scrollable buttons"
         }
       ]
     },
@@ -386,15 +426,17 @@
         {
           "id": "E7-U1",
           "name": "Loading states and skeletons",
-          "status": "pending",
+          "status": "completed",
           "priority": "P0",
-          "files": ["frontend/app/components/ui/skeleton.tsx"],
+          "files": ["frontend/app/components/ui/skeleton.tsx", "frontend/app/routes/cards.$cardId.tsx"],
           "acceptance_criteria": [
             "Skeleton loaders for all async sections",
             "Consistent skeleton styling",
             "No layout shift when data loads",
             "Graceful error states with retry"
-          ]
+          ],
+          "completed_at": "2026-01-08",
+          "notes": "Created reusable Skeleton component library with CardDetailPageSkeleton, SkeletonChart, SkeletonTableRows. Updated page to use proper skeleton loading states."
         },
         {
           "id": "E7-U2",
@@ -458,24 +500,27 @@
       "name": "Foundation & Core UI",
       "epics": ["E1", "E2"],
       "goal": "Two-column layout with price box and listings panel working",
-      "status": "pending",
-      "units_count": 7
+      "status": "completed",
+      "units_count": 7,
+      "completed_at": "2026-01-08"
     },
     {
       "id": 2,
       "name": "Market Data & Listings",
       "epics": ["E3", "E4"],
       "goal": "Complete market data section and full listings table",
-      "status": "pending",
-      "units_count": 8
+      "status": "completed",
+      "units_count": 8,
+      "completed_at": "2026-01-08"
     },
     {
       "id": 3,
       "name": "Similar Cards & Mobile",
       "epics": ["E5", "E6"],
       "goal": "Similar cards section and mobile optimization complete",
-      "status": "pending",
-      "units_count": 8
+      "status": "completed",
+      "units_count": 8,
+      "completed_at": "2026-01-08"
     },
     {
       "id": 4,
@@ -486,8 +531,8 @@
       "units_count": 5
     }
   ],
-  "current_sprint": 1,
-  "current_unit": null,
+  "current_sprint": 4,
+  "current_unit": "E7-U1",
   "total_units": 28,
-  "completed_units": 0
+  "completed_units": 23
 }
