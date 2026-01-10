@@ -52,7 +52,7 @@ class PersistentMetricsStore(MetricsStore):
         # Track job log IDs for updating completion
         self._job_log_ids: Dict[str, int] = {}
 
-    def record_start(
+    def record_start(  # type: ignore[override]
         self,
         job_name: str,
         metadata: Optional[Dict[str, Any]] = None,
@@ -84,7 +84,8 @@ class PersistentMetricsStore(MetricsStore):
                 session.refresh(log_entry)
 
                 # Track for completion update
-                self._job_log_ids[job_name] = log_entry.id
+                if log_entry.id is not None:
+                    self._job_log_ids[job_name] = log_entry.id
 
                 logger.debug(
                     "Job start logged",

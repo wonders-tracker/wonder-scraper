@@ -893,10 +893,9 @@ async def job_check_price_alerts():
 
                 # Get current floor price
                 floor_result = floor_service.get_floor_price(alert.card_id, treatment=alert.treatment, days=30)
-                current_price = floor_result.price
-
-                if current_price is None:
+                if floor_result.price is None:
                     continue
+                current_price = floor_result.price
 
                 # Check if alert should trigger
                 should_trigger = False

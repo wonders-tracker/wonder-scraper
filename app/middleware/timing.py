@@ -93,7 +93,7 @@ class TimingMiddleware(BaseHTTPMiddleware):
         endpoint = _normalize_endpoint(path, request.method)
 
         # Record to metrics collector
-        perf_metrics.record(endpoint, duration_ms)
+        perf_metrics.record_request(endpoint, duration_ms, response.status_code)
 
         # Log slow requests
         if duration_ms > SLOW_REQUEST_THRESHOLD_MS:

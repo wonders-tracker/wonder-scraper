@@ -136,6 +136,7 @@ def _get_trace_semaphore() -> asyncio.Semaphore:
             # Double-check inside lock to prevent race condition
             if _trace_semaphore is None:
                 _trace_semaphore = asyncio.Semaphore(settings.TRACE_QUEUE_MAX_SIZE)
+    assert _trace_semaphore is not None  # Guaranteed by logic above
     return _trace_semaphore
 
 
