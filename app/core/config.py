@@ -87,9 +87,12 @@ class Settings(BaseSettings):
     # Concurrent browser tab operations (4 tabs balances speed vs memory)
     BROWSER_SEMAPHORE_LIMIT: int = 2  # Reduced from 4 to avoid eBay rate limits
     # Maximum browser restart attempts before extended cooldown
-    BROWSER_MAX_RESTARTS: int = 3
+    BROWSER_MAX_RESTARTS: int = 5
     # Absolute maximum total restarts before giving up (hard safety limit)
-    BROWSER_MAX_TOTAL_RESTARTS: int = 20
+    # Set high for long-running scrapers - resets after BROWSER_RESTART_RESET_HOURS
+    BROWSER_MAX_TOTAL_RESTARTS: int = 10000
+    # Hours of successful operation after which _total_restarts resets
+    BROWSER_RESTART_RESET_HOURS: int = 1
     # Seconds between proactive health checks
     BROWSER_HEALTH_CHECK_INTERVAL: int = 30
     # Consecutive timeouts before forcing hard restart
@@ -97,8 +100,8 @@ class Settings(BaseSettings):
     # Seconds to wait for browser to start
     BROWSER_STARTUP_TIMEOUT: int = 60
     # Restart browser after this many page fetches to prevent memory leaks
-    # Reduced from 50 to 25 - Chrome can accumulate 200-500MB per tab
-    BROWSER_MAX_PAGES_BEFORE_RESTART: int = 25
+    # Balance between memory management and restart overhead
+    BROWSER_MAX_PAGES_BEFORE_RESTART: int = 100
     # Extended cooldown (seconds) after hitting max restarts
     BROWSER_EXTENDED_COOLDOWN: int = 10
     # Delay (seconds) between browser restarts

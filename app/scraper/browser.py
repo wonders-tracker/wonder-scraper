@@ -282,21 +282,24 @@ class BrowserManager:
     Singleton browser manager with health monitoring and restart safety limits.
 
     Class Variables:
-        _total_restarts: Absolute restart count (hard limit, never decremented)
-        _max_total_restarts: Give up after this many restarts (from settings)
+        _total_restarts: Restart count within reset window (resets after BROWSER_RESTART_RESET_HOURS)
+        _max_total_restarts: Give up after this many restarts within reset window
         _restart_count: Restarts within current cycle (resets after extended cooldown)
+        _last_restart_reset: Timestamp when _total_restarts was last reset
     """
 
     _browser: Optional[Chrome] = None
     _lock: asyncio.Lock = asyncio.Lock()
     _restart_count: int = 0  # Restarts within current cooldown cycle
     _max_restarts: int = settings.BROWSER_MAX_RESTARTS
-    _total_restarts: int = 0  # Absolute total restarts (hard safety limit)
+    _total_restarts: int = 0  # Total restarts within reset window
     _max_total_restarts: int = settings.BROWSER_MAX_TOTAL_RESTARTS
     _startup_timeout: int = settings.BROWSER_STARTUP_TIMEOUT
     _page_count: int = 0
     _max_pages_before_restart: int = settings.BROWSER_MAX_PAGES_BEFORE_RESTART
     _last_restart_time: float = 0  # Timestamp of last restart
+    _last_restart_reset: float = 0  # Timestamp when _total_restarts was last reset
+    _restart_reset_hours: int = settings.BROWSER_RESTART_RESET_HOURS
     _last_health_check: float = 0  # Timestamp of last health check
     _health_check_interval: int = settings.BROWSER_HEALTH_CHECK_INTERVAL
     _consecutive_timeouts: int = 0  # Track consecutive timeout errors
@@ -310,6 +313,9 @@ class BrowserManager:
             if not cls._browser:
                 await cls._start_browser_internal()
                 cls._last_health_check = time.time()
+                # Initialize reset timestamp on first browser start
+                if cls._last_restart_reset == 0:
+                    cls._last_restart_reset = time.time()
             elif time.time() - cls._last_health_check > cls._health_check_interval:
                 # Periodic health check - verify Chrome is still responsive
                 try:
@@ -351,6 +357,7 @@ class BrowserManager:
         - All state changes happen under lock
         - Cooldown happens under lock (safe because browser is broken anyway)
         - Concurrent callers wait on lock, then see fresh browser
+        - Reset counter resets after BROWSER_RESTART_RESET_HOURS of operation
         """
         import time
 
@@ -361,8 +368,18 @@ class BrowserManager:
                 print("[Browser] Skipping restart - browser was just restarted")
                 return cls._browser
 
-            # Check absolute limit to prevent infinite restart loops
-            # This limit is NEVER decremented to ensure true safety cutoff
+            # Time-based reset: if enough time has passed, reset the restart counter
+            # This allows long-running scrapers to run indefinitely
+            hours_since_reset = (time.time() - cls._last_restart_reset) / 3600
+            if hours_since_reset >= cls._restart_reset_hours and cls._total_restarts > 0:
+                print(
+                    f"[Browser] Resetting restart counter after {hours_since_reset:.1f}h "
+                    f"(was {cls._total_restarts} restarts)"
+                )
+                cls._total_restarts = 0
+                cls._last_restart_reset = time.time()
+
+            # Check limit to prevent infinite restart loops within reset window
             if cls._total_restarts >= cls._max_total_restarts:
                 raise RuntimeError(
                     f"Browser restart limit exceeded ({cls._total_restarts} restarts). "
