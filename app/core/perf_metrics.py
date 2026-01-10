@@ -23,6 +23,9 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, Deque, List, Any, Optional, Literal
 from threading import Lock
 
+# Configuration
+SLOW_REQUEST_THRESHOLD_MS = 500  # Threshold for "slow" requests
+
 
 @dataclass
 class EndpointMetrics:
