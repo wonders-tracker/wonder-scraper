@@ -33,6 +33,7 @@ from app.core.anti_scraping import AntiScrapingMiddleware
 from app.core.config import settings
 from app.core.saas import get_mode_info
 from app.core.scheduler import start_scheduler
+from app.middleware.context import RequestContextMiddleware
 from app.middleware.metering import METERING_AVAILABLE, APIMeteringMiddleware
 from app.middleware.timing import TimingMiddleware
 
@@ -197,8 +198,6 @@ app.add_middleware(cast(Any, TimingMiddleware))
 app.add_middleware(cast(Any, AntiScrapingMiddleware), enabled=True)
 
 # Request context middleware - adds request_id and correlation_id for tracing
-from app.middleware.context import RequestContextMiddleware
-
 app.add_middleware(cast(Any, RequestContextMiddleware))
 
 # API metering middleware - tracks usage for billing (only when SaaS enabled)

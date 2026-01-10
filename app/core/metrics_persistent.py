@@ -25,7 +25,7 @@ import structlog
 
 from sqlmodel import Session, select
 from app.db import engine
-from app.core.metrics import MetricsStore, ScrapeMetrics
+from app.core.metrics import MetricsStore
 from app.models.observability import ScraperJobLog, MetricsSnapshot
 from app.core.errors import capture_exception
 

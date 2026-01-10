@@ -27,10 +27,7 @@ from starlette.responses import Response
 
 from app.core.context import (
     set_request_id,
-    get_request_id,
     set_correlation_id,
-    get_correlation_id,
-    set_user_id,
     get_user_id,
     generate_request_id,
     clear_context,

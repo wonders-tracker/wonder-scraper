@@ -15,7 +15,7 @@ Usage:
     circuits = HealthCheck.check_circuit_health()
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Dict, Any
 import structlog
 
