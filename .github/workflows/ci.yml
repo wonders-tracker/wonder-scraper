@@ -88,6 +88,12 @@ jobs:
           SECRET_KEY: test-secret-key-for-ci
         run: poetry run alembic upgrade head
 
+      - name: Run observability migrations
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/wonder_test
+          SECRET_KEY: test-secret-key-for-ci
+        run: poetry run python scripts/migrate_observability.py
+
       - name: Seed test data
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/wonder_test
