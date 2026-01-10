@@ -117,7 +117,8 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
-          fail_ci_if_error: true  # Fail if coverage upload fails
+          fail_ci_if_error: false  # Don't fail CI on coverage upload issues
+        continue-on-error: true
 
   backend-lint:
     name: Backend Lint
