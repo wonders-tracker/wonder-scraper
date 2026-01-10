@@ -6,6 +6,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 import uuid
 from typing import Optional
 
@@ -30,6 +31,25 @@ IS_CONTAINER = os.path.exists("/.dockerenv") or os.getenv("RAILWAY_ENVIRONMENT")
 
 # Unique session ID for this process (avoids PID=1 collision in containers)
 _SESSION_ID = uuid.uuid4().hex[:8]
+
+# User agent rotation pool - realistic desktop browsers
+# Rotated on each browser restart to avoid fingerprinting
+USER_AGENTS = [
+    # Chrome on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    # Chrome on macOS
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    # Firefox on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    # Firefox on macOS
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
+    # Edge on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+    # Safari on macOS
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+]
 
 
 def _find_chrome_binary_sync() -> Optional[str]:
@@ -121,6 +141,38 @@ def get_user_data_dir():
     return os.path.join(tempfile.gettempdir(), f"pydoll_profile_{_SESSION_ID}")
 
 
+def rotate_session_id():
+    """Generate a new session ID for fresh browser profile.
+
+    Called on restart to ensure completely fresh browser state.
+    """
+    global _SESSION_ID
+    old_id = _SESSION_ID
+    _SESSION_ID = uuid.uuid4().hex[:8]
+    print(f"[Browser] Rotated session ID: {old_id} -> {_SESSION_ID}")
+    return _SESSION_ID
+
+
+def delete_current_profile():
+    """Delete the current profile directory to free memory/disk.
+
+    Called before restart to ensure fresh browser state without
+    accumulated cache, cookies, IndexedDB, etc.
+    """
+    profile_dir = get_user_data_dir()
+    if os.path.exists(profile_dir):
+        try:
+            shutil.rmtree(profile_dir, ignore_errors=True)
+            print(f"[Browser] Deleted profile: {profile_dir}")
+        except Exception as e:
+            print(f"[Browser] Failed to delete profile: {e}")
+
+
+def get_random_user_agent() -> str:
+    """Get a random user agent from the pool."""
+    return random.choice(USER_AGENTS)
+
+
 def _kill_stale_chrome_processes_sync():
     """Synchronous implementation of killing stale Chrome processes."""
     try:
@@ -151,7 +203,6 @@ async def kill_stale_chrome_processes():
 
 def _force_kill_all_chrome_sync():
     """Synchronous implementation of force killing all Chrome processes."""
-    import time
 
     print("[Browser] FORCE KILLING all Chrome processes...")
     kill_commands = [
@@ -234,7 +285,6 @@ def startup_cleanup_sync() -> dict:
             pass
 
     # Wait for processes to die
-    import time
 
     time.sleep(1)
 
@@ -286,6 +336,7 @@ class BrowserManager:
         _max_total_restarts: Give up after this many restarts within reset window
         _restart_count: Restarts within current cycle (resets after extended cooldown)
         _last_restart_reset: Timestamp when _total_restarts was last reset
+        _health_score: Connection health score (0-100), triggers restart when low
     """
 
     _browser: Optional[Chrome] = None
@@ -304,11 +355,14 @@ class BrowserManager:
     _health_check_interval: int = settings.BROWSER_HEALTH_CHECK_INTERVAL
     _consecutive_timeouts: int = 0  # Track consecutive timeout errors
     _max_consecutive_timeouts: int = settings.BROWSER_MAX_CONSECUTIVE_TIMEOUTS
+    # Connection health scoring (0-100)
+    _health_score: int = 100  # Starts at perfect health
+    _health_threshold: int = 30  # Restart if score drops below this
+    _health_decay_on_failure: int = 20  # Points lost per failure
+    _health_gain_on_success: int = 5  # Points gained per success (capped at 100)
 
     @classmethod
     async def get_browser(cls) -> Chrome:
-        import time
-
         async with cls._lock:
             if not cls._browser:
                 await cls._start_browser_internal()
@@ -330,8 +384,13 @@ class BrowserManager:
             return cls._browser
 
     @classmethod
-    async def _close_internal(cls):
-        """Internal close - assumes lock is already held."""
+    async def _close_internal(cls, full_cleanup: bool = False):
+        """Internal close - assumes lock is already held.
+
+        Args:
+            full_cleanup: If True, force kill all Chrome and delete profile.
+                         Used on restart for completely fresh state.
+        """
         if cls._browser:
             try:
                 await asyncio.wait_for(cls._browser.stop(), timeout=10)
@@ -340,7 +399,14 @@ class BrowserManager:
             except Exception as e:
                 print(f"[Browser] Error closing browser: {e}")
             cls._browser = None
-            # Ensure Chrome processes are cleaned up
+
+        if full_cleanup:
+            # Nuclear cleanup for restart - ensures completely fresh state
+            await force_kill_all_chrome()
+            delete_current_profile()
+            rotate_session_id()
+        else:
+            # Normal cleanup - just kill orphan processes
             await kill_stale_chrome_processes()
 
     @classmethod
@@ -359,7 +425,6 @@ class BrowserManager:
         - Concurrent callers wait on lock, then see fresh browser
         - Reset counter resets after BROWSER_RESTART_RESET_HOURS of operation
         """
-        import time
 
         async with cls._lock:
             # Check if another task just restarted (within last 2 seconds)
@@ -418,8 +483,8 @@ class BrowserManager:
                 f"total: {cls._total_restarts}/{cls._max_total_restarts})..."
             )
 
-            # Close existing browser
-            await cls._close_internal()
+            # Full cleanup: kill Chrome, delete profile, rotate session ID
+            await cls._close_internal(full_cleanup=True)
 
             # Brief delay before restart
             await asyncio.sleep(settings.BROWSER_RESTART_DELAY)
@@ -428,6 +493,7 @@ class BrowserManager:
             try:
                 await cls._start_browser_internal()
                 cls._last_restart_time = time.time()
+                cls._health_score = 100  # Reset health on successful restart
             except Exception as e:
                 print(f"[Browser] Restart failed: {e}")
                 raise
@@ -453,6 +519,11 @@ class BrowserManager:
             options.binary_location = chrome_path
         else:
             print("[Browser] ERROR: No Chrome binary found.")
+
+        # Rotate user agent on each browser start to avoid fingerprinting
+        user_agent = get_random_user_agent()
+        print(f"[Browser] Using user agent: {user_agent[:50]}...")
+        options.add_argument(f"--user-agent={user_agent}")
 
         # Essential args for headless Chrome
         options.add_argument("--no-sandbox")
@@ -499,29 +570,56 @@ class BrowserManager:
     @classmethod
     async def increment_page_count(cls, success: bool = True) -> bool:
         """
-        Increment page count and restart browser if threshold reached.
+        Increment page count, update health score, and restart if needed.
 
         Args:
             success: Whether the page load was successful.
 
         Returns True if browser was restarted.
 
-        Note: We intentionally do NOT decrement _total_restarts on success.
-        This prevents "immortal loop" where a flaky browser (50% success rate)
-        would never hit the safety limit. The total restart counter is a
-        hard safety limit that should only be reset manually or on process restart.
+        Restart triggers:
+        1. Page count threshold (preventive memory management)
+        2. Health score below threshold (connection degradation)
         """
         async with cls._lock:
             cls._page_count += 1
+
+            # Update health score
             if success:
-                cls._consecutive_timeouts = 0  # Reset timeout counter on success
-            should_restart = cls._page_count >= cls._max_pages_before_restart
+                cls._consecutive_timeouts = 0
+                cls._health_score = min(100, cls._health_score + cls._health_gain_on_success)
+            else:
+                cls._health_score = max(0, cls._health_score - cls._health_decay_on_failure)
+
+            # Check restart conditions
+            page_limit_hit = cls._page_count >= cls._max_pages_before_restart
+            health_degraded = cls._health_score < cls._health_threshold
+            should_restart = page_limit_hit or health_degraded
+            current_health = cls._health_score
+            current_pages = cls._page_count
 
         if should_restart:
-            print(f"[Browser] Preventive restart after {cls._page_count} pages to free memory")
+            if health_degraded:
+                print(
+                    f"[Browser] Health degraded (score={current_health}/{cls._health_threshold}). "
+                    f"Proactive restart after {current_pages} pages."
+                )
+            else:
+                print(f"[Browser] Preventive restart after {current_pages} pages to free memory")
             await cls.restart()
             return True
         return False
+
+    @classmethod
+    def get_health_status(cls) -> dict:
+        """Get current browser health metrics for monitoring."""
+        return {
+            "health_score": cls._health_score,
+            "page_count": cls._page_count,
+            "total_restarts": cls._total_restarts,
+            "restart_count_cycle": cls._restart_count,
+            "consecutive_timeouts": cls._consecutive_timeouts,
+        }
 
     @classmethod
     async def handle_timeout_error(cls):
